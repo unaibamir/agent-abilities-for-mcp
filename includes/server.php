@@ -1266,8 +1266,8 @@ function aafm_filter_initialize_capabilities( $result, $server = null, $schema =
 
 		unset( $data['capabilities']['resources'], $data['capabilities']['prompts'] );
 
-		// The playbook index, or the paused line, is decided here per request after the transport
-		// permission check, so a connection whose rules hide the two playbook tools never sees it.
+		// The playbook index is decided here per request after the transport permission check, so a
+		// connection whose rules hide the two playbook tools never sees it. A paused connection gets nothing.
 		$addendum = aafm_server_instructions_addendum();
 		if ( '' !== $addendum ) {
 			$instructions         = isset( $data['instructions'] ) && is_string( $data['instructions'] ) ? $data['instructions'] : '';
@@ -1932,8 +1932,7 @@ function aafm_mcp_explain_transport_refusal( $response, $server, $request ) {
  * Give the server/discover response the same instructions addendum initialize carries.
  *
  * Clients such as claude.ai and ChatGPT open with server/discover, and the adapter answers it
- * without running the initialize filter, so the playbook index (or the paused line) would never
- * reach them. The adapter has no discover filter, so this rewrites the response after dispatch:
+ * without running the initialize filter, so the playbook index would never reach them. The adapter has no discover filter, so this rewrites the response after dispatch:
  * our MCP route only, a single server/discover request, a successful result.
  *
  * @param mixed $response The response.

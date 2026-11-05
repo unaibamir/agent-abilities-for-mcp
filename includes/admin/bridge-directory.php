@@ -841,3 +841,61 @@ function aafm_ajax_save_bridged_abilities(): void {
 		)
 	);
 }
+
+/**
+ * AJAX: set one plugin's tools to its reads. Nonce + manage_options gated; the group key is checked
+ * against the computed groups inside aafm_bridge_apply_read_only_starter().
+ *
+ * @return void
+ */
+function aafm_ajax_bridge_read_only_starter(): void {
+	check_ajax_referer( 'aafm_admin', 'nonce' );
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+	}
+
+	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+	$key    = isset( $_POST['plugin'] ) ? sanitize_text_field( wp_unslash( $_POST['plugin'] ) ) : '';
+	$result = aafm_bridge_apply_read_only_starter( (string) $key );
+	if ( ! $result['ok'] ) {
+		wp_send_json_error( array( 'message' => $result['message'] ) );
+	}
+
+	wp_send_json_success( $result );
+}
+
+/**
+ * AJAX: mark one plugin's tools, or every new tool, as reviewed. Enables nothing. Nonce +
+ * manage_options gated; the group key is checked against the computed groups.
+ *
+ * @return void
+ */
+function aafm_ajax_bridge_mark_reviewed(): void {
+	check_ajax_referer( 'aafm_admin', 'nonce' );
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+	}
+
+	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+	$key    = isset( $_POST['plugin'] ) ? sanitize_text_field( wp_unslash( $_POST['plugin'] ) ) : '';
+	$groups = aafm_bridge_group_slugs( aafm_bridge_foreign_slugs() );
+	if ( 'all' === $key ) {
+		$slugs = aafm_bridge_foreign_slugs();
+	} elseif ( isset( $groups[ $key ] ) ) {
+		$slugs = $groups[ $key ];
+	} else {
+		wp_send_json_error( array( 'message' => __( 'That plugin has no tools registered right now.', 'agent-abilities-for-mcp' ) ) );
+	}
+
+	if ( ! aafm_bridge_mark_reviewed( $slugs ) ) {
+		aafm_bridge_review_log_failure();
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'The reviewed tools list', 'agent-abilities-for-mcp' ) ) ) );
+	}
+
+	wp_send_json_success(
+		array(
+			'new'   => aafm_bridge_new_tools(),
+			'count' => count( aafm_bridge_new_tools() ),
+		)
+	);
+}

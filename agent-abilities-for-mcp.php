@@ -502,6 +502,8 @@ function aafm_bootstrap() {
 		add_action( 'wp_ajax_aafm_add_starter_playbook', 'aafm_ajax_add_starter_playbook' );
 		add_action( 'wp_ajax_aafm_save_abilities_page', 'aafm_ajax_save_abilities_page' );
 		add_action( 'wp_ajax_aafm_save_bridged_abilities', 'aafm_ajax_save_bridged_abilities' );
+		add_action( 'wp_ajax_aafm_bridge_read_only_starter', 'aafm_ajax_bridge_read_only_starter' );
+		add_action( 'wp_ajax_aafm_bridge_mark_reviewed', 'aafm_ajax_bridge_mark_reviewed' );
 		add_action( 'wp_ajax_aafm_save_post_types', 'aafm_ajax_save_post_types' );
 		add_action( 'wp_ajax_aafm_save_meta_keys', 'aafm_ajax_save_meta_keys' );
 		add_action( 'wp_ajax_aafm_save_denied_meta_keys', 'aafm_ajax_save_denied_meta_keys' );

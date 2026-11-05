@@ -353,6 +353,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/server.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/bridge.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/bridge-labels.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/bridge-review.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/default-server.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/review-origin.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/catalog.php';
@@ -490,6 +491,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/integrations.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/bridge-directory.php';
 	if ( is_admin() ) {
+		add_action( 'admin_init', 'aafm_bridge_review_sync', 20 );
 		add_action( 'admin_menu', 'aafm_register_admin_menu' );
 		add_filter( 'submenu_file', 'aafm_highlight_tab_submenu' );
 		add_filter( 'plugin_action_links_' . AAFM_PLUGIN_BASENAME, 'aafm_plugin_action_links' );

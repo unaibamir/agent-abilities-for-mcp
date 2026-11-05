@@ -127,3 +127,97 @@ function aafm_bridge_risk_label( array $risk ): array {
 		'note'  => empty( $risk['declared'] ) ? __( 'The plugin did not label this tool, so it is treated as destructive.', 'agent-abilities-for-mcp' ) : '',
 	);
 }
+
+/**
+ * Whether a bridged tool may return personal data, and of what kind.
+ *
+ * An exact-slug map of tools known to carry data, then a namespace map a filter can add to, then
+ * whole-word tokens in the tool name. A false positive only costs a notice, so this leans toward
+ * flagging, and the filter is a union: it cannot take a built-in away.
+ *
+ * @param string $slug Foreign ability slug.
+ * @return string '', 'forms', 'lms', 'membership', 'orders', 'payments' or 'users'.
+ */
+function aafm_bridge_personal_data_kind( string $slug ): string {
+	$exact = array(
+		'woocommerce/orders-query'                       => 'orders',
+		'woocommerce/order-add-note'                     => 'orders',
+		'woocommerce/order-update-status'                => 'orders',
+		'woocommerce-gateway-stripe/get-charges'         => 'payments',
+		'woocommerce-gateway-stripe/get-charge'          => 'payments',
+		'woocommerce-gateway-stripe/get-payment-intent'  => 'payments',
+		'woocommerce-gateway-stripe/get-disputes'        => 'payments',
+		'woocommerce-gateway-stripe/get-dispute'         => 'payments',
+		'woocommerce-paypal-payments/get-paypal-order'   => 'payments',
+		'woocommerce-paypal-payments/get-order-tracking' => 'payments',
+		'simple-history/get-user-activity'               => 'users',
+		'simple-history/get-failed-logins'               => 'users',
+		'simple-history/get-recent-events'               => 'users',
+		'simple-history/search-events'                   => 'users',
+		'simple-history/get-event'                       => 'users',
+	);
+	if ( isset( $exact[ $slug ] ) ) {
+		return $exact[ $slug ];
+	}
+
+	$pos = strpos( $slug, '/' );
+	if ( false === $pos ) {
+		return '';
+	}
+
+	$tokens = array(
+		'forms'      => array( 'entries', 'entry', 'submissions', 'submission' ),
+		'lms'        => array( 'learner', 'learners', 'student', 'students', 'enrol', 'enrollment', 'enrolment', 'course-progress' ),
+		'membership' => array( 'member', 'members', 'membership', 'subscriber', 'subscribers' ),
+		'orders'     => array( 'order', 'orders', 'customer', 'customers', 'billing', 'refund', 'refunds' ),
+		'payments'   => array( 'charge', 'charges', 'payment-intent', 'dispute', 'disputes', 'payout', 'payouts' ),
+		'users'      => array( 'user-activity', 'failed-logins', 'login-attempts' ),
+	);
+
+	$namespaces = array(
+		'wpforms'    => 'forms',
+		'fluentform' => 'forms',
+		'ninjaforms' => 'forms',
+		'sureforms'  => 'forms',
+	);
+	/**
+	 * Add namespaces whose tools may return personal data.
+	 *
+	 * A union over the built-in map: a filter can add a namespace, never remove or change one.
+	 *
+	 * @param array<string,string> $namespaces Namespace => 'forms', 'lms', 'membership', 'orders', 'payments' or 'users'.
+	 */
+	$added = apply_filters( 'aafm_bridge_personal_data_namespaces', $namespaces );
+	$ns    = substr( $slug, 0, $pos );
+	if ( isset( $namespaces[ $ns ] ) ) {
+		return $namespaces[ $ns ];
+	}
+	if ( is_array( $added ) && isset( $added[ $ns ], $tokens[ $added[ $ns ] ] ) ) {
+		return (string) $added[ $ns ];
+	}
+
+	$tool = '-' . substr( $slug, $pos + 1 ) . '-';
+	foreach ( $tokens as $kind => $words ) {
+		foreach ( $words as $word ) {
+			if ( false !== strpos( $tool, '-' . $word . '-' ) ) {
+				return $kind;
+			}
+		}
+	}
+
+	return '';
+}
+
+/**
+ * The notice for a tool that may return personal data. An indicator, never a determination.
+ *
+ * @param string $kind Result of aafm_bridge_personal_data_kind().
+ * @return string '' when the tool is not flagged.
+ */
+function aafm_bridge_personal_data_notice( string $kind ): string {
+	if ( '' === $kind ) {
+		return '';
+	}
+
+	return __( 'This tool may return personal data, such as names, email addresses or order details. This notice is based on the plugin and tool name and is not a full check, so treat any tool from another plugin as able to return personal data.', 'agent-abilities-for-mcp' );
+}

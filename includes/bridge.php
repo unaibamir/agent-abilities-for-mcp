@@ -592,6 +592,30 @@ function aafm_discover_foreign_abilities(): array {
 }
 
 /**
+ * A stored bridge allow-list value as a clean list: strings only, never a native name, de-duplicated.
+ *
+ * @param mixed $stored The option value.
+ * @return array<int,string>
+ */
+function aafm_bridge_normalize_stored_slugs( $stored ): array {
+	if ( ! is_array( $stored ) ) {
+		return array();
+	}
+
+	$clean = array();
+	// Keep only non-empty strings. array_map('strval', ...) would FATAL on an object with no
+	// __toString, so filter to strings first rather than coercing arbitrary values.
+	foreach ( array_filter( $stored, 'is_string' ) as $slug ) {
+		if ( '' === $slug || aafm_bridge_is_native_namespace( $slug ) ) {
+			continue; // Never bridge our own aafm/* abilities or aafm-bridge/* wrappers.
+		}
+		$clean[] = $slug;
+	}
+
+	return array_values( array_unique( $clean ) );
+}
+
+/**
  * The foreign slugs stored in the operator's bridge allow-list (sanitized, de-duplicated).
  *
  * Reads option aafm_enabled_bridged_abilities, kept SEPARATE from aafm_enabled_abilities so a
@@ -603,30 +627,12 @@ function aafm_discover_foreign_abilities(): array {
  * @return array<int,string>
  */
 function aafm_get_stored_bridged_abilities_raw(): array {
-	$normalize = static function ( $stored ): array {
-		if ( ! is_array( $stored ) ) {
-			return array();
-		}
-
-		$clean = array();
-		// Keep only non-empty strings. array_map('strval', ...) would FATAL on an object with no
-		// __toString, so filter to strings first rather than coercing arbitrary values.
-		foreach ( array_filter( $stored, 'is_string' ) as $slug ) {
-			if ( '' === $slug || aafm_bridge_is_native_namespace( $slug ) ) {
-				continue; // Never bridge our own aafm/* abilities or aafm-bridge/* wrappers.
-			}
-			$clean[] = $slug;
-		}
-
-		return array_values( array_unique( $clean ) );
-	};
-
-	$clean = $normalize( get_option( 'aafm_enabled_bridged_abilities', array() ) );
+	$clean = aafm_bridge_normalize_stored_slugs( get_option( 'aafm_enabled_bridged_abilities', array() ) );
 	// A cache copy that disagrees with the row bridges only what both hold; an unreadable row
 	// bridges nothing.
 	$row = aafm_policy_row_if_stale( 'aafm_enabled_bridged_abilities' );
 	if ( null !== $row ) {
-		$clean = $row['ok'] ? array_values( array_intersect( $clean, $normalize( $row['value'] ) ) ) : array();
+		$clean = $row['ok'] ? array_values( array_intersect( $clean, aafm_bridge_normalize_stored_slugs( $row['value'] ) ) ) : array();
 	}
 
 	return $clean;

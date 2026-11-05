@@ -193,3 +193,78 @@ function aafm_bridge_review_sync(): void {
 		unset( $e ); // Bookkeeping for a notice must never break the admin page that raised it.
 	}
 }
+
+/**
+ * Set one plugin's enabled tools to exactly its read tools. Other plugins are untouched.
+ *
+ * Reads are what the Read only access preset calls reads, so the two can never disagree, and a tool
+ * with no readonly annotation is not a read. The plugin's stored slugs that are not registered right
+ * now are removed too, or a tool an update dropped for a moment would come back switched on.
+ *
+ * The base is the database row, not aafm_get_stored_bridged_abilities_raw(): under a stale cache that
+ * accessor intersects with the cache copy, which is right for a read and would drop another plugin's
+ * selections from this write.
+ *
+ * @param string $group_key A key of aafm_bridge_group_slugs().
+ * @return array{ok:bool,enabled:list<string>,disabled:list<string>,reads:int,message:string}
+ */
+function aafm_bridge_apply_read_only_starter( string $group_key ): array {
+	$result = array(
+		'ok'       => false,
+		'enabled'  => array(),
+		'disabled' => array(),
+		'reads'    => 0,
+		'message'  => '',
+	);
+
+	$groups = aafm_bridge_group_slugs( aafm_bridge_foreign_slugs() );
+	if ( ! isset( $groups[ $group_key ] ) ) {
+		$result['message'] = __( 'That plugin has no tools registered right now.', 'agent-abilities-for-mcp' );
+		return $result;
+	}
+
+	$label = __( 'The bridged abilities selection', 'agent-abilities-for-mcp' );
+	$row   = aafm_option_row( 'aafm_enabled_bridged_abilities' );
+	if ( ! $row['ok'] ) {
+		$result['message'] = aafm_switch_not_persisted_message( $label );
+		return $result;
+	}
+
+	$stored = aafm_bridge_normalize_stored_slugs( $row['value'] );
+	$owned  = aafm_bridge_group_slugs( $stored )[ $group_key ] ?? array();
+	$reads  = array_values(
+		array_filter(
+			$groups[ $group_key ],
+			static function ( string $slug ): bool {
+				return aafm_preset_permits( 'read_only', $slug );
+			}
+		)
+	);
+	$new    = array_values( array_unique( array_merge( array_diff( $stored, $owned ), $reads ) ) );
+
+	if ( ! aafm_update_option_verified( 'aafm_enabled_bridged_abilities', $new ) ) {
+		aafm_log_ability_persist_failure( 'aafm_enabled_bridged_abilities', $label );
+		$result['message'] = aafm_switch_not_persisted_message( $label );
+		return $result;
+	}
+	aafm_log_ability_toggle_diff( $stored, $new );
+
+	$result['ok']       = true;
+	$result['enabled']  = $reads;
+	$result['disabled'] = array_values( array_diff( $owned, $reads ) );
+	$result['reads']    = count( $reads );
+	$result['message']  = array() === $reads
+		? __( 'This plugin labels none of its tools as read-only, so no tool from it is on.', 'agent-abilities-for-mcp' )
+		: sprintf(
+			/* translators: %d: how many read tools are now on. */
+			_n( '%d read tool from this plugin is on. Its other tools are off.', '%d read tools from this plugin are on. Its other tools are off.', count( $reads ), 'agent-abilities-for-mcp' ),
+			count( $reads )
+		);
+
+	if ( ! aafm_bridge_mark_reviewed( $groups[ $group_key ] ) ) {
+		aafm_bridge_review_log_failure();
+		$result['message'] .= ' ' . __( 'These tools could not be marked as reviewed.', 'agent-abilities-for-mcp' );
+	}
+
+	return $result;
+}

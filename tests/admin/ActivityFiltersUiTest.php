@@ -9,11 +9,15 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Admin;
 
+use AAFM\Tests\Support\ForeignAbilities;
 use AAFM\Tests\TestCase;
 
 final class ActivityFiltersUiTest extends TestCase {
 
+	use ForeignAbilities;
+
 	public function tear_down(): void {
+		$this->unregister_foreign_abilities();
 		$_GET = array();
 		parent::tear_down();
 	}
@@ -153,6 +157,36 @@ final class ActivityFiltersUiTest extends TestCase {
 		}
 		$this->assertStringContainsString( 'id="aafm-log-live"', $html );
 		$this->assertSame( 9, substr_count( $html, '<th scope="col">' ) );
+	}
+
+	public function test_the_plugin_select_names_a_bridged_plugin_and_keeps_the_selected_value(): void {
+		$this->acting_as( 'administrator' );
+		$this->register_foreign_abilities( 'wpforms', array( 'list-entries' => array() ) );
+		wp_cache_set(
+			'plugins',
+			array(
+				'' => array(
+					'wpforms/wpforms.php'           => array(
+						'Name'       => 'WPForms',
+						'TextDomain' => 'wpforms',
+					),
+					'hostile-name/hostile-name.php' => array(
+						'Name'       => '<img src=x>Hostile',
+						'TextDomain' => 'hostile-name',
+					),
+				),
+			),
+			'plugins'
+		);
+		update_option( 'active_plugins', array( 'wpforms/wpforms.php', 'hostile-name/hostile-name.php' ) );
+		$this->register_foreign_abilities( 'hostile-name', array( 'run' => array() ) );
+		$_GET['plugin'] = 'bridge:ns-wpforms';
+
+		$html = $this->render();
+
+		$this->assertMatchesRegularExpression( '/<option value="bridge:ns-wpforms"[^>]*selected[^>]*>Other plugin: WPForms<\/option>/', $html );
+		$this->assertStringContainsString( 'Other plugin: Hostile</option>', $html );
+		$this->assertStringNotContainsString( '<img src=x>', $html );
 	}
 
 	public function test_url_filters_prefill_the_form_and_are_escaped(): void {

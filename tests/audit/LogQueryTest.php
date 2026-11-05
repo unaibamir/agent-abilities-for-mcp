@@ -9,9 +9,17 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Audit;
 
+use AAFM\Tests\Support\ForeignAbilities;
 use AAFM\Tests\TestCase;
 
 final class LogQueryTest extends TestCase {
+
+	use ForeignAbilities;
+
+	public function tear_down(): void {
+		$this->unregister_foreign_abilities();
+		parent::tear_down();
+	}
 
 	private function log( string $ability, string $status, array $extra = array() ): int {
 		return aafm_log_activity(
@@ -148,6 +156,99 @@ final class LogQueryTest extends TestCase {
 		$this->assertSame( array( $bridge ), $this->ids( array( 'plugin' => 'bridge' ) ) );
 		$this->assertArrayHasKey( 'bridge', aafm_activity_plugin_groups() );
 		$this->assertArrayHasKey( 'yoast', aafm_activity_plugin_groups() );
+	}
+
+	public function test_plugin_groups_list_each_registered_bridged_plugin(): void {
+		$this->register_foreign_abilities( 'wpforms', array( 'list-entries' => array() ) );
+		$this->register_foreign_abilities( 'writer', array( 'draft-summary' => array() ) );
+
+		$groups = aafm_activity_plugin_groups();
+
+		$this->assertSame( 'Other plugin: "wpforms" namespace', $groups['bridge:ns-wpforms'] );
+		$this->assertSame( 'Other plugin: "writer" namespace', $groups['bridge:ns-writer'] );
+		$this->assertContains( 'bridge:ns-wpforms', aafm_activity_plugin_keys() );
+		$this->assertArrayHasKey( 'bridge', $groups, 'The whole-Bridge bucket stays.' );
+	}
+
+	public function test_filtering_by_a_bridged_plugin_returns_only_its_tools(): void {
+		$this->register_foreign_abilities( 'wpforms', array( 'list-entries' => array() ) );
+		$this->register_foreign_abilities( 'ai-engine', array( 'run' => array() ) );
+		$this->register_foreign_abilities( 'ai', array( 'summarize' => array() ) );
+		$wpforms = $this->log( 'aafm-bridge/wpforms-list-entries', 'success' );
+		$engine  = $this->log( 'aafm-bridge/ai-engine-run', 'success' );
+		$ai      = $this->log( 'aafm-bridge/ai-summarize', 'success' );
+
+		$this->assertSame( array( $ai ), $this->ids( array( 'plugin' => 'bridge:ns-ai' ) ), 'A namespace that prefixes another never picks up its rows.' );
+		$this->assertSame( array( $engine ), $this->ids( array( 'plugin' => 'bridge:ns-ai-engine' ) ) );
+		$this->assertSame( array( $wpforms ), $this->ids( array( 'plugin' => 'bridge:ns-wpforms' ) ) );
+	}
+
+	public function test_a_known_multi_namespace_plugin_covers_all_its_namespaces(): void {
+		$this->register_foreign_abilities( 'aioseo-posts', array( 'get' => array() ) );
+		$this->register_foreign_abilities( 'aioseo-settings', array( 'read' => array() ) );
+		$posts    = $this->log( 'aafm-bridge/aioseo-posts-get', 'success' );
+		$settings = $this->log( 'aafm-bridge/aioseo-settings-read', 'success' );
+		$this->log( 'aafm-bridge/other-get', 'success' );
+
+		$this->assertSame( array( $posts, $settings ), $this->ids( array( 'plugin' => 'bridge:known-aioseo' ) ) );
+		$this->assertSame( 'Other plugin: All in One SEO', aafm_activity_plugin_groups()['bridge:known-aioseo'] );
+		$this->assertArrayNotHasKey( 'bridge:ns-aioseo-posts', aafm_activity_plugin_groups() );
+	}
+
+	public function test_an_unknown_or_malformed_bridge_key_is_dropped_not_an_error(): void {
+		$this->register_foreign_abilities( 'wpforms', array( 'list-entries' => array() ) );
+
+		foreach ( array( 'bridge:ns-gone', 'bridge:', 'bridge:ns-', 'bridge:known-nope', "bridge:ns-wpforms' OR 1=1" ) as $key ) {
+			$this->assertArrayNotHasKey( 'plugin', aafm_activity_filters_normalize( array( 'plugin' => $key ) ), $key );
+		}
+	}
+
+	public function test_the_where_clause_binds_every_name(): void {
+		$this->register_foreign_abilities( 'wpforms', array( 'list-entries' => array() ) );
+
+		$where = aafm_activity_filter_where( array( 'plugin' => 'bridge:ns-wpforms' ) );
+
+		$this->assertStringNotContainsString( 'wpforms', $where['sql'] );
+		$this->assertStringContainsString( 'ability IN (%s)', $where['sql'] );
+		$this->assertSame( array( 'aafm-bridge/wpforms-list-entries' ), $where['params'] );
+	}
+
+	public function test_a_wrapper_name_two_plugins_both_normalize_to_belongs_to_neither_plugin_filter(): void {
+		$this->register_foreign_abilities( 'foo', array( 'bar-baz' => array() ) );
+		$this->register_foreign_abilities( 'foo-bar', array( 'baz' => array() ) );
+		$row = $this->log( 'aafm-bridge/foo-bar-baz', 'success' );
+
+		$this->assertSame( array(), $this->ids( array( 'plugin' => 'bridge:ns-foo' ) ) );
+		$this->assertSame( array(), $this->ids( array( 'plugin' => 'bridge:ns-foo-bar' ) ) );
+		$this->assertContains( $row, $this->ids( array( 'plugin' => 'bridge' ) ) );
+	}
+
+	public function test_two_tools_of_one_plugin_sharing_a_wrapper_name_are_not_ambiguous(): void {
+		$this->register_foreign_abilities(
+			'foo',
+			array(
+				'bar-baz'  => array(),
+				'bar--baz' => array(),
+			)
+		);
+		$row = $this->log( 'aafm-bridge/foo-bar-baz', 'success' );
+
+		$this->assertSame( array( $row ), $this->ids( array( 'plugin' => 'bridge:ns-foo' ) ) );
+	}
+
+	public function test_the_normalizer_does_not_load_plugin_headers(): void {
+		$this->register_foreign_abilities( 'wpforms', array( 'list-entries' => array() ) );
+		update_option( 'active_plugins', array( 'spy-plugin/spy-plugin.php' ) );
+		wp_cache_delete( 'plugins', 'plugins' );
+
+		aafm_activity_filters_normalize( array( 'plugin' => 'bridge:ns-wpforms' ) );
+		aafm_query_activity( array( 'plugin' => 'bridge:ns-wpforms' ) );
+		aafm_activity_plugin_keys();
+
+		$this->assertFalse( wp_cache_get( 'plugins', 'plugins' ), 'The query path never called get_plugins().' );
+
+		aafm_activity_plugin_groups();
+		$this->assertNotFalse( wp_cache_get( 'plugins', 'plugins' ), 'Guard on the guard: the dropdown does, so the spy can see it.' );
 	}
 
 	public function test_date_range_is_inclusive_of_both_utc_days(): void {

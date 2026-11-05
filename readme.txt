@@ -304,7 +304,7 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 
 * **Fix:** A request from another site's web page now gets a 403 even when it carries wrong credentials, and responses requested with ?_envelope=1 send Cache-Control: no-store like every other response.
 * **Fix:** Content editor and Shop manager connections can read playbooks. The Playbooks editor refuses to save over a playbook someone else changed after you opened it, and keeps your text in the form.
-* **Fix:** The unknown ACF field refusal names fields only for callers who can list them. A paused connection no longer leaves a "paused" note in the server instructions after you resume it.
+* **Fix:** The unknown ACF field refusal names fields only for callers who can list them. A paused connection no longer leaves a "paused" note in the server instructions after you resume it. An app the site no longer recognizes now gets the steps and MCP URL to add it again.
 * **Fix:** Seven integration tool descriptions now match what the tools do, and every description that lists page builders names all five.
 * **Chore:** The ability picker on the Playbooks tab has space between its search box and the count line.
 

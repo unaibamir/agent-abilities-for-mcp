@@ -311,7 +311,10 @@ class GrantPauseTest extends TestCase {
 		$this->set_paused( '2026-10-01 00:00:00' );
 		$this->resolve();
 		list( , $init ) = $this->handshake();
-		$this->assertStringNotContainsString( 'paused', $this->wire( $init )['result']['instructions'] ?? '' );
+		$instructions   = $this->wire( $init )['result']['instructions'] ?? null;
+		$this->assertIsString( $instructions, 'The initialize result carries instructions, so the check below is not vacuous.' );
+		$this->assertNotSame( '', $instructions );
+		$this->assertStringNotContainsString( 'paused', $instructions );
 		$this->assertSame( '', aafm_server_instructions_addendum(), 'Pause is carried by the per-call refusal, never by instructions a client may cache.' );
 
 		$request = new \WP_REST_Request( 'POST', '/agent-abilities-for-mcp/mcp' );
@@ -356,7 +359,9 @@ class GrantPauseTest extends TestCase {
 		);
 		$body     = $this->wire( $response );
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertStringNotContainsString( 'paused', $body['result']['instructions'] ?? '' );
+		$this->assertIsString( $body['result']['instructions'] ?? null, 'The discover result carries instructions, so the check below is not vacuous.' );
+		$this->assertNotSame( '', $body['result']['instructions'] );
+		$this->assertStringNotContainsString( 'paused', $body['result']['instructions'] );
 	}
 
 	public function test_one_blocked_request_writes_one_denial_row_although_core_reruns_the_permission_callback(): void {

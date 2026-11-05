@@ -11,13 +11,16 @@ declare( strict_types=1 );
 namespace AAFM\Tests\Admin;
 
 use AAFM\Tests\Support\AjaxHarness;
+use AAFM\Tests\Support\ForeignAbilities;
 use AAFM\Tests\TestCase;
 
 final class LogFilterParityTest extends TestCase {
 
 	use AjaxHarness;
+	use ForeignAbilities;
 
 	public function tear_down(): void {
+		$this->unregister_foreign_abilities();
 		$this->reset_ajax_harness();
 		parent::tear_down();
 	}
@@ -125,6 +128,29 @@ final class LogFilterParityTest extends TestCase {
 			}
 			$this->assertSame( max( 1, (int) ceil( $total / aafm_activity_page_size() ) ), $pages, "Page count for {$label}." );
 		}
+	}
+
+	public function test_the_table_the_count_and_the_csv_agree_for_a_bridged_plugin_filter(): void {
+		$this->register_foreign_abilities( 'wpforms', array( 'list-entries' => array() ) );
+		$this->register_foreign_abilities( 'ai', array( 'summarize' => array() ) );
+		$this->register_foreign_abilities( 'ai-engine', array( 'run' => array() ) );
+		foreach ( array( 'wpforms-list-entries', 'ai-summarize', 'ai-engine-run', 'ai-summarize' ) as $i => $tool ) {
+			aafm_log_activity(
+				array(
+					'ability' => 'aafm-bridge/' . $tool,
+					'status'  => 'success',
+					'detail'  => 'row-' . $i . '-' . $tool,
+				)
+			);
+		}
+
+		$request                       = array( 'plugin' => 'bridge:ns-ai' );
+		list( $table, $total, $pages ) = $this->ajax( $request );
+
+		$this->assertSame( 2, $total );
+		$this->assertSame( 1, $pages );
+		$this->assertSame( $table, $this->csv_details( $request ) );
+		$this->assertEqualsCanonicalizing( array( 'row-1-ai-summarize', 'row-3-ai-summarize' ), $table );
 	}
 
 	public function test_conn_none_lists_only_rows_whose_connection_cell_says_direct(): void {

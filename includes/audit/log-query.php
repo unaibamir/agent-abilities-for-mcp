@@ -19,11 +19,76 @@ if ( ! defined( 'AAFM_ACTIVITY_SUMMARY_TTL' ) ) {
 }
 
 /**
- * The plugin-filter choices: slug => label.
+ * The registered bridged plugins as filter keys: bridge:known-<id> for a known plugin with several
+ * namespaces, bridge:ns-<namespace> for the rest.
+ *
+ * @return array<string,list<string>> Filter key => foreign slugs.
+ */
+function aafm_activity_bridge_groups(): array {
+	if ( ! function_exists( 'aafm_bridge_foreign_slugs' ) ) {
+		return array();
+	}
+	$prefix = aafm_bridge_merge_group_key_prefix();
+	$out    = array();
+	foreach ( aafm_bridge_group_slugs( aafm_bridge_foreign_slugs() ) as $key => $slugs ) {
+		$key            = (string) $key;
+		$is_known       = 0 === strncmp( $key, $prefix, strlen( $prefix ) );
+		$filter         = $is_known ? 'bridge:known-' . substr( $key, strlen( $prefix ) ) : 'bridge:ns-' . $key;
+		$out[ $filter ] = $slugs;
+	}
+	return $out;
+}
+
+/**
+ * The exact wrapper tool names a bridge: filter key covers.
+ *
+ * A wrapper name two different plugins' slugs both normalize to (foo/bar-baz and foo-bar/baz) is left
+ * out, because the audit row cannot say which plugin it belongs to. Such a row, and a row for a plugin
+ * that is no longer registered, still appears under the Other plugins (Bridge) bucket.
+ *
+ * @param string $key A bridge: filter key.
+ * @return list<string>
+ */
+function aafm_activity_bridge_tools( string $key ): array {
+	$groups = aafm_activity_bridge_groups();
+	if ( ! isset( $groups[ $key ] ) ) {
+		return array();
+	}
+
+	$claimants = array();
+	foreach ( $groups as $group => $slugs ) {
+		foreach ( $slugs as $slug ) {
+			$claimants[ aafm_bridge_tool_name( $slug ) ][ $group ] = true;
+		}
+	}
+
+	$tools = array();
+	foreach ( $groups[ $key ] as $slug ) {
+		$name = aafm_bridge_tool_name( $slug );
+		if ( 1 === count( $claimants[ $name ] ) ) {
+			$tools[ $name ] = true;
+		}
+	}
+	return array_map( 'strval', array_keys( $tools ) );
+}
+
+/**
+ * The valid plugin-filter values. No labels and no plugin headers, so the query path stays cheap.
+ *
+ * @return list<string>
+ */
+function aafm_activity_plugin_keys(): array {
+	$integrations = function_exists( 'aafm_integration_ability_order' ) ? array_keys( aafm_integration_ability_order() ) : array();
+	return array_map( 'strval', array_merge( array( 'core', 'bridge' ), $integrations, array_keys( aafm_activity_bridge_groups() ) ) );
+}
+
+/**
+ * The plugin-filter choices: slug => label. Only the dropdown calls this, because a bridged label can
+ * read plugin headers.
  *
  * `core` is this plugin's own tools that belong to no integration, each integration slug is the
- * abilities listed for it in aafm_integration_ability_order(), and `bridge` is every ability
- * bridged from another plugin. Per-bridged-plugin entries are deliberately absent (spec D7).
+ * abilities listed for it in aafm_integration_ability_order(), `bridge` is every ability bridged from
+ * another plugin, and a bridge: key is one plugin registered right now.
  *
  * @return array<string,string>
  */
@@ -36,7 +101,21 @@ function aafm_activity_plugin_groups(): array {
 		}
 	}
 	$groups['bridge'] = __( 'Other plugins (Bridge)', 'agent-abilities-for-mcp' );
-	return $groups;
+
+	$bridged = array();
+	foreach ( aafm_activity_bridge_groups() as $key => $slugs ) {
+		$ns   = aafm_bridge_namespace_of( (string) reset( $slugs ) );
+		$name = aafm_bridge_provider_label( $ns );
+		if ( '' === $name ) {
+			/* translators: %s: an ability namespace, for example "writer". */
+			$name = sprintf( __( '"%s" namespace', 'agent-abilities-for-mcp' ), $ns );
+		}
+		/* translators: %s: a plugin's name, or a namespace when the plugin is not known. */
+		$bridged[ $key ] = sprintf( __( 'Other plugin: %s', 'agent-abilities-for-mcp' ), $name );
+	}
+	asort( $bridged );
+
+	return $groups + $bridged;
 }
 
 /**
@@ -83,7 +162,7 @@ function aafm_activity_filters_normalize( array $raw ): array {
 	if ( is_scalar( $tool ) && '' !== trim( (string) $tool ) ) {
 		$out['tool'] = mb_substr( trim( (string) $tool ), 0, 191 );
 	}
-	if ( isset( $raw['plugin'] ) && is_scalar( $raw['plugin'] ) && isset( aafm_activity_plugin_groups()[ (string) $raw['plugin'] ] ) ) {
+	if ( isset( $raw['plugin'] ) && is_scalar( $raw['plugin'] ) && in_array( (string) $raw['plugin'], aafm_activity_plugin_keys(), true ) ) {
 		$out['plugin'] = (string) $raw['plugin'];
 	}
 	$from = aafm_activity_valid_date( $raw['from'] ?? null );
@@ -177,6 +256,15 @@ function aafm_activity_filter_where( array $filters ): array {
 		if ( 'bridge' === $f['plugin'] ) {
 			$sql     .= ' AND ability LIKE %s';
 			$params[] = $wpdb->esc_like( 'aafm-bridge/' ) . '%';
+		} elseif ( 0 === strncmp( (string) $f['plugin'], 'bridge:', 7 ) ) {
+			// Exact names, never a LIKE on a namespace: that would match ai-engine for ai.
+			$tools = aafm_activity_bridge_tools( (string) $f['plugin'] );
+			if ( array() === $tools ) {
+				$sql .= ' AND 1=0';
+			} else {
+				$sql   .= ' AND ability IN (' . implode( ',', array_fill( 0, count( $tools ), '%s' ) ) . ')';
+				$params = array_merge( $params, $tools );
+			}
 		} elseif ( 'core' === $f['plugin'] ) {
 			$sql     .= ' AND ability LIKE %s';
 			$params[] = $wpdb->esc_like( 'aafm/' ) . '%';

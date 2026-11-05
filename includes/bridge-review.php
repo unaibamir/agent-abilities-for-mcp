@@ -63,8 +63,8 @@ function aafm_bridge_review_state(): array {
 /**
  * Store the review state.
  *
- * @param list<string> $reviewed Reviewed slugs.
- * @param list<string> $notified Announced slugs.
+ * @param array<int,string> $reviewed Reviewed slugs.
+ * @param array<int,string> $notified Announced slugs.
  * @return bool Whether the write took.
  */
 function aafm_bridge_review_store( array $reviewed, array $notified ): bool {
@@ -169,9 +169,26 @@ function aafm_bridge_review_sync(): void {
 		if ( ! $state['ok'] ) {
 			return;
 		}
-		if ( ! $state['baselined'] && ! aafm_bridge_review_store( aafm_bridge_foreign_slugs(), array() ) ) {
-			aafm_bridge_review_log_failure();
+		if ( ! $state['baselined'] ) {
+			if ( ! aafm_bridge_review_store( aafm_bridge_foreign_slugs(), array() ) ) {
+				aafm_bridge_review_log_failure();
+			}
+			return;
 		}
+
+		// Only slugs never announced count, so reviewing some tools does not re-announce the rest, and
+		// a plugin deactivated and reactivated before review does not announce its tools twice. The
+		// list is stored before the event goes out: a write that keeps failing must not send one on
+		// every page load.
+		$fresh = array_values( array_diff( array_diff( aafm_bridge_foreign_slugs(), $state['reviewed'] ), $state['notified'] ) );
+		if ( array() === $fresh ) {
+			return;
+		}
+		if ( ! aafm_bridge_review_store( $state['reviewed'], array_merge( $state['notified'], $fresh ) ) ) {
+			aafm_bridge_review_log_failure();
+			return;
+		}
+		aafm_notify_event( 'new_tools', 'detected', array( 'count' => count( $fresh ) ) );
 	} catch ( \Throwable $e ) {
 		unset( $e ); // Bookkeeping for a notice must never break the admin page that raised it.
 	}

@@ -112,6 +112,135 @@ final class BridgeReviewTest extends TestCase {
 		$this->assertFalse( wp_has_ability( 'aafm-bridge/demo-fresh' ) );
 	}
 
+	/**
+	 * Turn the new-tools notification on for the admin notice only.
+	 *
+	 * @return void
+	 */
+	private function notify_on(): void {
+		update_option(
+			'aafm_notifications',
+			array(
+				'mode'     => 'notice',
+				'email'    => '',
+				'triggers' => array( 'new_tools' => true ),
+			)
+		);
+		delete_option( 'aafm_notify_pending' );
+	}
+
+	/**
+	 * How many times a new-tools event reached the admin notice. Repeats of one trigger and subtype
+	 * fold into one entry with a repeat count (aafm_notify_pending_push()).
+	 *
+	 * @return int
+	 */
+	private function announcements(): int {
+		$total = 0;
+		foreach ( wp_list_filter( aafm_notify_pending_list(), array( 'trigger' => 'new_tools' ) ) as $entry ) {
+			$total += 1 + (int) ( $entry['repeat'] ?? 0 );
+		}
+		return $total;
+	}
+
+	public function test_a_notification_fires_once_per_new_tool(): void {
+		aafm_bridge_review_sync();
+		$this->notify_on();
+		$this->register_foreign_abilities(
+			'demo',
+			array(
+				'one' => array(),
+				'two' => array(),
+			)
+		);
+
+		aafm_bridge_review_sync();
+		$this->assertSame( 1, $this->announcements() );
+		$this->assertSame( 2, wp_list_filter( aafm_notify_pending_list(), array( 'trigger' => 'new_tools' ) )[0]['count'] );
+
+		aafm_bridge_review_sync();
+		$this->assertSame( 1, $this->announcements(), 'A second sync adds none.' );
+
+		$this->register_foreign_abilities( 'demo', array( 'three' => array() ) );
+		aafm_bridge_review_sync();
+		$this->assertSame( 2, $this->announcements() );
+		$this->assertCount( 3, aafm_bridge_review_state()['notified'] );
+	}
+
+	public function test_the_first_load_after_upgrading_raises_no_notification(): void {
+		$this->notify_on();
+		$this->register_foreign_abilities( 'demo', array( 'one' => array() ) );
+
+		aafm_bridge_review_sync();
+
+		$this->assertSame( 0, $this->announcements() );
+	}
+
+	public function test_reviewing_one_plugins_tools_does_not_re_announce_the_others(): void {
+		aafm_bridge_review_sync();
+		$this->notify_on();
+		$this->register_foreign_abilities( 'plugina', array( 'one' => array() ) );
+		$this->register_foreign_abilities( 'pluginb', array( 'two' => array() ) );
+		aafm_bridge_review_sync();
+		$this->assertSame( 1, $this->announcements() );
+
+		$this->assertTrue( aafm_bridge_mark_reviewed( array( 'plugina/one' ) ) );
+		$this->assertNotContains( 'plugina/one', aafm_bridge_review_state()['notified'], 'A reviewed slug leaves the announced list.' );
+		aafm_bridge_review_sync();
+		$this->assertSame( 1, $this->announcements(), 'The remaining tool is not announced again.' );
+
+		$this->register_foreign_abilities( 'pluginb', array( 'three' => array() ) );
+		aafm_bridge_review_sync();
+		$this->assertSame( 2, $this->announcements() );
+	}
+
+	public function test_a_plugin_deactivated_before_review_is_not_announced_twice_on_reactivation(): void {
+		aafm_bridge_review_sync();
+		$this->notify_on();
+		$this->register_foreign_abilities( 'demo', array( 'one' => array() ) );
+		aafm_bridge_review_sync();
+		$this->assertSame( 1, $this->announcements() );
+
+		$this->unregister_foreign_ability( 'demo/one' );
+		aafm_bridge_review_sync();
+		$this->register_foreign_abilities( 'demo', array( 'one' => array() ) );
+		aafm_bridge_review_sync();
+
+		$this->assertSame( 1, $this->announcements() );
+		$this->assertSame( array( 'demo/one' ), aafm_bridge_new_tools(), 'It is still waiting for review.' );
+	}
+
+	public function test_no_notification_when_the_trigger_is_off(): void {
+		aafm_bridge_review_sync();
+		$this->notify_on();
+		update_option(
+			'aafm_notifications',
+			array(
+				'mode'     => 'notice',
+				'email'    => '',
+				'triggers' => array( 'switch_flip' => true ),
+			)
+		);
+		$this->register_foreign_abilities( 'demo', array( 'one' => array() ) );
+
+		aafm_bridge_review_sync();
+
+		$this->assertSame( 0, $this->announcements() );
+		$this->assertSame( array( 'demo/one' ), aafm_bridge_new_tools(), 'It still shows as new on the screen.' );
+	}
+
+	public function test_a_write_that_keeps_failing_does_not_announce_on_every_page_load(): void {
+		aafm_bridge_review_sync();
+		$this->notify_on();
+		$this->register_foreign_abilities( 'demo', array( 'one' => array() ) );
+		add_filter( 'pre_update_option_aafm_bridge_review', static fn( $value, $old ) => $old, 10, 2 );
+
+		aafm_bridge_review_sync();
+		aafm_bridge_review_sync();
+
+		$this->assertSame( 0, $this->announcements() );
+	}
+
 	public function test_a_deactivated_then_reactivated_plugin_is_not_new_again(): void {
 		$this->register_foreign_abilities( 'demo', array( 'one' => array() ) );
 		aafm_bridge_review_sync();

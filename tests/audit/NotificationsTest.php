@@ -105,7 +105,7 @@ final class NotificationsTest extends TestCase {
 		) as $stored ) {
 			$n = aafm_notifications_normalize( $stored );
 			$this->assertArrayHasKey( $n['mode'], aafm_notify_modes() );
-			$this->assertSame( array( 'new_app', 'risky_run', 'denial_burst', 'switch_flip' ), array_keys( $n['triggers'] ) );
+			$this->assertSame( array( 'new_app', 'risky_run', 'denial_burst', 'switch_flip', 'new_tools' ), array_keys( $n['triggers'] ) );
 			$this->assertSame( '', $n['email'] );
 		}
 		$this->assertTrue( aafm_notifications_normalize( array( 'triggers' => array( 'new_app' => '1' ) ) )['triggers']['new_app'] );
@@ -817,5 +817,37 @@ final class NotificationsTest extends TestCase {
 			$this->assertStringNotContainsString( 'ana_the_admin', $mail['subject'] . $mail['message'] );
 			$this->assertStringNotContainsString( '203.0.113.77', $mail['subject'] . $mail['message'] );
 		}
+	}
+
+	public function test_the_new_tools_email_counts_tools_and_never_says_denied_calls(): void {
+		$this->configure(
+			array(
+				'triggers' => array( 'new_tools' => true ),
+			)
+		);
+
+		aafm_notify_event( 'new_tools', 'detected', array( 'count' => 3 ) );
+
+		$sent = $this->sent();
+		$this->assertCount( 1, $sent );
+		$this->assertStringContainsString( 'Other plugins added new tools', $sent[0]['subject'] );
+		$this->assertStringContainsString( 'New tools from other plugins: 3', $sent[0]['message'] );
+		$this->assertStringContainsString( 'Review them here:', $sent[0]['message'] );
+		$this->assertStringContainsString( 'tab=bridge', $sent[0]['message'] );
+		$this->assertStringNotContainsString( 'Denied calls counted', $sent[0]['message'] );
+		$this->assertStringNotContainsString( 'Open the Activity Log', $sent[0]['message'] );
+
+		$burst = aafm_notify_build_message(
+			array(
+				array(
+					'trigger' => 'denial_burst',
+					'subtype' => 'burst',
+					'count'   => 10,
+				),
+			),
+			false
+		);
+		$this->assertStringContainsString( 'Denied calls counted: 10', $burst['body'] );
+		$this->assertStringContainsString( 'Open the Activity Log:', $burst['body'] );
 	}
 }

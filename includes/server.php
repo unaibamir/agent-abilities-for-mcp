@@ -2011,7 +2011,7 @@ function aafm_mcp_no_store_enveloped( $served, $result, $request, $server ) {
 		// The filter core applies before it sends its logged-in no-cache headers.
 		if ( apply_filters( 'rest_send_nocache_headers', is_user_logged_in() ) ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core hook.
 			$nocache = wp_get_nocache_headers();
-			$value   = is_string( $nocache['Cache-Control'] ?? null ) && str_contains( $nocache['Cache-Control'], 'no-store' ) ? $nocache['Cache-Control'] : 'no-store';
+			$value   = is_string( $nocache['Cache-Control'] ?? null ) && false !== strpos( $nocache['Cache-Control'], 'no-store' ) ? $nocache['Cache-Control'] : 'no-store';
 		}
 		$server->send_header( 'Cache-Control', $value );
 	}

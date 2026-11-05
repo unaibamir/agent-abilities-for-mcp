@@ -661,6 +661,7 @@ function aafm_render_bridge_ability_row( array $ability, array $enabled, bool $d
 	$hint        = (string) ( $ability['description'] ?? '' );
 	$tool_name   = (string) ( $ability['tool_name'] ?? aafm_mcp_tool_name( aafm_bridge_tool_name( $slug ) ) );
 	$title_id    = 'aafm-bridge-ability-title-' . sanitize_key( $slug );
+	$risk_label  = aafm_bridge_risk_label( $ability );
 
 	printf(
 		'<div class="aafm-ability-row%1$s" data-risk="%2$s"%3$s>',
@@ -698,14 +699,20 @@ function aafm_render_bridge_ability_row( array $ability, array $enabled, bool $d
 
 	echo '<div class="aafm-ability-main"><div class="aafm-ability-title">';
 	printf(
-		'<h4 id="%1$s">%2$s</h4><span class="aafm-badge aafm-badge-%3$s">%3$s</span>',
+		'<h4 id="%1$s">%2$s</h4><span class="aafm-badge aafm-badge-%3$s">%4$s</span>',
 		esc_attr( $title_id ),
 		esc_html( (string) ( $ability['label'] ?? $slug ) ),
-		esc_attr( $risk )
+		esc_attr( $risk ),
+		esc_html( $risk_label['label'] )
 	);
 	echo '</div>';
 
 	printf( '<p class="aafm-ability-hint">%s</p>', esc_html( $hint ) );
+
+	// An unavailable row has no annotations to read, so it says nothing about what the plugin labelled.
+	if ( ! $disabled && '' !== $risk_label['note'] ) {
+		printf( '<p class="aafm-ability-hint aafm-muted">%s</p>', esc_html( $risk_label['note'] ) );
+	}
 
 	// The resulting MCP tool name as a muted monospace line (not a second badge).
 	printf(

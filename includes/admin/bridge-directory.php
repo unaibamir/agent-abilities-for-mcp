@@ -388,27 +388,17 @@ function aafm_merge_bridge_groups_by_known_plugin( array $groups ): array {
 /**
  * Turn a source namespace slug into a readable group heading.
  *
- * The namespace comes off the ability slug lowercased and hyphenated (e.g. "events-manager"),
- * with no way to recover a plugin's real brand casing from it. Three lookups, in order:
- * 1. aafm_bridge_known_plugin_labels() - namespaces whose real name Title Case gets wrong.
- * 2. aafm_integration_cards() - the Integrations tab's own labels, for the namespaces that
- *    happen to match our internal integration slugs exactly (yoast, rankmath, aioseo, acf,
- *    woocommerce), so the two tabs never disagree about the same plugin's name.
- * 3. A generic Title Case transform ("events-manager" -> "Events Manager") as the last resort
- *    for any namespace we cannot otherwise resolve.
+ * The namespace comes off the ability slug lowercased and hyphenated (e.g. "events-manager").
+ * aafm_bridge_provider_label() is tried first; a generic Title Case transform ("events-manager" ->
+ * "Events Manager") is the last resort, and only for a heading, because a heading is only a label.
  *
  * @param string $ns Source namespace.
  * @return string
  */
 function aafm_bridge_display_label( string $ns ): string {
-	$known = aafm_bridge_known_plugin_labels();
-	if ( isset( $known[ $ns ] ) ) {
-		return $known[ $ns ];
-	}
-
-	$cards = aafm_integration_cards();
-	if ( isset( $cards[ $ns ]['label'] ) ) {
-		return (string) $cards[ $ns ]['label'];
+	$provider = aafm_bridge_provider_label( $ns );
+	if ( '' !== $provider ) {
+		return $provider;
 	}
 
 	$words = str_replace( array( '-', '_' ), ' ', $ns );

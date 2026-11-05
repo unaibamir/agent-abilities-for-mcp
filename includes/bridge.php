@@ -923,37 +923,47 @@ function aafm_bridge_result_is_plain_data( $value, int $depth = 0 ): bool {
  * Name the plugin behind a bridged ability's own failure.
  *
  * The client sees only the error text, so a bare "No such customer" gives no hint which plugin said
- * it. The source is the foreign slug's namespace, the label the admin directory uses. The error
- * code and data are kept; only the first message gets the prefix. The core namespace, an error
- * with no code, core's own ability_* errors and a message that already names the plugin (as a whole word,
- * ignoring case) are returned as they are.
+ * it. The source is the plugin name from aafm_bridge_provider_label(); without one the namespace is
+ * named as a namespace, never guessed into a plugin name. The error code and data are kept; only the
+ * first message gets the prefix. The core namespace, an error with no code, core's own ability_*
+ * errors and a message that already names the plugin or the namespace (as whole words, ignoring
+ * case) are returned as they are.
  *
  * @param string    $foreign_slug Foreign ability slug, for example "woocommerce/product-update".
  * @param \WP_Error $error        The error the foreign ability returned.
  * @return \WP_Error
  */
 function aafm_bridge_attribute_error( string $foreign_slug, \WP_Error $error ): \WP_Error {
-	$pos    = strpos( $foreign_slug, '/' );
-	$source = false === $pos ? $foreign_slug : substr( $foreign_slug, 0, $pos );
+	$source = aafm_bridge_namespace_of( $foreign_slug );
 	$code   = $error->get_error_code();
 	if ( '' === $source || 'core' === $source || '' === $code || str_starts_with( (string) $code, 'ability_' ) ) {
 		return $error;
 	}
+
+	$label   = aafm_bridge_provider_label( $source );
+	$message = $error->get_error_message();
 	// Whole-word match, so a short namespace such as "ai" is not found inside "failed" or "email".
-	if ( 1 === preg_match( '/(?<![a-z0-9])' . preg_quote( $source, '/' ) . '(?![a-z0-9])/i', $error->get_error_message() ) ) {
-		return $error;
+	foreach ( array( $source, $label ) as $name ) {
+		if ( '' !== $name && 1 === preg_match( '/(?<![a-z0-9])' . preg_quote( $name, '/' ) . '(?![a-z0-9])/i', $message ) ) {
+			return $error;
+		}
 	}
 
-	return new WP_Error(
-		$code,
-		sprintf(
-			/* translators: 1: the plugin's ability namespace, for example "woocommerce". 2: the error text that plugin returned. */
+	$text = '' !== $label
+		? sprintf(
+			/* translators: 1: the plugin's name, for example "WooCommerce". 2: the error text that plugin returned. */
 			__( 'The %1$s plugin returned an error: %2$s', 'agent-abilities-for-mcp' ),
+			$label,
+			$message
+		)
+		: sprintf(
+			/* translators: 1: an ability namespace, for example "writer". 2: the error text that plugin returned. */
+			__( 'A plugin that registers tools under the "%1$s" namespace returned an error: %2$s', 'agent-abilities-for-mcp' ),
 			$source,
-			$error->get_error_message()
-		),
-		$error->get_error_data()
-	);
+			$message
+		);
+
+	return new WP_Error( $code, $text, $error->get_error_data() );
 }
 
 /**

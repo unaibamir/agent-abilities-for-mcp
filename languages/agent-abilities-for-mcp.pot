@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-05T05:06:54+05:00\n"
+"POT-Creation-Date: 2026-11-05T05:30:02+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -10055,12 +10055,12 @@ msgstr ""
 msgid "This site does not accept MCP requests from that web page."
 msgstr ""
 
-#: includes/page-builder-guard.php:193
+#: includes/page-builder-guard.php:195
 msgid "This content may belong to a page builder, and the plugin could not tell which one, so it refused the write. Edit the content in the page builder directly, or try again."
 msgstr ""
 
 #. translators: 1: detected page builder name, e.g. Elementor. 2: same name, repeated for readability. 3: same name, repeated for readability.
-#: includes/page-builder-guard.php:203
+#: includes/page-builder-guard.php:205
 #, php-format
 msgid "This content is owned by %1$s. Writing to it through this ability would either have no visible effect or corrupt %2$s's own stored markup, because %3$s renders from its own stored data rather than (or in addition to) the post content field. Edit it there directly."
 msgstr ""

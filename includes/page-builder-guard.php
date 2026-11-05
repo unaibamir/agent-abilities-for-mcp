@@ -2,14 +2,16 @@
 /**
  * Page-builder content-ownership detection.
  *
- * A post whose content is owned by a page builder (Elementor, Divi, Beaver Builder, Avada or Visual
- * Composer) will either silently ignore a write to post_content/post_excerpt made through this
- * plugin's own content abilities or have it corrupted. Elementor, Divi and Beaver Builder do not use
- * post_content as their rendering source - the builder's own
- * stored data (a separate meta key, or an external asset file) is what actually renders, so the
- * agent's edit appears to succeed but has no visible effect. This is a REFUSAL guard, not a
- * builder integration: it never edits builder-owned data, it only stops a write from landing
- * somewhere it will be silently ignored.
+ * A write to post_content/post_excerpt made through this plugin's own content abilities can go wrong
+ * three ways on a post owned by a page builder (Elementor, Divi, Beaver Builder, Avada or Visual
+ * Composer). It can be silently ignored: Elementor, Divi and Beaver Builder do not use post_content
+ * as their rendering source, so the builder's own stored data (a separate meta key, or an external
+ * asset file) is what actually renders, and the agent's edit appears to succeed but has no visible
+ * effect. It can corrupt markup: Avada renders from Fusion shortcodes in post_content, so a generic
+ * write can break that shortcode tree. And it can be overwritten later: Visual Composer also writes
+ * rendered output into post_content, so a visible change is lost the next time someone saves in the
+ * builder. This is a REFUSAL guard, not a builder integration: it never edits builder-owned data, it
+ * only stops a write from landing where it will be ignored, corrupted or overwritten.
  *
  * Avada/Fusion Builder's marker WAS confirmed (2026-09-05) against a real installed copy (Avada
  * 7.16.1 theme, Fusion Builder 3.16.1 plugin): `fusion_builder_status` post meta set to 'active'

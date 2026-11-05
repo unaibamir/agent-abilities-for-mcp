@@ -327,6 +327,17 @@ final class OriginGuardTest extends TestCase {
 		$this->assertGreaterThan( 0, $seen, 'The OAuth namespace registers routes.' );
 	}
 
+	public function test_both_guards_judge_the_same_origin_string(): void {
+		$this->route_as_rest_request();
+		// WordPress slashes $_SERVER, so a trailing backslash is part of the value core hands the dispatch guard.
+		foreach ( array( 'https://claude.ai\\', 'https://claude.ai', 'https://evil.example\\' ) as $origin ) {
+			$_SERVER['HTTP_ORIGIN'] = $origin;
+			$at_auth                = aafm_mcp_origin_auth_guard( null );
+			$at_dispatch            = aafm_mcp_origin_guard( null, null, $this->request( $origin ) );
+			$this->assertSame( null === $at_auth, null === $at_dispatch, $origin );
+		}
+	}
+
 	public function test_one_denial_row_for_a_refused_origin_at_the_auth_stage(): void {
 		$this->serve_with_credentials( 'https://evil.example', array() );
 		$rows = aafm_query_activity( array( 'ability' => '(transport)' ) );

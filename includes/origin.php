@@ -159,11 +159,11 @@ function aafm_mcp_origin_auth_guard( $errors ) {
 	if ( ! is_string( $route ) || ! aafm_is_mcp_route( untrailingslashit( $route ) ) ) {
 		return $errors;
 	}
-	// Core's get_headers() builds the origin header from this same server variable.
+	// Core's get_headers() builds the origin header from this same server variable, as it is, so the
+	// dispatch guard and this one judge the identical string. No unslashing here.
 	if ( ! isset( $_SERVER['HTTP_ORIGIN'] ) || ! is_string( $_SERVER['HTTP_ORIGIN'] ) ) {
 		return $errors;
 	}
-	$header = wp_unslash( $_SERVER['HTTP_ORIGIN'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- compared against an allow-list, never stored raw.
-	return aafm_mcp_origin_error( $header ) ?? $errors;
+	return aafm_mcp_origin_error( $_SERVER['HTTP_ORIGIN'] ) ?? $errors; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- left slashed on purpose to match core's own header string; compared against an allow-list, never stored raw.
 }
 add_filter( 'rest_authentication_errors', 'aafm_mcp_origin_auth_guard', 1 );

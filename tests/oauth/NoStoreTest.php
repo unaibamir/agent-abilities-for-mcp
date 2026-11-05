@@ -74,10 +74,20 @@ final class NoStoreTest extends TestCase {
 	public function test_enveloped_responses_carry_no_store(): void {
 		$denied = $this->serve_enveloped( false );
 		$this->assertSame( 401, json_decode( $denied->sent_body, true )['status'] ?? null, 'The envelope carries the real status in its body.' );
-		$this->assertSame( 'no-store', $denied->sent_headers['Cache-Control'] ?? null, 'enveloped 401' );
+		$this->assertSame( 'no-store', $denied->sent_headers['Cache-Control'] ?? null, 'enveloped logged-out 401' );
 		$ok = $this->serve_enveloped( true );
 		$this->assertSame( 200, json_decode( $ok->sent_body, true )['status'] ?? null );
-		$this->assertSame( 'no-store', $ok->sent_headers['Cache-Control'] ?? null, 'enveloped 200' );
+		$value = (string) ( $ok->sent_headers['Cache-Control'] ?? '' );
+		$this->assertStringContainsString( 'no-store', $value, 'enveloped logged-in 200' );
+		$this->assertStringContainsString( 'private', $value, 'A logged-in response keeps the private directive core sends.' );
+		$this->assertSame( wp_get_nocache_headers()['Cache-Control'], $value, "Core's own logged-in value is kept, not narrowed to bare no-store." );
+	}
+
+	public function test_a_request_without_the_envelope_flag_is_left_to_core(): void {
+		$this->acting_as( 'administrator' );
+		$server = $this->mcp_spy_server();
+		$this->assertFalse( aafm_mcp_no_store_enveloped( false, new \WP_REST_Response( array(), 200 ), new \WP_REST_Request( 'POST', aafm_mcp_rest_route() ), $server ) );
+		$this->assertArrayNotHasKey( 'Cache-Control', $server->sent_headers, 'The filter acts only for enveloped requests.' );
 	}
 
 	public function test_envelope_flag_without_a_value_carries_no_store(): void {

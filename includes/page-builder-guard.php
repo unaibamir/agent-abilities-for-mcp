@@ -2,9 +2,10 @@
 /**
  * Page-builder content-ownership detection.
  *
- * A post whose content is owned by a page builder that does not use post_content as its
- * rendering source (Elementor, Divi, Beaver Builder) will silently ignore a write to
- * post_content/post_excerpt made through this plugin's own content abilities - the builder's own
+ * A post whose content is owned by a page builder (Elementor, Divi, Beaver Builder, Avada or Visual
+ * Composer) will either silently ignore a write to post_content/post_excerpt made through this
+ * plugin's own content abilities or have it corrupted. Elementor, Divi and Beaver Builder do not use
+ * post_content as their rendering source - the builder's own
  * stored data (a separate meta key, or an external asset file) is what actually renders, so the
  * agent's edit appears to succeed but has no visible effect. This is a REFUSAL guard, not a
  * builder integration: it never edits builder-owned data, it only stops a write from landing
@@ -18,7 +19,7 @@
  * had assumed no such key existed and scoped its own guard to post_content alone - this is the
  * "new information" it said would require a follow-up, not a gap in that design. Both keys are
  * added below so the GENERIC guard also refuses a write on an Avada-owned post, exactly like
- * Elementor/Divi/Beaver Builder; aafm/avada-replace-text (includes/abilities/avada.php) is the one
+ * the other builders; aafm/avada-replace-text (includes/abilities/avada.php) is the one
  * exception that allows a text-only edit, via its own shortcode-tree signature check rather than
  * this blanket refusal.
  *

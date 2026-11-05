@@ -1012,7 +1012,8 @@ function aafm_acf_address_reads_back( string $address, array $def ): bool {
  * string is the caller's own, so it discloses nothing the caller did not supply, and naming it is
  * what lets an agent drop the stray character and retry instead of escalating a bare failure to a
  * human. It runs after the hard block, so a protected key is still refused generically and is never
- * named back here.
+ * named back here. Like the other unknown-name refusals it names the address only to a caller who
+ * could call acf-list-field-groups; anyone else gets a generic refusal.
  *
  * The message says what to do rather than describing ACF's internals, because the caller cannot act
  * on the collation and can act on "use the field's exact name or its key". It goes through the same
@@ -1039,12 +1040,14 @@ function aafm_acf_inexact_address_error( string $address ): WP_Error {
  * The refusal for a container write addressing sub-fields the field definition does not declare.
  *
  * Named rather than generic, and it echoes the offending addresses back, unlike the hard-block
- * refusal one line above it. The two are not the same kind of secret. The hard block stays generic
- * because saying which meta key was protected tells a caller something about the site it did not
- * supply; an unrecognised sub-field address is the caller's own string handed straight back, so it
- * discloses nothing the caller did not already have. Naming it is what turns "the request could not
- * be completed" into something an agent can correct on its next turn, which is most of the point of
- * refusing early.
+ * refusal one line above it, but only to a caller who could call acf-list-field-groups (see
+ * aafm_acf_caller_can_list_fields()); anyone else gets a generic refusal that still says nothing was
+ * written. The hard block stays generic because saying which meta key was protected tells a caller
+ * something about the site it did not supply. An unrecognised sub-field address is the caller's own
+ * string handed straight back, so echoing it discloses nothing the caller did not already have, and
+ * naming it is what turns "the request could not be completed" into something an agent can correct
+ * on its next turn. The list-tool gate exists so the message never reopens a channel an owner closed
+ * by hiding that tool.
  *
  * An earlier version of this note also argued the names were public anyway, through
  * aafm-acf-list-field-groups. That was wrong: that ability returns key, label and type per TOP-LEVEL
@@ -1161,7 +1164,8 @@ function aafm_acf_safe_address_list( array $addresses ): array {
  * that would only be accurate for half its rows is not an option.
  *
  * It names the ROW, not the layout the caller sent and not the layouts the field declares. The row
- * address is the actionable part and is the same kind of string the sibling refusal already echoes;
+ * address is the actionable part and is the same kind of string the sibling refusal already echoes
+ * (and, like it, only to a caller who could call acf-list-field-groups);
  * the declared layout names are site configuration the caller did not supply, and nothing in this
  * plugin's read surface exposes them, so listing them here would disclose rather than help.
  *

@@ -1022,6 +1022,9 @@ function aafm_acf_address_reads_back( string $address, array $def ): bool {
  * @return \WP_Error
  */
 function aafm_acf_inexact_address_error( string $address ): WP_Error {
+	if ( ! aafm_acf_caller_can_list_fields() ) {
+		return new WP_Error( 'aafm_acf_inexact_field_address', __( 'One of those does not exactly name a field, so nothing was written. Send the field\'s exact name or its field key.', 'agent-abilities-for-mcp' ) );
+	}
 	return new WP_Error(
 		'aafm_acf_inexact_field_address',
 		sprintf(
@@ -1166,6 +1169,9 @@ function aafm_acf_safe_address_list( array $addresses ): array {
  * @return \WP_Error
  */
 function aafm_acf_unknown_layout_error( array $rows ): WP_Error {
+	if ( ! aafm_acf_caller_can_list_fields() ) {
+		return new WP_Error( 'aafm_acf_unknown_layout', __( 'Each flexible content row must name one of the field\'s own layouts in acf_fc_layout. One or more rows do not, so nothing was written.', 'agent-abilities-for-mcp' ) );
+	}
 	return new WP_Error(
 		'aafm_acf_unknown_layout',
 		sprintf(

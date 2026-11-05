@@ -57,7 +57,7 @@ function aafm_notify_modes(): array {
 }
 
 /**
- * The four trigger switches: slug => the Settings label and the phrase for "alerts for ...".
+ * The trigger switches: slug => the Settings label and the phrase for "alerts for ...".
  * The event subtype for "alerts for this trigger were turned off" is the slug plus "_off".
  *
  * @return array<string,array{label:string,phrase:string}>
@@ -79,6 +79,10 @@ function aafm_notify_triggers(): array {
 		'switch_flip'  => array(
 			'label'  => __( 'Read-only mode or the high-risk lock is switched', 'agent-abilities-for-mcp' ),
 			'phrase' => __( 'read-only and high-risk switch changes', 'agent-abilities-for-mcp' ),
+		),
+		'new_tools'    => array(
+			'label'  => __( 'Another plugin adds new AI tools', 'agent-abilities-for-mcp' ),
+			'phrase' => __( 'new tools from other plugins', 'agent-abilities-for-mcp' ),
 		),
 	);
 }
@@ -384,6 +388,7 @@ function aafm_notify_event_label( array $event ): string {
 		'switch_flip:read_only_off'      => __( 'Read-only mode was turned off', 'agent-abilities-for-mcp' ),
 		'switch_flip:high_risk_unlocked' => __( 'The high-risk lock was opened', 'agent-abilities-for-mcp' ),
 		'switch_flip:high_risk_locked'   => __( 'The high-risk lock was closed', 'agent-abilities-for-mcp' ),
+		'new_tools:detected'             => __( 'Other plugins added new tools', 'agent-abilities-for-mcp' ),
 		'recipient:changed'              => __( 'The notification address was changed', 'agent-abilities-for-mcp' ),
 		'settings:plugin_reset'          => __( 'The plugin settings were reset', 'agent-abilities-for-mcp' ),
 		'settings:alerts_off'            => __( 'Email alerts were turned off', 'agent-abilities-for-mcp' ),
@@ -396,12 +401,16 @@ function aafm_notify_event_label( array $event ): string {
 }
 
 /**
- * The Activity Log link for an event: its row, or the denied view for a burst, or the tab.
+ * Where an event is looked at: its Activity Log row, the denied view for a burst, the Other plugins
+ * tab for new tools, or the Activity Log tab.
  *
  * @param array<string,mixed> $event An event record.
  * @return string
  */
 function aafm_notify_event_link( array $event ): string {
+	if ( 'new_tools' === ( $event['trigger'] ?? '' ) ) {
+		return admin_url( 'admin.php?page=agent-abilities-for-mcp&tab=bridge' );
+	}
 	$base = 'admin.php?page=agent-abilities-for-mcp&tab=activity';
 	if ( ! empty( $event['row_id'] ) ) {
 		return admin_url( $base . '&row=' . (int) $event['row_id'] );
@@ -467,9 +476,13 @@ function aafm_notify_build_message( array $events, bool $digest ): array {
 			/* translators: %d: a WordPress user id. */
 			$lines[] = sprintf( __( 'For user account #%d', 'agent-abilities-for-mcp' ), (int) $event['user_id'] );
 		}
+		$new_tools = 'new_tools' === ( $event['trigger'] ?? '' );
 		if ( ! empty( $event['count'] ) ) {
-			/* translators: %d: how many calls were denied. */
-			$lines[] = sprintf( __( 'Denied calls counted: %d', 'agent-abilities-for-mcp' ), (int) $event['count'] );
+			$lines[] = $new_tools
+				/* translators: %d: how many tools other plugins added. */
+				? sprintf( __( 'New tools from other plugins: %d', 'agent-abilities-for-mcp' ), (int) $event['count'] )
+				/* translators: %d: how many calls were denied. */
+				: sprintf( __( 'Denied calls counted: %d', 'agent-abilities-for-mcp' ), (int) $event['count'] );
 		}
 		if ( ! empty( $event['suppressed'] ) ) {
 			/* translators: %d: how many similar alerts were held back. */
@@ -484,7 +497,7 @@ function aafm_notify_build_message( array $events, bool $digest ): array {
 			}
 		}
 		$lines[] = '';
-		$lines[] = __( 'Open the Activity Log:', 'agent-abilities-for-mcp' );
+		$lines[] = $new_tools ? __( 'Review them here:', 'agent-abilities-for-mcp' ) : __( 'Open the Activity Log:', 'agent-abilities-for-mcp' );
 		$lines[] = aafm_notify_event_link( $event );
 	}
 	$lines[] = '';

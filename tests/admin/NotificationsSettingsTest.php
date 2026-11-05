@@ -196,13 +196,32 @@ final class NotificationsSettingsTest extends TestCase {
 		$html = (string) ob_get_clean();
 		$this->assertStringContainsString( 'name="aafm_notify_mode"', $html );
 		$this->assertStringContainsString( 'name="aafm_notify_email"', $html );
-		foreach ( array( 'new_app', 'risky_run', 'denial_burst', 'switch_flip' ) as $slug ) {
+		foreach ( array( 'new_app', 'risky_run', 'denial_burst', 'switch_flip', 'new_tools' ) as $slug ) {
 			$this->assertStringContainsString( 'name="aafm_notify_' . $slug . '"', $html );
 			$this->assertDoesNotMatchRegularExpression( '/name="aafm_notify_' . $slug . '"[^>]*checked/', $html );
 		}
 		$this->assertMatchesRegularExpression( '/<option value="off"[^>]*selected/', $html );
 		$this->assertStringContainsString( 'id="aafm-notify-test"', $html );
 		$this->assertStringContainsString( 'wp-cron.php', $html, 'The WP-Cron note is on the card.' );
+	}
+
+	public function test_the_new_tools_trigger_saves_and_its_notice_links_to_the_other_plugins_tab(): void {
+		$json = $this->save(
+			array(
+				'aafm_notify_mode'      => 'notice',
+				'aafm_notify_new_tools' => '1',
+			)
+		);
+		$this->assertTrue( $json['success'] ?? false, wp_json_encode( $json ) );
+		$this->assertTrue( aafm_notifications_settings()['triggers']['new_tools'] );
+
+		aafm_notify_event( 'new_tools', 'detected', array( 'count' => 2 ) );
+		$this->acting_as( 'administrator' );
+		$html = $this->render_notice();
+		$this->assertStringContainsString( 'Other plugins added new tools', $html );
+		$this->assertStringContainsString( 'tab=bridge', $html );
+		$this->assertStringContainsString( 'Review them', $html );
+		$this->assertStringNotContainsString( 'View in Activity Log', $html, 'The link goes to the Other plugins tab.' );
 	}
 
 	public function test_the_card_escapes_a_stored_address(): void {

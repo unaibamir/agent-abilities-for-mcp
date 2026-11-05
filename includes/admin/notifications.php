@@ -358,7 +358,7 @@ function aafm_notify_admin_notice(): void {
 			/* translators: 1: what happened, for example "An Application Password was created". 2: how many times it happened. */
 			$label = sprintf( _n( '%1$s (%2$d time)', '%1$s (%2$d times)', $times, 'agent-abilities-for-mcp' ), $label, $times );
 		}
-		echo '<li>' . esc_html( $label ) . ' (' . esc_html( gmdate( 'Y-m-d H:i', (int) ( $event['time'] ?? 0 ) ) ) . ' UTC) <a href="' . esc_url( aafm_notify_event_link( $event ) ) . '">' . esc_html__( 'View in Activity Log', 'agent-abilities-for-mcp' ) . '</a></li>';
+		echo '<li>' . esc_html( $label ) . ' (' . esc_html( gmdate( 'Y-m-d H:i', (int) ( $event['time'] ?? 0 ) ) ) . ' UTC) <a href="' . esc_url( aafm_notify_event_link( $event ) ) . '">' . esc_html( 'new_tools' === ( $event['trigger'] ?? '' ) ? __( 'Review them', 'agent-abilities-for-mcp' ) : __( 'View in Activity Log', 'agent-abilities-for-mcp' ) ) . '</a></li>';
 	}
 	$more = count( $pending ) - 3;
 	if ( $more > 0 ) {

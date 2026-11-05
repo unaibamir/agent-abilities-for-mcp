@@ -27,7 +27,7 @@ final class NotificationClaimsTest extends TestCase {
 
 	public function test_the_faq_names_the_modes_and_triggers_the_settings_card_offers(): void {
 		$this->assertSame( array( 'off', 'notice', 'immediate', 'digest' ), array_keys( aafm_notify_modes() ) );
-		$this->assertCount( 4, aafm_notify_triggers() );
+		$this->assertCount( 5, aafm_notify_triggers() );
 		$faq = strtolower( $this->faq_entry() );
 		foreach ( array( 'admin notice', 'email right away', 'one email a day', 'new app being authorized', 'burst of denied calls' ) as $phrase ) {
 			$this->assertStringContainsString( $phrase, $faq );

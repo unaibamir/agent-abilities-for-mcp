@@ -482,6 +482,11 @@ function aafm_render_bridge_group( string $ns, array $group, array $enabled, boo
 		echo '<p class="aafm-card-desc">' . esc_html( aafm_bridge_source_line( (string) ( $group['label'] ?? $ns ) ) ) . '</p>';
 	}
 
+	$flagged = $disabled ? '' : aafm_bridge_group_personal_data_kind( $rows );
+	if ( '' !== $flagged ) {
+		echo wp_kses( aafm_get_notice_html( 'info', aafm_bridge_personal_data_notice( $flagged ) ), aafm_admin_allowed_html() );
+	}
+
 	// Per-group bulk controls: flip every ability in this plugin at once. Not on the orphan
 	// group (its rows are disabled). Bulk enable is a deliberate action, so it turns on
 	// destructive abilities too without the per-row confirm; the DESTRUCTIVE badge still warns.
@@ -504,6 +509,22 @@ function aafm_render_bridge_group( string $ns, array $group, array $enabled, boo
 	echo '</div>';
 
 	echo '</details>';
+}
+
+/**
+ * The first personal-data kind among a group's rows.
+ *
+ * @param array<int,array<string,mixed>> $rows Group rows; each has a slug.
+ * @return string '' when no row is flagged.
+ */
+function aafm_bridge_group_personal_data_kind( array $rows ): string {
+	foreach ( $rows as $row ) {
+		$kind = aafm_bridge_personal_data_kind( (string) ( $row['slug'] ?? '' ) );
+		if ( '' !== $kind ) {
+			return $kind;
+		}
+	}
+	return '';
 }
 
 /**
@@ -708,6 +729,11 @@ function aafm_render_bridge_ability_row( array $ability, array $enabled, bool $d
 	echo '</div>';
 
 	printf( '<p class="aafm-ability-hint">%s</p>', esc_html( $hint ) );
+
+	$data_notice = $disabled ? '' : aafm_bridge_personal_data_row_notice( aafm_bridge_personal_data_kind( $slug ) );
+	if ( '' !== $data_notice ) {
+		echo wp_kses( aafm_get_notice_html( 'info', $data_notice, array( 'inline' => true ) ), aafm_admin_allowed_html() );
+	}
 
 	// An unavailable row has no annotations to read, so it says nothing about what the plugin labelled.
 	if ( ! $disabled && '' !== $risk_label['note'] ) {

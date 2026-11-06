@@ -241,7 +241,7 @@ final class BridgeReviewScreenTest extends TestCase {
 		$this->assertSame( 2, substr_count( $card, '>Mark as reviewed<' ) );
 		$this->assertSame( 2, substr_count( $card, '>Allow only read tools<' ) );
 		$this->assertSame( 1, substr_count( $card, '>Mark all as reviewed<' ) );
-		$this->assertStringContainsString( 'aafm-bridge-mark-reviewed" data-bridge-plugin="all"', $card );
+		$this->assertStringContainsString( 'aafm-bridge-mark-reviewed" data-bridge-plugin="AAFM-ALL:"', $card );
 		$this->assertStringContainsString( 'aafm-bridge-mark-reviewed" data-bridge-plugin="otherplugin" data-bridge-name="Otherplugin"', $card );
 		$this->assertStringContainsString( 'type="button"', $card, 'kses keeps the button type, so a click never submits anything.' );
 	}
@@ -254,7 +254,7 @@ final class BridgeReviewScreenTest extends TestCase {
 		$nonce             = wp_create_nonce( 'aafm_admin' );
 		$_POST['nonce']    = $nonce;
 		$_REQUEST['nonce'] = $nonce;
-		$_POST['plugin']   = 'all';
+		$_POST['plugin']   = aafm_bridge_review_all_key();
 		$json              = $this->run_handler( 'aafm_ajax_bridge_mark_reviewed' );
 
 		$this->assertTrue( $json['success'] );

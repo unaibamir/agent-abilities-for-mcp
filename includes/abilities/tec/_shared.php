@@ -307,7 +307,7 @@ function aafm_tec_perm_create_organizer(): bool {
  * Enforce the operator's max-title-length and strict-block-validation settings against a TEC
  * ORM args array before it is persisted.
  *
- * Codex final round 9 MEDIUM: TEC events/venues/organizers build their own ORM args array
+ * TEC events/venues/organizers build their own ORM args array
  * (aafm_tec_event_orm_args()/aafm_tec_venue_orm_args()/aafm_tec_organizer_orm_args()) instead of
  * routing through aafm_insert_post()/aafm_exec_update_post(), so neither setting ever applied to
  * them. Force-draft is fixed at its own shared chokepoint

@@ -123,7 +123,7 @@ function aafm_wc_attribute_output_properties(): array {
 /**
  * Redact one WooCommerce global attribute stdClass into the API row shape.
  *
- * Sweep finding A (208 FIX-2 item 1): this is now used ONLY by wc-list-product-attributes' bulk
+ * This is now used ONLY by wc-list-product-attributes' bulk
  * row mapping. The two by-id lookups (create's post-write re-read, update's before/after reads)
  * were rewritten to call wc_get_attribute( $id ) directly - WooCommerce's own by-id lookup already
  * returns a stdClass in this exact renamed shape (wc-attribute-functions.php:472-488), including
@@ -217,7 +217,7 @@ function aafm_exec_wc_list_product_attributes(): array {
  * @return array<string,mixed>
  */
 function aafm_wc_attribute_write_properties(): array {
-	// B31: the accepted attribute types come from WooCommerce's own wc_get_attribute_types() -
+	// The accepted attribute types come from WooCommerce's own wc_get_attribute_types() -
 	// for core that is ONLY 'select'. The old enum also advertised a phantom 'text' type, which
 	// wc_create_attribute() silently coerced to select. Sourcing the enum from the vendor keeps
 	// the schema honest, including on a site whose features register extra types; the fallback
@@ -289,8 +289,8 @@ function aafm_args_wc_create_product_attribute(): array {
  * Execute aafm/wc-create-product-attribute.
  *
  * Sanitizes all inputs, delegates to wc_create_attribute(), then re-reads the created row via
- * wc_get_attribute() - WooCommerce's own by-id lookup, already in the API's exact field shape
- * (sweep finding A, 208 FIX-2 item 1) - and returns it directly.
+ * wc_get_attribute() - WooCommerce's own by-id lookup, already in the API's exact field shape -
+ * and returns it directly.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
@@ -372,11 +372,11 @@ function aafm_args_wc_update_product_attribute(): array {
  * Execute aafm/wc-update-product-attribute.
  *
  * Resolve-before-mutate: unknown id returns a generic error. Passing an unresolvable id straight
- * to wc_update_attribute() would fall through to its own `$args['id'] = $attribute ? $attribute->id
- * : 0` branch and silently CREATE a new attribute instead of failing (wc-attribute-functions.php:701),
+ * to wc_update_attribute() would fall through to its own `$args['id'] = $attribute ? $attribute->id:
+ * 0` branch and silently CREATE a new attribute instead of failing (wc-attribute-functions.php:701),
  * so this check stays regardless of what else changes here.
  *
- * Sweep finding B (208 FIX-2 item 2): a prior version of this function manually rebuilt the full
+ * A prior version of this function manually rebuilt the full
  * field set from the resolved attribute before calling wc_update_attribute(), guarding against
  * that function's own backfill being "only present from WC 9.1.0". Verified that guard is now
  * unreachable dead code: wc_update_attribute() (wc-attribute-functions.php:696-720) has done this

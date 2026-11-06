@@ -362,7 +362,7 @@ function aafm_tec_event_orm_args( array $input, array &$warnings = array() ): ar
 /**
  * Confirm venue_id/organizer_ids in $input actually name existing venue/organizer posts.
  *
- * Codex hunt F5: aafm_tec_event_orm_args() above passes these ids through absint() alone.
+ * Note: aafm_tec_event_orm_args() above passes these ids through absint() alone.
  * TEC's own repository (Repositories/Event.php, confirmed against the installed plugin)
  * silently drops an invalid venue/organizer relationship on save rather than erroring, so a
  * caller-supplied id naming an ordinary post would be dropped with no error and no signal
@@ -562,7 +562,7 @@ function aafm_args_tec_update_event(): array {
 /**
  * Execute aafm/tec-update-event.
  *
- * Codex final round 8 HIGH: this maps 'content' straight to post_content and persists it through
+ * This maps 'content' straight to post_content and persists it through
  * the ORM (aafm_tec_event_orm_args()) with no page-builder ownership check anywhere in the
  * function - the same corruption risk aafm_exec_update_post() guards against, just at a
  * chokepoint the generic guard's own coverage sweep (tests/PageBuilderGuardSweepTest.php) never
@@ -599,7 +599,7 @@ function aafm_exec_tec_update_event( array $input ) {
 	}
 	$safety = array( 'warnings' => array() );
 	if ( array() !== $args ) {
-		// Codex final round 10 MEDIUM: round 9's content-safety fix wired this call into event
+		// Round 9's content-safety fix wired this call into event
 		// create and both venue/organizer paths, but missed this one - the fifth-of-six call sites
 		// that got left out.
 		$safety = aafm_tec_enforce_content_safety( $args, 'post_title', 'post_content' );
@@ -695,7 +695,7 @@ function aafm_args_tec_delete_event(): array {
  * the event to Trash the normal way, matching this plugin's own trash-post/trash-page/
  * delete-block abilities.
  *
- * Codex hunt F6, gate round 1 finding 6: the disclosure only weakened the "always recoverable"
+ * The disclosure only weakened the "always recoverable"
  * claim to name the Trash-disabled risk (core's own wp_trash_post() permanently deletes when
  * EMPTY_TRASH_DAYS is falsy) rather than closing it, leaving this the one "trash" ability that
  * could still silently, permanently destroy data. Now guarded exactly like trash-post/trash-page/

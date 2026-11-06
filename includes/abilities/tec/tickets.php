@@ -10,8 +10,8 @@
  * deliberate, recorded scoping choice, not a gap.
  *
  * Reads use Event Tickets' own stable, long-lived static entry points
- * (Tribe__Tickets__Tickets::get_all_event_tickets(), ::load_ticket_object(),
- * ::get_event_attendees()) rather than the ticket/attendee ORM repositories directly: the
+ * (Tribe__Tickets__Tickets::get_all_event_tickets(), ::load_ticket_object(),::
+ * get_event_attendees()) rather than the ticket/attendee ORM repositories directly: the
  * default tribe_tickets() repository ('tickets.ticket-repository', a Post_Repository over posts
  * that HAVE tickets) has no confirmed per-event 'event' filter, while these three static methods
  * are documented, provider-agnostic aggregation points already used by the plugin's own admin
@@ -39,7 +39,7 @@ add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_tec_tickets_f
  * @return array<string,array<string,mixed>>
  */
 function aafm_register_tec_tickets_definitions( array $registry ): array {
-	// Codex final round 3 MEDIUM: Event Tickets can run standalone, attaching tickets to an
+	// Event Tickets can run standalone, attaching tickets to an
 	// ordinary post or page with no Events Calendar installed at all - but every read here is
 	// gated on the ticket's PARENT EVENT (this file's own docblock), and that lookup hard-
 	// references Tribe__Events__Main::POSTTYPE and edit_tribe_event, both defined by TEC itself.

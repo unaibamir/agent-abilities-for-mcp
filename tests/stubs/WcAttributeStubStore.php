@@ -25,7 +25,7 @@ namespace AAFM\Tests;
  *   attribute_id, attribute_name (slug, e.g. "color"), attribute_label (e.g. "Color"),
  *   attribute_type (e.g. "select"), attribute_orderby (e.g. "menu_order"), attribute_public (bool).
  *
- * Doc 214, finding 6: this store deliberately applies no WooCommerce filters, checked and
+ * This store deliberately applies no WooCommerce filters, checked and
  * confirmed rather than assumed. aafm_redact_wc_attribute() (attributes.php) shapes a plain
  * stdClass built by wc_get_attribute() - never a WC_Product_Attribute instance. Real WooCommerce's
  * wc_get_attribute() (wc-attribute-functions.php) builds that stdClass straight from a DB row with

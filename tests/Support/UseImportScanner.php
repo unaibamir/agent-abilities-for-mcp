@@ -165,7 +165,7 @@ final class UseImportScanner {
 	}
 
 	/**
-	 * Codex round 7, R7-6: on PHP 8, `\wp_safe_remote_get` tokenizes as ONE T_NAME_FULLY_QUALIFIED
+	 * On PHP 8, `\wp_safe_remote_get` tokenizes as ONE T_NAME_FULLY_QUALIFIED
 	 * token (never a bare T_STRING), and `Foo\Bar` as ONE T_NAME_QUALIFIED token; on PHP 7.4 the
 	 * same source is a T_NS_SEPARATOR/T_STRING run instead. Collapse every such run - on either PHP
 	 * version - into a single T_STRING-shaped token carrying the full qualified text (leading `\`
@@ -337,7 +337,7 @@ final class UseImportScanner {
 	 * Record one parsed import. The local name is the explicit alias when there is one, otherwise
 	 * the imported name's own trailing segment - `use Foo\Bar;` makes `Bar` usable unqualified.
 	 *
-	 * Codex round 8, R8-5: keyed lower-case, since PHP resolves class/function/const names and
+	 * Keyed lower-case, since PHP resolves class/function/const names and
 	 * `use` aliases case-insensitively (class constants and property/method names are the only
 	 * case-sensitive part of a call).
 	 *

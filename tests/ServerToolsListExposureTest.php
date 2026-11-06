@@ -159,7 +159,7 @@ final class ServerToolsListExposureTest extends TestCase {
 	 * This test proves that indistinguishability holds for a REAL disabled ability, not just an
 	 * invented name, and additionally proves the same name is absent from tools/list.
 	 *
-	 * Codex round 9, R9-12: this used to enable the FULL catalog via enable_full_catalog_as_admin()
+	 * This used to enable the FULL catalog via enable_full_catalog_as_admin()
 	 * and go hunting through wp_get_abilities() for whatever the high-risk floor happened to strip
 	 * out - but that floor is subtracted inside aafm_get_enabled_abilities() itself
 	 * (includes/registry.php), before register_enabled() ever calls aafm_register_ability_with_log()

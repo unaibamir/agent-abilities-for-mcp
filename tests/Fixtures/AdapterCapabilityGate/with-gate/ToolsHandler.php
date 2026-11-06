@@ -2,8 +2,8 @@
 /**
  * Test fixture: an adapter tools/list handler that STILL applies the per-connection capability gate.
  *
- * Stands in for a compliant in-range adapter copy - it runs apply_filters( 'mcp_adapter_tools_list',
- * ... ), the hook our request-time gate rides on. Under a unique fixture namespace so it never
+ * Stands in for a compliant in-range adapter copy - it runs apply_filters( 'mcp_adapter_tools_list',...
+ * ), the hook our request-time gate rides on. Under a unique fixture namespace so it never
  * collides with the real WP\MCP\ classes and is never eager-loaded (it lives under tests/, not vendor/).
  *
  * @package AgentAbilitiesForMCP

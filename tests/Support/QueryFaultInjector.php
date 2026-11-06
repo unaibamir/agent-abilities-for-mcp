@@ -2,7 +2,7 @@
 /**
  * Reusable $wpdb query fault injector for the failure-path test suite.
  *
- * Eight Codex rounds on `fix/1.7.5-deferred` found real defects almost exclusively in query
+ * Real defects turned up almost exclusively in query
  * FAILURE paths (a stale $wpdb->last_result, a token that rotates mid-walk, a row that changes
  * between two statements) while 3,800+ PHPUnit tests, the traffic sim, and every CI leg stayed
  * green throughout - the gate only ever exercised success paths. Several fix lanes each hand-rolled
@@ -17,7 +17,7 @@
  *   wp-includes/class-wpdb.php's query() checks `if ( ! $query )` and returns false
  *   IMMEDIATELY, before its own flush() call - so $wpdb->last_result/last_error are left holding
  *   whatever the PREVIOUS query left there. This is the "no-flush" / stale-result path the
- *   R7-2/R8-1/R8-2/R8-3 defect class exploits, and it raises no real SQL error.
+ *   stale-reader defect class exploits, and it raises no real SQL error.
  *
  * - break_query_with_real_error(): the targeted query is redirected at a table that does not
  *   exist, producing a genuine SQL error - last_result IS flushed, last_error IS populated. Use

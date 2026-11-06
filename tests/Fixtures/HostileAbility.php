@@ -1,6 +1,6 @@
 <?php
 /**
- * Codex round 12 R12-1 fixture: a hostile WP_Ability subclass.
+ * Fixture: a hostile WP_Ability subclass.
  *
  * @package AgentAbilitiesForMCP
  */

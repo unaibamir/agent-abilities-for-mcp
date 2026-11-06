@@ -618,7 +618,7 @@ function aafm_quickconnect_render(): void {
 						<div class="aafm-qc-amberwarn" data-qc-writewarn><div>
 							<div class="aafm-qc-amberbox">
 								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v4M12 17h.01"/></svg>
-								<div class="at"><?php echo wp_kses( __( '<b>Write is on.</b> The agent can create, update, and publish posts and pages as the connected user. Nothing is deleted permanently; deletes go to Trash.', 'agent-abilities-for-mcp' ), array( 'b' => array() ) ); ?></div>
+								<div class="at"><?php echo wp_kses( __( '<b>Write is on.</b> The agent can create, update, and publish posts and pages as the connected user. Turning this on adds no delete tools.', 'agent-abilities-for-mcp' ), array( 'b' => array() ) ); ?></div>
 							</div>
 						</div></div>
 

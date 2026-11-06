@@ -170,6 +170,12 @@ final class LogQueryTest extends TestCase {
 		$this->assertArrayHasKey( 'bridge', $groups, 'The whole-Bridge bucket stays.' );
 	}
 
+	public function test_wordpress_core_tools_are_named_wordpress_in_the_dropdown(): void {
+		$this->register_foreign_abilities( 'core', array( 'demo-tool' => array() ) );
+
+		$this->assertSame( 'WordPress', aafm_activity_plugin_groups()['bridge:ns-core'] );
+	}
+
 	public function test_filtering_by_a_bridged_plugin_returns_only_its_tools(): void {
 		$this->register_foreign_abilities( 'wpforms', array( 'list-entries' => array() ) );
 		$this->register_foreign_abilities( 'ai-engine', array( 'run' => array() ) );

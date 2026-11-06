@@ -104,7 +104,11 @@ function aafm_activity_plugin_groups(): array {
 
 	$bridged = array();
 	foreach ( aafm_activity_bridge_groups() as $key => $slugs ) {
-		$ns   = aafm_bridge_namespace_of( (string) reset( $slugs ) );
+		$ns = aafm_bridge_namespace_of( (string) reset( $slugs ) );
+		if ( 'core' === $ns ) {
+			$bridged[ $key ] = __( 'WordPress', 'agent-abilities-for-mcp' );
+			continue;
+		}
 		$name = aafm_bridge_provider_label( $ns );
 		if ( '' === $name ) {
 			/* translators: %s: an ability namespace, for example "writer". */

@@ -5,8 +5,8 @@
  * Registers ONLY when AIOSEO is active (aafm_integration_active('aioseo')). AIOSEO v4+ keeps post
  * SEO in a CUSTOM TABLE (wp_aioseo_posts), NOT post meta. So reads go through AIOSEO's own Post
  * model: AIOSEO\Plugin\Common\Models\Post::getPost($id) returns the row. Writes go through the
- * model's own AIOSEO\Plugin\Common\Models\Post::savePost($id, $data) (fix round 1, delegation
- * audit sweep, 210-sweep-B5-report.md), the same method AIOSEO's own REST controller and every
+ * model's own AIOSEO\Plugin\Common\Models\Post::savePost($id, $data),
+ * the same method AIOSEO's own REST controller and every
  * other real caller in its codebase use - NOT a bare property-set-then-save(), which skips
  * savePost()'s own aioseo_save_post/aioseo_insert_post hooks, its default-title/description
  * tracking, and its _aioseo_* traditional-post-meta sync.
@@ -210,7 +210,7 @@ function aafm_aioseo_robots_fields(): array {
 /**
  * The AIOSEO boolean robots fields: unified field => Post::savePost()'s own PATCH-DATA key.
  *
- * Fix round 1, delegation audit sweep: Post::savePost()'s field map (Model::getSanitizeFieldMap())
+ * Post::savePost()'s field map (Model::getSanitizeFieldMap())
  * uses BARE names for the robots flags - 'noindex', 'nofollow', 'default' - not the model COLUMN
  * names ('robots_noindex', 'robots_nofollow', 'robots_default') aafm_aioseo_robots_fields() above
  * returns for reading. Sending the column name as a $data key to savePost() would be silently
@@ -471,7 +471,7 @@ function aafm_args_aioseo_update_post(): array {
 /**
  * Execute aafm/aioseo-update-post.
  *
- * Fix round 1 (delegation audit sweep, 210-sweep-B5-report.md): builds a $data array (keyed by
+ * Builds a $data array (keyed by
  * AIOSEO's OWN savePost() patch-data keys, sanitized: esc_url_raw on URL fields, aafm_sanitize_
  * plain_text on text, bool on robots) and calls Post::savePost($id, $data) - the same method
  * AIOSEO's own REST controller and every other real caller in its codebase use - instead of
@@ -505,7 +505,7 @@ function aafm_exec_aioseo_update_post( array $input ) {
 	}
 
 	$class = AAFM_AIOSEO_MODEL;
-	// Fix round 2 (test-quality sweep finding): this branch is untested in either direction, on
+	// This branch is untested in either direction, on
 	// purpose, not by oversight - it is the same shape as the sibling aafm_aioseo_model_available()
 	// guard just above and every other vendor-absence guard in this codebase (e.g. class_exists()
 	// checks for WC_Product_Simple). The test-environment stub (tests/stubs/IntegrationStubs.php)

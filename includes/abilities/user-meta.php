@@ -278,11 +278,10 @@ function aafm_exec_update_user_meta( array $input ) {
 	if ( is_wp_error( $key ) || ! aafm_exact_object( 'user', $id ) instanceof WP_User ) {
 		return aafm_generic_error();
 	}
-	// Codex round 7 R7-3: this used to omit the object subtype, defaulting to ''. get_userdata()
+	// This used to omit the object subtype, defaulting to ''. get_userdata()
 	// above already confirmed the target user exists, and core's get_object_subtype( 'user', $id )
 	// resolves to the literal string 'user' for any user that exists (wp-includes/meta.php) - that
-	// is the subtype update_metadata() itself passes to sanitize_meta() at write time. Codex round
-	// 8 R8-2: that resolution is filterable via get_object_subtype_user, so resolve it through
+	// is the subtype update_metadata() itself passes to sanitize_meta() at write time. That resolution is filterable via get_object_subtype_user, so resolve it through
 	// get_object_subtype() itself rather than hardcoding the literal 'user' - a site remapping the
 	// subtype is honoured here the same way it is at write time.
 	$subtype = (string) get_object_subtype( 'user', $id );

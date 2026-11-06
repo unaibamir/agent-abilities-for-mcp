@@ -164,13 +164,13 @@ function aafm_perm_get_comments( array $input ): bool {
 /**
  * Scan ceiling for aafm_exec_get_comments()'s whole-site, unprivileged branch.
  *
- * Codex round 9, R9-4: that branch used to ask get_comments() for one DB page, THEN drop
+ * That branch used to ask get_comments() for one DB page, THEN drop
  * comments on unreadable posts - so a readable comment could be pushed off page 1 (or off
  * every page) by unreadable ones consuming its slot, with no `total` and no truncation
  * signal to tell the caller a readable result was stranded further in. Comments are now
  * fetched in one bounded, unpaginated scan (default id/date order preserved), filtered by
  * post readability, and only THEN paginated - the same authorize-before-paginate fix
- * already applied to GeoDirectory listings (B184). The filter is narrow-only (matching
+ * already applied to GeoDirectory listings. The filter is narrow-only (matching
  * aafm_geodirectory_listing_batch_cap()'s own posture) so a hook can lower the cap for a
  * test without ever raising it past the hard ceiling.
  *
@@ -263,16 +263,15 @@ function aafm_exec_get_comments( array $input ): array {
 
 	$visible = array_values( array_filter( (array) $scanned, $is_readable ) );
 
-	// `truncated` must be computed from what THIS caller can see, not the raw site-wide scan
-	// (Codex round 10, R10-8, generalized at F7, then R2-6, then R3-6 across three rounds of
-	// this batch). Every earlier predicate - comparing raw_total against scan_cap, requiring the
+	// `truncated` must be computed from what THIS caller can see, not the raw site-wide scan.
+	// Every earlier predicate - comparing raw_total against scan_cap, requiring the
 	// whole window to be visible, a bounded second-window lookahead sized or OFFSET from a count
 	// that includes hidden rows - shared the same flaw: inserting or removing ONE hidden comment
 	// anywhere before a count-based boundary shifts every comment after it by one position, which
 	// can push a genuinely visible comment across whichever boundary the predicate was watching,
 	// flipping `truncated` on content the caller never saw and never asked about.
 	//
-	// R3-6's fix: probe by IDENTITY, not by count/offset. `comment__not_in` excludes exactly the
+	// So probe by IDENTITY, not by count/offset. `comment__not_in` excludes exactly the
 	// comment ids already examined, so the next probe batch is always "whatever wasn't already
 	// looked at", regardless of how many hidden comments were inserted or removed anywhere in the
 	// approved set - unlike an offset, an id exclusion list cannot be shifted by unrelated rows.
@@ -370,7 +369,7 @@ function aafm_comment_post_readable_state( int $post_id ): ?bool {
 
 	$read = aafm_with_checked_reads(
 		static function () use ( $post, $post_id ): array {
-			// R3-5 (1.7.5 deferred, round 3): a password-protected public post fell straight through to
+			// A password-protected public post fell straight through to
 			// the read_post branch below, which maps to the ordinary 'read' capability - the password
 			// itself was never checked, so a Subscriber could read approved comments on a password-
 			// protected published post. Matches core's own REST comments controller
@@ -673,7 +672,7 @@ function aafm_exec_create_comment( array $input ) {
 	// Pin status to pending in case a filter flipped it on insert.
 	wp_set_comment_status( $comment_id, 'hold' );
 
-	// Codex round 8, R8-4: wp_set_comment_status()'s return value was discarded here, and only
+	// wp_set_comment_status()'s return value was discarded here, and only
 	// existence was checked afterward - so if its own DB update failed, or a 'wp_set_comment_status'
 	// hook it fires (synchronously, before it returns) moved the comment somewhere other than
 	// pending, this reported success with an approved (or otherwise non-pending) comment,
@@ -888,7 +887,7 @@ function aafm_exec_moderate_comment( array $input ) {
 			);
 	}
 
-	// Codex round 8, R8-4: this used to branch on each call's own return value ($ok) - true only
+	// This used to branch on each call's own return value ($ok) - true only
 	// proves wp_set_comment_status()'s (or wp_spam_comment()'s/wp_trash_comment()'s, both thin
 	// wrappers around it) OWN $wpdb->update() call landed. It fires the 'wp_set_comment_status'
 	// action synchronously, AFTER that update succeeds but BEFORE returning, so a hook on that
@@ -1038,8 +1037,8 @@ function aafm_exec_update_comment( array $input ) {
 	// wp_update_comment() returning a non-false, non-WP_Error value only means the write did not
 	// hard-fail - not that the requested content is what actually landed. A `wp_update_comment_data`
 	// filter can veto the change by rewriting comment_content back to its prior value, and that
-	// return value is exactly what a genuine already-equal no-op also produces (Codex round 9,
-	// R9-5), so the two are indistinguishable without comparing what was actually stored. Compare
+	// return value is exactly what a genuine already-equal no-op also produces,
+	// so the two are indistinguishable without comparing what was actually stored. Compare
 	// the fresh row against the requested content directly: a match covers both a real update and
 	// a true no-op, and only a real divergence is an error.
 	if ( $saved->comment_content !== $content ) {

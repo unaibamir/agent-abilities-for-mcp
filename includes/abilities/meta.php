@@ -347,9 +347,9 @@ function aafm_exec_update_post_meta( array $input ) {
 	if ( is_wp_error( $key ) || ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
-	// Codex round 7 R7-3: pass the post's real type, not the default 'post', so a
+	// Pass the post's real type, not the default 'post', so a
 	// sanitize_callback registered for a page or a custom post type is not invisible to the probe.
-	// Codex round 8 R8-2: resolve it through get_object_subtype(), the same filterable call core
+	// Resolve it through get_object_subtype(), the same filterable call core
 	// itself makes at write time, rather than the raw get_post_type() - a get_object_subtype_post
 	// filter remapping the subtype is honoured here the same way it is at write time.
 	$subtype = (string) get_object_subtype( 'post', $id );

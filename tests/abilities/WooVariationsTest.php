@@ -256,7 +256,7 @@ final class WooVariationsTest extends TestCase {
 	}
 
 	/**
-	 * B28: a grouped parent used to return {variations:[], total:N} - total counted the grouped
+	 * A grouped parent used to return {variations:[], total:N} - total counted the grouped
 	 * CHILD PRODUCTS from get_children() while every row failed the variation check and was
 	 * dropped, so total never agreed with the rows. Only variable products have variations, so a
 	 * non-variable parent is refused with an actionable error instead.
@@ -366,7 +366,7 @@ final class WooVariationsTest extends TestCase {
 	}
 
 	/**
-	 * B22 (variation): stock_status on a variation that INHERITS the parent's stock management must
+	 * Note: stock_status on a variation that INHERITS the parent's stock management must
 	 * be refused, not silently discarded.
 	 *
 	 * When the variation's own manage_stock is false but the parent manages stock,
@@ -681,7 +681,7 @@ final class WooVariationsTest extends TestCase {
 	}
 
 	/**
-	 * R2-9: an attribute the parent declares for DISPLAY only must be refused too.
+	 * An attribute the parent declares for DISPLAY only must be refused too.
 	 *
 	 * WooCommerce carries a "used for variations" flag per attribute, and its own variation REST
 	 * controller skips any attribute whose flag is off before writing. Nothing ever matches a
@@ -719,7 +719,7 @@ final class WooVariationsTest extends TestCase {
 	}
 
 	/**
-	 * R2-9 on update, where the replace semantics make it worse: the display-only key applies
+	 * On update, where the replace semantics make it worse: the display-only key applies
 	 * nothing AND every real attribute the variation had is cleared.
 	 */
 	public function test_update_variation_rejects_an_attribute_the_parent_does_not_use_for_variations(): void {
@@ -744,7 +744,7 @@ final class WooVariationsTest extends TestCase {
 	}
 
 	/**
-	 * R2-9: the keys the error offers as alternatives are the parent's VARIATION attributes. Naming
+	 * The keys the error offers as alternatives are the parent's VARIATION attributes. Naming
 	 * a display-only key there would send the agent straight into the rejection above.
 	 */
 	public function test_unknown_attribute_error_does_not_offer_a_display_only_key_as_an_alternative(): void {
@@ -764,7 +764,7 @@ final class WooVariationsTest extends TestCase {
 	}
 
 	/**
-	 * R2-9: a parent that declares attributes but uses none of them for variations gets its own
+	 * A parent that declares attributes but uses none of them for variations gets its own
 	 * message, because "declares no attributes" would be a lie and the fix is a different one.
 	 */
 	public function test_create_variation_rejects_every_attribute_when_the_parent_uses_none_for_variations(): void {
@@ -795,7 +795,7 @@ final class WooVariationsTest extends TestCase {
 	}
 
 	/**
-	 * R2-10: a value outside the parent's option list must be refused.
+	 * A value outside the parent's option list must be refused.
 	 *
 	 * The option list is the only thing WooCommerce ever matches a variation against, so a value
 	 * outside it is stored and then matched by nothing. The key is right, which is what makes this
@@ -826,7 +826,7 @@ final class WooVariationsTest extends TestCase {
 	}
 
 	/**
-	 * R2-10: a TAXONOMY attribute's options are term slugs, resolved from the term ids the parent
+	 * A TAXONOMY attribute's options are term slugs, resolved from the term ids the parent
 	 * stores. Comparing against the raw options would put a slug up against a list of numeric ids.
 	 */
 	public function test_create_variation_accepts_a_taxonomy_term_slug(): void {
@@ -843,7 +843,7 @@ final class WooVariationsTest extends TestCase {
 	}
 
 	/**
-	 * R2-10: a CUSTOM attribute stores its option strings, unslugified, and a variation stores the
+	 * A CUSTOM attribute stores its option strings, unslugified, and a variation stores the
 	 * same string. "Cotton" is the real option here, so it has to be accepted with its capital
 	 * intact rather than slugified into something the parent never declared.
 	 */
@@ -875,7 +875,7 @@ final class WooVariationsTest extends TestCase {
 	}
 
 	/**
-	 * R2-10: the match is case-sensitive on purpose. This plugin stores the value verbatim, and
+	 * The match is case-sensitive on purpose. This plugin stores the value verbatim, and
 	 * WooCommerce matches the stored string against the parent's option, so "Blue" is the
 	 * silently-never-matches case rather than a harmless spelling of "blue".
 	 */
@@ -894,7 +894,7 @@ final class WooVariationsTest extends TestCase {
 	}
 
 	/**
-	 * R2-10: the value checked is the SANITIZED one, the string that actually reaches storage, so a
+	 * The value checked is the SANITIZED one, the string that actually reaches storage, so a
 	 * value differing only by surrounding whitespace is accepted rather than refused for a
 	 * difference the writer was about to remove anyway.
 	 */
@@ -912,7 +912,7 @@ final class WooVariationsTest extends TestCase {
 	}
 
 	/**
-	 * R2-10 against trap: an EMPTY value is WooCommerce's "Any <attribute>", a real and common
+	 * Against the trap: an EMPTY value is WooCommerce's "Any <attribute>", a real and common
 	 * configuration. Refusing it would break valid variations, so it is exempt from the value check
 	 * on every attribute kind, not just the one the earlier empty-value test happens to use.
 	 */
@@ -937,7 +937,7 @@ final class WooVariationsTest extends TestCase {
 	}
 
 	/**
-	 * R2-10: an attribute declared with no options constrains nothing, so there is no list to judge
+	 * An attribute declared with no options constrains nothing, so there is no list to judge
 	 * a value against and the write goes through.
 	 */
 	public function test_create_variation_accepts_any_value_for_an_attribute_with_no_options(): void {
@@ -967,7 +967,7 @@ final class WooVariationsTest extends TestCase {
 	}
 
 	/**
-	 * R2-10: an option the PARENT's own data cannot resolve read-only must not cost the caller a
+	 * An option the PARENT's own data cannot resolve read-only must not cost the caller a
 	 * write, and must not cost the site a term.
 	 *
 	 * Parent 704 declares a taxonomy attribute whose options are one resolvable term id and one
@@ -1045,7 +1045,7 @@ final class WooVariationsTest extends TestCase {
 	}
 
 	/**
-	 * R2-10 on update, where a rejected write would otherwise have cleared the variation's real
+	 * On update, where a rejected write would otherwise have cleared the variation's real
 	 * attributes as well as applying nothing.
 	 */
 	public function test_update_variation_rejects_a_value_the_parent_does_not_declare(): void {
@@ -1534,7 +1534,7 @@ final class WooVariationsTest extends TestCase {
 	}
 
 	/**
-	 * Found by the Codex review pass: an attribute key that sanitizes away to nothing used to be
+	 * An attribute key that sanitizes away to nothing used to be
 	 * waved through, so the writer stored an attribute under the empty key. That is the same silent
 	 * no-op the validation exists to stop.
 	 */
@@ -1637,7 +1637,7 @@ final class WooVariationsTest extends TestCase {
 	}
 
 	/**
-	 * 1.7.2 finding 1 (Codex re-review, same bug class as the delete-path fix above): the
+	 * Same bug class as the delete-path fix above: the
 	 * update-attributes path resolved the variation's parent for attribute VALIDATION via
 	 * $variation->get_parent_id() in the DEFAULT 'view' context. A
 	 * woocommerce_product_variation_get_parent_id filter substituting a different id for that
@@ -1683,7 +1683,7 @@ final class WooVariationsTest extends TestCase {
 	}
 
 	/**
-	 * Sweep finding 1 (208 FIX-2 item 3): aafm_wc_variation_attribute_options() now delegates a
+	 * Note: aafm_wc_variation_attribute_options() now delegates a
 	 * taxonomy attribute's option resolution to wc_get_product_terms(), which reads real
 	 * object-term relationships, rather than resolving each option id independently via
 	 * get_term_by(). This is the one case that genuinely discriminates the two approaches: a term

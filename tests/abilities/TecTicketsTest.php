@@ -130,7 +130,7 @@ final class TecTicketsTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 3 MEDIUM: Event Tickets can run standalone, with no Events Calendar
+	 * Event Tickets can run standalone, with no Events Calendar
 	 * installed at all - attaching tickets to an ordinary post or page. Every ticket ability here
 	 * is gated on the ticket's PARENT EVENT via Tribe__Events__Main::POSTTYPE/edit_tribe_event,
 	 * both defined by TEC itself, so registering these abilities without TEC active would expose

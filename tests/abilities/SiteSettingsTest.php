@@ -63,7 +63,7 @@ final class SiteSettingsTest extends TestCase {
 	}
 
 	/**
-	 * B50: "the set can only be NARROWED" was only true for the five takeover-class keys the
+	 * "the set can only be NARROWED" was only true for the five takeover-class keys the
 	 * array_diff stripped. Any OTHER option - template, active_plugins, WPLANG - could be
 	 * ADDED by a filter, and update-site-settings would then happily write it. Narrowing must
 	 * mean the filtered set intersects the fixed base, so a filter can remove but never add.
@@ -84,7 +84,7 @@ final class SiteSettingsTest extends TestCase {
 	}
 
 	/**
-	 * B50 companion: narrowing itself still works after the intersect.
+	 * Narrowing itself still works after the intersect.
 	 */
 	public function test_allowlist_filter_can_still_narrow(): void {
 		$narrow = static fn( array $base ): array => array_diff( $base, array( 'posts_per_page' ) );
@@ -125,7 +125,7 @@ final class SiteSettingsTest extends TestCase {
 	}
 
 	/**
-	 * B11: re-submitting the current blogname as its human-readable form must be a no-op success,
+	 * Re-submitting the current blogname as its human-readable form must be a no-op success,
 	 * not a false rejection that also kills every co-submitted setting.
 	 *
 	 * Core stores blogname escaped ("Bob's Store" -> "Bob&#039;s Store"), so our unescaped sanitize
@@ -157,7 +157,7 @@ final class SiteSettingsTest extends TestCase {
 	}
 
 	/**
-	 * The B11 fix must not swallow the guard's real purpose: an invalid value core silently reverts
+	 * The fix must not swallow the guard's real purpose: an invalid value core silently reverts
 	 * to the current one still has to be an error, not a no-op success.
 	 */
 	public function test_update_site_settings_still_rejects_an_invalid_timezone_revert(): void {

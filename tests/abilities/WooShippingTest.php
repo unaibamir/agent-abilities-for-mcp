@@ -200,7 +200,7 @@ final class WooShippingTest extends TestCase {
 	}
 
 	/**
-	 * B33: the real WC_Shipping_Zone CONSTRUCTOR throws for a missing non-zero id (the zone data
+	 * The real WC_Shipping_Zone CONSTRUCTOR throws for a missing non-zero id (the zone data
 	 * store's read_multiple() raises "Invalid data store."), so the resolver's null branch was
 	 * dead and a routine bad id was crash-classified by the catalog-wide Throwable catch. The
 	 * stub now models the vendor throw, the resolver catches it, and an unknown zone id returns
@@ -291,7 +291,7 @@ final class WooShippingTest extends TestCase {
 	}
 
 	/**
-	 * B33 (update side): an unknown zone id is refused with the clean not-found before anything
+	 * An unknown zone id is refused with the clean not-found before anything
 	 * is written, instead of the vendor constructor throw escaping into a crash classification.
 	 */
 	public function test_update_shipping_zone_unknown_id_is_a_clean_not_found(): void {
@@ -647,7 +647,7 @@ final class WooShippingTest extends TestCase {
 	}
 
 	/**
-	 * B42: WooCommerce fires woocommerce_shipping_zone_method_status_toggled whenever the enabled
+	 * WooCommerce fires woocommerce_shipping_zone_method_status_toggled whenever the enabled
 	 * toggle actually changes the row (its AJAX, REST v2, and v4 write paths all do), so
 	 * extensions hooking it went stale when the toggle came through this ability. The executor
 	 * must fire it with WC's exact signature - (instance_id, method_id, zone_id, is_enabled) -
@@ -693,7 +693,7 @@ final class WooShippingTest extends TestCase {
 	}
 
 	/**
-	 * B32: the title used to persist via update_option() BEFORE the enabled toggle ran its
+	 * The title used to persist via update_option() BEFORE the enabled toggle ran its
 	 * $wpdb->update(), so a failed enabled write returned an error AFTER the title had already
 	 * landed - the caller was told "error" while state changed. The enabled write (the only
 	 * detectably fallible write) now runs first, so an error means nothing changed.
@@ -1212,7 +1212,7 @@ final class WooShippingTest extends TestCase {
 		$create_description = (string) wp_get_ability( 'aafm/wc-create-shipping-method' )->get_description();
 		$update_description = (string) wp_get_ability( 'aafm/wc-update-shipping-method' )->get_description();
 
-		// Test-quality finding 3 (fix round 1, 208): a bare 'cost' substring is an ordinary English
+		// A bare 'cost' substring is an ordinary English
 		// word that a future edit could satisfy with unrelated cost-adjacent prose while silently
 		// dropping the actual capability-gap explanation. Assert the specific fragments that state
 		// the field cannot be written, matching the sibling zone_locations test's exact-field-name
@@ -1243,7 +1243,7 @@ final class WooShippingTest extends TestCase {
 	}
 
 	/**
-	 * FIX-3 item 2 (sweep finding A1): the shared zone resolver used by 7 of this file's 8
+	 * The shared zone resolver used by 7 of this file's 8
 	 * abilities now delegates to WC_Shipping_Zones::get_zone() instead of hand-instantiating
 	 * WC_Shipping_Zone in a try/catch with a redundant id re-check. Traced both paths line by
 	 * line against real WooCommerce source and found no observable difference today (the vendor

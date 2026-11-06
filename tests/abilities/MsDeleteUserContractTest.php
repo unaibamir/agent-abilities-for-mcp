@@ -1,6 +1,6 @@
 <?php
 /**
- * Multisite honesty contract for aafm/delete-user (finding B19).
+ * Multisite honesty contract for aafm/delete-user.
  *
  * Core's wp_delete_user() on multisite does NOT delete the account: its multisite branch
  * only calls remove_user_from_blog() for the current site (wp-admin/includes/user.php),
@@ -46,7 +46,7 @@ final class MsDeleteUserContractTest extends TestCase {
 	}
 
 	/**
-	 * B19: on multisite the account survives the call, so the ability must not claim
+	 * On multisite the account survives the call, so the ability must not claim
 	 * {deleted:true}. The exact wire body is pinned - deleted:false plus
 	 * removed_from_site:true - and the survival of the network account is asserted
 	 * alongside it, so the shape can never drift away from reality unnoticed.

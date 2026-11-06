@@ -328,7 +328,7 @@ final class MediaReadTest extends TestCase {
 	}
 
 	/**
-	 * Codex hunt F2: the scoped posts_where filter had no query-identity marker, so it ran
+	 * The scoped posts_where filter had no query-identity marker, so it ran
 	 * against EVERY WP_Query built while it was attached, not only its own - an unrelated
 	 * nested WP_Query fired from a hook during the search (e.g. a 'pre_get_posts' callback
 	 * elsewhere in the stack) would incorrectly receive the same title/content/excerpt/meta OR

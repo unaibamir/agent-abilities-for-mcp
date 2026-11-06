@@ -146,7 +146,7 @@ final class RevisionsTest extends TestCase {
 
 	/**
 	 * A restore rewrites title/content/excerpt exactly like aafm/update-post, so a builder-owned
-	 * post must refuse it the same way (Codex round-b finding 9): restoring a pre-builder
+	 * post must refuse it the same way: restoring a pre-builder
 	 * revision over a post the builder now owns would report success while the builder's own
 	 * meta (which actually drives the rendered output) stays untouched.
 	 */
@@ -198,7 +198,7 @@ final class RevisionsTest extends TestCase {
 	 * wp_update_post bail), then assert the guard returns a WP_Error.
 	 */
 	/**
-	 * B49: the description claims "the current state is first saved as a fresh revision, so
+	 * The description claims "the current state is first saved as a fresh revision, so
 	 * the restore is reversible". When revisions are disabled for the post (WP_POST_REVISIONS
 	 * false, or the wp_revisions_to_keep filter returning 0), core takes NO fresh snapshot
 	 * and the pre-restore state is lost forever. The ability must refuse rather than perform

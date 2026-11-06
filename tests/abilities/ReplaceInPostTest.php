@@ -86,7 +86,7 @@ final class ReplaceInPostTest extends TestCase {
 	}
 
 	/**
-	 * B8: a replace must never mutate bytes OUTSIDE the replaced spans. The old code ran
+	 * A replace must never mutate bytes OUTSIDE the replaced spans. The old code ran
 	 * wp_kses_post() over the whole rewritten body, so a one-word edit by an
 	 * unfiltered_html-capable user silently stripped their script/iframe markup elsewhere
 	 * in the post and reported success. Only the inserted replacement text is sanitized by
@@ -145,7 +145,7 @@ final class ReplaceInPostTest extends TestCase {
 	}
 
 	/**
-	 * B2-02: the stored-XSS reproduction, asserted on the ASSEMBLED document.
+	 * The stored-XSS reproduction, asserted on the ASSEMBLED document.
 	 *
 	 * The replacement is judged by wp_kses_post() in isolation, and in isolation
 	 * `x" onmouseover="alert(1)" data-z="` is plain text with no tags in it - kses returns it
@@ -238,7 +238,7 @@ final class ReplaceInPostTest extends TestCase {
 	}
 
 	/**
-	 * R6-2: the refusal was evadable, so the stored XSS was still live.
+	 * The refusal was evadable, so the stored XSS was still live.
 	 *
 	 * The first lexer called the first `>` the end of the tag. A perfectly valid `>` inside an
 	 * earlier quoted attribute value ended the tag early in its eyes, so everything after it -
@@ -269,7 +269,7 @@ final class ReplaceInPostTest extends TestCase {
 	}
 
 	/**
-	 * R6-4, the other direction and a regression of my own making. A literal `<` in visible prose
+	 * The other direction and a regression of my own making. A literal `<` in visible prose
 	 * is ordinary text - HTML5 only starts a tag when `<` is followed by a letter - but the first
 	 * lexer treated it as a tag opener through the next `>` and refused a replacement that was
 	 * never near any markup.
@@ -340,7 +340,7 @@ final class ReplaceInPostTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 5 R5-2: only is_wp_error() was checked on the wp_update_post() result, so a
+	 * Only is_wp_error() was checked on the wp_update_post() result, so a
 	 * wp_insert_post_data filter that reverts the content must surface as a structured error, not
 	 * a success response reporting a positive replacement count for a change that never landed.
 	 */
@@ -377,9 +377,9 @@ final class ReplaceInPostTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6 B6-3: the confirmation guard compared the fresh read against $new (the
+	 * The confirmation guard compared the fresh read against $new (the
 	 * pre-write intent), so a legitimate save-time normalization looked identical to a veto. Only
-	 * the INSERTED text is run through this ability's own wp_kses_post() (B8/687ff62's whole
+	 * the INSERTED text is run through this ability's own wp_kses_post() (the whole
 	 * point); the untouched surrounding content is spliced in as-is and reaches wp_update_post()
 	 * unfiltered. For an acting user who lacks unfiltered_html, core's own content_save_pre kses
 	 * (kses_init(), attached whenever current_user_can('unfiltered_html') is false) runs over the

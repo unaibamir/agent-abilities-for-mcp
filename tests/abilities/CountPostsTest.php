@@ -26,7 +26,7 @@ final class CountPostsTest extends TestCase {
 	}
 
 	/**
-	 * B45: the least-privilege zeroing of non-public status counts is correct behaviour,
+	 * The least-privilege zeroing of non-public status counts is correct behaviour,
 	 * but it must be DISCLOSED - an agent reading "draft: 0" with no caveat concludes the
 	 * site has no drafts. Pin the disclosure in both agent-facing texts.
 	 */

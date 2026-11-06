@@ -84,7 +84,7 @@ final class RankMathRenderedHeadBufferTest extends TestCase {
 	}
 
 	/**
-	 * Step 12 (R1-6): the render scope puts back exactly what was there before it, never a state
+	 * Step 12: the render scope puts back exactly what was there before it, never a state
 	 * rebuilt from the main query. The main query points at post A while the global $post is post B
 	 * (a secondary loop in progress). After the render, $post is still B, both query globals are the
 	 * same objects, and no post-data global the render set is left behind where it was absent.
@@ -277,7 +277,7 @@ final class RankMathRenderedHeadBufferTest extends TestCase {
 	}
 
 	/**
-	 * Step 12 (fixsurface-4 c, R1-5): a head hook opens a buffer without the removable flag, so
+	 * A head hook opens a buffer without the removable flag, so
 	 * ob_end_clean() cannot close it and the level never drops. The scope must stop at that buffer
 	 * and return, on the success path and the throw path alike, instead of looping forever.
 	 * PHPUnit cannot hold such a buffer (its own teardown loops on ob_end_clean() until the level

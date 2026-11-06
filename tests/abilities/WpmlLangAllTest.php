@@ -617,7 +617,7 @@ final class WpmlLangAllTest extends TestCase {
 	}
 
 	/**
-	 * Branch review fix, round 2: the operator's own round-1 constraint (leave the
+	 * The operator's own constraint (leave the
 	 * single-language branch byte-for-byte unchanged) preserved the identical defect on an
 	 * EXPLICIT lang request - aafm_with_language() restores ambient before returning either
 	 * way, "all" or one code. Withdrawn: a single non-"all" language must ALSO shape under the
@@ -713,7 +713,7 @@ final class WpmlLangAllTest extends TestCase {
 	}
 
 	/**
-	 * Branch review fix, round 3: aafm/get-media had the identical defect as the post/search
+	 * Note: aafm/get-media had the identical defect as the post/search
 	 * list paths - aafm_redact_media() (which calls the filterable get_the_title()) ran after
 	 * the language scope had already restored to ambient. Covers both explicit lang and "all",
 	 * since both now share the same $shape_language closure.

@@ -291,7 +291,7 @@ final class TermMetaTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 5 R5-2: the write-confirmation guard only checked `false ===
+	 * The write-confirmation guard only checked `false ===
 	 * update_term_meta(...)`, so a metadata filter that short-circuits update_term_metadata to a
 	 * truthy value bypassed the write entirely while the guard never noticed - the write reported
 	 * success and returned the old stored value.

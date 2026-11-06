@@ -40,7 +40,7 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 
 	/**
 	 * Register a real ability and build the real McpTool the adapter would construct for it, so
-	 * the round 3 identity-classification tests exercise McpTool::get_observability_context() as
+	 * the identity-classification tests exercise McpTool::get_observability_context() as
 	 * the bundled adapter actually shapes it, not a hand-rolled stand-in.
 	 *
 	 * @param string $name Ability name (e.g. 'aafm-bridge/round3-renamed-vendor').
@@ -107,8 +107,7 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 	 * filter exists to prevent (upstream mcp-adapter#253). {"data":[]} is the correct wire shape
 	 * here, matching what 1.6.0 sent and what every other non-empty list gets.
 	 *
-	 * KNOWN LIMITATION, deliberately not fixed in 1.6.1 (the schema-fidelity plan's MEDIUM
-	 * finding M2), and a characterization pin, not an aspiration: the wrap is unconditional for
+	 * KNOWN LIMITATION, deliberately not fixed in 1.6.1, and a characterization pin, not an aspiration: the wrap is unconditional for
 	 * ANY empty bridged result. A reasoned consequence - not a state this test constructs, since
 	 * the filter never sees a schema - is that a foreign ability declaring {type:object,
 	 * additionalProperties:false} and returning array() gets a {"data":[]} its own schema
@@ -283,7 +282,7 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 	}
 
 	/**
-	 * Fix round 1, correctness F1: a zero-property stdClass carries nothing to leak. This codebase
+	 * Correctness F1: a zero-property stdClass carries nothing to leak. This codebase
 	 * itself uses (object) array() in several places for the "empty map serialises as {} not []"
 	 * idiom, so a bridged ability following the same convention must pass through unchanged.
 	 */
@@ -375,7 +374,7 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 		}
 	}
 
-	// IDENTITY CLASSIFICATION, final gate round 3. The wire tool-name prefix test alone is
+	// IDENTITY CLASSIFICATION. The wire tool-name prefix test alone is
 	// bypassable: the adapter's PUBLIC mcp_adapter_tool_name filter can rename a tool's wire name
 	// after the ability name is sanitized, in either direction. These tests drive the actual
 	// McpTool instance the adapter passes (accepted_args=4), built via the real

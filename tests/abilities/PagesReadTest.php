@@ -122,7 +122,7 @@ final class PagesReadTest extends TestCase {
 	}
 
 	/**
-	 * Sweep review finding (test quality, fix round 2): RichPostTest pins the shared
+	 * RichPostTest pins the shared
 	 * aafm_rich_post() excerpt delegation directly, and aafm_exec_get_page() calls that same
 	 * function with no branching of its own (verified: pages.php:279 passes the post straight
 	 * through). This asserts the same excerpt_length behaviour through aafm/get-page's own call

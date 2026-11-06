@@ -122,7 +122,7 @@ final class ReplaceSitewideTest extends TestCase {
 	}
 
 	/**
-	 * Codex-review finding: dry-run must run the same guards a real apply would, so its preview
+	 * Dry-run must run the same guards a real apply would, so its preview
 	 * is an honest forecast - previously the guard checks sat AFTER the dry-run early return, so
 	 * a dry-run always reported skipped_structure_guard:0 even for a post the real write would
 	 * refuse.
@@ -143,7 +143,7 @@ final class ReplaceSitewideTest extends TestCase {
 	}
 
 	/**
-	 * Codex-review finding: MySQL's default collation makes LIKE case-insensitive, so a naive
+	 * MySQL's default collation makes LIKE case-insensitive, so a naive
 	 * SQL match for "quick" would also select a post containing only "Quick" - but str_replace()
 	 * is case-sensitive and would leave it byte-for-byte unchanged, silently inflating
 	 * total_matches/updated_posts for a write that touched nothing.
@@ -164,7 +164,7 @@ final class ReplaceSitewideTest extends TestCase {
 	}
 
 	/**
-	 * Codex-review amendment 19: the SQL-side match must find a real match even when it sits
+	 * The SQL-side match must find a real match even when it sits
 	 * well past the first AAFM_REPLACE_SITEWIDE_MAX_POSTS posts by ascending ID - the exact case
 	 * the plan's original fetched-page-then-filtered-in-PHP draft would have silently missed
 	 * from both matched_posts and total_matches.
@@ -206,7 +206,7 @@ final class ReplaceSitewideTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 2 MEDIUM: the SQL-side cap applied before permission filtering, so 50
+	 * The SQL-side cap applied before permission filtering, so 50
 	 * matching posts the caller cannot edit could occupy the entire cap and the caller's own
 	 * editable match (a later ID) was never even fetched. Repeating the call selected the exact
 	 * same unreachable window every time. The caller's own post must be found and processed
@@ -246,7 +246,7 @@ final class ReplaceSitewideTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 3 MEDIUM: the candidate scan had no ceiling of its own, so a search term
+	 * The candidate scan had no ceiling of its own, so a search term
 	 * matching an enormous number of non-editable posts could force scanning all of them before
 	 * giving up. Forces a tiny scan budget so a handful of non-editable posts (rather than
 	 * thousands) proves the scan genuinely stops instead of continuing to the caller's own
@@ -288,7 +288,7 @@ final class ReplaceSitewideTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 4 MEDIUM: the LIKE-clause filter ran against EVERY WP_Query built while
+	 * The LIKE-clause filter ran against EVERY WP_Query built while
 	 * it was attached, not only this function's own count/scan queries - an unrelated nested
 	 * query (fired from any hook during either query) would silently receive the same
 	 * post_content LIKE clause even though it has nothing to do with the search.
@@ -331,7 +331,7 @@ final class ReplaceSitewideTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 5 R5-2: only is_wp_error() was checked on each post's wp_update_post() result,
+	 * Only is_wp_error() was checked on each post's wp_update_post() result,
 	 * so a wp_insert_post_data filter that reverts the content must count that post as a failed
 	 * write, not an updated one, for a change that never actually landed in storage.
 	 */

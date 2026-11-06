@@ -283,7 +283,7 @@ final class UserMetaTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 5 R5-2: the write-confirmation guard only checked `false ===
+	 * The write-confirmation guard only checked `false ===
 	 * update_user_meta(...)`, so a metadata filter that short-circuits update_user_metadata to a
 	 * truthy value bypassed the write entirely while the guard never noticed - the write reported
 	 * success and returned the old stored value.
@@ -314,7 +314,7 @@ final class UserMetaTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7 R7-3: the confirmation guard used to omit the object subtype (defaulting to
+	 * The confirmation guard used to omit the object subtype (defaulting to
 	 * ''), but core's own get_object_subtype( 'user', $id ) (wp-includes/meta.php) resolves to
 	 * the literal string 'user' for any user that exists - the exact subtype update_metadata()
 	 * itself passes to sanitize_meta() at write time. A sanitizer registered on the

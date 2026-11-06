@@ -2,7 +2,7 @@
 /**
  * Native Avada/Fusion Builder integration: avada-get-page-content, avada-replace-text.
  *
- * Fixture corpus per the design doc's own Codex-review requirement: a self-closing element, an
+ * Fixture corpus per the design doc's own requirement: a self-closing element, an
  * attribute value containing a literal ']', and nested columns using distinct "_inner" tag names.
  *
  * @package AgentAbilitiesForMCP
@@ -104,7 +104,7 @@ final class AvadaTest extends TestCase {
 	/**
 	 * Avada-replace-text must refuse a post that is not genuinely Avada-owned - including one
 	 * owned by a DIFFERENT foreign builder, which carries no Fusion shortcodes at all and would
-	 * otherwise pass the structural-signature check trivially (Codex round C finding 3).
+	 * otherwise pass the structural-signature check trivially.
 	 */
 	public function test_replace_text_refuses_a_post_owned_by_a_different_foreign_builder(): void {
 		$id = self::factory()->post->create( array( 'post_content' => 'Elementor-owned body text' ) );
@@ -167,7 +167,7 @@ final class AvadaTest extends TestCase {
 	}
 
 	/**
-	 * Codex hunt F4: the replacement count was reported straight from the pre-save string
+	 * The replacement count was reported straight from the pre-save string
 	 * count, never re-validated against what actually landed - a wp_insert_post_data filter
 	 * that reverts the content back to the original must surface as a structured error, not a
 	 * success response claiming the replacement was saved.
@@ -199,7 +199,7 @@ final class AvadaTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 5 MEDIUM: counting each quote character independently (odd '"' OR odd
+	 * Counting each quote character independently (odd '"' OR odd
 	 * "'") false-positived on a perfectly ordinary attribute value containing an apostrophe
 	 * INSIDE a double-quoted value - not a second delimiter, just a literal character. A safe,
 	 * unrelated plain-text edit must not be refused because of it.
@@ -270,7 +270,7 @@ final class AvadaTest extends TestCase {
 	/**
 	 * Removing a closing tag changes the shortcode's real structure (its content is no longer
 	 * INSIDE the element), and must be refused - even though the tag/self_closing/atts/depth
-	 * tuple alone cannot tell the difference (Codex round C finding 2, bullet 2).
+	 * tuple alone cannot tell the difference.
 	 */
 	public function test_replacing_away_a_closing_tag_is_refused(): void {
 		$content = '[fusion_text]Hello[/fusion_text]';
@@ -295,7 +295,7 @@ final class AvadaTest extends TestCase {
 	 * A Fusion shortcode NOT in the hardcoded baseline list (fusion_button) must still be
 	 * protected when the site's real shortcode registry (WordPress's $shortcode_tags global,
 	 * populated by Fusion Builder's own add_shortcode() calls) carries it - the dynamic-discovery
-	 * fix for Codex round C finding 2, bullet 1.
+	 * fix.
 	 */
 	public function test_an_unlisted_but_registered_fusion_tag_is_still_protected(): void {
 		add_shortcode( 'fusion_button', '__return_empty_string' );

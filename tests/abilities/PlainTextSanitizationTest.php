@@ -197,7 +197,7 @@ final class PlainTextSanitizationTest extends TestCase {
 	}
 
 	/**
-	 * The create/update sibling. Found by the Codex review pass: create-user was swept and
+	 * The create/update sibling: create-user was swept and
 	 * update-user was not, which is this project's documented "fixed at one call site, never
 	 * swept" archetype. display_name is emitted in feeds, author markup and admin UI.
 	 */
@@ -231,7 +231,7 @@ final class PlainTextSanitizationTest extends TestCase {
 	}
 
 	/**
-	 * B2-09. `]]>` in an excerpt ends the CDATA section the feed wraps it in, so everything after
+	 * `]]>` in an excerpt ends the CDATA section the feed wraps it in, so everything after
 	 * it is read as markup and the whole document stops being well-formed - the same harm B-18
 	 * exists to prevent, through a character B-18 never enumerated.
 	 *

@@ -197,7 +197,7 @@ final class AioseoTest extends TestCase {
 	}
 
 	/**
-	 * Fix round 1, delegation audit sweep (210-sweep-B5-report.md): the write must go through
+	 * The write must go through
 	 * AIOSEO's own Post::savePost($id, $data) - the same method AIOSEO's own REST controller and
 	 * every other real caller in its codebase use - not a bare property-set-then-save(). Asserts
 	 * BOTH that the vendor save path was actually called AND that the robots fields were translated
@@ -619,7 +619,7 @@ final class AioseoTest extends TestCase {
 	}
 
 	/**
-	 * Fix round 2, assertion-count reconciliation: pins the exact contract two GENERIC,
+	 * Assertion-count reconciliation: pins the exact contract two GENERIC,
 	 * registry-wide scanner tests elsewhere in the suite (AbilitiesSaveTest::
 	 * test_every_registry_entry_declares_a_subject, AnnotationCorrectnessTest::
 	 * test_scan_reports_what_it_skipped_and_why) silently depend on without asserting it

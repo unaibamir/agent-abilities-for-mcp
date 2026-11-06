@@ -197,7 +197,7 @@ final class WooProductsTest extends TestCase {
 	}
 
 	/**
-	 * B56: get_children() is not variation-specific - on a grouped product it returns the grouped
+	 * Note: get_children() is not variation-specific - on a grouped product it returns the grouped
 	 * child PRODUCT ids, which used to be reported as variation_ids. Only a variable product's
 	 * children are variations, so a grouped product must report an empty variation_ids.
 	 */
@@ -222,7 +222,7 @@ final class WooProductsTest extends TestCase {
 	}
 
 	/**
-	 * B56 control: a variable product's children are real variations and must keep appearing.
+	 * A variable product's children are real variations and must keep appearing.
 	 */
 	public function test_get_product_variable_children_still_reported_as_variation_ids(): void {
 		$this->acting_as( 'administrator' );
@@ -351,7 +351,7 @@ final class WooProductsTest extends TestCase {
 	}
 
 	/**
-	 * B7: the force-draft setting promises to cover "everything an agent creates", but
+	 * The force-draft setting promises to cover "everything an agent creates", but
 	 * wc-create-product saved with WooCommerce's default publish status (or any explicitly
 	 * requested one) untouched. With the setting on, a new product must land as a draft,
 	 * and an explicit publish request on create or update must be coerced to draft too.
@@ -410,7 +410,7 @@ final class WooProductsTest extends TestCase {
 	}
 
 	/**
-	 * B7 companion: with force-draft off, nothing changes - the default stays publish.
+	 * With force-draft off, nothing changes - the default stays publish.
 	 */
 	public function test_create_product_defaults_to_publish_without_force_draft(): void {
 		$this->acting_as( 'administrator' );
@@ -420,7 +420,7 @@ final class WooProductsTest extends TestCase {
 	}
 
 	/**
-	 * B22: stock_status alongside manage_stock:true must be refused, not silently discarded.
+	 * Note: stock_status alongside manage_stock:true must be refused, not silently discarded.
 	 *
 	 * When stock is managed, WooCommerce derives stock_status from stock_quantity in
 	 * validate_props() on save, so a caller-supplied stock_status was silently overwritten and the
@@ -738,7 +738,7 @@ final class WooProductsTest extends TestCase {
 
 	// =========================================================================
 	// aafm/wc-update-product -- page-builder ownership and block-content guards
-	// (Codex round 9 R9-1)
+	//
 	//
 	// aafm_wc_apply_product_input() used to send description/short_description straight to the
 	// WC_Product setters, and aafm_exec_wc_update_product() saved without ever checking
@@ -849,9 +849,9 @@ final class WooProductsTest extends TestCase {
 
 	// =========================================================================
 	// aafm/wc-update-product -- the ownership guard is scoped to content fields
-	// (Codex round 10 R10-6)
 	//
-	// R9-1's fix above ran the ownership check unconditionally, so a builder-owned product
+	//
+	// The fix above ran the ownership check unconditionally, so a builder-owned product
 	// refused every update, including price/SKU/stock/category/status changes that never touch
 	// post_content or post_excerpt and so have nothing for a builder to silently ignore. The
 	// check now only runs when description or short_description is present.
@@ -1065,7 +1065,7 @@ final class WooProductsTest extends TestCase {
 	}
 
 	/**
-	 * B21: when the store keeps the row but WC_Data::delete() still returns true (its real contract),
+	 * When the store keeps the row but WC_Data::delete() still returns true (its real contract),
 	 * the ability must verify by re-reading and report failure, not deleted:true.
 	 *
 	 * A guard on delete()'s return is dead here because delete() returns true whenever a data store
@@ -1265,7 +1265,7 @@ final class WooProductsTest extends TestCase {
 	}
 
 	/**
-	 * Sweep finding 2 (208 FIX-2 item 4): create-product now instantiates WC_Product_Simple, matching
+	 * Create-product now instantiates WC_Product_Simple, matching
 	 * WooCommerce's own create path, rather than the bare WC_Product base class it never uses for a
 	 * new product. No observable difference exists to drive a behavioural test red - WC_Product::get_type()
 	 * already defaults to 'simple' and the response is rebuilt from a fresh wc_get_product() read

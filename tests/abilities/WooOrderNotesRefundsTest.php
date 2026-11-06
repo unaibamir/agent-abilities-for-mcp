@@ -132,7 +132,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	}
 
 	/**
-	 * Doc 214, finding 6: WcOrderStubStore::get_notes() used to apply no WooCommerce filter at
+	 * WcOrderStubStore::get_notes() used to apply no WooCommerce filter at
 	 * all, unlike real wc_get_order_note() (wc-order-functions.php), which applies
 	 * 'woocommerce_get_order_note' over the whole note array before returning it. Hook the filter
 	 * and confirm the changed content reaches the wire.
@@ -278,7 +278,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	}
 
 	/**
-	 * B58: the note text went through sanitize_text_field(), which collapses newlines, flattening
+	 * The note text went through sanitize_text_field(), which collapses newlines, flattening
 	 * a multi-line note into one line - while the sibling customer_note field on the order writes
 	 * uses sanitize_textarea_field(). Notes are free-form text; line breaks must survive.
 	 */
@@ -486,7 +486,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	}
 
 	/**
-	 * Doc 214, finding 6: the WC_Order_Refund stub's getters used to apply no WooCommerce filter
+	 * The WC_Order_Refund stub's getters used to apply no WooCommerce filter
 	 * at all, unlike real WC_Order_Refund (get_prop()-backed, filtered
 	 * 'woocommerce_order_refund_get_{prop}'). Hook one of the getters this ability's own shaping
 	 * reads and confirm the filtered value reaches the wire.
@@ -613,7 +613,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	}
 
 	/**
-	 * B24: a line_item_id that does not resolve to an item on the order must be refused with an
+	 * A line_item_id that does not resolve to an item on the order must be refused with an
 	 * actionable error BEFORE wc_create_refund() runs. wc_create_refund() silently skips unknown
 	 * item ids, which turned a documented per-line refund into a full-amount refund with no
 	 * per-line record and no download-permission revocation.
@@ -643,7 +643,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	}
 
 	/**
-	 * B24: a known line_item_id still refunds normally, proving the new guard only bites bad ids.
+	 * A known line_item_id still refunds normally, proving the new guard only bites bad ids.
 	 */
 	public function test_create_order_refund_known_line_item_id_still_succeeds(): void {
 		$this->register_group_c();
@@ -669,7 +669,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 
 	/**
 	 * R8C-3: a line_item_id resolving to a COUPON order item is a real, existing item - the
-	 * existing B24 guard (which only checks existence) lets it through - but wc_create_refund()'s
+	 * existing guard (which only checks existence) lets it through - but wc_create_refund()'s
 	 * own loop only ever iterates line_item/fee/shipping items, so it silently drops a coupon or
 	 * tax id from the refund with no error. Refuse it before the call, mirroring the exact type set
 	 * wc_create_refund() itself consumes.

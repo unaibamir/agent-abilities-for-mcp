@@ -85,7 +85,7 @@ final class WpmlLanguageTest extends TestCase {
 		$this->assertSame( 'all', aafm_resolve_lang( array( 'lang' => 'all' ) ) );
 		$this->assertNull( aafm_resolve_lang( array() ) ); // None requested.
 
-		// B48 contract change: an unknown code used to coerce to null, which both served the
+		// An unknown code used to coerce to null, which both served the
 		// default language silently AND reported `language: null` - documented as "WPML
 		// inactive". Two false statements; now it is an actionable refusal naming the codes.
 		$invalid = aafm_resolve_lang( array( 'lang' => 'zz' ) );
@@ -95,7 +95,7 @@ final class WpmlLanguageTest extends TestCase {
 	}
 
 	/**
-	 * B48 at the wire layer: a list read with an invalid lang refuses instead of silently
+	 * At the wire layer: a list read with an invalid lang refuses instead of silently
 	 * answering in the default language with language:null.
 	 */
 	public function test_get_posts_refuses_an_invalid_lang_instead_of_coercing(): void {
@@ -110,7 +110,7 @@ final class WpmlLanguageTest extends TestCase {
 	}
 
 	/**
-	 * B48: without WPML the lang input stays documented as ignored - no refusal.
+	 * Without WPML the lang input stays documented as ignored - no refusal.
 	 */
 	public function test_get_posts_ignores_lang_when_wpml_is_off(): void {
 		$this->acting_as( 'administrator' );
@@ -139,7 +139,7 @@ final class WpmlLanguageTest extends TestCase {
 	}
 
 	/**
-	 * Doc 214, finding 4 (investigated, LEFT AS-IS): if a misbehaving third party overrides
+	 * Investigated and left as is: if a misbehaving third party overrides
 	 * `wpml_current_language` to return something empty while WPML otherwise reports itself
 	 * loaded, aafm_wpml_current_language() resolves that to null. This pins the deliberate
 	 * behavior: aafm_with_language() must skip the switch rather than switch into a state it
@@ -190,7 +190,7 @@ final class WpmlLanguageTest extends TestCase {
 	}
 
 	/**
-	 * B47: get-post pinned the WPML element type to 'post' for every id, while WPML's
+	 * Get-post pinned the WPML element type to 'post' for every id, while WPML's
 	 * wpml_object_id filter resolves per the element's REAL type - so a lang request on a
 	 * CPT item never matched a translation and silently served the untranslated item.
 	 * The element type must be derived from the actual post type.

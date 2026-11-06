@@ -194,7 +194,7 @@ final class AbilityCrashSafetyTest extends TestCase {
 	}
 
 	/**
-	 * The same-request Red Gate finding 5 of the final review identified: aafm_wc_apply_coupon_input()
+	 * The same-request failure: aafm_wc_apply_coupon_input()
 	 * used to apply amount BEFORE discount_type. A fresh WC_Coupon defaults to discount_type
 	 * 'fixed_cart', and WC_Coupon::set_amount() only rejects an amount over 100 once
 	 * get_discount_type() already reads 'percent' - so a single create call carrying BOTH

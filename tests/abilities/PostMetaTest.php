@@ -306,7 +306,7 @@ final class PostMetaTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 7 HIGH: every page-builder ownership marker (includes/page-builder-
+	 * Every page-builder ownership marker (includes/page-builder-
 	 * guard.php) must be absolutely blocked from update-post-meta/delete-post-meta, even when the
 	 * operator has exposed every other meta key via `*` - clearing a marker (e.g.
 	 * fusion_builder_status) let aafm_exec_update_post()'s ownership check pass on the very next
@@ -352,7 +352,7 @@ final class PostMetaTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 5 R5-2: the write-confirmation guard only checked `false ===
+	 * The write-confirmation guard only checked `false ===
 	 * update_post_meta(...)`, so a metadata filter that short-circuits update_post_metadata to a
 	 * truthy value bypassed the write entirely while the guard never noticed - the write reported
 	 * success and returned the old stored value.
@@ -383,7 +383,7 @@ final class PostMetaTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6 B6-3: the confirmation guard compared the fresh read against the plugin's own
+	 * The confirmation guard compared the fresh read against the plugin's own
 	 * pre-write intent, so a site-registered sanitize_post_meta_{key} callback (register_meta()'s
 	 * sanitize_callback lands there, exactly like update_metadata() itself runs on every meta
 	 * write) that legitimately normalizes the value on save was indistinguishable from a filter
@@ -423,7 +423,7 @@ final class PostMetaTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6, R6-4: "nothing was asked to change" used to be judged from the raw values
+	 * "nothing was asked to change" used to be judged from the raw values
 	 * alone ($intended === $old), blind to whether $old was already in the site's own canonical
 	 * form. Resubmitting the literal value already stored, when that value is NOT canonical, is a
 	 * real ask (the sanitizer should still normalize it) - a persistence veto that blocks even
@@ -469,7 +469,7 @@ final class PostMetaTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 8 R8-1: the confirmation guard used to run sanitize_meta() against
+	 * The confirmation guard used to run sanitize_meta() against
 	 * wp_slash( $intended ) and then unslash the sanitizer's OUTPUT, but core's own
 	 * update_metadata() unslashes the incoming value and THEN sanitizes it - the guard was
 	 * feeding a slash-sensitive registered sanitizer a different input than core's own call ever
@@ -514,7 +514,7 @@ final class PostMetaTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7 R7-3: aafm_sanitize_meta_value()'s coercion-to-array probe used to always pass
+	 * Note: aafm_sanitize_meta_value()'s coercion-to-array probe used to always pass
 	 * the literal string 'post' as the object subtype, so a sanitize_callback registered for a
 	 * page (or any other non-'post' type) never reached the subtype-specific hook the probe
 	 * checked - the value's own documented scalar-only guarantee did not actually apply to it.
@@ -555,7 +555,7 @@ final class PostMetaTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 8 R8-2: the probe and the confirmation guard used to resolve the object
+	 * The probe and the confirmation guard used to resolve the object
 	 * subtype from get_post_type( $id ) directly, bypassing core's own get_object_subtype()
 	 * and the get_object_subtype_post filter it runs through. A site remapping a post's write-
 	 * time subtype (a multi-tenant plugin scoping meta by a virtual subtype, for example) was

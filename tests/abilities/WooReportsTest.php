@@ -129,7 +129,7 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
-	 * B25: an unparseable date must return an error, not a confidently wrong money figure.
+	 * An unparseable date must return an error, not a confidently wrong money figure.
 	 *
 	 * The strtotime('garbage') call returns false, which cast to 0 silently widened the window to all-time on a bad
 	 * start date and emptied it on a bad end date, returning success either way. The report now
@@ -518,7 +518,7 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
-	 * B52: `total` used to be a hardcoded seven-status sum, so orders in a custom status (which
+	 * `total` used to be a hardcoded seven-status sum, so orders in a custom status (which
 	 * plugins register through the wc_order_statuses filter) were silently excluded while the
 	 * shape claimed a complete total. The total now derives from wc_get_order_statuses().
 	 */
@@ -1206,7 +1206,7 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
-	 * B32: with the old sequence, a mid-batch persistence failure returned a bare generic error
+	 * With the old sequence, a mid-batch persistence failure returned a bare generic error
 	 * after earlier fields had already landed - "error" with changed state. The executor now
 	 * verifies the whole batch at the end and, when anything failed, names exactly which fields
 	 * persisted and which did not, in both the message and the error data.
@@ -1293,7 +1293,7 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
-	 * FIX-3 item 3 (sweep finding, A2 batch): the per-status order count now delegates to
+	 * The per-status order count now delegates to
 	 * wc_orders_count(), WooCommerce's own public, HPOS/legacy-abstracted, cache-backed count
 	 * helper, instead of a hand-rolled wc_get_orders() pagination probe. Both mechanisms read the
 	 * same underlying count, so there is no behavioural difference to drive a test red - this pins
@@ -1310,7 +1310,7 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
-	 * FIX-3 item 4 (sweep finding, B4 batch): the only live gap in this dispatch.
+	 * The only live gap in this dispatch.
 	 * WC_Settings_API::process_admin_options() - the real admin-form gateway save path - fires
 	 * woocommerce_update_option with array('id' => $option_key) before its own update_option()
 	 * call. This ability never fired it, so WooCommerce's own opt-in usage-tracking snapshot
@@ -1598,7 +1598,7 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
-	 * Doc 250's scenario (R1-4): the row says paypal is at 1, a stale cache says 5. The request
+	 * Doc 250's scenario: the row says paypal is at 1, a stale cache says 5. The request
 	 * asks for 5 with a title, so a write judged from the cache would be skipped as a no-op and
 	 * read back as done. The ordering views disagree, so nothing is written at all: not the
 	 * ordering, not the title, not a cache entry, and no outcome row.

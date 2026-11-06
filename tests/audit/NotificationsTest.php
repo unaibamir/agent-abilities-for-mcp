@@ -819,6 +819,26 @@ final class NotificationsTest extends TestCase {
 		}
 	}
 
+	public function test_the_digest_counts_new_tools_as_tools_and_other_events_as_events(): void {
+		$tools = array(
+			'trigger' => 'new_tools',
+			'subtype' => 'detected',
+			'time'    => 1000,
+			'count'   => 12,
+		);
+		$burst = array(
+			'trigger' => 'denial_burst',
+			'subtype' => 'burst',
+			'time'    => 1000,
+			'count'   => 7,
+		);
+
+		$body = aafm_notify_build_message( array( $tools, $tools, $burst ), true )['body'];
+
+		$this->assertStringContainsString( 'Other plugins added new tools: 24', $body );
+		$this->assertStringContainsString( 'Many calls were denied: 1', $body, 'Only new tools are counted by the tool.' );
+	}
+
 	public function test_the_new_tools_email_counts_tools_and_never_says_denied_calls(): void {
 		$this->configure(
 			array(

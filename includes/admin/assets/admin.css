@@ -1197,10 +1197,73 @@
 	/* Per-group Enable all / Disable all controls, above the ability list. */
 	.aafm-bridge-bulk {
 		display: flex;
+		flex-wrap: wrap;
 		gap: 8px;
 		margin-block-end: 12px;
 		padding-block: 14px;
 		padding-inline: 18px;
+	}
+
+	/* New tools since your last review: one block per plugin, ruled apart rather than boxed, because
+	   the card allows no card inside it. */
+	.aafm-bridge-review {
+		.aafm-bridge-review-status {
+			margin-block: 0;
+			font-size: var(--aafm-fs-base);
+
+			&:empty {
+				display: none;
+			}
+
+			&:not(:empty) {
+				margin-block-end: var(--aafm-space-3);
+			}
+		}
+
+		.aafm-bridge-review-all {
+			margin-block: 0 var(--aafm-space-4);
+		}
+
+		.aafm-bridge-review-block {
+			border-block-start: 1px solid var(--aafm-border);
+			padding-block: var(--aafm-space-4) 0;
+			margin-block-start: var(--aafm-space-4);
+
+			&:first-of-type {
+				margin-block-start: 0;
+			}
+
+			h3 {
+				margin-block: 0 var(--aafm-space-2);
+				font-size: var(--aafm-fs-body);
+				font-weight: 600;
+			}
+		}
+
+		.aafm-bridge-review-tools {
+			margin-block: 0 var(--aafm-space-3);
+			margin-inline: 0;
+			list-style: none;
+
+			li {
+				margin-block: 0 var(--aafm-space-2);
+			}
+
+			code {
+				overflow-wrap: anywhere;
+			}
+
+			.aafm-ability-hint {
+				margin-block: var(--aafm-space-1) 0;
+			}
+		}
+
+		.aafm-bridge-review-actions {
+			display: flex;
+			flex-wrap: wrap;
+			gap: var(--aafm-space-2);
+			margin-block: 0;
+		}
 	}
 
 	/* The inline destructive confirm strip: reuses the .aafm-notice-inline component; this

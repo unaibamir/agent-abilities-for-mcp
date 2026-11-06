@@ -109,7 +109,7 @@ final class ServerToolsTest extends TestCase {
 	}
 
 	// =========================================================================
-	// aafm_build_server_tools() -- ownership check (Codex round 9 R9-7)
+	// aafm_build_server_tools() -- ownership check
 	//
 	// A name AAFM enables must never be served from an object AAFM itself never registered.
 	// aafm_register_enabled_abilities() (register.php) treats an already-registered name as an
@@ -257,16 +257,16 @@ final class ServerToolsTest extends TestCase {
 	}
 
 	// =========================================================================
-	// aafm_build_server_tools() -- ownership check hardened to object identity (Codex round 10
-	// R10-4)
+	// aafm_build_server_tools() -- ownership check hardened to object identity
 	//
-	// R9-7's fix checked `instanceof AAFM_Rate_Limited_Ability`, which is forgeable: that class
+	//
+	// An earlier fix checked `instanceof AAFM_Rate_Limited_Ability`, which is forgeable: that class
 	// is public and non-final, and wp_register_ability() accepts a caller-chosen ability_class,
 	// so a foreign plugin can preclaim a name using AAFM's own subclass with its own permissive
 	// callbacks and pass a class check that never proves the object came from this plugin's
 	// chokepoint. These fixtures register the foreign object with
 	// 'ability_class' => \AAFM_Rate_Limited_Ability::class explicitly - the exact hole a plain
-	// WP_Ability fixture (the R9-7 tests above) cannot see.
+	// WP_Ability fixture (the tests above) cannot see.
 	// =========================================================================
 
 	/**
@@ -325,7 +325,7 @@ final class ServerToolsTest extends TestCase {
 	}
 
 	/**
-	 * End-to-end shape of R10-4: a foreign plugin claims a reserved, enabled name before this
+	 * End to end: a foreign plugin claims a reserved, enabled name before this
 	 * plugin's own registration pass runs, using AAFM's own subclass as its ability_class.
 	 * aafm_register_enabled_abilities() sees the name already answered and skips re-registering
 	 * it, so the object left standing under the name is the foreign one, an instance of the right
@@ -417,10 +417,10 @@ final class ServerToolsTest extends TestCase {
 	}
 
 	// =========================================================================
-	// aafm_build_server_tools() -- the ownership record itself cannot be poisoned (Codex round 11
-	// R11-3)
+	// aafm_build_server_tools() -- the ownership record itself cannot be poisoned
 	//
-	// R10-4 closed the class-forgery route by comparing object identity against whatever
+	//
+	// The identity check closed the class-forgery route by comparing object identity against whatever
 	// aafm_register_ability_with_log() actually returned. But the record it compared against used
 	// to be writable through a public, two-argument aafm_remember_registered_ability( $name,
 	// $ability ) that trusted whatever object it was handed - so a foreign plugin could register a
@@ -434,7 +434,7 @@ final class ServerToolsTest extends TestCase {
 	// =========================================================================
 
 	/**
-	 * The literal R11-3 attack: register a name directly with core, then try to make the record
+	 * The literal attack: register a name directly with core, then try to make the record
 	 * believe that object is ours by calling the old two-argument write shape. Must be a no-op.
 	 */
 	public function test_poisoning_the_ownership_record_directly_no_longer_admits_a_foreign_ability(): void {
@@ -493,7 +493,7 @@ final class ServerToolsTest extends TestCase {
 
 	// =========================================================================
 	// AAFM_Registration_Authority::register() -- a caller-supplied ability_class is never honored
-	// (Codex round 12 R12-1)
+	//
 	//
 	// aafm_register_ability_with_log() decorates whatever $args it is given before calling
 	// register() - but it used to also honor whatever `ability_class` those $args carried. A
@@ -600,7 +600,7 @@ final class ServerToolsTest extends TestCase {
 
 	// =========================================================================
 	// AAFM_Registration_Authority -- the ownership store does not retain unregistered abilities
-	// (Codex round 12 R12-4)
+	//
 	//
 	// The store used to hold a strong reference to every uniquely named ability ever registered
 	// through it, with nothing removing an entry when core's wp_unregister_ability() unregistered

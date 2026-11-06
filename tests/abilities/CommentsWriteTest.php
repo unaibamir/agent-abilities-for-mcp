@@ -369,7 +369,7 @@ final class CommentsWriteTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 8, R8-4: wp_set_comment_status() fires its 'wp_set_comment_status' action
+	 * Note: wp_set_comment_status() fires its 'wp_set_comment_status' action
 	 * AFTER its own DB update has already succeeded, and returns `true` unconditionally once that
 	 * update ran - the old code branched on that return value, so a hook on the action that moves
 	 * the comment again (here, straight back to its pre-moderation status - the same shape as a

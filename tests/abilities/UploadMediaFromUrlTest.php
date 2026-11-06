@@ -126,7 +126,7 @@ final class UploadMediaFromUrlTest extends TestCase {
 	}
 
 	/**
-	 * Codex hunt F9: media_handle_sideload() already commits the attachment before this
+	 * Note: media_handle_sideload() already commits the attachment before this
 	 * ability re-sanitizes an IPTC/EXIF caption that landed in post_content. If that re-save
 	 * fails, the attachment must not be left behind with its un-renormalized caption.
 	 */

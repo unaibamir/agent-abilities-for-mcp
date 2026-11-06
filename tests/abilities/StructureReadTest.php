@@ -76,7 +76,7 @@ final class StructureReadTest extends TestCase {
 	}
 
 	/**
-	 * B46: `writable` used to claim "create/update", but the update/delete gates refuse any
+	 * `writable` used to claim "create/update", but the update/delete gates refuse any
 	 * map_meta_cap:false type (aafm_can_edit_post_object degrades fail-closed) while create
 	 * is allowed - so a non-mapped allowlisted CPT is create-only in reality. The shape now
 	 * splits the claim: `writable` = agents may create, `updatable` = agents may also

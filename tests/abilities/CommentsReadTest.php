@@ -191,7 +191,7 @@ final class CommentsReadTest extends TestCase {
 	}
 
 	/**
-	 * R3-5 (1.7.5 deferred, round 3): a password-protected post is PUBLIC (its post_status object
+	 * A password-protected post is PUBLIC (its post_status object
 	 * has public=>true), so it used to fall through to the "any logged-in caller may read" branch
 	 * - the password itself was never checked. A Subscriber must not read approved comments on a
 	 * password-protected published post through either the post-scoped or sitewide entry point.
@@ -268,7 +268,7 @@ final class CommentsReadTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 9, R9-4: the whole-site listing used to ask the database for one page,
+	 * The whole-site listing used to ask the database for one page,
 	 * THEN drop comments on posts the caller can't read - so a readable comment could be
 	 * pushed off page 1 entirely by unreadable ones consuming its slot. An older readable
 	 * comment plus ten newer unreadable ones on a private post must still surface the
@@ -446,7 +446,7 @@ final class CommentsReadTest extends TestCase {
 	}
 
 	/**
-	 * R2-6 (1.7.5 deferred, round 2): the round-1 fix above stopped a HIDDEN comment inside the
+	 * The round-1 fix above stopped a HIDDEN comment inside the
 	 * scan window from leaking, but a window that is ENTIRELY visible still leaked: a raw count
 	 * crossing the cap flipped `truncated` true even when the one additional comment beyond the
 	 * window sat on a post this subscriber cannot read. `comments` and `total` are unaffected
@@ -497,7 +497,7 @@ final class CommentsReadTest extends TestCase {
 	}
 
 	/**
-	 * R3-6 (1.7.5 deferred, round 3): the round-2 lookahead sized/offset its second window from a
+	 * The round-2 lookahead sized/offset its second window from a
 	 * count that included hidden comments, so inserting ONE hidden comment between the scanned
 	 * window and a genuinely visible comment shifted that visible comment out of the lookahead
 	 * window entirely - flipping truncated from true to false with the caller's own visible

@@ -1,11 +1,11 @@
 <?php
 /**
- * The B2-02 regression corpus: every case the replace-in-post structure guard has ever protected.
+ * The regression corpus: every case the replace-in-post structure guard has ever protected.
  *
  * ROWS IN THIS FILE ARE APPEND-ONLY. NEVER DELETE ONE.
  *
  * Read that literally, and here is why it is worth the inconvenience. This guard has now been
- * written three times. Each rewrite fixed the case the current review round had found and silently
+ * written three times. Each rewrite fixed the case the current review had found and silently
  * dropped a case an earlier version was already protecting, because the suite only ever pinned the
  * most recent round's findings. The second attempt deleted the first attempt's raw-text body
  * protection with all four gates green, and the next round rediscovered it as a fresh HIGH.
@@ -50,21 +50,21 @@ final class ReplaceInPostStructureTest extends TestCase {
 	 */
 	public function provide_guard_cases(): array {
 		return array(
-			// R6-2: the tag does not end at the first `>` when that `>` is inside a quoted value.
+			// The tag does not end at the first `>` when that `>` is inside a quoted value.
 			'R6-2 quoted attribute contains a bracket' => array(
 				'<p>hi</p><a title="a > b" href="MARK">x</a>',
 				'MARK',
 				'x" onmouseover="alert(1)" data-z="',
 				false,
 			),
-			// R6-4: a literal `<` in prose is not a tag opener, and must not cost a caller their edit.
+			// A literal `<` in prose is not a tag opener, and must not cost a caller their edit.
 			'R6-4 literal bracket in prose'            => array(
 				'<p>if x < y then MARK holds</p>',
 				'MARK',
 				'the bound',
 				true,
 			),
-			// Round 6: every original token survives, yet the rest of the comment became live markup.
+			// Every original token survives, yet the rest of the comment became live markup.
 			'round6 comment ended early'               => array(
 				'<p>a</p><!-- note MARK end --><p>b</p>',
 				'MARK',
@@ -123,7 +123,7 @@ final class ReplaceInPostStructureTest extends TestCase {
 			),
 
 			/*
-			 * Round 7, and never protected by either previous attempt. What actually let these
+			 * And never protected by either previous attempt. What actually let these
 			 * through was not the missing namespace but the old count-and-subsequence arithmetic:
 			 * a break-out that re-opens the subtree leaves every original token present and in
 			 * order, and the totals balance. Demanding exact equality is what closes them, and
@@ -243,7 +243,7 @@ final class ReplaceInPostStructureTest extends TestCase {
 				'<strong>brown</strong>',
 				false,
 			),
-			// The R6-4 family again: a bracket that cannot open a tag must stay affordable.
+			// A bracket that cannot open a tag must stay affordable.
 			'replacement contains an inert bracket'    => array(
 				'<p>bound MARK stated</p>',
 				'MARK',

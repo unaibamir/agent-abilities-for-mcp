@@ -1,6 +1,6 @@
 <?php
 /**
- * Pagination bounds sweep (B44).
+ * Pagination bounds sweep.
  *
  * AAFM_LIST_PAGE_MAX's docblock promises the ceiling is "declared on every list tool's
  * `page` arg". That was false: get-pages and the WooCommerce lists declared `minimum`

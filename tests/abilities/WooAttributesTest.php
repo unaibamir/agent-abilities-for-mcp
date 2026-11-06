@@ -183,7 +183,7 @@ final class WooAttributesTest extends TestCase {
 
 	public function test_update_attribute_field_isolation(): void {
 		// Changing 'order_by' must leave 'name' intact. This test used to patch type to 'text',
-		// but B31 removed 'text' from the enum - wc_get_attribute_types() only offers 'select' and
+		// but 'text' was removed from the enum - wc_get_attribute_types() only offers 'select' and
 		// wc_create_attribute() silently coerced anything else - so the isolation check now rides
 		// on order_by, another enum field.
 		$this->acting_as( 'administrator' );
@@ -199,7 +199,7 @@ final class WooAttributesTest extends TestCase {
 	}
 
 	/**
-	 * B31: the type enum advertised 'text', but wc_get_attribute_types() returns only 'select'
+	 * The type enum advertised 'text', but wc_get_attribute_types() returns only 'select'
 	 * and wc_create_attribute() silently coerces anything else to select - schema-enum vs
 	 * code-enum drift plus a silent coercion. The enum is now sourced from the vendor's own list
 	 * (falling back to select when WooCommerce is unavailable), so 'text' is gone.
@@ -213,7 +213,7 @@ final class WooAttributesTest extends TestCase {
 	}
 
 	/**
-	 * B31 wire check: a create naming the old phantom 'text' type is refused by the schema
+	 * A create naming the old phantom 'text' type is refused by the schema
 	 * instead of being silently stored as select.
 	 */
 	public function test_create_attribute_type_text_is_rejected(): void {
@@ -387,7 +387,7 @@ final class WooAttributesTest extends TestCase {
 	}
 
 	/**
-	 * Sweep finding A (208 FIX-2 item 1): create's and update's by-id reads now delegate to
+	 * Note: create's and update's by-id reads now delegate to
 	 * wc_get_attribute() rather than a hand-rolled scan over wc_get_attribute_taxonomies(). Both
 	 * paths return the identical shape either way (both this test suite's create/update tests above
 	 * already assert on that shape, unchanged), so there is no behavioural difference to drive RED -
@@ -411,7 +411,7 @@ final class WooAttributesTest extends TestCase {
 	}
 
 	/**
-	 * Sweep finding B (208 FIX-2 item 2): update no longer seeds $args from the resolved attribute's
+	 * Update no longer seeds $args from the resolved attribute's
 	 * current values before calling wc_update_attribute(); the vendor function backfills any omitted
 	 * field itself on every WooCommerce version this ability can run on (the AAFM_WOOCOMMERCE_MIN_VERSION
 	 * floor is pinned to exactly the release that introduced that backfill). This test's stub already

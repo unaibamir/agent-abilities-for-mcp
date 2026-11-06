@@ -133,7 +133,7 @@ final class ServerDiscoveryTest extends TestCase {
 	}
 
 	/**
-	 * B15: a site that renames a tool via mcp_adapter_tool_name must not thereby leak an admin-only
+	 * A site that renames a tool via mcp_adapter_tool_name must not thereby leak an admin-only
 	 * tool into a subscriber's tools/list.
 	 *
 	 * The adapter names the tool DTO by running the sanitized name through mcp_adapter_tool_name. If
@@ -365,7 +365,7 @@ final class ServerDiscoveryTest extends TestCase {
 	}
 
 	/**
-	 * FINDING 1 (Codex MEDIUM): the standalone edit_private_pages arm never resolves anything on
+	 * The standalone edit_private_pages arm never resolves anything on
 	 * its own (core only ever pairs it with edit_others_pages), so a role holding ONLY
 	 * edit_private_pages was shown update-page despite being unable to execute it on any object.
 	 * Removing the arm must make discovery agree with that reality.
@@ -406,7 +406,7 @@ final class ServerDiscoveryTest extends TestCase {
 	}
 
 	/**
-	 * Fix round 2: Codex MEDIUM x2 (update-page's remaining private-cap arm, and the same
+	 * Two cases (update-page's remaining private-cap arm, and the same
 	 * discovery/execute mismatch on every sibling per-object write/delete). Every test below
 	 * follows the same shape as test_discovery_reconciles_update_page_for_a_role_missing_edit_pages
 	 * above: a custom role holding ONLY the new OR arm, a sanity check that the real execute-time
@@ -476,7 +476,7 @@ final class ServerDiscoveryTest extends TestCase {
 	}
 
 	/**
-	 * FINDING 2 (Codex-named example): aafm/trash-page and aafm/delete-page checked only
+	 * Note: aafm/trash-page and aafm/delete-page checked only
 	 * delete_pages (i.e. the page type's delete_posts cap), missing delete_others_posts and
 	 * delete_published_posts - the exact mismatch Task 8 had already fixed on update-page but
 	 * never carried to this sibling.
@@ -844,7 +844,7 @@ final class ServerDiscoveryTest extends TestCase {
 	}
 
 	/**
-	 * Fix round 3, ITEM 1 (MEDIUM): create-cpt-item previously checked the literal core
+	 * ITEM 1 (MEDIUM): create-cpt-item previously checked the literal core
 	 * 'edit_posts' string only, which is wrong for a CPT registered with its own
 	 * capability_type - a role holding that type's own edit_posts-equivalent cap (e.g.
 	 * edit_aafm_widgets) but not literal edit_posts could genuinely create a draft item of that
@@ -887,11 +887,11 @@ final class ServerDiscoveryTest extends TestCase {
 	}
 
 	/**
-	 * Fix round 3, ITEM 1 (MEDIUM): update-cpt-item has the identical per-object edit_post shape
+	 * ITEM 1 (MEDIUM): update-cpt-item has the identical per-object edit_post shape
 	 * as update-post (aafm_can_edit_post_object), but was sharing create-cpt-item's bare literal
 	 * edit_posts check - wrong for the same custom-capability_type reason, and additionally
 	 * missing the edit_others/edit_published widening every sibling per-object case already got
-	 * in round 2.
+	 * earlier.
 	 */
 	public function test_update_cpt_item_discoverable_with_custom_capability_type_others_cap_alone(): void {
 		register_post_type(
@@ -933,7 +933,7 @@ final class ServerDiscoveryTest extends TestCase {
 	}
 
 	/**
-	 * Fix round 3, ITEM 2 (MEDIUM): create-comment has NO per-object component (the comment
+	 * ITEM 2 (MEDIUM): create-comment has NO per-object component (the comment
 	 * doesn't exist yet and its author is forced to the current user), so splitting it into its
 	 * own case must not change its behaviour - moderate_comments alone is still the exact,
 	 * complete floor.
@@ -954,7 +954,7 @@ final class ServerDiscoveryTest extends TestCase {
 	}
 
 	/**
-	 * Fix round 3, ITEM 2 (MEDIUM, documented as LEFT ALONE): moderate-comment/update-comment/
+	 * ITEM 2 (MEDIUM, documented as LEFT ALONE): moderate-comment/update-comment/
 	 * delete-comment additionally require edit_comment($id), which resolves through
 	 * map_meta_cap('edit_post', ...) on the comment's PARENT POST (verified directly against
 	 * core, wp-includes/capabilities.php's 'edit_comment' branch) - not restricted to any
@@ -986,7 +986,7 @@ final class ServerDiscoveryTest extends TestCase {
 	}
 
 	/**
-	 * Fix round 3, ITEM 3 (LOW): aafm_perm_acf_term() accepts any EXISTING term and checks
+	 * ITEM 3 (LOW): aafm_perm_acf_term() accepts any EXISTING term and checks
 	 * edit_term($id) directly, with no aafm_validate_taxonomy()-style public-taxonomy
 	 * restriction (unlike term-meta, which routes through aafm_validate_term_meta_request() and
 	 * DOES enforce that restriction). So the taxonomy loop ACF term-fields previously shared with

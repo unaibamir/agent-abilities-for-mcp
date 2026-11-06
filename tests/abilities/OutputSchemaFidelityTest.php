@@ -152,7 +152,7 @@ final class OutputSchemaFidelityTest extends TestCase {
 	public function test_shipping_settings_reports_the_instance_configuration_not_the_legacy_bucket(): void {
 		$this->prepare_wc_shipping_stub();
 
-		// The zone must exist before its method: since B33 the zone stub mirrors the vendor
+		// The zone must exist before its method: the zone stub mirrors the vendor
 		// constructor, which throws for a missing non-zero zone id.
 		WcShippingStubStore::seed(
 			1,
@@ -246,7 +246,7 @@ final class OutputSchemaFidelityTest extends TestCase {
 	 * Task 10 / L3: variation_ids has the identical key-gap risk via get_children(), and it never
 	 * self-heals - the data store persists the array verbatim on save rather than imploding it
 	 * back to a clean sequence the way the gallery meta does. Same seed-the-gap-directly approach
-	 * as the images test above. Seeded as a VARIABLE product: since B56, variation_ids is
+	 * as the images test above. Seeded as a VARIABLE product: variation_ids is
 	 * populated only for variable products (grouped children are separate products, not
 	 * variations, and report an empty list).
 	 */
@@ -381,8 +381,8 @@ final class OutputSchemaFidelityTest extends TestCase {
 		}
 		\WP_Theme_JSON_Resolver::clean_cached_data();
 
-		// Core's own read is `get_raw_data()['styles']` with no isset (global-styles-and-settings
-		// .php:129 on both 6.9.4 and 7.0.2): in production that diagnostic-then-continue-with-null
+		// Core's own read is `get_raw_data()['styles']` with no isset (global-styles-and-settings.
+		// php:129 on both 6.9.4 and 7.0.2): in production that diagnostic-then-continue-with-null
 		// is exactly the value the guard exists for. The level depends on the PHP line: E_WARNING
 		// "Undefined array key" on PHP 8, E_NOTICE "Undefined index" on the PHP 7.4 floor, so the
 		// mask must cover both or the 7.4 notice prints and fails PHPUnit's strict-output check.

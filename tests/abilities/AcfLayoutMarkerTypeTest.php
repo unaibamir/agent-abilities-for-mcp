@@ -2,7 +2,7 @@
 /**
  * The flexible-content layout marker must reach ACF as the same string our own guard validated.
  *
- * R8C-8's sibling in shape and R5-1's sibling in consequence. The layout guard casts the marker to
+ * The layout guard casts the marker to
  * a string before its strict membership test; ACF's get_layout() compares $layout['name'] === $name
  * with no cast at all. While the sanitizer preserved integer leaves, a JSON number sent as
  * acf_fc_layout against a layout genuinely named in digits satisfied our guard and could not be

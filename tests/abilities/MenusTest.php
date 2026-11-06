@@ -87,7 +87,7 @@ final class MenusTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 1 (1.7.6), R1-7: get-menu advertised only id/name/slug/count while its executor
+	 * Get-menu advertised only id/name/slug/count while its executor
 	 * (aafm_redact_menu(), the same one list-menus/create-menu/update-menu already used) had long
 	 * since started returning attached_theme_locations and registered_theme_locations too. Assert
 	 * schema keys match the actual result keys for every one of the four menu endpoints that share

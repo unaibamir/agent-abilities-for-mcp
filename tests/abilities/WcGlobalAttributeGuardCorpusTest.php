@@ -5,13 +5,13 @@
  * ROWS IN THIS FILE ARE APPEND-ONLY. NEVER DELETE ONE.
  *
  * Read that literally. This guard has been written three times. Each attempt fixed the case the
- * current review round had found and left or reopened one an earlier attempt had handled, because the
+ * current review had found and left or reopened one an earlier attempt had handled, because the
  * suite only ever pinned the newest round's findings:
  *
  *   9fab08d  introduced the guard (a read-modify-write must not demote a global attribute to a local
  *            one) and compared the caller's options against a VIEW-context read. That comparison is
  *            what R7B-1 turned out to be.
- *   f291ea7  fixed R6-1 by splitting stored from shown and handing the BUILDER the stored objects,
+ *   f291ea7  fixed it by splitting stored from shown and handing the BUILDER the stored objects,
  *            so a display filter could no longer be persisted. It left the comparison on shown.
  *   R7B-1    a filter that hides a stored term makes the displayed set a legitimate edit request in
  *            its own right, so sending it back was classified as an unchanged echo, allowed, and
@@ -143,7 +143,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 		return array(
 
 			/*
-			 * 9fab08d (B2-01/B2-03). The case the guard was built for: the field models a name and a
+			 * 9fab08d. The case the guard was built for: the field models a name and a
 			 * list of literal strings, so it cannot express a change to terms in a shared taxonomy.
 			 * Accepting it rebuilt the attribute with set_id( 0 ), which flipped is_taxonomy to 0 and
 			 * stranded every variation keyed on it.
@@ -246,7 +246,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 			),
 
 			/*
-			 * f291ea7 (R6-1). A filter that APPENDS a display-only string. aafm_wc_attribute_shape()
+			 * f291ea7. A filter that APPENDS a display-only string. aafm_wc_attribute_shape()
 			 * drops an option it cannot resolve to a term read-only, so shown and stored agree again
 			 * by the time they are compared and the echo is still accepted. That is deliberate, and
 			 * it is why the R7B-1 direction below is the dangerous one: this direction self-heals.
@@ -535,7 +535,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 	}
 
 	/**
-	 * Behaviour 5, from f291ea7 (R6-1): the builder leaves a global attribute's object exactly as handed
+	 * Behaviour 5, from f291ea7: the builder leaves a global attribute's object exactly as handed
 	 * to it, so whatever the caller is given, the object that reaches set_attributes() is the one the
 	 * caller of the builder chose. That is what makes passing STORED objects sufficient.
 	 *
@@ -572,7 +572,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 	}
 
 	/**
-	 * Behaviour 5's other half, from f291ea7 (R6-1): an attribute the caller did not mention outlives
+	 * Behaviour 5's other half, from f291ea7: an attribute the caller did not mention outlives
 	 * set_attributes()'s pre-null, and a custom attribute the caller DID mention is rebuilt from the
 	 * sent options while keeping its visibility, variation flag, and slot.
 	 */
@@ -623,7 +623,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 	}
 
 	/**
-	 * Behaviour 9, from 9fab08d (B2-03): the read emits a global attribute's options as term SLUGS plus a
+	 * Behaviour 9, from 9fab08d: the read emits a global attribute's options as term SLUGS plus a
 	 * taxonomy flag, and a custom attribute's as its literal strings with the flag off.
 	 *
 	 * This is the same function the guard compares through, which is the point: the read and the
@@ -657,8 +657,8 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 	}
 
 	/**
-	 * Behaviour 6, from 09e1378: no path in this plugin calls WC_Product_Attribute::get_terms() or
-	 * ::get_slugs(). They are the two APIs that resolve an option by name, and both share an insert
+	 * Behaviour 6, from 09e1378: no path in this plugin calls WC_Product_Attribute::get_terms() or::
+	 * get_slugs(). They are the two APIs that resolve an option by name, and both share an insert
 	 * branch that calls wp_insert_term(), so either one turns a display-only string into a real term
 	 * on a live store.
 	 *
@@ -693,7 +693,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 	}
 
 	/**
-	 * Behaviour 7, from ae074f1 (R2-9): a variation keyed on a parent attribute the parent does not use
+	 * Behaviour 7, from ae074f1: a variation keyed on a parent attribute the parent does not use
 	 * FOR VARIATIONS is refused. WooCommerce never matches such a key, so the write would land in
 	 * postmeta and mean nothing.
 	 */
@@ -710,7 +710,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 			'A key the parent DECLARES but does not vary on has its own code, distinct from a key it has never heard of.'
 		);
 
-		// And a key the parent has never heard of at all, which is the other half of R2-9.
+		// And a key the parent has never heard of at all, which is the other half of that defect.
 		$unknown = aafm_wc_unknown_variation_attributes_error( $this->corpus_parent(), array( 'pa_nonesuch' => 'x' ) );
 		$this->assertInstanceOf( WP_Error::class, $unknown );
 		$this->assertSame( 'aafm_wc_unknown_variation_attribute', $unknown->get_error_code() );
@@ -723,7 +723,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 	}
 
 	/**
-	 * Behaviour 8, from f285327 (R2-10): a value the parent never declared for that attribute is refused,
+	 * Behaviour 8, from f285327: a value the parent never declared for that attribute is refused,
 	 * and the error names the real options. An empty value is exempt: that is WooCommerce's
 	 * "Any <attribute>", a supported configuration.
 	 */

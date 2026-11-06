@@ -1,6 +1,6 @@
 <?php
 /**
- * AIOSEO version floor (fix round 2, sweep review security finding):
+ * AIOSEO version floor:
  * aafm_aioseo_active() gates registration on AIOSEO being both present AND at or above
  * AAFM_AIOSEO_MIN_VERSION.
  *

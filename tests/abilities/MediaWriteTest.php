@@ -537,7 +537,7 @@ final class MediaWriteTest extends TestCase {
 	}
 
 	/**
-	 * Security review finding 1 (fix round 1, 208).
+	 * Security regression.
 	 *
 	 * The finding as filed: media_handle_sideload() writes an IPTC/EXIF-derived caption straight
 	 * into the attachment's post_content, and core's wp_read_image_metadata() applies only trim(),
@@ -592,7 +592,7 @@ final class MediaWriteTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 5 R5-2: the caption resave after core's own sanitization pass was only
+	 * The caption resave after core's own sanitization pass was only
 	 * checked via is_wp_error(), so a wp_insert_attachment_data filter reverting that resave
 	 * would leave the un-renormalized, potentially unsafe caption in storage while this ability
 	 * still reported success. This is the exact security gap the resave exists to close.
@@ -636,7 +636,7 @@ final class MediaWriteTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 5 R5-2: update_post_meta()'s return value for the caller's alt text was
+	 * Note: update_post_meta()'s return value for the caller's alt text was
 	 * discarded outright, so a metadata filter vetoing that write must surface as a structured
 	 * error, not a success response for an attachment whose alt text never actually landed.
 	 */
@@ -768,7 +768,7 @@ final class MediaWriteTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 5 R5-2: the post-field write was only checked via is_wp_error(), so a
+	 * The post-field write was only checked via is_wp_error(), so a
 	 * wp_insert_attachment_data filter reverting the title must surface as a structured error,
 	 * not a success response claiming the new title was saved.
 	 *
@@ -809,7 +809,7 @@ final class MediaWriteTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 5 R5-2: update_post_meta()'s return value for the alt text write was
+	 * Note: update_post_meta()'s return value for the alt text write was
 	 * discarded outright, so a metadata filter vetoing that write must surface as a structured
 	 * error, not a success response reporting the old alt text as though it were replaced.
 	 */

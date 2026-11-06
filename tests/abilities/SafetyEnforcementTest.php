@@ -72,7 +72,7 @@ final class SafetyEnforcementTest extends TestCase {
 	}
 
 	/**
-	 * B38: IP-blocked transport denials must be bounded per source IP, the same way the sibling
+	 * IP-blocked transport denials must be bounded per source IP, the same way the sibling
 	 * failed-app-password logger already is (AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW rows per window).
 	 * Without the cap, an attacker holding a VALID credential from a blocked address can flood the
 	 * 30-day activity-log table without limit, since every request writes its own denied row. The
@@ -158,7 +158,7 @@ final class SafetyEnforcementTest extends TestCase {
 	}
 
 	/**
-	 * B35: a top-level scalar JSON body on the MCP route must be rejected cleanly, not crash.
+	 * A top-level scalar JSON body on the MCP route must be rejected cleanly, not crash.
 	 *
 	 * The bundled transport builds an HttpRequestContext whose $body is typed ?array from
 	 * get_json_params(); a scalar body ("x", true) makes that assignment throw an uncaught TypeError
@@ -191,7 +191,7 @@ final class SafetyEnforcementTest extends TestCase {
 		$other->set_body( '"x"' );
 		$this->assertNull( aafm_reject_scalar_mcp_body( null, null, $other ), 'A scalar body on another route must not be touched.' );
 
-		// B40 sweep: core routes case-insensitively, so an odd-cased MCP route reaches the
+		// Core routes case-insensitively, so an odd-cased MCP route reaches the
 		// transport too - the guard must catch it, or the crash it closes comes back through
 		// nothing but a capital letter.
 		$odd_case = new \WP_REST_Request( 'POST', strtoupper( aafm_mcp_rest_route() ) );
@@ -259,7 +259,7 @@ final class SafetyEnforcementTest extends TestCase {
 	}
 
 	/**
-	 * B39: a batch with non-object elements must get the JSON-RPC 2.0 answer, not a 500.
+	 * A batch with non-object elements must get the JSON-RPC 2.0 answer, not a 500.
 	 *
 	 * The vendor's JsonRpcResponseBuilder treats any array with a 0 key as a batch and feeds each
 	 * element into process_single_message(array $message); a non-array element ([1,2,3]) is a
@@ -324,7 +324,7 @@ final class SafetyEnforcementTest extends TestCase {
 		);
 		$ability = wp_get_ability( 'aafm/rl-probe' );
 
-		// B12: one tools/call fires the decorated permission TWICE (the adapter's check_permission,
+		// One tools/call fires the decorated permission TWICE (the adapter's check_permission,
 		// then core's re-check inside execute), but it must consume ONE token, not two. Model a full
 		// call: check_permissions then execute (which releases the per-call memo). A limit of 1 must
 		// therefore allow the whole first call and only deny the second call.
@@ -344,7 +344,7 @@ final class SafetyEnforcementTest extends TestCase {
 	}
 
 	/**
-	 * B12 residual (Codex, doc 167): a call whose adapter-phase permission fire passes but whose
+	 * A call whose adapter-phase permission fire passes but whose
 	 * input then fails core's schema validation dies INSIDE WP_Ability::execute(), before the
 	 * decorated execute wrapper that used to be the only in-call release of the per-call rate memo.
 	 * The stale allowed memo then let the NEXT tools/call for the same ability in the same request
@@ -385,7 +385,7 @@ final class SafetyEnforcementTest extends TestCase {
 		// omits a required property is now refused at the permission fire itself and releases its
 		// memo inline, which is a different route to the same guarantee and is pinned in its own
 		// test below. This row has to keep exercising the ORIGINAL path, where the permission fire
-		// passes and core is what rejects the input, or B12's actual regression stops being covered.
+		// passes and core is what rejects the input, or the batch leak regression stops being covered.
 		$this->assertTrue( $ability->check_permissions( array( 'ok' => 'not-a-boolean' ) ) );
 		// ...then core refuses the input on schema grounds before the execute wrapper ever runs.
 		$this->assertInstanceOf( \WP_Error::class, $ability->execute( array( 'ok' => 'not-a-boolean' ) ) );
@@ -401,14 +401,14 @@ final class SafetyEnforcementTest extends TestCase {
 	}
 
 	/**
-	 * The same B12 guarantee for the other route: a call that OMITS a required argument.
+	 * The same guarantee for the other route: a call that OMITS a required argument.
 	 *
 	 * This one is refused at the permission fire rather than by core, because the fire now answers
 	 * a missing required property as the schema failure it is instead of handing it to the
 	 * permission callback. It consumes a token first, exactly as before, so a flood of malformed
 	 * calls still costs something, and then releases its memo through the shared non-true branch.
-	 * If that release were ever lost the dead call would pay for the next one, which is the leak
-	 * B12 was.
+	 * If that release were ever lost the dead call would pay for the next one, which is the
+	 * batch leak again.
 	 */
 	public function test_a_call_missing_a_required_argument_releases_its_rate_memo(): void {
 		$uid = self::factory()->user->create( array( 'role' => 'editor' ) );
@@ -452,7 +452,7 @@ final class SafetyEnforcementTest extends TestCase {
 	}
 
 	/**
-	 * B12 sweep: mcp_adapter_pre_tool_call may short-circuit a call with a WP_Error AFTER the
+	 * Note: mcp_adapter_pre_tool_call may short-circuit a call with a WP_Error AFTER the
 	 * adapter's permission fire consumed a token but BEFORE execute() runs - the one dead-call path
 	 * core's execute() cannot see. The abort hook must release the stale memo so the next
 	 * same-ability call consumes fresh, and a pass-through (non-error) filter result must leave the
@@ -501,7 +501,7 @@ final class SafetyEnforcementTest extends TestCase {
 			'An aborted call must not leave its allowed memo behind for the next same-ability call.'
 		);
 
-		// Finding 2 (doc 214): the short-circuit must also leave an audit row. This plugin's own
+		// The short-circuit must also leave an audit row. This plugin's own
 		// permission check ALLOWED the call, so it must not read as a 'denied' capability decision,
 		// and there is no pending 'started' row to resolve - wp_ability_invoked, which opens one,
 		// only fires from inside execute(), which the short-circuit prevented from ever running.
@@ -531,7 +531,7 @@ final class SafetyEnforcementTest extends TestCase {
 	}
 
 	/**
-	 * B12 sweep: a permission callback that crashes while the rethrow switch is on escapes the
+	 * A permission callback that crashes while the rethrow switch is on escapes the
 	 * decorated closure AFTER the consume memoized an allow. The catch must release the memo before
 	 * rethrowing, or the next same-ability fire reuses the dead call's allow instead of consuming.
 	 */

@@ -558,7 +558,7 @@ final class PostsWriteTest extends TestCase {
 	}
 
 	/**
-	 * R2-2/R3-1 (1.7.5 deferred): a scheduled post's date does not change on this update, so
+	 * A scheduled post's date does not change on this update, so
 	 * requesting status "publish" while that date is still genuinely in the future must land core
 	 * back at "future" (wp_insert_post()'s own publish->future half of the same transition). Three
 	 * rounds of trying to replicate that transition (and wp_unique_post_slug()'s dedup) in a
@@ -593,7 +593,7 @@ final class PostsWriteTest extends TestCase {
 	}
 
 	/**
-	 * R2-3/R3-1 (1.7.5 deferred): a Contributor (no publish_posts) requesting a pending post with
+	 * A Contributor (no publish_posts) requesting a pending post with
 	 * an explicit slug must not be treated as a veto when core deliberately clears that slug - see
 	 * the note above the previous test for why post_name confirmation was dropped rather than
 	 * replicated a fourth time.

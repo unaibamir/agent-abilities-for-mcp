@@ -172,7 +172,7 @@ final class CommentsCrudTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 8, R8-4: the post-insert wp_set_comment_status( $id, 'hold' ) pin's return
+	 * The post-insert wp_set_comment_status( $id, 'hold' ) pin's return
 	 * value used to be discarded, and only the comment's existence was checked afterward - so if
 	 * a 'wp_set_comment_status' hook (fired synchronously, AFTER that pin's own DB update
 	 * succeeds but BEFORE it returns) moved the comment away from pending again, creation still
@@ -200,7 +200,7 @@ final class CommentsCrudTest extends TestCase {
 
 		// Now the pending-status pin's own UPDATE (approved '1' -> '0') is a real, non-no-op
 		// write - fail that one query so its return value is false, the same fault-injection
-		// shape R8-2's repro uses: suppress a single targeted query via the 'query' filter, never
+		// shape the stale-read repro uses: suppress a single targeted query via the 'query' filter, never
 		// the whole request.
 		$fail_pin_update = static function ( $query ) use ( &$comment_id, $wpdb ) {
 			if ( null !== $comment_id
@@ -370,7 +370,7 @@ final class CommentsCrudTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 9, R9-5: wp_update_comment() returns 0 (not false, not WP_Error) both when a
+	 * Note: wp_update_comment() returns 0 (not false, not WP_Error) both when a
 	 * filter vetoes the change AND when the request is a genuine no-op, so the executor cannot
 	 * tell the two apart from that return value alone. A wp_update_comment_data filter that
 	 * rewrites the content back to its original value is the veto case: the requested content

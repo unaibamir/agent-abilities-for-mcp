@@ -87,7 +87,7 @@ final class TecEventsTest extends TestCase {
 	}
 
 	/**
-	 * Codex hunt F5: venue_id/organizer_ids used to pass through absint() alone. The real TEC
+	 * Note: venue_id/organizer_ids used to pass through absint() alone. The real TEC
 	 * repository silently drops an invalid relationship id rather than erroring, so a caller
 	 * naming an ordinary post as the venue would previously get a normal success response with
 	 * the venue relationship simply missing. Must now be refused up front instead.
@@ -148,7 +148,7 @@ final class TecEventsTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 9 MEDIUM: aafm_exec_tec_create_event() never called aafm_force_draft(),
+	 * Note: aafm_exec_tec_create_event() never called aafm_force_draft(),
 	 * so the operator's force-draft-on-create setting silently never applied to events - fixed at
 	 * the shared aafm_resolve_create_status()/aafm_authorize_post_status() chokepoint (posts.php)
 	 * that this ability, like every other create ability, routes status through.
@@ -173,7 +173,7 @@ final class TecEventsTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 9 MEDIUM: aafm_exec_tec_create_event() built its own ORM args array
+	 * Note: aafm_exec_tec_create_event() built its own ORM args array
 	 * instead of routing through aafm_insert_post(), so the max-title-length setting never
 	 * applied to it - fixed via aafm_tec_enforce_content_safety() (tec/_shared.php).
 	 */
@@ -196,7 +196,7 @@ final class TecEventsTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 9 MEDIUM: same gap as the title-length case above, for strict block
+	 * Same gap as the title-length case above, for strict block
 	 * validation - fixed via the same aafm_tec_enforce_content_safety() call.
 	 */
 	public function test_create_event_enforces_strict_block_validation(): void {
@@ -291,7 +291,7 @@ final class TecEventsTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 10 MEDIUM: round 9's content-safety fix wired aafm_tec_enforce_content_safety()
+	 * Round 9's content-safety fix wired aafm_tec_enforce_content_safety()
 	 * into event creation and both venue/organizer paths, but missed this one - the update path is
 	 * a separate execute function that builds and saves its own ORM args, so the check has to be
 	 * called here too, not inherited from the create-side fix.
@@ -331,7 +331,7 @@ final class TecEventsTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round MEDIUM: TEC's own repository unsets a falsy all_day meta_input entirely
+	 * TEC's own repository unsets a falsy all_day meta_input entirely
 	 * rather than writing it, so the ORM save alone never clears an existing 'yes' - proven here
 	 * against a stub that reproduces that exact quirk (TecStubStore.php's write_meta()), not one
 	 * that would pass this assertion regardless of whether the separate delete_post_meta() call
@@ -354,7 +354,7 @@ final class TecEventsTest extends TestCase {
 	}
 
 	/**
-	 * Codex hunt F4: delete_post_meta()'s bool return was discarded here, so a
+	 * Note: delete_post_meta()'s bool return was discarded here, so a
 	 * delete_post_metadata filter vetoing the delete must surface as a structured error, not a
 	 * success response claiming the all-day flag was cleared while the meta row survives.
 	 */
@@ -391,7 +391,7 @@ final class TecEventsTest extends TestCase {
 	}
 
 	/**
-	 * Gate round 1 finding 6: tec-delete-event must refuse, not silently permanently delete,
+	 * Tec-delete-event must refuse, not silently permanently delete,
 	 * on a Trash-disabled site - matching the trash-post/trash-page/delete-block guarantee
 	 * (see tests/abilities/TrashDisabledTest.php's identical disable_trash() pattern).
 	 */
@@ -425,13 +425,13 @@ final class TecEventsTest extends TestCase {
 	}
 
 	/**
-	 * Codex round-b finding 6: tec-get-events defaulted to the repository's own published-only
+	 * Tec-get-events defaulted to the repository's own published-only
 	 * query, so a draft event a caller had just created (tec-create-event defaults to draft) was
 	 * invisible to the matching list ability. This admin fixture holds every TEC capability
 	 * (stub_tec()), so it does not by itself distinguish which capability actually authorizes
 	 * status=draft - that split (edit_tribe_events for draft/pending/future, read_private_
-	 * tribe_events for private) is proven by the dedicated tests below, added by the final Codex
-	 * round that gave draft/pending/future their own editable-events gate.
+	 * tribe_events for private) is proven by the dedicated tests below, added with the
+	 * change that gave draft/pending/future their own editable-events gate.
 	 */
 	public function test_get_events_can_list_drafts_with_read_private_capability(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
@@ -452,7 +452,7 @@ final class TecEventsTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 7 LOW: this test's name and its original docblock (now above, on the
+	 * This test's name and its original docblock (now above, on the
 	 * previous test) both attributed this refusal to a missing read_private_tribe_events
 	 * capability, but a bare 'author' fixture is refused because it has neither edit_tribe_events
 	 * NOR read_private_tribe_events - the real read_private-specific gate is now proven by
@@ -470,7 +470,7 @@ final class TecEventsTest extends TestCase {
 	}
 
 	/**
-	 * Final Codex round MEDIUM: 'draft'/'pending'/'future' must be gated on the EDIT capability,
+	 * 'draft'/'pending'/'future' must be gated on the EDIT capability,
 	 * not the private-read one - a caller who only holds edit_tribe_events (TEC's stock
 	 * Author/Contributor shape) can create a draft via aafm_tec_perm_create_event()'s own gate,
 	 * and must be able to list it back, without ever holding read_private_tribe_events.
@@ -507,7 +507,7 @@ final class TecEventsTest extends TestCase {
 	}
 
 	/**
-	 * Final Codex round MEDIUM: read_private_tribe_events alone must not widen a draft/pending/
+	 * Note: read_private_tribe_events alone must not widen a draft/pending/
 	 * future listing to every author's events - a role with the private-read cap but not
 	 * edit_others_tribe_events is still contained to its own.
 	 */

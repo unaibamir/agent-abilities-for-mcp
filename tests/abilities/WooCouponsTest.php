@@ -193,7 +193,7 @@ final class WooCouponsTest extends TestCase {
 	}
 
 	/**
-	 * Doc 214, finding 6: the WC_Coupon stub's getters used to apply no WooCommerce filter at
+	 * The WC_Coupon stub's getters used to apply no WooCommerce filter at
 	 * all, unlike real WC_Coupon (get_prop()-backed, filtered 'woocommerce_coupon_get_{prop}').
 	 * A site-installed plugin hooking that real filter would have been silently invisible to
 	 * this suite. Hook two of the getters this ability's own shaping reads and confirm the
@@ -272,7 +272,7 @@ final class WooCouponsTest extends TestCase {
 	}
 
 	/**
-	 * B51: a negative usage_limit must be rejected, not sign-flipped by absint into a live limit.
+	 * A negative usage_limit must be rejected, not sign-flipped by absint into a live limit.
 	 *
 	 * The absint(-5) call returns 5, so a negative usage_limit was silently persisted as its positive twin and the
 	 * write reported success. The integer schema now carries minimum:0, so a negative is refused at
@@ -295,7 +295,7 @@ final class WooCouponsTest extends TestCase {
 	}
 
 	/**
-	 * B53: a non-numeric amount used to be silently swallowed (WC casts it toward 0 on the way to
+	 * A non-numeric amount used to be silently swallowed (WC casts it toward 0 on the way to
 	 * storage) while the tax sibling validates its rate. It must be refused with an actionable
 	 * error before any write.
 	 */
@@ -314,7 +314,7 @@ final class WooCouponsTest extends TestCase {
 	}
 
 	/**
-	 * B53: an unparseable date_expires was silently swallowed to null (WC_Data::set_date_prop
+	 * An unparseable date_expires was silently swallowed to null (WC_Data::set_date_prop
 	 * catches its own parse exception), so the caller believed an expiry was set when the coupon
 	 * would never expire. It must be refused, and on update the stored expiry must survive.
 	 */
@@ -339,7 +339,7 @@ final class WooCouponsTest extends TestCase {
 	}
 
 	/**
-	 * B53 control: null and empty string stay valid ways to clear the expiry.
+	 * Null and empty string stay valid ways to clear the expiry.
 	 */
 	public function test_update_coupon_null_expiry_still_clears(): void {
 		$this->acting_as( 'administrator' );

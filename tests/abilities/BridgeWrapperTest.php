@@ -146,7 +146,7 @@ final class BridgeWrapperTest extends TestCase {
 	}
 
 	/**
-	 * B1: a bridged foreign ability that declares no input schema must EXECUTE, not fail.
+	 * A bridged foreign ability that declares no input schema must EXECUTE, not fail.
 	 *
 	 * Core's WP_Ability::validate_input() accepts only null for an empty schema. The wrapper used
 	 * to forward array(), so every call returned ability_missing_input_schema. The forwarder now
@@ -171,7 +171,7 @@ final class BridgeWrapperTest extends TestCase {
 	}
 
 	/**
-	 * B1 second class: a foreign ability with a non-object (scalar) input schema must receive the
+	 * A foreign ability with a non-object (scalar) input schema must receive the
 	 * caller's scalar argument, not have it discarded and replaced with array().
 	 */
 	public function test_bridged_scalar_input_schema_forwards_the_argument(): void {
@@ -720,7 +720,7 @@ final class BridgeWrapperTest extends TestCase {
 	}
 
 	/**
-	 * The regression an adversarial Codex pass found and no existing test covered: a bridged
+	 * The regression no existing test covered: a bridged
 	 * ability that declares a scalar output_schema (e.g. `{type: boolean}`) and legitimately
 	 * returns a matching scalar (e.g. `true`) must succeed and return that scalar unchanged.
 	 * Wrapping it into `array( 'data' => $value )` - as includes/bridge.php did between
@@ -1223,7 +1223,7 @@ final class BridgeWrapperTest extends TestCase {
 	}
 
 	/**
-	 * Fix round 1, test-quality F2: Task 8 delegated BOTH aafm_bridge_input_schema() and
+	 * Test-quality F2: Task 8 delegated BOTH aafm_bridge_input_schema() and
 	 * aafm_bridge_output_schema() to wp_prepare_json_schema_for_client(), but only the input side
 	 * had a test. A regression that removed just the output-schema call would have passed clean.
 	 * Mirrors the input-schema test above, asserting on the specific stripped keyword.

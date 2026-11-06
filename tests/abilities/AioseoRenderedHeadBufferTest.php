@@ -82,7 +82,7 @@ final class AioseoRenderedHeadBufferTest extends TestCase {
 	}
 
 	/**
-	 * Step 12 (R1-6): the render scope puts back exactly what was there before it, never a state
+	 * Step 12: the render scope puts back exactly what was there before it, never a state
 	 * rebuilt from the main query. The main query points at post A while the global $post is post B
 	 * (a secondary loop in progress). After the render, $post is still B, both query globals are the
 	 * same objects, and no post-data global the render set is left behind where it was absent.

@@ -108,7 +108,7 @@ final class GatewayRedactionCorpusTest extends TestCase {
 			'sim signature_required marked'   => array( 'signature_required', true ),
 
 			// -----------------------------------------------------------------
-			// R6-6: security and terminal became compounds only. Bare, this
+			// Security and terminal became compounds only. Bare, this
 			// release's own widening had marked a badge and a display setting.
 			// -----------------------------------------------------------------
 			'R6-6 security_badge released'    => array( 'security_badge', false ),
@@ -119,7 +119,7 @@ final class GatewayRedactionCorpusTest extends TestCase {
 			'R6-6 terminal_secret held'       => array( 'terminal_secret', true ),
 
 			// -----------------------------------------------------------------
-			// R6-6: the tokens deliberately left broad. user and number predate
+			// The tokens deliberately left broad. user and number predate
 			// this release; narrowing them on a review's say-so trades a
 			// withheld benign value for a possible leak, and those are not
 			// symmetric.
@@ -180,7 +180,7 @@ final class GatewayRedactionCorpusTest extends TestCase {
 			'ordinary sandbox'                => array( 'sandbox', false ),
 
 			// -----------------------------------------------------------------
-			// camelCase, from Codex round 8 (R8C-8). Until then this whole file
+			// camelCase. Until then this whole file
 			// held not one camelCase row, which is exactly why a rewrite could
 			// move bare `key`, `api`, `auth` and `sign` behind an underscore or
 			// hyphen boundary with every gate green: a camelCase hump is not a
@@ -205,7 +205,7 @@ final class GatewayRedactionCorpusTest extends TestCase {
 			'camel routingNumber'             => array( 'routingNumber', true ),
 
 			// -----------------------------------------------------------------
-			// Leading ACRONYMS, from the round 8 follow-up. Splitting only the
+			// Leading ACRONYMS. Splitting only the
 			// lower-to-upper hump leaves `SSLCertificate` untouched, so an
 			// anchored-only token never sees a boundary and the key goes out in
 			// full. `APIKey` and `APIToken` masked how bad this was: they
@@ -261,7 +261,7 @@ final class GatewayRedactionCorpusTest extends TestCase {
 	 * evidence is already gone: the row count is simply one lower than the file appears to declare,
 	 * every remaining row still passes, and all four gates stay green. That is a corpus which
 	 * structurally cannot report the one failure it exists to prevent, and it is the same shape as
-	 * B2-02 attempt 2, which deleted attempt 1's protection with everything passing.
+	 * An earlier attempt, which deleted attempt 1's protection with everything passing.
 	 *
 	 * So this counts the row names in the SOURCE and compares against what the provider actually
 	 * returns. The source is the only place the duplicate is still visible.
@@ -442,7 +442,7 @@ final class GatewayRedactionCorpusTest extends TestCase {
 	}
 
 	/**
-	 * R6-6: a real value that happens to BE the marker must not read as withheld.
+	 * A real value that happens to BE the marker must not read as withheld.
 	 *
 	 * The marker sits in the same arbitrary-string domain as real data, so it can always be forged
 	 * by accident. This is the assertion that the out-of-band list, not the marker, carries the

@@ -439,7 +439,7 @@ function aafm_notify_build_message( array $events, bool $digest ): array {
 		$lines   = array( __( 'What happened since the last summary:', 'agent-abilities-for-mcp' ), '' );
 		$counts  = array();
 		foreach ( $events as $event ) {
-			$label            = aafm_notify_event_label( $event );
+			$label = aafm_notify_event_label( $event );
 			// A new-tools event stands for every tool it announced, so this line is read as a tool count.
 			$counts[ $label ] = ( $counts[ $label ] ?? 0 ) + ( 'new_tools' === ( $event['trigger'] ?? '' ) ? (int) ( $event['count'] ?? 1 ) : 1 );
 		}

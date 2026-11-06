@@ -246,6 +246,29 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'doctorWhoPlugin'          => __( 'A security plugin may be the cause', 'agent-abilities-for-mcp' ),
 				'doctorCopySnippet'        => __( 'Copy snippet', 'agent-abilities-for-mcp' ),
 				'doctorError'              => __( 'The check could not run. Reload the page and try again.', 'agent-abilities-for-mcp' ),
+				// Other plugins: review card and read-only starter.
+				'bridgeWorking'            => __( 'Working…', 'agent-abilities-for-mcp' ),
+				/* translators: 1: how many read tools, 2: plugin name. */
+				'bridgeStarterOn'          => __( 'This turns on %1$s read tools from %2$s.', 'agent-abilities-for-mcp' ),
+				/* translators: %s: plugin name. */
+				'bridgeStarterOnOne'       => __( 'This turns on 1 read tool from %s.', 'agent-abilities-for-mcp' ),
+				/* translators: %s: how many of the plugin's tools. */
+				'bridgeStarterAlsoOff'     => __( 'It also turns off %s of its tools that are on now.', 'agent-abilities-for-mcp' ),
+				'bridgeStarterAlsoOffOne'  => __( 'It also turns off 1 of its tools that is on now.', 'agent-abilities-for-mcp' ),
+				/* translators: 1: how many tools, 2: plugin name. */
+				'bridgeStarterOffOnly'     => __( 'This turns off %1$s tools from %2$s and turns on none.', 'agent-abilities-for-mcp' ),
+				/* translators: %s: plugin name. */
+				'bridgeStarterOffOnlyOne'  => __( 'This turns off 1 tool from %s and turns on none.', 'agent-abilities-for-mcp' ),
+				/* translators: %s: plugin name. */
+				'bridgeStarterNoop'        => __( 'Nothing to change: %s already allows only its read tools.', 'agent-abilities-for-mcp' ),
+				/* translators: %s: how many tools the starter turned off. */
+				'bridgeStarterTurnedOff'   => __( 'Tools turned off: %s.', 'agent-abilities-for-mcp' ),
+				/* translators: 1: how many tools, 2: plugin name. */
+				'bridgeReviewed'           => __( '%1$s tools from %2$s marked as reviewed.', 'agent-abilities-for-mcp' ),
+				/* translators: %s: plugin name. */
+				'bridgeReviewedOne'        => __( '1 tool from %s marked as reviewed.', 'agent-abilities-for-mcp' ),
+				'bridgeReviewedAll'        => __( 'All new tools marked as reviewed.', 'agent-abilities-for-mcp' ),
+				'bridgeNothingLeft'        => __( 'Nothing left to review.', 'agent-abilities-for-mcp' ),
 				// Needs review inbox.
 				'reviewDiscardConfirm'     => __( 'Move this item to the Trash?', 'agent-abilities-for-mcp' ),
 				'reviewFailed'             => __( 'That did not work. Reload the page and try again.', 'agent-abilities-for-mcp' ),

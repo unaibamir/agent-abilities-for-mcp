@@ -201,6 +201,8 @@ function aafm_admin_allowed_html(): array {
 		'data-aafm-saved'           => true,
 		'data-saved'                => true,
 		'data-tab'                  => true,
+		'data-bridge-plugin'        => true,
+		'data-bridge-name'          => true,
 		'data-aafm-untracked'       => true,
 		'data-qc-preset'            => true,
 		'data-ttl'                  => true,

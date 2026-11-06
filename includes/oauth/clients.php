@@ -118,7 +118,7 @@ function aafm_oauth_register_client( array $req ) {
 /**
  * Fetch a single OAuth client row by its public client_id.
  *
- * Codex round 8, R8-1: this used to run a bare $wpdb->get_row(), which hands back the PREVIOUS
+ * This used to run a bare $wpdb->get_row(), which hands back the PREVIOUS
  * query's row when the current one fails ($wpdb->query() returning false without clearing
  * last_result - see includes/option-cache.php). A caller saving an allowlist row for client A
  * followed by nonexistent client B could have B's lookup fail and silently inherit A's row,
@@ -240,7 +240,7 @@ function aafm_principal_is_agent_identity( int $user_id, ?string $oauth_client_i
  * Whether a client is anything other than a confirmed, currently-active registration, and
  * whether that read could even be completed - one query answering both.
  *
- * Codex round 7, R7-3: aafm_oauth_client_is_deactivated() plus the former
+ * Note: aafm_oauth_client_is_deactivated() plus the former
  * aafm_oauth_client_lookup_failed() used to require two separate queries at the two call sites
  * that need to tell a genuine deactivation apart from a read failure - the same query, run
  * twice, with two chances to disagree. If the first read failed and the second succeeded, both
@@ -255,14 +255,14 @@ function aafm_principal_is_agent_identity( int $user_id, ?string $oauth_client_i
  * refresh rotation, and the redemption of a code minted before deactivation. A fourth caller,
  * aafm_oauth_validate_access_token() (tokens.php), is NOT a live gate: its own docblock states
  * it lacks RFC 8707 audience binding and exists for token-lifecycle/introspection use only, never
- * as a standalone authorization decision (Codex round 12, R12-3 - an earlier docblock here
+ * as a standalone authorization decision (an earlier docblock here
  * claimed every caller was a live gate, which was true of three but not that fourth).
  *
  * Fails closed in every direction regardless of which caller is asking, because certification
  * reads go through a direct aafm_wpdb_scalar() read instead - see aafm_oauth_deactivate_client()
  * and aafm_oauth_delete_consent() - never through this function: an unreadable clients table
- * denies (Codex round 10, R10-10), and so does a row that is missing entirely rather than
- * confirmed inactive (Codex round 11, R11-2) - a client whose row was removed by a partial table
+ * denies, and so does a row that is missing entirely rather than
+ * confirmed inactive - a client whose row was removed by a partial table
  * clear, a manual repair, or the abandoned-client reaper must not keep authenticating just
  * because there is nothing left to read as "deactivated". Only a row read back with
  * is_active = 1 counts as active; anything else - no row, a non-1 value, or a failed read -
@@ -349,11 +349,10 @@ function aafm_oauth_client_active_row_view( string $client_id ): array {
  * Backs the DCR soft cap (aafm_oauth_rest_register()): the count itself is not enough there,
  * because a query failure and a genuine count of 0 both leave `count` at 0, and casting a
  * failed read to 0 read an unreadable cap as spare capacity and let the public registration
- * route grow the clients table without bound during an outage (Codex round 11, R11-4, the
- * DCR sibling of R10-1's certification-read class). Counts only is_active = 1 rows (a revoked
+ * route grow the clients table without bound during an outage. Counts only is_active = 1 rows (a revoked
  * client no longer counts against the cap).
  *
- * Codex round 12 R12-2: an earlier version of this docblock claimed a not-yet-installed table
+ * An earlier version of this docblock claimed a not-yet-installed table
  * reads the same as a real empty table - `ok` true, `count` 0. It does not, and never did: the
  * query below goes through aafm_wpdb_scalar(), which returns `ok` false on ANY failed query,
  * a missing table included, exactly like any other unreadable table. So the DCR soft cap
@@ -388,7 +387,7 @@ function aafm_oauth_count_active_clients_view(): array {
  * tolerates any read failure, including a not-yet-installed table, by reporting 0. Not safe
  * for a live abuse-control decision - a caller enforcing a cap must use
  * aafm_oauth_count_active_clients_view() instead, so a failed read denies rather than reading
- * as "no active clients, plenty of room" (Codex round 11, R11-4).
+ * as "no active clients, plenty of room".
  *
  * @return int Non-negative count of active clients, or 0 when the count could not be read.
  */
@@ -464,7 +463,7 @@ function aafm_oauth_validate_redirect_uri( string $uri ): bool {
  * non-array value decodes to an empty array so the caller never has to guard it.
  * Ordered newest first. Read-only, prepared queries against the plugin's own tables.
  *
- * Codex round 7, R7-2: both reads below used to go through a bare $wpdb->get_results(), which
+ * Both reads below used to go through a bare $wpdb->get_results(), which
  * always returns $wpdb->last_result after calling query() regardless of whether that call
  * succeeded (wp-includes/class-wpdb.php) - so a failed query here could hand back an EARLIER,
  * unrelated query's rows rather than the empty result the `! is_array()` guard expected. Routed
@@ -563,7 +562,7 @@ function aafm_oauth_list_grants(): array {
 	// Read-only listing for the admin table: tolerate a not-yet-installed table
 	// by returning an empty list instead of surfacing a DB error. Both table names are
 	// bound as %i identifiers; the LEFT JOIN keeps a consent whose client row was removed.
-	// Codex round 7, R7-2: routed through aafm_wpdb_results() rather than a bare get_results() -
+	// Routed through aafm_wpdb_results() rather than a bare get_results() -
 	// see aafm_oauth_list_clients()'s docblock for why a failed query must not be allowed to
 	// return an earlier, unrelated query's rows here.
 	// In the update window, before the installer adds the v9 columns, list without them so the
@@ -669,11 +668,11 @@ function aafm_oauth_deactivate_client( string $client_id ): bool {
 
 	// Certify against a fresh read rather than trusting the UPDATE's own affected-row count: a
 	// real SQL failure and "already inactive, nothing to update" both leave that count at zero,
-	// so casting it straight to a bool collapsed the two (Codex round 9, R9-2) and let a failed
+	// so casting it straight to a bool collapsed the two and let a failed
 	// revoke still report the client as deactivated.
 	//
-	// A direct aafm_wpdb_scalar() read here, not aafm_oauth_client_is_deactivated() (Codex round
-	// 10, R10-2): that helper is also the live token-validation guard (tokens.php, validator.php),
+	// A direct aafm_wpdb_scalar() read here, not aafm_oauth_client_is_deactivated():
+	// that helper is also the live token-validation guard (tokens.php, validator.php),
 	// where the safe direction on a read failure is to ASSUME deactivated and reject the token.
 	// Certification needs the opposite bias - a read failure here must NOT count as "confirmed
 	// deactivated," or a client whose deactivating UPDATE and confirming SELECT both fail the
@@ -714,9 +713,9 @@ function aafm_oauth_delete_consent( int $user_id, string $client_id ): bool {
 
 	// Certify against a fresh read (see aafm_oauth_deactivate_client()) rather than trusting
 	// $wpdb->delete()'s own affected-row count, for the same reason: a real SQL failure and "no
-	// matching row" both leave that count at zero (Codex round 9, R9-2).
+	// matching row" both leave that count at zero.
 	//
-	// A direct aafm_wpdb_scalar() read here, not aafm_oauth_has_consent() (Codex round 10, R10-2):
+	// A direct aafm_wpdb_scalar() read here, not aafm_oauth_has_consent():
 	// that helper also gates whether the authorize screen skips asking for consent again, where the
 	// safe direction on a read failure is to ASSUME no consent and show the screen. Certification
 	// needs the opposite bias - a read failure must not count as "confirmed gone," or a delete whose

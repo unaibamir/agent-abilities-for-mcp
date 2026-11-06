@@ -531,7 +531,7 @@ function aafm_oauth_read_bearer_token(): ?string {
  * null. The row carries at least `resource` (the audience) and `wp_user_id`.
  *
  * This gates authentication for every bearer request, so it is the highest-stakes instance of the
- * stale-reader class (R8-1's sibling shape): a bare $wpdb->get_row() hands back the PREVIOUS
+ * stale-reader class: a bare $wpdb->get_row() hands back the PREVIOUS
  * query's row when this one fails, which here would authenticate the caller as whichever OTHER
  * token happened to be looked up last on this connection - a cross-token identity confusion, not
  * merely a missing row. Routed through aafm_wpdb_row() so a failed lookup denies, exactly like a
@@ -573,7 +573,7 @@ function aafm_oauth_get_access_token_row( string $raw ): ?array {
  * at will, so the denial audit is gated on this existence check. token_hash is a UNIQUE key, so this
  * is a single indexed lookup.
  *
- * Codex round 7, R7-2: routed through aafm_wpdb_scalar() rather than a bare get_var() - a failed
+ * Routed through aafm_wpdb_scalar() rather than a bare get_var() - a failed
  * query here could otherwise inherit a stale non-null value left over from an unrelated earlier
  * query in the same request and wrongly report a fabricated bearer as a real, once-issued token,
  * defeating the anti-flood gate this existence check exists to enforce.

@@ -116,7 +116,7 @@ function aafm_oauth_redeem_code( string $raw, string $client_id, string $redirec
 		)
 	);
 
-	// R6-2: $wpdb->query()'s own return value used to be discarded outright, so a genuine query
+	// $wpdb->query()'s own return value used to be discarded outright, so a genuine query
 	// failure (false) and a code that is simply invalid/expired/already-used (0 rows affected)
 	// were indistinguishable through $wpdb->rows_affected alone - both reported as invalid_grant.
 	// Only the latter is a real grant-validity answer.
@@ -142,7 +142,7 @@ function aafm_oauth_redeem_code( string $raw, string $client_id, string $redirec
 		)
 	);
 
-	// R6-2: the UPDATE above just stamped exactly one row by this exact hash, so a failed or
+	// The UPDATE above just stamped exactly one row by this exact hash, so a failed or
 	// empty readback here is never a genuine grant-validity answer - it is this function's own
 	// read that could not be trusted, not evidence the code itself is bad.
 	if ( ! $lookup['ok'] || ! is_array( $lookup['value'] ) ) {
@@ -220,12 +220,11 @@ function aafm_oauth_revoke_user_client_codes( int $user_id, string $client_id ):
  * Whether a client still has any authorization-code row, redeemed or not.
  *
  * Used by the admin "Revoke client" handler to certify aafm_oauth_revoke_client_codes() actually
- * cleared the table, rather than trusting that delete's own affected-row count (Codex round 10,
- * R10-2): the revoke handlers called the delete and threw its result away entirely, so the codes
+ * cleared the table, rather than trusting that delete's own affected-row count:
+ * the revoke handlers called the delete and threw its result away entirely, so the codes
  * table was never certified at all - only the client and its tokens were.
  *
- * Codex round 11 R11-5 corrected an earlier version of this comment that overstated the risk: a
- * code left behind by a failed delete is NOT actually redeemable after the fact. The token
+ * A code left behind by a failed delete is NOT actually redeemable after the fact. The token
  * endpoint independently re-checks client deactivation before redemption
  * (aafm_oauth_rest_token_authorization_code(), includes/oauth/rest.php) and re-checks consent at
  * redemption for the revoked-grant case, so a leftover row cannot mint a token either way.
@@ -298,7 +297,7 @@ function aafm_oauth_user_client_has_pending_codes( int $user_id, string $client_
  * or otherwise unreadable table never prints a raw wpdb error block - the same discipline the
  * read-only helpers in this file already follow. $wpdb->query() returns false, not an int, on
  * a failed DELETE - casting that straight to (int) collapsed a real SQL failure into the same
- * 0 a genuine "nothing to delete" produces, which is exactly the R9-2 shape this codebase
+ * 0 a genuine "nothing to delete" produces, which is exactly the shape this codebase
  * otherwise guards against with a certifying re-read.
  *
  * @param int $user_id The WordPress user.

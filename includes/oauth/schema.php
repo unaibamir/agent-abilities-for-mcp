@@ -204,7 +204,7 @@ function aafm_oauth_enforce_lifecycle_engine(): bool {
 		// A SUCCESSFUL read of '' means the engine could not be determined: the table is absent, or
 		// it is a TEMPORARY table (the PHPUnit harness form), which information_schema does not
 		// list. Either way there is nothing to convert, nothing to warn about, and nothing to block
-		// the version stamp on. Codex round 7, R7-2: this must be gated on $view['ok'] as well as
+		// the version stamp on. This must be gated on $view['ok'] as well as
 		// the value - a query that FAILED (not merely found nothing) used to read identically to
 		// '' here, so a stale non-null 'InnoDB' string left over from an earlier iteration's
 		// successful read of a DIFFERENT, already-converted table could make this branch wrongly
@@ -238,7 +238,7 @@ function aafm_oauth_enforce_lifecycle_engine(): bool {
  * The information_schema view may omit a TEMPORARY table (the PHPUnit harness rewrites plugin
  * CREATE TABLE to that form) or a table that does not exist, so both read as a SUCCESSFUL query
  * whose value is '' - callers treat that as "cannot verify, do not act". A query that fails
- * outright is a different thing entirely (Codex round 7, R7-2) and must not be folded into the
+ * outright is a different thing entirely and must not be folded into the
  * same '' signal - see aafm_wpdb_scalar()'s docblock for why $wpdb->query()'s own return value,
  * not a bare get_var(), is what tells the two apart. The table name is bound as a value here
  * (information_schema stores it as data), never interpolated.
@@ -352,7 +352,7 @@ function aafm_oauth_finalize_schema( bool $engine_ok ): bool {
 	}
 
 	if ( $schema_ok && $engine_ok ) {
-		// Verified, not a bare update_option() (Codex round 7, R7-2): aafm_maybe_upgrade_oauth_tables()
+		// Verified, not a bare update_option(): aafm_maybe_upgrade_oauth_tables()
 		// below trusts this stamp to decide whether the installer needs to run again, so a write
 		// that a persistent cache silently no-ops must not be allowed to look like it landed.
 		// A fresh install is seeded with Administrators as the only approvers before its first stamp,
@@ -361,7 +361,7 @@ function aafm_oauth_finalize_schema( bool $engine_ok ): bool {
 		$seeded  = aafm_seed_fresh_install_defaults();
 		$stamped = $seeded && aafm_update_option_verified( 'aafm_oauth_schema_version', AAFM_OAUTH_SCHEMA_VERSION );
 		if ( ! $stamped ) {
-			// Codex round 8 R8-3: this return value used to be discarded. The schema itself is
+			// This return value used to be discarded. The schema itself is
 			// genuinely fine, but with the version left un-stamped, aafm_maybe_upgrade_oauth_tables()
 			// reruns dbDelta() every request instead of settling - and the error transient above
 			// was already cleared on the strength of $schema_ok alone, hiding the persist failure
@@ -423,9 +423,9 @@ function aafm_oauth_schema_verify(): bool {
  * not list, so existence is probed with a trivial select that sees a temporary table the same way
  * the plugin's own queries do. The %i placeholder quotes the identifier (an internal constant).
  *
- * 1.7.5 round 4, R4-4: this used to read '' === $wpdb->last_error as its success signal, which
+ * This used to read '' === $wpdb->last_error as its success signal, which
  * confuses a query that never ran (three of $wpdb->query()'s own false-returning paths never
- * touch last_error - see aafm_wpdb_scalar()'s docblock, R10-1) with one that ran and found the
+ * touch last_error - see aafm_wpdb_scalar()'s docblock) with one that ran and found the
  * table. Under that failure shape an absent table (the consents table, say, after an
  * unsuccessful CREATE) reported present, and schema finalization could stamp the current version
  * without the normal missing-table retry ever firing. Delegating to aafm_wpdb_scalar(), which
@@ -446,7 +446,7 @@ function aafm_oauth_table_present( string $table ): bool {
 /**
  * Whether a named column exists on a table. Works on the harness's TEMPORARY tables.
  *
- * Codex round 7, R7-2: a bare $wpdb->get_var() returns the PREVIOUS query's row when the current
+ * A bare $wpdb->get_var() returns the PREVIOUS query's row when the current
  * query itself fails, so a failed SHOW COLUMNS could inherit an unrelated non-empty value left
  * over from an earlier, successful check and report a missing column as present - letting schema
  * finalization stamp the current version over an incomplete upgrade. Routed through
@@ -492,8 +492,8 @@ add_action( 'admin_notices', 'aafm_oauth_schema_admin_notice' );
  * every admin request without churn. dbDelta() is safe to re-run and the
  * installer resets the option. Mirrors the audit log's activation wiring.
  *
- * Reads the database row directly rather than get_option()'s cache-trusting view (Codex round 7,
- * R7-2): a stale cached current version over an old/absent database row would skip a genuinely
+ * Reads the database row directly rather than get_option()'s cache-trusting view:
+ * a stale cached current version over an old/absent database row would skip a genuinely
  * needed install, and this file's own docblocks identify missing tables/columns as the failure
  * this guard exists to catch.
  *
@@ -545,11 +545,11 @@ function aafm_oauth_client_reap_ttl(): int {
  * temporary table in some MySQL configs). Mirrors aafm_drop_oauth_tables()' escaping.
  *
  * Certifies each table by reading its row count back rather than trusting the DELETE's own
- * affected-row count (Codex round 9, R9-3): a table this call never actually reached still
+ * affected-row count: a table this call never actually reached still
  * counts as failed, even though it never contributes a nonzero affected-row count either way.
  *
- * The confirmation read goes through aafm_wpdb_scalar() rather than a bare get_var() (Codex round
- * 10, R10-3): a get_var() read that itself failed used to cast straight to `(int) null === 0`,
+ * The confirmation read goes through aafm_wpdb_scalar() rather than a bare get_var():
+ * a get_var() read that itself failed used to cast straight to `(int) null === 0`,
  * the same "unreadable, so call it empty" mistake the DELETE-count fix above already closed, just
  * one query later.
  *
@@ -665,7 +665,7 @@ function aafm_oauth_reap_abandoned_clients(): int {
 	$codes_table    = esc_sql( $wpdb->prefix . 'aafm_oauth_codes' );
 
 	// Find abandoned client_ids: older than the cutoff, with no consent row and no token row.
-	// All table names are internal constants; the cutoff is bound. Codex round 7, R7-2: routed
+	// All table names are internal constants; the cutoff is bound. Routed
 	// through aafm_wpdb_col() rather than a bare get_col() - a failed query here must not be
 	// allowed to return an earlier, unrelated query's column values, since this list feeds a
 	// DELETE below and a stale, wrong client_id list would delete the wrong rows.
@@ -689,12 +689,12 @@ function aafm_oauth_reap_abandoned_clients(): int {
 	$placeholders = implode( ', ', array_fill( 0, count( $abandoned ), '%s' ) );
 
 	// Delete the clients, but re-certify abandonment in the DELETE's own WHERE clause rather
-	// than trusting the candidate list above (Codex round 8, R8-3): that list can go stale
+	// than trusting the candidate list above: that list can go stale
 	// between the scan and this delete if a candidate is approved in the meantime - consent
 	// recorded, a code minted, a token issued - and a blind IN-list delete would then remove a
 	// registration that just went live, orphaning the token issued seconds earlier. Carrying the
 	// scan's exact predicate here means the database decides from current data at delete time,
-	// not PHP from a stale snapshot, the same fix shape as R7-1's row-locked UPDATE.
+	// not PHP from a stale snapshot, the same fix shape as the row-locked UPDATE.
 	// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 	$deleted = (int) $wpdb->query(
 		$wpdb->prepare(

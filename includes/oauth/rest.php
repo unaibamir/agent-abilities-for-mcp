@@ -40,7 +40,7 @@ if ( ! defined( 'AAFM_OAUTH_MAX_FIELD_LEN' ) ) {
  * Matches the storage column, client_name VARCHAR(191): MySQL counts a VARCHAR length in
  * characters, not bytes, so this guard is measured with mb_strlen() rather than strlen() and
  * pinned to the same number. A 255-byte guard against a 191-character column let a 192-character
- * ASCII name pass validation and then fail (or truncate) at insert (Codex round 9, R9-11).
+ * ASCII name pass validation and then fail (or truncate) at insert.
  */
 if ( ! defined( 'AAFM_OAUTH_MAX_CLIENT_NAME_LEN' ) ) {
 	define( 'AAFM_OAUTH_MAX_CLIENT_NAME_LEN', 191 );
@@ -426,7 +426,7 @@ function aafm_oauth_rest_register( WP_REST_Request $request ) {
 		$active_view = aafm_oauth_count_active_clients_view();
 		// An unreadable count must deny the same as a confirmed cap: casting a failed read to 0
 		// active clients read the cap as spare capacity and let the public registration route
-		// grow unbounded during an outage (Codex round 11, R11-4).
+		// grow unbounded during an outage.
 		if ( ! $active_view['ok'] || $active_view['count'] >= $max_clients ) {
 			return aafm_oauth_rest_protocol_error(
 				'temporarily_unavailable',
@@ -466,7 +466,7 @@ function aafm_oauth_rest_register( WP_REST_Request $request ) {
 	);
 
 	if ( is_wp_error( $result ) ) {
-		// Codex round 5 R5-4: aafm_oauth_register_client()'s 'registration_failed' code means the
+		// aafm_oauth_register_client()'s 'registration_failed' code means the
 		// INSERT itself failed - an operational fault, not a problem with what the client sent.
 		// Folding it into invalid_client_metadata told a client with a perfectly valid request that
 		// its metadata was rejected, when the server was the one that failed.
@@ -597,10 +597,10 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ): W
 	// only checked at authorize-time otherwise, so re-check it here.
 	$client_view = aafm_oauth_client_deactivation_view( $client_id );
 	if ( $client_view['deactivated'] ) {
-		// Codex round 6, R6-2, then round 7, R7-3: a failed read fails closed (denies), but
+		// A failed read fails closed (denies), but
 		// reporting that to the client as invalid_grant misstates the cause - it is this
 		// pipeline's own fault, not a finding about the client's registration.
-		// aafm_oauth_client_deactivation_view() answers both from the one read (R7-3), replacing
+		// aafm_oauth_client_deactivation_view() answers both from the one read, replacing
 		// the query-per-decision pair this site used to run.
 		if ( ! $client_view['ok'] ) {
 			return aafm_oauth_rest_protocol_error(
@@ -624,7 +624,7 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ): W
 	// nesting inside it, so the claim that used to sit here about it being a harmless no-op under
 	// the test harness was false. Read that comment before changing either site; both carry the
 	// same shape and the fix, if one is ever worth making, belongs to both at once.
-	// R4-3: if the transaction itself never started, nothing below is actually wrapped - refuse
+	// If the transaction itself never started, nothing below is actually wrapped - refuse
 	// the redemption rather than run the consume+mint pair unprotected. Same check tokens.php's
 	// aafm_oauth_rotate_refresh() uses for its own START TRANSACTION.
 	if ( ! aafm_oauth_txn( 'START TRANSACTION' ) ) {
@@ -642,13 +642,13 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ): W
 		// Nothing was consumed (0 rows affected) or the consuming UPDATE/readback itself failed -
 		// rolling back is safe either way: a clean no-op in the first case, and in the second it
 		// un-burns a code this pipeline could not confirm was actually redeemed, so an otherwise-
-		// valid code stays usable on retry instead of being lost to an operational fault. R5-4:
-		// fire an action rather than discard the outcome outright, matching every other rollback
+		// valid code stays usable on retry instead of being lost to an operational fault.
+		// Fire an action rather than discard the outcome outright, matching every other rollback
 		// site in this pipeline.
 		if ( ! aafm_oauth_txn( 'ROLLBACK' ) ) {
 			do_action( 'aafm_oauth_rollback_failed', 'token_redeem_code', $client_id );
 		}
-		// R6-2: aafm_oauth_redeem_code() used to signal every failure as invalid_grant, so this
+		// aafm_oauth_redeem_code() used to signal every failure as invalid_grant, so this
 		// site could not tell a genuinely bad code from its own database fault. It now
 		// distinguishes the two through the returned error code, the same way the mint failure
 		// below is already handled.
@@ -674,12 +674,12 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ): W
 	$consent = aafm_oauth_consent_view( (int) $row['wp_user_id'], (string) $row['client_id'] );
 	$gate    = $consent['ok'] && $consent['value'] ? aafm_oauth_grant_gate( (int) $row['wp_user_id'], (string) $row['client_id'] ) : 'ok';
 	if ( ! $consent['ok'] || ! $consent['value'] || 'ok' !== $gate ) {
-		// R6-2, then R7-2: a failed read must fail closed (report no consent) but must not be told
+		// A failed read must fail closed (report no consent) but must not be told
 		// to the client as "your grant is invalid" - that permanently burns an otherwise-valid,
 		// unexpired code over a transient read failure that says nothing real about consent. Roll
 		// back instead so the code survives, and report the fault honestly. aafm_oauth_consent_view()
-		// answers both "is there a consent row" and "could this even be checked" from the one read
-		// (Codex round 7, R7-2), replacing the query-per-decision pair this site used to run.
+		// answers both "is there a consent row" and "could this even be checked" from the one read,
+		// replacing the query-per-decision pair this site used to run.
 		if ( ! $consent['ok'] || 'unknown' === $gate ) {
 			if ( ! aafm_oauth_txn( 'ROLLBACK' ) ) {
 				do_action( 'aafm_oauth_rollback_failed', 'token_check_consent', $client_id );
@@ -726,7 +726,7 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ): W
 	// than being permanently burned by a transient error.
 	if ( is_wp_error( $tokens ) ) {
 		// A failed ROLLBACK does not change this response - it is already a server_error - but it
-		// does mean the stated recovery (the code stays redeemable) is not established. R5-4: fire
+		// does mean the stated recovery (the code stays redeemable) is not established. Fire
 		// an action rather than discard that outcome, matching every other rollback site here.
 		if ( ! aafm_oauth_txn( 'ROLLBACK' ) ) {
 			do_action( 'aafm_oauth_rollback_failed', 'token_mint', $client_id );
@@ -740,7 +740,7 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ): W
 
 	// The token pair persisted: commit the consumption + mint together.
 	//
-	// R4-3: a failed COMMIT means this pipeline cannot confirm the consumption and the new tokens
+	// A failed COMMIT means this pipeline cannot confirm the consumption and the new tokens
 	// actually landed together. Reporting the minted tokens anyway would hand the caller
 	// credentials this function cannot confirm persisted - refuse instead of claiming success for
 	// a write that was never confirmed committed.
@@ -797,7 +797,7 @@ function aafm_oauth_rest_token_refresh( WP_REST_Request $request ): WP_REST_Resp
 		// replayed, already-consumed token), which is a compromise signal worth a trace row.
 		aafm_oauth_log_event( 'refresh', 'denied', array( 'client_id' => $client_id ) );
 
-		// Codex round 5 R5-4: aafm_oauth_rotate_refresh() returns 'invalid_grant' for every
+		// aafm_oauth_rotate_refresh() returns 'invalid_grant' for every
 		// genuine grant-validity reason (unknown/expired/wrong-client/replayed token), but also
 		// returns an operational error - a failed START TRANSACTION, a failed successor mint, or a
 		// failed COMMIT - through the exact same is_wp_error() branch. Collapsing both into
@@ -876,7 +876,7 @@ function aafm_oauth_rest_revoke( WP_REST_Request $request ) {
 	if ( '' !== $token ) {
 		$revoked = aafm_oauth_revoke_token( $token );
 
-		// R4-2: null means the query itself failed, not "no matching token" - RFC 7009 protects
+		// Null means the query itself failed, not "no matching token" - RFC 7009 protects
 		// TOKEN VALIDITY from disclosure, never server operational state, so a genuine failure is
 		// reported distinctly rather than folded into the same 200 an unknown/already-revoked
 		// token gets. The raw token is never logged either way.

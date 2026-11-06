@@ -207,7 +207,7 @@ Yes. Enter addresses or CIDR ranges, one per line, under IP allowlist on the Set
 A preset caps what one OAuth connection can reach, and you pick it when you approve an app or in Quick Connect and can change it later on the connection's row.
 
 * Read only: look at your content, never change it.
-* Content editor: posts, pages, media, categories and tags. No deletes, users, settings or comments.
+* Content editor: posts, pages, media, categories, tags and playbooks. No deletes, users, settings or comments.
 * Shop manager: everything in Content editor plus WooCommerce, minus deletes and the money and authority tools.
 * Custom: everything you've switched on, limited by the approving user's role.
 

@@ -24,11 +24,11 @@ function aafm_access_presets(): array {
 		),
 		'content_editor' => array(
 			'label'   => __( 'Content editor', 'agent-abilities-for-mcp' ),
-			'summary' => __( 'Posts, pages, media and categories or tags. No deletes, users, settings or comments.', 'agent-abilities-for-mcp' ),
+			'summary' => __( 'Posts, pages, media, categories or tags and playbooks. No deletes, users, settings or comments.', 'agent-abilities-for-mcp' ),
 		),
 		'shop_manager'   => array(
 			'label'   => __( 'Shop manager', 'agent-abilities-for-mcp' ),
-			'summary' => __( 'Everything in Content editor plus WooCommerce, except deletes and the nine money and authority tools.', 'agent-abilities-for-mcp' ),
+			'summary' => __( 'Everything in Content editor, playbooks included, plus WooCommerce, except deletes and the nine money and authority tools.', 'agent-abilities-for-mcp' ),
 		),
 		'custom'         => array(
 			'label'   => __( 'Custom', 'agent-abilities-for-mcp' ),

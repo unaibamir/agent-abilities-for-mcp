@@ -24,8 +24,8 @@ use AAFM\Tests\TestCase;
  * trigger, and the fix deliberately leaves no SQL statement between the scan and the
  * delete for anything else to land in). These tests therefore prove the DELETE's
  * predicate is correct and matches the scan's - not that the race is closed. That was
- * instead proven empirically with two genuinely concurrent connections; see.
- * scratch/1-7-5-deferred/r83-race-harness/ (not committed - environment-specific).
+ * instead proven empirically with two genuinely concurrent connections; see
+ * .scratch/1-7-5-deferred/r83-race-harness/ (not committed - environment-specific).
  */
 class ReapAbandonedClientsTest extends TestCase {
 

@@ -1,6 +1,6 @@
 <?php
 /**
- * Owner notifications: opt-in email, daily digest and admin notice for four kinds of event.
+ * Owner notifications: opt-in email, daily digest and admin notice for five kinds of event.
  *
  * Off by default (the option row is absent). Nothing here carries the content of a call: events are
  * identifiers (a trigger, a tool name, an app id and host, a count, a row id). Detection is by direct,

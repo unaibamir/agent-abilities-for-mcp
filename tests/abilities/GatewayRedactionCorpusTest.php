@@ -261,7 +261,7 @@ final class GatewayRedactionCorpusTest extends TestCase {
 	 * evidence is already gone: the row count is simply one lower than the file appears to declare,
 	 * every remaining row still passes, and all four gates stay green. That is a corpus which
 	 * structurally cannot report the one failure it exists to prevent, and it is the same shape as
-	 * An earlier attempt, which deleted attempt 1's protection with everything passing.
+	 * an earlier attempt, which deleted attempt 1's protection with everything passing.
 	 *
 	 * So this counts the row names in the SOURCE and compares against what the provider actually
 	 * returns. The source is the only place the duplicate is still visible.

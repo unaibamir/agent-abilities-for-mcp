@@ -971,8 +971,8 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 	// code fix available: a filter that runs after this closure returns can always override it, by
 	// design of the hook, the same way current_user_can() has always been overridable via
 	// map_meta_cap/user_has_cap. Decision (2026-08-22, delegation audit): ACCEPT and DOCUMENT rather
-	// than attempt a third permission check that would only race the filter's own intent. See.
-	// claude/planning/ROADMAP.md's decision log for the full reasoning.
+	// than attempt a third permission check that would only race the filter's own intent. See
+	// .claude/planning/ROADMAP.md's decision log for the full reasoning.
 	$args['permission_callback'] = static function ( $input = null ) use ( $original_permission, $name, $principal, $required_input ) {
 		// Per-principal rate gate. Discovery (tools/list) is exempt automatically: it
 		// uses the raw permission stored above, which never enters this decorated closure

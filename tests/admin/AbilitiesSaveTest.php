@@ -244,8 +244,8 @@ final class AbilitiesSaveTest extends TestCase {
 		$content_close = ( false === $next_panel ) ? strpos( $html, 'aafm-save-status', $content_open ) : $next_panel;
 		$content_panel = substr( $html, $content_open, ( false === $content_close ? null : $content_close - $content_open ) );
 
-		// Matches the real ability-group heading markup exactly (<h3>Reads</h3> inside.
-		// aafm-ability-group-head), not a bare '>Reads<'/'>Writes<' substring: a public custom
+		// Matches the real ability-group heading markup exactly (<h3>Reads</h3> inside
+		// .aafm-ability-group-head), not a bare '>Reads<'/'>Writes<' substring: a public custom
 		// post type registered anywhere in the process (e.g. a real content-model test fixture)
 		// also renders in this same panel's "other post types" table, whose own <th>Writes</th>
 		// column header would otherwise false-match and appear before the real Reads heading.

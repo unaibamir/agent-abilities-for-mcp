@@ -381,8 +381,8 @@ final class OutputSchemaFidelityTest extends TestCase {
 		}
 		\WP_Theme_JSON_Resolver::clean_cached_data();
 
-		// Core's own read is `get_raw_data()['styles']` with no isset (global-styles-and-settings.
-		// php:129 on both 6.9.4 and 7.0.2): in production that diagnostic-then-continue-with-null
+		// Core's own read is `get_raw_data()['styles']` with no isset (global-styles-and-settings.php:129
+		// on both 6.9.4 and 7.0.2): in production that diagnostic-then-continue-with-null
 		// is exactly the value the guard exists for. The level depends on the PHP line: E_WARNING
 		// "Undefined array key" on PHP 8, E_NOTICE "Undefined index" on the PHP 7.4 floor, so the
 		// mask must cover both or the 7.4 notice prints and fails PHPUnit's strict-output check.

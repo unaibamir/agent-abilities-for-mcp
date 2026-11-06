@@ -75,7 +75,7 @@ function aafm_lang_schema_fragment(): array {
  *
  * An unknown code under active WPML is REFUSED, not coerced: the old null-coercion both
  * served the default language silently and reported `language: null`, which the output
- * schema documents as "WPML inactive" - two false statements in one response (B48). With
+ * schema documents as "WPML inactive" - two false statements in one response. With
  * WPML off, `lang` stays documented as ignored, so null is returned without inspection.
  *
  * @param array<string,mixed> $input Ability input.
@@ -137,7 +137,7 @@ function aafm_with_language( ?string $lang, callable $fn ) {
 		return $fn();
 	}
 	$original = aafm_wpml_current_language();
-	// Investigated (doc 214, finding 4, LOW/SUSPECTED): if WPML reports itself loaded but
+	// Investigated, low and only suspected: if WPML reports itself loaded but
 	// $original comes back null, this skips the switch and $lang runs under whatever ambient
 	// language WPML actually holds - which looks like the same silent-wrong-language class fixed
 	// three times on this branch. Left alone deliberately, for two reasons. First, $original can

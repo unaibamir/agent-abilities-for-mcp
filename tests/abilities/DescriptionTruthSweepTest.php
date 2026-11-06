@@ -334,4 +334,18 @@ final class DescriptionTruthSweepTest extends TestCase {
 			$this->assertStringContainsString( 'edit other', $text );
 		}
 	}
+
+	public function test_no_avada_text_uses_a_spaced_hyphen_as_a_dash(): void {
+		$checked = 0;
+		foreach ( $this->texts() as $name => $texts ) {
+			if ( 0 !== strncmp( $name, 'aafm/avada-', 11 ) ) {
+				continue;
+			}
+			foreach ( $texts as $where => $text ) {
+				++$checked;
+				$this->assertStringNotContainsString( ' - ', $text, $where );
+			}
+		}
+		$this->assertGreaterThan( 0, $checked );
+	}
 }

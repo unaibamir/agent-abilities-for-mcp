@@ -58,7 +58,7 @@ function aafm_avada_registry_definitions(): array {
 	return array(
 		'aafm/avada-get-page-content' => array(
 			'label'        => __( 'Get Avada page content', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads the raw post content of an Avada/Fusion Builder page, unchanged - Fusion Builder shortcodes are returned exactly as stored, never rendered or stripped. Also returns is_avada_owned, true when Avada owns the content. Requires edit access to the post.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Reads the raw post content of an Avada/Fusion Builder page, unchanged. Fusion Builder shortcodes are returned exactly as stored, never rendered or stripped. Also returns is_avada_owned, true when Avada owns the content. Requires edit access to the post.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'avada',
@@ -66,7 +66,7 @@ function aafm_avada_registry_definitions(): array {
 		),
 		'aafm/avada-replace-text'     => array(
 			'label'        => __( 'Replace text in an Avada page', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Replaces literal text within an Avada/Fusion Builder page while requiring the Fusion shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee) - a replacement that would touch a shortcode tag, its self-closing form, or an attribute is refused rather than risk breaking the layout. Requires edit access to the post.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Replaces literal text within an Avada/Fusion Builder page while requiring the Fusion shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee). A replacement that would touch a shortcode tag, its self-closing form, or an attribute is refused rather than risk breaking the layout. Requires edit access to the post.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'avada',

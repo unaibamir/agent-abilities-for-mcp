@@ -438,7 +438,7 @@ function aafm_activity_detail_map(): array {
 			),
 		),
 
-		// The permanent-delete sweep (B2-07). Every ability named by
+		// The permanent-delete sweep. Every ability named by
 		// aafm_permanent_delete_abilities() in helpers.php now records the identifier of what it
 		// destroyed. Before this, nine of those thirteen logged detail:null, so the audit trail
 		// could say that an agent permanently deleted something but never say WHAT - measured on

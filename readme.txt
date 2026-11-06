@@ -91,7 +91,7 @@ When one of these plugins is active, its abilities appear on the Integrations ta
 
 The Events Calendar has 13 abilities for events, venues and organizers, Event Tickets has 3 for reading tickets and attendees, and Avada has 2 that read a page's Fusion Builder markup and replace text inside it. GeoDirectory has 4 for business listings, and they stay off until you enable that integration on the Integrations tab, even when GeoDirectory is active.
 
-Plugins that register their own abilities with the WordPress Abilities API appear on the Other plugins tab, and this plugin does not filter what another plugin's ability returns. The WP-CLI command `wp aafm catalog export` prints those abilities as JSON, and `--include-native` adds this plugin's own.
+Plugins that register their own abilities with the WordPress Abilities API appear on the Other plugins tab, and this plugin does not filter what another plugin's ability returns. Each tool shows which plugin provides it (or its namespace, when the plugin cannot be identified), is labelled Read, Write or Destructive from the plugin's own annotations (a tool the plugin leaves unlabelled is treated as Destructive and says so), and carries a notice when it may return personal data (a hint based on the plugin and tool name, not a full check). Tools a plugin update adds wait for your review. The WP-CLI command `wp aafm catalog export` prints those abilities as JSON, and `--include-native` adds this plugin's own.
 
 = Built on the Abilities API and the MCP Adapter =
 

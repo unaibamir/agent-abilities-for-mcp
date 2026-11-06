@@ -92,8 +92,9 @@ function aafm_render_bridge_directory(): void {
 	echo '<form id="aafm-bridge-form" class="aafm-integrations-cards">';
 	wp_nonce_field( 'aafm_admin', 'aafm_nonce' );
 
+	$unavailable = aafm_bridge_group_slugs( $orphans );
 	foreach ( $groups as $ns => $group ) {
-		aafm_render_bridge_group( (string) $ns, $group, $enabled, false );
+		aafm_render_bridge_group( (string) $ns, $group, $enabled, false, count( $unavailable[ (string) $ns ] ?? array() ) );
 	}
 
 	if ( ! empty( $orphans ) ) {
@@ -491,13 +492,16 @@ function aafm_bridge_display_label( string $ns ): string {
 /**
  * Render one source-plugin group (a collapsed accordion card) with its ability rows.
  *
- * @param string              $ns       Source namespace (the group key).
- * @param array<string,mixed> $group    Group data from aafm_discover_foreign_abilities().
- * @param array<int,string>   $enabled  Enabled foreign slugs.
- * @param bool                $disabled True to render every row disabled (the orphan group).
+ * @param string              $ns          Source namespace (the group key).
+ * @param array<string,mixed> $group       Group data from aafm_discover_foreign_abilities().
+ * @param array<int,string>   $enabled     Enabled foreign slugs.
+ * @param bool                $disabled    True to render every row disabled (the orphan group).
+ * @param int                 $unavailable This group's stored slugs that are not registered right
+ *                                         now. Their rows sit in the Unavailable group, so the
+ *                                         starter's confirm reads the count from this card.
  * @return void
  */
-function aafm_render_bridge_group( string $ns, array $group, array $enabled, bool $disabled ): void {
+function aafm_render_bridge_group( string $ns, array $group, array $enabled, bool $disabled, int $unavailable = 0 ): void {
 	$rows  = isset( $group['abilities'] ) && is_array( $group['abilities'] ) ? $group['abilities'] : array();
 	$label = aafm_bridge_display_label( (string) ( $group['label'] ?? $ns ) );
 
@@ -530,10 +534,11 @@ function aafm_render_bridge_group( string $ns, array $group, array $enabled, boo
 	);
 
 	printf(
-		'<details class="aafm-card aafm-integration-card aafm-integration-%1$s%2$s" data-bridge-plugin="%3$s">',
+		'<details class="aafm-card aafm-integration-card aafm-integration-%1$s%2$s" data-bridge-plugin="%3$s"%4$s>',
 		esc_attr( sanitize_html_class( $ns ) ),
 		$disabled ? ' is-disabled' : '',
-		esc_attr( $ns )
+		esc_attr( $ns ),
+		$unavailable > 0 ? ' data-bridge-unavailable="' . esc_attr( (string) $unavailable ) . '"' : ''
 	);
 
 	// One neutral glyph for every group (the integrations "plug"); no per-plugin logos/brand colors.

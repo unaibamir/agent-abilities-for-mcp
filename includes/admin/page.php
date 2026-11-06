@@ -261,8 +261,20 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'bridgeStarterOffOnlyOne'  => __( 'This turns off 1 tool from %s and turns on none.', 'agent-abilities-for-mcp' ),
 				/* translators: %s: plugin name. */
 				'bridgeStarterNoop'        => __( 'Nothing to change: %s already allows only its read tools.', 'agent-abilities-for-mcp' ),
+				/* translators: %s: plugin name. */
+				'bridgeStarterNoopNoReads' => __( 'Nothing to change: %s labels none of its tools as read-only, and none of them is on.', 'agent-abilities-for-mcp' ),
+				/* translators: 1: how many saved selections, 2: plugin name. */
+				'bridgeStarterRemoved'     => __( 'This removes %1$s saved selections from %2$s, for tools that are not on now, so they will not come back on.', 'agent-abilities-for-mcp' ),
+				/* translators: %s: plugin name. */
+				'bridgeStarterRemovedOne'  => __( 'This removes 1 saved selection from %s, for a tool that is not on now, so it will not come back on.', 'agent-abilities-for-mcp' ),
+				/* translators: %s: how many saved selections. */
+				'bridgeStarterAlsoRemoved' => __( 'It also removes %s saved selections for tools that are not on now, so they will not come back on.', 'agent-abilities-for-mcp' ),
+				'bridgeStarterOneRemoved'  => __( 'It also removes 1 saved selection for a tool that is not on now, so it will not come back on.', 'agent-abilities-for-mcp' ),
 				/* translators: %s: how many tools the starter turned off. */
 				'bridgeStarterTurnedOff'   => __( 'Tools turned off: %s.', 'agent-abilities-for-mcp' ),
+				/* translators: %s: how many saved selections the starter removed. */
+				'bridgeStarterRemovedLine' => __( 'Saved selections removed: %s.', 'agent-abilities-for-mcp' ),
+				'bridgeStarterReload'      => __( 'Reload the page to update the Unavailable group.', 'agent-abilities-for-mcp' ),
 				/* translators: 1: how many tools, 2: plugin name. */
 				'bridgeReviewed'           => __( '%1$s tools from %2$s marked as reviewed.', 'agent-abilities-for-mcp' ),
 				/* translators: %s: plugin name. */

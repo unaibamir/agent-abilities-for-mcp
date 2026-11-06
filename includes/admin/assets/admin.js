@@ -1428,14 +1428,18 @@
 					const status =
 						btn.closest( '.aafm-bridge-review' )?.querySelector( '.aafm-bridge-review-status' ) ??
 						document.querySelector( '#aafm-bridge-form .aafm-save-status' );
-					const { on, off } = this.#bridgeStarterCounts( groupCard );
-					if ( 0 === on && 0 === off ) {
-						status.textContent = this.#format( this.#t( 'bridgeStarterNoop', 'Nothing to change: %s already allows only its read tools.' ), name );
+					const { on, off, removed } = this.#bridgeStarterCounts( groupCard );
+					if ( 0 === on && 0 === off && 0 === removed ) {
+						const noop = groupCard.querySelector( '.aafm-ability-row[data-risk="read"]' )
+							? this.#t( 'bridgeStarterNoop', 'Nothing to change: %s already allows only its read tools.' )
+							: this.#t( 'bridgeStarterNoopNoReads', 'Nothing to change: %s labels none of its tools as read-only, and none of them is on.' );
+						status.textContent = this.#format( noop, name );
 						return;
 					}
-					if ( ! window.confirm( this.#bridgeStarterConfirm( on, off, name ) ) ) {
+					if ( ! window.confirm( this.#bridgeStarterConfirm( on, off, removed, name ) ) ) {
 						return;
 					}
+					const unavailable = Number( groupCard.dataset.bridgeUnavailable ?? 0 );
 					status.textContent = this.#t( 'bridgeWorking', 'Working…' );
 					btn.disabled = true;
 					const json = await this.#post( 'aafm_bridge_read_only_starter', { plugin: key } );
@@ -1455,9 +1459,16 @@
 					groupCard.querySelectorAll( '[data-aafm-stored-on]' ).forEach( ( row ) => {
 						delete row.dataset.aafmStoredOn;
 					} );
+					delete groupCard.dataset.bridgeUnavailable;
 					this.#markClean( groupCard );
-					const offLine = this.#format( this.#t( 'bridgeStarterTurnedOff', 'Tools turned off: %s.' ), disabled.length );
-					status.textContent = `${ message } ${ offLine }`;
+					const lines = [ message, this.#format( this.#t( 'bridgeStarterTurnedOff', 'Tools turned off: %s.' ), Math.max( 0, disabled.length - removed ) ) ];
+					if ( removed > 0 ) {
+						lines.push( this.#format( this.#t( 'bridgeStarterRemovedLine', 'Saved selections removed: %s.' ), removed ) );
+					}
+					if ( unavailable > 0 ) {
+						lines.push( this.#t( 'bridgeStarterReload', 'Reload the page to update the Unavailable group.' ) );
+					}
+					status.textContent = lines.join( ' ' );
 					const left = card ? this.#bridgeReviewBlockDone( key, card ) : '';
 					const cardStatus = card?.querySelector( '.aafm-bridge-review-status' );
 					if ( left && cardStatus ) {
@@ -1472,7 +1483,9 @@
 		 * What the starter would change in storage, from what the page was loaded or last saved with.
 		 *
 		 * @param {Element} groupCard One plugin's card.
-		 * @return {{on:number,off:number}} Read tools to turn on, other tools to turn off.
+		 * @return {{on:number,off:number,removed:number}} Read tools to turn on, other tools to turn off,
+		 *     and stored selections that are not on now: held off by read-only mode, or not registered
+		 *     (those rows sit in the Unavailable group, so the card carries their count).
 		 */
 		#bridgeStarterCounts( groupCard ) {
 			const saved = ( box ) => box.dataset.aafmSaved ?? this.#controlValue( box );
@@ -1480,36 +1493,57 @@
 			const isRead = ( box ) => 'read' === box.closest( '.aafm-ability-row' ).dataset.risk;
 			return {
 				on: boxes.filter( ( box ) => isRead( box ) && '0' === saved( box ) ).length,
-				off:
-					boxes.filter( ( box ) => ! isRead( box ) && '1' === saved( box ) ).length +
-					groupCard.querySelectorAll( '[data-aafm-stored-on]' ).length,
+				off: boxes.filter( ( box ) => ! isRead( box ) && '1' === saved( box ) ).length,
+				removed:
+					groupCard.querySelectorAll( '[data-aafm-stored-on]' ).length +
+					Number( groupCard.dataset.bridgeUnavailable ?? 0 ),
 			};
 		}
 
 		/**
 		 * The starter's confirm text. Called only when at least one count is above zero.
 		 *
-		 * @param {number} on   Read tools to turn on.
-		 * @param {number} off  Other tools to turn off.
-		 * @param {string} name Plugin name.
+		 * @param {number} on      Read tools to turn on.
+		 * @param {number} off     Other tools to turn off.
+		 * @param {number} removed Stored selections to remove, for tools that are not on now.
+		 * @param {string} name    Plugin name.
 		 * @return {string} The sentence to confirm.
 		 */
-		#bridgeStarterConfirm( on, off, name ) {
+		#bridgeStarterConfirm( on, off, removed, name ) {
+			if ( 0 === on && 0 === off ) {
+				return 1 === removed
+					? this.#format( this.#t( 'bridgeStarterRemovedOne', 'This removes 1 saved selection from %s, for a tool that is not on now, so it will not come back on.' ), name )
+					: this.#format( this.#t( 'bridgeStarterRemoved', 'This removes %1$s saved selections from %2$s, for tools that are not on now, so they will not come back on.' ), removed, name );
+			}
+			const parts = [];
 			if ( 0 === on ) {
-				return 1 === off
-					? this.#format( this.#t( 'bridgeStarterOffOnlyOne', 'This turns off 1 tool from %s and turns on none.' ), name )
-					: this.#format( this.#t( 'bridgeStarterOffOnly', 'This turns off %1$s tools from %2$s and turns on none.' ), off, name );
+				parts.push(
+					1 === off
+						? this.#format( this.#t( 'bridgeStarterOffOnlyOne', 'This turns off 1 tool from %s and turns on none.' ), name )
+						: this.#format( this.#t( 'bridgeStarterOffOnly', 'This turns off %1$s tools from %2$s and turns on none.' ), off, name )
+				);
+			} else {
+				parts.push(
+					1 === on
+						? this.#format( this.#t( 'bridgeStarterOnOne', 'This turns on 1 read tool from %s.' ), name )
+						: this.#format( this.#t( 'bridgeStarterOn', 'This turns on %1$s read tools from %2$s.' ), on, name )
+				);
+				if ( off > 0 ) {
+					parts.push(
+						1 === off
+							? this.#t( 'bridgeStarterAlsoOffOne', 'It also turns off 1 of its tools that is on now.' )
+							: this.#format( this.#t( 'bridgeStarterAlsoOff', 'It also turns off %s of its tools that are on now.' ), off )
+					);
+				}
 			}
-			const first = 1 === on
-				? this.#format( this.#t( 'bridgeStarterOnOne', 'This turns on 1 read tool from %s.' ), name )
-				: this.#format( this.#t( 'bridgeStarterOn', 'This turns on %1$s read tools from %2$s.' ), on, name );
-			if ( 0 === off ) {
-				return first;
+			if ( removed > 0 ) {
+				parts.push(
+					1 === removed
+						? this.#t( 'bridgeStarterOneRemoved', 'It also removes 1 saved selection for a tool that is not on now, so it will not come back on.' )
+						: this.#format( this.#t( 'bridgeStarterAlsoRemoved', 'It also removes %s saved selections for tools that are not on now, so they will not come back on.' ), removed )
+				);
 			}
-			const second = 1 === off
-				? this.#t( 'bridgeStarterAlsoOffOne', 'It also turns off 1 of its tools that is on now.' )
-				: this.#format( this.#t( 'bridgeStarterAlsoOff', 'It also turns off %s of its tools that are on now.' ), off );
-			return `${ first } ${ second }`;
+			return parts.join( ' ' );
 		}
 
 		/**

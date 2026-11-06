@@ -176,7 +176,7 @@ function aafm_recent_agent_count(): int {
 	$table  = aafm_activity_log_table();
 	$cutoff = gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS );
 
-	// Codex round 7, R7-2: routed through aafm_wpdb_scalar() rather than a bare get_var() - the
+	// Routed through aafm_wpdb_scalar() rather than a bare get_var() - the
 	// dashboard renders several counts back to back, so a failed query could otherwise inherit the
 	// previous count's value and display a plausible but wrong number.
 	//

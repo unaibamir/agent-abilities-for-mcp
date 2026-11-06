@@ -627,8 +627,8 @@ function aafm_ajax_oauth_revoke_client(): void {
 
 	// Authoritative final-state read: report success only when the client is really
 	// deactivated, no active token for it survives, and no code row survives either, whatever
-	// any single write above reported on its own (Codex round 9, R9-2 - a failed UPDATE used to
-	// still send success; Codex round 10, R10-2 - the code-table delete above was never
+	// any single write above reported on its own (a failed UPDATE used to
+	// still send success, and the code-table delete above was never
 	// certified at all).
 	//
 	// F6 (1.7.5 deferred): aafm_oauth_revoke_client_tokens() reports a genuine query failure as
@@ -715,8 +715,8 @@ function aafm_ajax_oauth_revoke_grant(): void {
 
 	// Authoritative final-state read: report success only when the consent is really gone, no
 	// active token for this user+client survives, and no code row survives either, whatever any
-	// single write above reported on its own (Codex round 9, R9-2 - a failed UPDATE used to still
-	// send success while the bearer token kept validating; Codex round 10, R10-2 - the code-table
+	// single write above reported on its own (a failed UPDATE used to still
+	// send success while the bearer token kept validating, and the code-table
 	// delete above was never certified at all).
 	//
 	// F6 (1.7.5 deferred): same sentinel leak as aafm_ajax_oauth_revoke_client() above -
@@ -748,7 +748,7 @@ function aafm_ajax_oauth_revoke_grant(): void {
  * never implies "this is what your agent will see," and it never sends or logs the
  * Application Password.
  *
- * Codex hunt F3: the target URL comes from aafm_endpoint_url(), which calls core's own
+ * The target URL comes from aafm_endpoint_url(), which calls core's own
  * rest_url() and is therefore filterable by any active plugin to a different host.
  * Sending this call's scoped auth cookies there trusts whatever rest_url filter the site
  * already runs - already-privileged, already-installed code, not attacker input - the

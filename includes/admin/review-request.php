@@ -689,7 +689,7 @@ JS;
  *
  * @param string $verdict One of 'review', 'later', 'dismiss'.
  * @return array{state:array{status:string,first_success_seen_at:int,snooze_until:int,snooze_count:int,threshold_met:int},persisted:bool}
- *              persisted is false when the save did not actually take (Codex round 9, R9-10);
+ *              persisted is false when the save did not actually take;
  *              the returned state is still the caller's in-memory copy of what was requested,
  *              never a claim that it is what the database now holds.
  */
@@ -797,8 +797,8 @@ function aafm_handle_review_request_post(): void {
 	}
 
 	$result = aafm_review_request_record_verdict( $verdict );
-	// Honour the same persistence result the AJAX twin above already checks (Codex round 10,
-	// R10-9): this path used to discard it and redirect back as though the answer had saved,
+	// Honour the same persistence result the AJAX twin above already checks:
+	// this path used to discard it and redirect back as though the answer had saved,
 	// even when it had not.
 	if ( ! $result['persisted'] ) {
 		wp_die( esc_html( aafm_switch_not_persisted_message( __( 'Your answer', 'agent-abilities-for-mcp' ) ) ), '', array( 'response' => 500 ) );

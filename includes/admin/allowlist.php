@@ -36,7 +36,7 @@ function aafm_allowlist_sanitize_row( $row ) {
 	if ( 'role' === $scope_type && ! array_key_exists( $scope_id, wp_roles()->roles ) ) {
 		return null; // Refuse a role slug that does not exist on this site.
 	}
-	// Codex final round 2 MEDIUM: an OAuth client id was accepted as arbitrary free text, so a
+	// An OAuth client id was accepted as arbitrary free text, so a
 	// mistyped id saved successfully but matched no real client - the allowlist has no override
 	// for that client at all, and per the design's own intersection precedence (global list only,
 	// no narrowing), an unmatched client is UNRESTRICTED. Reject an id that names no real client,
@@ -56,7 +56,7 @@ function aafm_allowlist_sanitize_row( $row ) {
 			)
 		);
 		$allowed = array_values( array_unique( $names ) );
-		// Codex final round 7 LOW: a row naming an ability slug absent from the registry (typo,
+		// A row naming an ability slug absent from the registry (typo,
 		// or a name from a since-removed integration) used to save successfully and then, at
 		// read time, deny EVERY real ability for that scope - the row matched no real name, so
 		// aafm_allowlist_set_permits() refused everything rather than degrading to unrestricted,
@@ -198,7 +198,7 @@ function aafm_ajax_save_allowlist(): void {
 		);
 	}
 
-	// Codex final round 3 MEDIUM: a row naming an unknown role or OAuth client used to be
+	// A row naming an unknown role or OAuth client used to be
 	// silently dropped while the save still reported success, so the operator could believe a
 	// restriction had taken effect when the row that was meant to apply it never reached
 	// storage. Reject the WHOLE save with a row-specific error instead, and leave the
@@ -277,7 +277,7 @@ function aafm_render_allowlist_section(): void {
 	// explanation toggled the card. It belongs in the body, as prose, not in the disclosure control.
 	echo '<p class="aafm-card-desc">' . esc_html__( 'Optionally narrow which abilities a role or a specific connection may reach, on top of the abilities enabled above. Leave a scope with no row to leave it unrestricted.', 'agent-abilities-for-mcp' ) . '</p>';
 
-	// R3-3 (1.7.5 deferred, round 3): a failed read must never be rendered as "no restrictions
+	// A failed read must never be rendered as "no restrictions
 	// exist" - this card is editable and Save replaces the whole option, so that lookalike empty
 	// state could otherwise be saved over the real, still-stored rows the moment the database
 	// recovers. Say the read failed and refuse to offer Add/Save until a reload gets a real read.
@@ -335,7 +335,7 @@ function aafm_render_allowlist_section(): void {
 	// still the real boundary, this only makes the common mistake unreachable through the UI.
 	$clients = aafm_oauth_list_clients();
 
-	// Codex admin-ui-r1 M3: three adjacent selects with no visible label at all - the worst case
+	// Three adjacent selects with no visible label at all - the worst case
 	// the finding named - each got a visually-hidden <label for>, the same pattern the Abilities
 	// search field above now uses.
 	echo '<div class="aafm-allowlist-add" id="aafm-allowlist-add">';

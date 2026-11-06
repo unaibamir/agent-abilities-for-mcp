@@ -53,7 +53,7 @@ function aafm_register_media_definitions( array $registry ): array {
 	);
 	$registry['aafm/upload-media']          = array(
 		'label'        => __( 'Upload media', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Upload an image from base64 data (jpg, png, gif, webp; SVG rejected). For anything larger than a small icon, aafm-upload-media-from-url is more reliable.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Upload an image from base64 data (jpg, png, gif, webp; SVG rejected). For anything larger than a small icon, aafm-upload-media-from-url is more reliable. Requires the upload-files capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'media',
@@ -61,7 +61,7 @@ function aafm_register_media_definitions( array $registry ): array {
 	);
 	$registry['aafm/upload-media-from-url'] = array(
 		'label'        => __( 'Upload media from URL', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Fetch an image over HTTPS and upload it (jpg, png, gif, webp; SVG rejected). The URL must resolve to a public host; private/loopback/link-local addresses and redirects are refused.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Fetch an image over HTTPS and upload it (jpg, png, gif, webp; SVG rejected). The URL must resolve to a public host; private/loopback/link-local addresses and redirects are refused. Requires the upload-files capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'media',

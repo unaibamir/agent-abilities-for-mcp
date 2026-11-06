@@ -40,13 +40,13 @@ function aafm_quickconnect_pointer_id(): string {
  * update_option() call would overwrite an existing row, but add_option()'s no-op-if-present
  * behaviour is exactly what keeps a reactivate cycle from re-arming a pointer the operator
  * already dismissed. So this certifies the row's presence directly with the same lower-level
- * cache primitives instead (Codex round 9, R9-10), without disturbing that contract.
+ * cache primitives instead, without disturbing that contract.
  *
  * @return bool True when a row for the option is confirmed present after this call, whether
  *              this call created it or an earlier activation already had.
  */
 function aafm_quickconnect_flag_menu_pointer(): bool {
-	// A rejected cache rewrite here (Codex round 10, R10-9) means the forget below may not have
+	// A rejected cache rewrite here means the forget below may not have
 	// actually cleared a stale entry, the same gap aafm_update_option_verified() guards against -
 	// certifying against db_found alone, without checking this, could report the flag as set
 	// while a stale cache still hides it from the next get_option() read.
@@ -68,7 +68,7 @@ function aafm_quickconnect_flag_menu_pointer(): bool {
  * WordPress's register_activation_hook() expects a callable(bool): void - it passes the
  * network-wide activation flag in and does nothing with a return value.
  * aafm_quickconnect_flag_menu_pointer() itself has to return bool so it can certify the row it
- * just seeded (Codex round 9, R9-10), so that certifying function cannot be the activation
+ * just seeded, so that certifying function cannot be the activation
  * callback directly. This thin wrapper is: it satisfies the hook's void contract while still
  * running (and discarding the result of) the certified write.
  *
@@ -79,7 +79,7 @@ function aafm_quickconnect_flag_menu_pointer(): bool {
 function aafm_quickconnect_activate_menu_pointer( bool $network_wide = false ): void { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- signature required by register_activation_hook()'s callable(bool): void contract.
 	// The hook contract is void, so a failed flag cannot be reported back to the activation
 	// caller directly; logging it is the only way this is ever visible rather than a silently
-	// missing first-run pointer (Codex round 10, R10-9 - the same "never report a change that
+	// missing first-run pointer (the same "never report a change that
 	// did not take" rule as every other certified write in this plugin).
 	//
 	// F3 (1.7.5 deferred): this file is require_once'd at top level specifically so its

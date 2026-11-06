@@ -109,7 +109,7 @@ function aafm_integration_cards(): array {
  *                'not_installed'.
  */
 function aafm_integration_status( string $slug ): string {
-	// Codex final round 4 MEDIUM: registering Event Tickets' abilities already requires TEC too
+	// Registering Event Tickets' abilities already requires TEC too
 	// (includes/abilities/tec/tickets.php), but this card reported a bare 'active' from Event
 	// Tickets alone, so the card said "Active" and let the operator enable abilities that would
 	// never actually register or appear in tools/list. Checked before the general 'active' report
@@ -308,8 +308,8 @@ function aafm_render_integrations_tab(): void {
 			: ( $by_subject[ $slug ] ?? ( $descriptor[ $slug ] ?? array() ) );
 
 		// Each card is a native <details> accordion (collapsed by default - no open attribute), so
-		// the whole section is the toggle. The card classes ride on the <details> so the existing
-		// .aafm-integration-{slug} hooks and .is-disabled muting still apply.
+		// the whole section is the toggle. The card classes ride on the <details> so the existing.
+		// aafm-integration-{slug} hooks and .is-disabled muting still apply.
 		printf(
 			'<details class="aafm-card aafm-integration-card aafm-integration-%1$s%2$s">',
 			esc_attr( $slug ),
@@ -425,7 +425,7 @@ function aafm_integration_status_note( string $slug, string $status ): string {
 		case 'active':
 			return __( 'Active. Turn on the abilities you want this agent to use.', 'agent-abilities-for-mcp' );
 		case 'below_floor':
-			// Codex final round 4 MEDIUM: this used to hardcode WooCommerce's own constant and
+			// This used to hardcode WooCommerce's own constant and
 			// version function for EVERY integration's below-floor notice, so a TEC or Event
 			// Tickets site below its real floor was told to install a WooCommerce version it
 			// likely already had. Each versioned integration's own minimum-version constant and

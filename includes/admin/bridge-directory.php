@@ -9,8 +9,8 @@
  * The markup mirrors includes/admin/integrations.php EXACTLY (same card / switch / badge / filter
  * classes) but posts to its OWN action (aafm_save_bridged_abilities) with its own field name
  * (bridged_abilities[]) and its own checked source (aafm_get_stored_bridged_abilities_raw()), so it can
- * never write into the native option. The only new classes are a .aafm-bridge scoping wrapper and an
- * .is-destructive row modifier.
+ * never write into the native option. The only new classes are a .aafm-bridge scoping wrapper and an.
+ * is-destructive row modifier.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -217,8 +217,8 @@ function aafm_render_bridge_collision_notice(): void {
 /**
  * The global search + All / Read Only / Write filter for the bridge directory.
  *
- * Reuses the integrations filter markup exactly (.aafm-integration-filter, .aafm-filter-risk,
- * .aafm-filter-btn with aria-pressed) but carries a bridge id so #bindBridgeFilter binds it as a
+ * Reuses the integrations filter markup exactly (.aafm-integration-filter, .aafm-filter-risk,.
+ * aafm-filter-btn with aria-pressed) but carries a bridge id so #bindBridgeFilter binds it as a
  * single global filter across every group. Destructive rows also satisfy the "Write" filter.
  *
  * @return void
@@ -239,8 +239,8 @@ function aafm_render_bridge_filter(): void {
  * exists precisely so nothing that identifies WHICH plugin this is ever depends on that: it is a
  * plain lowercase-hyphen literal that never passes through __() or the 'gettext' filter, so two
  * unrelated products can never end up sharing an id just because their labels happen to
- * translate to the same localized string on some site (1.7.2 residual finding, third Codex
- * re-review - the prior fix keyed the merge on the translated label itself, which closed the
+ * translate to the same localized string on some site
+ * (the prior fix keyed the merge on the translated label itself, which closed the
  * raw-namespace and sanitize_title aliasing cases but not this one).
  *
  * This list is necessarily incomplete - the Abilities API has no way to ask "what is your
@@ -341,7 +341,7 @@ function aafm_bridge_known_plugin_ids(): array {
  * (wp-includes/abilities-api/class-wp-abilities-registry.php, enforced on every
  * wp_register_ability() call), so a genuine namespace can never contain a colon or an uppercase
  * character. Both appear in this prefix, which makes a collision with a real raw-namespace key
- * structurally impossible rather than merely unlikely (1.7.2 finding 2) - unlike the prior
+ * structurally impossible rather than merely unlikely - unlike the prior
  * scheme's 'aafm-known-' prefix, itself built entirely from the same [a-z0-9-] alphabet a real
  * namespace uses, which a real foreign namespace could and did alias.
  *
@@ -360,8 +360,8 @@ function aafm_bridge_merge_group_key_prefix(): string {
  * sanitize_title($label) collapsed whitespace/hyphen/case differences between two DIFFERENT
  * labels onto the same slug, and keying on the label string itself (still __()'d) let two
  * DIFFERENT known plugins collapse onto the same key whenever their English labels happened to
- * translate - or get 'gettext'-filtered - to the same localized string (1.7.2 residual finding,
- * third Codex re-review). An id is a plain literal that is never translated or filtered, so only
+ * translate - or get 'gettext'-filtered - to the same localized string.
+ * An id is a plain literal that is never translated or filtered, so only
  * two namespaces this map itself declares to be the same product ever share a key.
  *
  * @param string $id Canonical known-plugin id (a value of aafm_bridge_known_plugin_ids()).
@@ -397,7 +397,7 @@ function aafm_bridge_merge_group_key( string $id ): string {
  * namespace key, it would fall through to the generic Title Case transform and get re-cased
  * wrong (e.g. "All in One SEO" -> "All In One SEO").
  *
- * 1.7.2 finding 2: the synthetic key a merged group is stored under (see
+ * The synthetic key a merged group is stored under (see
  * aafm_bridge_merge_group_key() below) must be provably disjoint from every real raw-namespace
  * key in this same array - see that function's own docblock for how. It is also keyed on the
  * canonical untranslated id, never the translated label - see aafm_bridge_merge_group_key()'s
@@ -899,7 +899,7 @@ function aafm_ajax_save_bridged_abilities(): void {
 	// from the screen. Refuse a slug that is not already stored, the same rule
 	// aafm_set_enabled_abilities() applies to native names: an existing choice is carried forward,
 	// a fresh one is not accepted from a form that never offered it. The refused slugs are kept
-	// so the refusal can be audited below (B18), exactly as the native path audits its own.
+	// so the refusal can be audited below, exactly as the native path audits its own.
 	$refused = array();
 	if ( aafm_read_only_mode() ) {
 		$kept = array_values(
@@ -938,7 +938,7 @@ function aafm_ajax_save_bridged_abilities(): void {
 	// persistent object cache can otherwise make the write silently no-op.
 	$enabled_persisted = aafm_update_option_verified( 'aafm_enabled_bridged_abilities', $enabled );
 
-	// B18: the bridge tab changes ability exposure outside the main save path, so it carries the
+	// The bridge tab changes ability exposure outside the main save path, so it carries the
 	// same audit contract - one ability_enabled/ability_disabled row per changed slug, and one
 	// ability_enable_blocked row per refused fresh write. The reason is passed explicitly:
 	// aafm_ability_lock_reason() is native-only and must never see a bridged slug, and the only

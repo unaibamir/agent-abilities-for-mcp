@@ -191,6 +191,18 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 			),
 			'reason' => 'Submitted bridge slugs, intersected against the slugs aafm_discover_foreign_abilities() actually found before anything is stored, so only a slug that already exists on this site survives.',
 		),
+		'includes/admin/bridge-directory.php::aafm_ajax_bridge_read_only_starter::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( wp_unslash( $_POST[\'plugin\'] ) )',
+			),
+			'reason' => 'A group key, only ever looked up in the computed plugin groups inside aafm_bridge_apply_read_only_starter(). An unknown key is refused and the value is never stored.',
+		),
+		'includes/admin/bridge-directory.php::aafm_ajax_bridge_mark_reviewed::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( wp_unslash( $_POST[\'plugin\'] ) )',
+			),
+			'reason' => 'A group key, compared with the reserved all-tools key and looked up in the computed plugin groups. An unknown key is refused and the value is never stored.',
+		),
 		'includes/admin/connection.php::aafm_ajax_oauth_revoke_client::sanitize_text_field' => array(
 			'calls'  => array(
 				'sanitize_text_field( wp_unslash( (string) $_POST[\'client_id\'] ) )',

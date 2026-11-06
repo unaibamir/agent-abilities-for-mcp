@@ -162,6 +162,15 @@ abstract class TestCase extends WP_UnitTestCase {
 			$GLOBALS['wp']->query_vars = $this->policy_query_vars;
 		}
 		aafm_policy_reset_request_state();
+		// The abilities registry is process-wide. A fixture left in it shows up as another plugin's
+		// tools on every later test that renders or lists them.
+		if ( function_exists( 'wp_get_abilities' ) ) {
+			foreach ( wp_get_abilities() as $ability ) {
+				if ( 0 === strncmp( $ability->get_name(), 'aafm-test/', 10 ) ) {
+					wp_unregister_ability( $ability->get_name() );
+				}
+			}
+		}
 		if ( $this->rest_server_swapped ) {
 			$GLOBALS['wp_rest_server'] = $this->saved_rest_server;
 			$this->rest_server_swapped = false;

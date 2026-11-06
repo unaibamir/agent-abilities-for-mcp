@@ -71,7 +71,7 @@ function aafm_render_bridge_directory(): void {
 		return;
 	}
 
-	aafm_render_bridge_review_card( $groups );
+	aafm_render_bridge_review_card( $groups, $enabled );
 
 	echo '<div class="aafm-integrations-disclaimer">';
 	echo wp_kses(
@@ -111,10 +111,11 @@ function aafm_render_bridge_directory(): void {
  *
  * It holds no ability checkbox, so a Save on this tab cannot enable anything it lists.
  *
- * @param array<string,array<string,mixed>> $groups Merged discovery groups, keyed by group key.
+ * @param array<string,array<string,mixed>> $groups  Merged discovery groups, keyed by group key.
+ * @param array<int,string>                 $enabled The stored enable list the tab's switches show.
  * @return void
  */
-function aafm_render_bridge_review_card( array $groups ): void {
+function aafm_render_bridge_review_card( array $groups, array $enabled ): void {
 	$new = aafm_bridge_new_tools();
 	if ( array() === $new ) {
 		return;
@@ -151,7 +152,13 @@ function aafm_render_bridge_review_card( array $groups ): void {
 			$risk_label = aafm_bridge_risk_label( $row );
 			$notice     = aafm_bridge_personal_data_row_notice( aafm_bridge_personal_data_kind( (string) $row['slug'] ) );
 
-			$body .= '<li><span class="aafm-badge aafm-badge-' . esc_attr( (string) $row['risk'] ) . '">' . esc_html( $risk_label['label'] ) . '</span> <code>' . esc_html( (string) $row['slug'] ) . '</code>';
+			$body .= '<li><span class="aafm-badge aafm-badge-' . esc_attr( (string) $row['risk'] ) . '">' . esc_html( $risk_label['label'] ) . '</span> ';
+			if ( in_array( (string) $row['slug'], $enabled, true ) ) {
+				$body .= null === aafm_ability_lock_reason( (string) $row['slug'] )
+					? '<span class="aafm-pill aafm-pill-success">' . esc_html__( 'On', 'agent-abilities-for-mcp' ) . '</span> '
+					: '<span class="aafm-pill aafm-pill-neutral">' . esc_html__( 'Saved, read-only mode blocks it', 'agent-abilities-for-mcp' ) . '</span> ';
+			}
+			$body .= '<code>' . esc_html( (string) $row['slug'] ) . '</code>';
 			if ( '' !== $risk_label['note'] ) {
 				$body .= '<p class="aafm-ability-hint aafm-muted">' . esc_html( $risk_label['note'] ) . '</p>';
 			}
@@ -173,7 +180,7 @@ function aafm_render_bridge_review_card( array $groups ): void {
 			'class'       => 'aafm-bridge-review',
 			'title'       => __( 'New tools since your last review', 'agent-abilities-for-mcp' ),
 			'icon'        => 'bell',
-			'description' => __( 'A plugin update or a newly activated plugin added these tools. They stay off until you switch them on, which needs a Save. Allow only read tools applies as soon as you confirm.', 'agent-abilities-for-mcp' ),
+			'description' => __( 'An update or a newly activated plugin added these tools. Tools not marked On stay off until you switch them on, which needs a Save. Allow only read tools applies as soon as you confirm.', 'agent-abilities-for-mcp' ),
 			'body'        => $body,
 		)
 	);

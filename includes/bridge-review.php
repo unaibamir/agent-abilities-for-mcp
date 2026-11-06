@@ -117,10 +117,22 @@ function aafm_bridge_group_slugs( array $slugs ): array {
 }
 
 /**
+ * What the first run counts as already listed: everything registered, plus every stored selection,
+ * because the tab lists a selected tool whose plugin is inactive and that tool is live again as soon
+ * as the plugin returns. An unreadable row adds nothing, and the card then marks such a tool as on.
+ *
+ * @return list<string>
+ */
+function aafm_bridge_review_baseline_slugs(): array {
+	$row = aafm_option_row( 'aafm_enabled_bridged_abilities' );
+	return array_values( array_unique( array_merge( aafm_bridge_foreign_slugs(), aafm_bridge_normalize_stored_slugs( $row['value'] ) ) ) );
+}
+
+/**
  * Record slugs as reviewed. Enables nothing.
  *
- * With no row yet the whole registered set counts as reviewed too, or the first mark would turn
- * everything else into "new".
+ * With no row yet everything already listed counts as reviewed too, or the first mark would turn it
+ * into "new".
  *
  * @param array<int,string> $slugs Slugs to mark.
  * @return bool Whether the state now says so. False when the row cannot be read or written.
@@ -133,7 +145,7 @@ function aafm_bridge_mark_reviewed( array $slugs ): bool {
 
 	$reviewed = array_merge( $state['reviewed'], $slugs );
 	if ( ! $state['baselined'] ) {
-		$reviewed = array_merge( $reviewed, aafm_bridge_foreign_slugs() );
+		$reviewed = array_merge( $reviewed, aafm_bridge_review_baseline_slugs() );
 	}
 	return aafm_bridge_review_store( array_values( array_unique( $reviewed ) ), array_values( array_diff( $state['notified'], $slugs ) ) );
 }
@@ -170,7 +182,7 @@ function aafm_bridge_review_sync(): void {
 			return;
 		}
 		if ( ! $state['baselined'] ) {
-			if ( ! aafm_bridge_review_store( aafm_bridge_foreign_slugs(), array() ) ) {
+			if ( ! aafm_bridge_review_store( aafm_bridge_review_baseline_slugs(), array() ) ) {
 				aafm_bridge_review_log_failure();
 			}
 			return;

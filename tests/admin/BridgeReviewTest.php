@@ -43,6 +43,26 @@ final class BridgeReviewTest extends TestCase {
 		$this->assertSame( array(), aafm_bridge_new_tools() );
 	}
 
+	public function test_a_tool_enabled_while_its_plugin_is_inactive_at_first_load_is_not_new(): void {
+		update_option( 'aafm_enabled_bridged_abilities', array( 'demo-away/delete-thing' ) );
+
+		aafm_bridge_review_sync();
+		$this->register_foreign_abilities( 'demo-away', array( 'delete-thing' => array( 'destructive' => true ) ) );
+
+		$this->assertSame( array(), aafm_bridge_new_tools(), 'The tab already listed it in the Unavailable group.' );
+		aafm_bridge_review_sync();
+		$this->assertSame( array(), aafm_bridge_review_state()['notified'], 'Reactivating its plugin announces nothing.' );
+	}
+
+	public function test_a_first_mark_also_counts_a_stored_tool_whose_plugin_is_inactive(): void {
+		update_option( 'aafm_enabled_bridged_abilities', array( 'demo-away/delete-thing' ) );
+
+		$this->assertTrue( aafm_bridge_mark_reviewed( array() ) );
+		$this->register_foreign_abilities( 'demo-away', array( 'delete-thing' => array( 'destructive' => true ) ) );
+
+		$this->assertSame( array(), aafm_bridge_new_tools() );
+	}
+
 	public function test_a_tool_registered_after_the_baseline_is_new(): void {
 		$this->register_foreign_abilities( 'demo', array( 'one' => array() ) );
 		aafm_bridge_review_sync();

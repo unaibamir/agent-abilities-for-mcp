@@ -98,6 +98,28 @@ final class BridgeReviewScreenTest extends TestCase {
 		$this->assertStringContainsString( 'treated as destructive', $card, 'An unlabelled tool does not look like the plugin called it destructive.' );
 	}
 
+	public function test_a_listed_tool_in_the_enable_list_is_marked_on_and_the_others_are_not(): void {
+		$this->register_new_plugin();
+		update_option( 'aafm_enabled_bridged_abilities', array( 'screenplugin/save-thing' ) );
+
+		$card = $this->card( $this->render() );
+
+		$this->assertMatchesRegularExpression( '#<span class="aafm-pill aafm-pill-success">On</span> <code>screenplugin/save-thing</code>#', $card );
+		$this->assertSame( 1, substr_count( $card, '>On</span>' ) );
+		$this->assertStringContainsString( 'Tools not marked On stay off until you switch them on', $card );
+	}
+
+	public function test_a_tool_read_only_mode_blocks_is_not_marked_on(): void {
+		$this->register_new_plugin();
+		update_option( 'aafm_enabled_bridged_abilities', array( 'screenplugin/save-thing' ) );
+		update_option( 'aafm_read_only_mode', '1' );
+
+		$card = $this->card( $this->render() );
+
+		$this->assertStringNotContainsString( '>On</span>', $card );
+		$this->assertMatchesRegularExpression( '#<span class="aafm-pill aafm-pill-neutral">Saved, read-only mode blocks it</span> <code>screenplugin/save-thing</code>#', $card );
+	}
+
 	public function test_a_hostile_plugin_name_stays_text_in_the_card(): void {
 		wp_cache_set(
 			'plugins',

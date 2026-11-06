@@ -71,6 +71,8 @@ function aafm_render_bridge_directory(): void {
 		return;
 	}
 
+	aafm_render_bridge_review_card( $groups );
+
 	echo '<div class="aafm-integrations-disclaimer">';
 	echo wp_kses(
 		aafm_get_notice_html(
@@ -102,6 +104,79 @@ function aafm_render_bridge_directory(): void {
 	echo '</form>';
 
 	echo '</div>'; // .aafm-bridge
+}
+
+/**
+ * The "New tools since your last review" card. Absent when nothing is new.
+ *
+ * It holds no ability checkbox, so a Save on this tab cannot enable anything it lists.
+ *
+ * @param array<string,array<string,mixed>> $groups Merged discovery groups, keyed by group key.
+ * @return void
+ */
+function aafm_render_bridge_review_card( array $groups ): void {
+	$new = aafm_bridge_new_tools();
+	if ( array() === $new ) {
+		return;
+	}
+
+	$body = '<p class="aafm-bridge-review-status" role="status"></p>'
+		. '<p class="aafm-bridge-review-all"><button type="button" class="aafm-btn aafm-btn-secondary aafm-bridge-mark-reviewed" data-bridge-plugin="all">' . esc_html__( 'Mark all as reviewed', 'agent-abilities-for-mcp' ) . '</button></p>';
+
+	foreach ( $groups as $key => $group ) {
+		$rows = array();
+		foreach ( (array) ( $group['abilities'] ?? array() ) as $row ) {
+			if ( in_array( (string) $row['slug'], $new, true ) ) {
+				$rows[] = $row;
+			}
+		}
+		if ( array() === $rows ) {
+			continue;
+		}
+
+		$label = aafm_bridge_display_label( (string) ( $group['label'] ?? $key ) );
+		$attrs = sprintf( 'data-bridge-plugin="%1$s" data-bridge-name="%2$s"', esc_attr( (string) $key ), esc_attr( $label ) );
+
+		$body .= '<div class="aafm-bridge-review-block" data-bridge-plugin="' . esc_attr( (string) $key ) . '">';
+		$body .= '<h3>' . esc_html( $label ) . ' <span class="aafm-count-badge">' . esc_html(
+			sprintf(
+				/* translators: %d: how many new tools this plugin added. */
+				_n( '%d new tool', '%d new tools', count( $rows ), 'agent-abilities-for-mcp' ),
+				count( $rows )
+			)
+		) . '</span></h3>';
+
+		$body .= '<ul class="aafm-bridge-review-tools">';
+		foreach ( $rows as $row ) {
+			$risk_label = aafm_bridge_risk_label( $row );
+			$notice     = aafm_bridge_personal_data_row_notice( aafm_bridge_personal_data_kind( (string) $row['slug'] ) );
+
+			$body .= '<li><span class="aafm-badge aafm-badge-' . esc_attr( (string) $row['risk'] ) . '">' . esc_html( $risk_label['label'] ) . '</span> <code>' . esc_html( (string) $row['slug'] ) . '</code>';
+			if ( '' !== $risk_label['note'] ) {
+				$body .= '<p class="aafm-ability-hint aafm-muted">' . esc_html( $risk_label['note'] ) . '</p>';
+			}
+			if ( '' !== $notice ) {
+				$body .= aafm_get_notice_html( 'info', $notice, array( 'inline' => true ) );
+			}
+			$body .= '</li>';
+		}
+		$body .= '</ul>';
+
+		$body .= '<p class="aafm-bridge-review-actions">'
+			. '<button type="button" class="aafm-btn aafm-btn-secondary aafm-bridge-starter" ' . $attrs . '>' . esc_html__( 'Allow only read tools', 'agent-abilities-for-mcp' ) . '</button> '
+			. '<button type="button" class="aafm-btn aafm-btn-secondary aafm-bridge-mark-reviewed" ' . $attrs . '>' . esc_html__( 'Mark as reviewed', 'agent-abilities-for-mcp' ) . '</button>'
+			. '</p></div>';
+	}
+
+	aafm_render_section(
+		array(
+			'class'       => 'aafm-bridge-review',
+			'title'       => __( 'New tools since your last review', 'agent-abilities-for-mcp' ),
+			'icon'        => 'bell',
+			'description' => __( 'A plugin update or a newly activated plugin added these tools. They stay off until you switch them on, which needs a Save. Allow only read tools applies as soon as you confirm.', 'agent-abilities-for-mcp' ),
+			'body'        => $body,
+		)
+	);
 }
 
 /**
@@ -448,9 +523,10 @@ function aafm_render_bridge_group( string $ns, array $group, array $enabled, boo
 	);
 
 	printf(
-		'<details class="aafm-card aafm-integration-card aafm-integration-%1$s%2$s">',
+		'<details class="aafm-card aafm-integration-card aafm-integration-%1$s%2$s" data-bridge-plugin="%3$s">',
 		esc_attr( sanitize_html_class( $ns ) ),
-		$disabled ? ' is-disabled' : ''
+		$disabled ? ' is-disabled' : '',
+		esc_attr( $ns )
 	);
 
 	// One neutral glyph for every group (the integrations "plug"); no per-plugin logos/brand colors.
@@ -497,8 +573,18 @@ function aafm_render_bridge_group( string $ns, array $group, array $enabled, boo
 		// Read-only mode covers bridged abilities, so the friction it creates lands here too: on a
 		// plugin that annotates many abilities readonly, the operator would otherwise tick each one
 		// by hand. Same control as the other two tabs, scoped by the group card this sits in.
-		echo '<button type="button" class="aafm-btn aafm-btn-secondary aafm-enable-reads">' . esc_html__( 'Enable all reads', 'agent-abilities-for-mcp' ) . '</button>';
+		echo '<button type="button" class="aafm-btn aafm-btn-secondary aafm-enable-reads">' . esc_html__( 'Enable all reads', 'agent-abilities-for-mcp' ) . '</button> ';
+		// Unlike the three above, this one saves as soon as it is confirmed. See #bindBridgeStarter.
+		printf(
+			'<button type="button" class="aafm-btn aafm-btn-secondary aafm-bridge-starter" data-bridge-plugin="%1$s" data-bridge-name="%2$s">%3$s</button>',
+			esc_attr( $ns ),
+			esc_attr( $label ),
+			esc_html__( 'Allow only read tools', 'agent-abilities-for-mcp' )
+		);
 		echo '</div>';
+		if ( 0 === $read ) {
+			echo '<p class="aafm-card-desc">' . esc_html__( 'This plugin labels none of its tools as read-only, so Allow only read tools turns all of them off.', 'agent-abilities-for-mcp' ) . '</p>';
+		}
 	}
 
 	echo '<div class="aafm-card aafm-ability-list">';
@@ -684,10 +770,14 @@ function aafm_render_bridge_ability_row( array $ability, array $enabled, bool $d
 	$title_id    = 'aafm-bridge-ability-title-' . sanitize_key( $slug );
 	$risk_label  = aafm_bridge_risk_label( $ability );
 
+	$lock_reason = aafm_ability_lock_reason( $slug );
+
+	// A locked row has no switch, so this is how the starter's confirm counts a stored tool it would turn off.
 	printf(
-		'<div class="aafm-ability-row%1$s" data-risk="%2$s"%3$s>',
+		'<div class="aafm-ability-row%1$s" data-risk="%2$s"%3$s%4$s>',
 		$destructive ? ' is-destructive' : '',
 		esc_attr( $risk ),
+		null !== $lock_reason && in_array( $slug, $enabled, true ) ? ' data-aafm-stored-on="1"' : '',
 		$disabled ? ' aria-disabled="true"' : ''
 	);
 
@@ -699,8 +789,6 @@ function aafm_render_bridge_ability_row( array $ability, array $enabled, bool $d
 	// includes/audit/high-risk.php), so calling the shared aafm_ability_lock_reason() predicate
 	// here is now safe: a foreign slug named in the aafm_high_risk_abilities filter can never make
 	// it report 'high_risk'. Pinned by ReadOnlyUiTest::test_a_bridge_row_never_renders_a_high_risk_lock().
-	$lock_reason = aafm_ability_lock_reason( $slug );
-
 	if ( null !== $lock_reason ) {
 		printf(
 			'<span class="aafm-ability-locked" role="img" aria-label="%1$s">%2$s</span>',

@@ -440,7 +440,8 @@ function aafm_notify_build_message( array $events, bool $digest ): array {
 		$counts  = array();
 		foreach ( $events as $event ) {
 			$label            = aafm_notify_event_label( $event );
-			$counts[ $label ] = ( $counts[ $label ] ?? 0 ) + 1;
+			// A new-tools event stands for every tool it announced, so this line is read as a tool count.
+			$counts[ $label ] = ( $counts[ $label ] ?? 0 ) + ( 'new_tools' === ( $event['trigger'] ?? '' ) ? (int) ( $event['count'] ?? 1 ) : 1 );
 		}
 		foreach ( $counts as $label => $n ) {
 			$lines[] = $label . ': ' . $n;

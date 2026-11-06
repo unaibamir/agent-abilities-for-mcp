@@ -65,6 +65,8 @@
 			this.#bindBridgeFilter();
 			this.#bindBridgeConfirm();
 			this.#bindBridgeBulk();
+			this.#bindBridgeReview();
+			this.#bindBridgeStarter();
 			this.#bindSaveSettings();
 			this.#bindMetaChips();
 			this.#bindCreateUser();
@@ -1370,6 +1372,183 @@
 					this.#refreshDirty?.();
 				} );
 			} );
+		}
+
+		/**
+		 * Mark as reviewed and Mark all as reviewed on the Other plugins review card. They record what
+		 * the owner has seen and touch no form control, so no saved baseline changes.
+		 */
+		#bindBridgeReview() {
+			const card = document.querySelector( '.aafm-bridge-review' );
+			if ( ! card ) {
+				return;
+			}
+			const status = card.querySelector( '.aafm-bridge-review-status' );
+			card.querySelectorAll( '.aafm-bridge-mark-reviewed' ).forEach( ( btn ) => {
+				btn.addEventListener( 'click', async () => {
+					const key = btn.dataset.bridgePlugin ?? '';
+					const name = btn.dataset.bridgeName ?? '';
+					const tools = card.querySelectorAll( `.aafm-bridge-review-block[data-bridge-plugin="${ CSS.escape( key ) }"] li` ).length;
+					status.textContent = this.#t( 'bridgeWorking', 'Working…' );
+					btn.disabled = true;
+					const json = await this.#post( 'aafm_bridge_mark_reviewed', { plugin: key } );
+					btn.disabled = false;
+					if ( ! json?.success ) {
+						status.textContent = json?.data?.message ?? this.#t( 'errorSaving', 'Error saving' );
+						this.#focusAfterReview( btn, card );
+						return;
+					}
+					let done = this.#t( 'bridgeReviewedAll', 'All new tools marked as reviewed.' );
+					if ( 'all' !== key ) {
+						done = 1 === tools
+							? this.#format( this.#t( 'bridgeReviewedOne', '1 tool from %s marked as reviewed.' ), name )
+							: this.#format( this.#t( 'bridgeReviewed', '%1$s tools from %2$s marked as reviewed.' ), tools, name );
+					}
+					status.textContent = `${ done }${ this.#bridgeReviewBlockDone( key, card ) }`;
+					this.#focusAfterReview( btn, card );
+				} );
+			} );
+		}
+
+		/**
+		 * Allow only read tools: set one plugin's tools to its reads. Unlike the bulk buttons this saves
+		 * on the spot, so it always asks first, and the plugin's card then shows what was stored. Only
+		 * that card is marked clean: an unsaved edit anywhere else on the tab keeps its dot.
+		 */
+		#bindBridgeStarter() {
+			document.querySelectorAll( '.aafm-bridge-starter' ).forEach( ( btn ) => {
+				btn.addEventListener( 'click', async () => {
+					const key = btn.dataset.bridgePlugin ?? '';
+					const name = btn.dataset.bridgeName ?? '';
+					const groupCard = document.querySelector( `#aafm-bridge-form details[data-bridge-plugin="${ CSS.escape( key ) }"]` );
+					if ( ! groupCard ) {
+						return;
+					}
+					const card = document.querySelector( '.aafm-bridge-review' );
+					const status =
+						btn.closest( '.aafm-bridge-review' )?.querySelector( '.aafm-bridge-review-status' ) ??
+						document.querySelector( '#aafm-bridge-form .aafm-save-status' );
+					const { on, off } = this.#bridgeStarterCounts( groupCard );
+					if ( 0 === on && 0 === off ) {
+						status.textContent = this.#format( this.#t( 'bridgeStarterNoop', 'Nothing to change: %s already allows only its read tools.' ), name );
+						return;
+					}
+					if ( ! window.confirm( this.#bridgeStarterConfirm( on, off, name ) ) ) {
+						return;
+					}
+					status.textContent = this.#t( 'bridgeWorking', 'Working…' );
+					btn.disabled = true;
+					const json = await this.#post( 'aafm_bridge_read_only_starter', { plugin: key } );
+					btn.disabled = false;
+					if ( ! json?.success ) {
+						status.textContent = json?.data?.message ?? this.#t( 'errorSaving', 'Error saving' );
+						this.#focusAfterReview( btn, card );
+						return;
+					}
+					const { enabled = [], disabled = [], message = '' } = json.data;
+					groupCard.querySelectorAll( 'input[name="bridged_abilities[]"]' ).forEach( ( box ) => {
+						box.checked = enabled.includes( box.value );
+					} );
+					groupCard.querySelectorAll( '.aafm-bridge-confirm' ).forEach( ( strip ) => {
+						strip.hidden = true;
+					} );
+					groupCard.querySelectorAll( '[data-aafm-stored-on]' ).forEach( ( row ) => {
+						delete row.dataset.aafmStoredOn;
+					} );
+					this.#markClean( groupCard );
+					const offLine = this.#format( this.#t( 'bridgeStarterTurnedOff', 'Tools turned off: %s.' ), disabled.length );
+					status.textContent = `${ message } ${ offLine }`;
+					const left = card ? this.#bridgeReviewBlockDone( key, card ) : '';
+					const cardStatus = card?.querySelector( '.aafm-bridge-review-status' );
+					if ( left && cardStatus ) {
+						cardStatus.textContent = `${ cardStatus.textContent }${ left }`.trim();
+					}
+					this.#focusAfterReview( btn, card );
+				} );
+			} );
+		}
+
+		/**
+		 * What the starter would change in storage, from what the page was loaded or last saved with.
+		 *
+		 * @param {Element} groupCard One plugin's card.
+		 * @return {{on:number,off:number}} Read tools to turn on, other tools to turn off.
+		 */
+		#bridgeStarterCounts( groupCard ) {
+			const saved = ( box ) => box.dataset.aafmSaved ?? this.#controlValue( box );
+			const boxes = Array.from( groupCard.querySelectorAll( '.aafm-ability-row input[name="bridged_abilities[]"]' ) );
+			const isRead = ( box ) => 'read' === box.closest( '.aafm-ability-row' ).dataset.risk;
+			return {
+				on: boxes.filter( ( box ) => isRead( box ) && '0' === saved( box ) ).length,
+				off:
+					boxes.filter( ( box ) => ! isRead( box ) && '1' === saved( box ) ).length +
+					groupCard.querySelectorAll( '[data-aafm-stored-on]' ).length,
+			};
+		}
+
+		/**
+		 * The starter's confirm text. Called only when at least one count is above zero.
+		 *
+		 * @param {number} on   Read tools to turn on.
+		 * @param {number} off  Other tools to turn off.
+		 * @param {string} name Plugin name.
+		 * @return {string} The sentence to confirm.
+		 */
+		#bridgeStarterConfirm( on, off, name ) {
+			if ( 0 === on ) {
+				return 1 === off
+					? this.#format( this.#t( 'bridgeStarterOffOnlyOne', 'This turns off 1 tool from %s and turns on none.' ), name )
+					: this.#format( this.#t( 'bridgeStarterOffOnly', 'This turns off %1$s tools from %2$s and turns on none.' ), off, name );
+			}
+			const first = 1 === on
+				? this.#format( this.#t( 'bridgeStarterOnOne', 'This turns on 1 read tool from %s.' ), name )
+				: this.#format( this.#t( 'bridgeStarterOn', 'This turns on %1$s read tools from %2$s.' ), on, name );
+			if ( 0 === off ) {
+				return first;
+			}
+			const second = 1 === off
+				? this.#t( 'bridgeStarterAlsoOffOne', 'It also turns off 1 of its tools that is on now.' )
+				: this.#format( this.#t( 'bridgeStarterAlsoOff', 'It also turns off %s of its tools that are on now.' ), off );
+			return `${ first } ${ second }`;
+		}
+
+		/**
+		 * Take a finished plugin's block (or every block) out of the review card. The card itself stays
+		 * until the next page load, so focus and the status line have somewhere to live.
+		 *
+		 * @param {string}  key  Group key, or 'all'.
+		 * @param {Element} card The review card.
+		 * @return {string} Text to add to the status line when nothing is left, otherwise ''.
+		 */
+		#bridgeReviewBlockDone( key, card ) {
+			const selector = 'all' === key ? '.aafm-bridge-review-block' : `.aafm-bridge-review-block[data-bridge-plugin="${ CSS.escape( key ) }"]`;
+			card.querySelectorAll( selector ).forEach( ( block ) => block.remove() );
+			if ( card.querySelector( '.aafm-bridge-review-block' ) ) {
+				return '';
+			}
+			card.querySelector( '.aafm-bridge-review-all' )?.remove();
+			return ` ${ this.#t( 'bridgeNothingLeft', 'Nothing left to review.' ) }`;
+		}
+
+		/**
+		 * Return focus after a review action, which may have removed the button that started it.
+		 *
+		 * @param {HTMLButtonElement} btn  The activating button.
+		 * @param {Element|null}      card The review card, when the tab has one.
+		 */
+		#focusAfterReview( btn, card ) {
+			if ( btn.isConnected ) {
+				btn.focus();
+				return;
+			}
+			const next = card?.querySelector( '.aafm-bridge-review-block button' );
+			if ( next ) {
+				next.focus();
+				return;
+			}
+			const heading = card?.querySelector( 'h2' );
+			heading?.setAttribute( 'tabindex', '-1' );
+			heading?.focus();
 		}
 
 		/**

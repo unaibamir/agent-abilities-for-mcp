@@ -321,4 +321,17 @@ final class DescriptionTruthSweepTest extends TestCase {
 		}
 		$this->assertStringContainsString( 'is_avada_owned', $registry['aafm/avada-get-page-content']['description'] );
 	}
+
+	/**
+	 * The behaviour itself is proved by the TEC wire test; this pins that both texts state it.
+	 */
+	public function test_tec_get_events_says_drafts_are_the_callers_own_unless_they_can_edit_others(): void {
+		$description = aafm_get_abilities_registry_full()['aafm/tec-get-events']['description'];
+		$disclosure  = aafm_ability_disclosures()['aafm/tec-get-events'];
+
+		foreach ( array( $description, $disclosure ) as $text ) {
+			$this->assertStringContainsString( "the caller's own", $text );
+			$this->assertStringContainsString( 'edit other', $text );
+		}
+	}
 }

@@ -9,8 +9,8 @@
  * The markup mirrors includes/admin/integrations.php EXACTLY (same card / switch / badge / filter
  * classes) but posts to its OWN action (aafm_save_bridged_abilities) with its own field name
  * (bridged_abilities[]) and its own checked source (aafm_get_stored_bridged_abilities_raw()), so it can
- * never write into the native option. The only new classes are a .aafm-bridge scoping wrapper and an.
- * is-destructive row modifier.
+ * never write into the native option. The only new classes are a .aafm-bridge scoping wrapper and an
+ * .is-destructive row modifier.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -225,8 +225,8 @@ function aafm_render_bridge_collision_notice(): void {
 /**
  * The global search + All / Read Only / Write filter for the bridge directory.
  *
- * Reuses the integrations filter markup exactly (.aafm-integration-filter, .aafm-filter-risk,.
- * aafm-filter-btn with aria-pressed) but carries a bridge id so #bindBridgeFilter binds it as a
+ * Reuses the integrations filter markup exactly (.aafm-integration-filter, .aafm-filter-risk,
+ * .aafm-filter-btn with aria-pressed) but carries a bridge id so #bindBridgeFilter binds it as a
  * single global filter across every group. Destructive rows also satisfy the "Write" filter.
  *
  * @return void

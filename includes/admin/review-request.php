@@ -249,7 +249,7 @@ function aafm_review_request_flush_display_count(): void {
  * bundle every front-end request pays for to answer questions only wp-admin asks.
  *
  * @param array<string,mixed> $state The full state array to store.
- * @return bool True when the option now certifies as $state (Codex round 9, R9-10) - callers
+ * @return bool True when the option now certifies as $state - callers
  *              that report a verdict back to the operator must act on this rather than assume
  *              a bare update_option() always lands.
  */

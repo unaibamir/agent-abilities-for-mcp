@@ -404,8 +404,8 @@ function aafm_get_stored_enabled_abilities_raw(): array {
  * control, not intent to disable it), and this function keeps it stored. The registration floor
  * (aafm_get_enabled_abilities()) is what keeps a locked name out of tools/list, so a stored
  * locked name is inert while locked - and unlocking the category restores exactly the selection
- * that was ticked before, which is the floor's stated promise. Stripping stored names here was
- * Re-locking the category wiped the operator's selection on the very next save. Only a
+ * that was ticked before, which is the floor's stated promise. Stripping stored names here was a bug:
+ * re-locking the category wiped the operator's selection on the very next save. Only a
  * locked name that was NOT already stored is stripped (and logged): it cannot have come from the
  * screen, since the screen rendered no control for it.
  *
@@ -1011,7 +1011,7 @@ function aafm_detected_meta_keys(): array {
  * intermediate state at least as strict as the state before the request, even when the same
  * request narrows BOTH lists at once.
  *
- * The round-5 fix (deny always written before exposed) is not direction-aware: it only protects
+ * The earlier fix (deny always written before exposed) is not direction-aware: it only protects
  * a request that ADDS to deny or REMOVES from exposed. A request that REMOVES a key from deny
  * and REMOVES it from exposed in the same submission (the bundled UI can post both fields
  * together) is a live counter-example: if the exposed write fails after the deny write already
@@ -1419,7 +1419,7 @@ function aafm_ajax_clear_log(): void {
  * markers written before schema v5 have no event_type, and keeping the name means an operator's
  * old and new markers still read as the same event.
  *
- * @return bool True when the marker row was actually inserted (Codex round 9, R9-8): a failed
+ * @return bool True when the marker row was actually inserted: a failed
  *              insert here would otherwise leave the freshly emptied log with no tamper
  *              evidence at all while the caller still reported success.
  */
@@ -1780,8 +1780,8 @@ function aafm_render_admin_page(): void {
 	echo '</span>';
 	echo '</div>';
 
-	// Anchor for core's admin-notice relocation: the <h1> now sits inside.
-	// aafm-page-head, so mark where WordPress should drop notices.
+	// Anchor for core's admin-notice relocation: the <h1> now sits inside
+	// .aafm-page-head, so mark where WordPress should drop notices.
 	echo '<hr class="wp-header-end">';
 
 	echo '<nav class="nav-tab-wrapper">';

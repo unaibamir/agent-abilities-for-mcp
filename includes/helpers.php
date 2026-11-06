@@ -1225,7 +1225,7 @@ function aafm_delete_guarantee(): array {
  * @param string $post_type The post's real object subtype (get_object_subtype( 'post', $id )
  *                           where an id exists), or the intended post type on a create where it
  *                           does not yet. Defaults to 'post' for callers that do not yet know it
- *                           (matches this function's pre-round-7 behavior).
+ *                           (matches this function's earlier behavior).
  * @return mixed|WP_Error Sanitized scalar, or error if non-scalar.
  */
 function aafm_sanitize_meta_value( string $key, $value, string $post_type = 'post' ) {
@@ -1504,7 +1504,7 @@ function aafm_validate_user_meta_key( string $key ) {
  * That resolution is still filterable, via get_object_subtype_user, the same
  * way get_object_subtype_post and get_object_subtype_term are - a site remapping a user's
  * subtype for its own register_meta() scoping was invisible to the hardcoded 'user' literal this
- * probe used to pass. $object_subtype now defaults to 'user' (this function's pre-round-8
+ * probe used to pass. $object_subtype now defaults to 'user' (this function's earlier
  * behavior for a caller that has not resolved it) but a caller that already has the user id
  * should pass get_object_subtype( 'user', $user_id ) instead, exactly as aafm_sanitize_meta_value()
  * and aafm_sanitize_term_meta_value() already do for their object types.

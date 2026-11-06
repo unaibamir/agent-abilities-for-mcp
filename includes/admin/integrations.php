@@ -308,8 +308,8 @@ function aafm_render_integrations_tab(): void {
 			: ( $by_subject[ $slug ] ?? ( $descriptor[ $slug ] ?? array() ) );
 
 		// Each card is a native <details> accordion (collapsed by default - no open attribute), so
-		// the whole section is the toggle. The card classes ride on the <details> so the existing.
-		// aafm-integration-{slug} hooks and .is-disabled muting still apply.
+		// the whole section is the toggle. The card classes ride on the <details> so the existing
+		// .aafm-integration-{slug} hooks and .is-disabled muting still apply.
 		printf(
 			'<details class="aafm-card aafm-integration-card aafm-integration-%1$s%2$s">',
 			esc_attr( $slug ),

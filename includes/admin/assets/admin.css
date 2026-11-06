@@ -447,6 +447,7 @@
 			display: flex;
 			flex-direction: column;
 			justify-content: center;
+			overflow-wrap: anywhere;
 			gap: 2px;
 			min-block-size: 24px;
 		}
@@ -473,6 +474,7 @@
 	/* A card's explanation or closing note: small and muted. Opening the body it keeps a gap
 	   below; closing the body, a gap above. */
 	.aafm-card-desc {
+		overflow-wrap: anywhere;
 		margin-block: 0 var(--aafm-space-3);
 		font-size: var(--aafm-fs-sm);
 		color: var(--aafm-text-subtle);
@@ -1207,6 +1209,12 @@
 	/* New tools since your last review: one block per plugin, ruled apart rather than boxed, because
 	   the card allows no card inside it. */
 	.aafm-bridge-review {
+		/* Focus lands here when the last block goes, so it takes the one ring. */
+		h2:focus-visible {
+			outline: none;
+			box-shadow: var(--aafm-ring);
+		}
+
 		.aafm-bridge-review-status {
 			margin-block: 0;
 			font-size: var(--aafm-fs-base);
@@ -1237,6 +1245,7 @@
 				margin-block: 0 var(--aafm-space-2);
 				font-size: var(--aafm-fs-body);
 				font-weight: 600;
+				overflow-wrap: anywhere;
 			}
 		}
 

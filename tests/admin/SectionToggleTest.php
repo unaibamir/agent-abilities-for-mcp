@@ -33,7 +33,7 @@ final class SectionToggleTest extends TestCase {
 	}
 
 	/**
-	 * Codex admin-ui-r1 M3: the Abilities search field's only text was placeholder + status live
+	 * The Abilities search field's only text was placeholder + status live
 	 * region text, neither of which is a persistent accessible name for a screen reader or voice
 	 * control user. A visually-hidden <label for> pointing at the field is the fix.
 	 */
@@ -50,7 +50,7 @@ final class SectionToggleTest extends TestCase {
 	}
 
 	/**
-	 * Codex admin-ui-r1 L3: a client-side "Add scope" row built its "Role:"/"Connection:" label
+	 * A client-side "Add scope" row built its "Role:"/"Connection:" label
 	 * from a hardcoded English template literal in admin.js instead of a localized string, so it
 	 * showed English on a localized site until reload. This pins the two i18n keys admin.js now
 	 * localizes through - it does not exercise the JS itself (see AllowlistAdminTest for the

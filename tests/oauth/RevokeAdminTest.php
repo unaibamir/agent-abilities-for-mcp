@@ -99,7 +99,7 @@ final class RevokeAdminTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 10, R10-10: aafm_oauth_client_is_deactivated() used to cast a failed SELECT to
+	 * Note: aafm_oauth_client_is_deactivated() used to cast a failed SELECT to
 	 * false ("not deactivated"), and every caller of it is a live authorization gate - so an
 	 * unreadable clients table let a deactivated client's already-issued tokens keep validating
 	 * for the duration of the outage. The client here is genuinely ACTIVE; only the read fails.

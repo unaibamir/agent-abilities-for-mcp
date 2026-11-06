@@ -179,7 +179,7 @@ final class BridgeDirectoryMergeTest extends TestCase {
 	}
 
 	/**
-	 * 1.7.2 finding 2 (Codex re-review): the merge helper's synthetic key ('aafm-known-' .
+	 * The merge helper's synthetic key ('aafm-known-' .
 	 * sanitize_title($known[$ns])) shared the SAME string keyspace as real raw namespace keys. A
 	 * real, unmapped foreign namespace literally named 'aafm-known-all-in-one-seo' - which is
 	 * exactly what the old scheme computed for AIOSEO's own merged key (sanitize_title('All in
@@ -234,7 +234,7 @@ final class BridgeDirectoryMergeTest extends TestCase {
 	}
 
 	/**
-	 * 1.7.2 finding 2, the second collision this fix closes: the old key derivation
+	 * The second collision this fix closes: the old key derivation
 	 * ('aafm-known-' . sanitize_title($label)) de-duped known plugins on a LOSSY transform of
 	 * their label, so two genuinely different plugin labels that happen to sanitize to the same
 	 * slug (sanitize_title() collapses whitespace/hyphen differences and case) would wrongly land
@@ -258,7 +258,7 @@ final class BridgeDirectoryMergeTest extends TestCase {
 	}
 
 	/**
-	 * 1.7.2 residual finding (third Codex re-review): the merge key was still built from the
+	 * The merge key was still built from the
 	 * TRANSLATED display label (aafm_bridge_known_plugin_labels()), not a canonical untranslated
 	 * plugin id. Two genuinely different known plugins - Yoast SEO and Rank Math here - whose
 	 * English labels happen to translate (or get gettext-filtered) to the SAME localized string on

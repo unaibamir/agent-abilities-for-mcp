@@ -126,7 +126,7 @@ final class QuickConnectInferenceTest extends TestCase {
 	}
 
 	/**
-	 * Found by the Codex review pass: native and bridged abilities live in two separate options.
+	 * Native and bridged abilities live in two separate options.
 	 * A site running purely on bridged integrations has no native ability enabled at all, and
 	 * reading only the native option kept calling it a first-run site.
 	 */
@@ -139,7 +139,7 @@ final class QuickConnectInferenceTest extends TestCase {
 	}
 
 	/**
-	 * Found by the second Codex review pass. Revoking an OAuth client deactivates the client row
+	 * Revoking an OAuth client deactivates the client row
 	 * and its tokens but deliberately leaves the consent row, and aafm_oauth_list_grants() does not
 	 * filter on the client being active -- that listing is shipped 1.6.3 behaviour and stays as it
 	 * is. What is new here is reading it as first-run evidence. The grant branch is only reached

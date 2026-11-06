@@ -30,7 +30,7 @@ class UpgradeMigrationTest extends TestCase {
 	/**
 	 * F9 (1.7.5 deferred): the clean test bootstrap loads the plugin on muplugins_loaded, so
 	 * aafm_oauth_dcr_adopt_on_by_default() already ran once for real before ANY test's own
-	 * fixture setup - certifying aafm_oauth_dcr_default_on_touched (its independent B2 sibling
+	 * fixture setup - certifying aafm_oauth_dcr_default_on_touched (its independent sibling
 	 * signal) in the process. Deleting only aafm_oauth_dcr_default_on_migrated, as every DCR
 	 * adoption test here does, left that touched marker still set to '1' from bootstrap, so the
 	 * function's second guard returned early before ever reaching the DCR-enable write these
@@ -90,7 +90,7 @@ class UpgradeMigrationTest extends TestCase {
 		aafm_oauth_dcr_adopt_on_by_default();
 		$this->assertSame( '1', get_option( 'aafm_oauth_dcr_enabled' ) );
 
-		// B2 (1.7.5 deferred): resetting BOTH the guard row and its independent sibling to
+		// Resetting BOTH the guard row and its independent sibling to
 		// simulate a genuinely fresh, not-yet-migrated install for the second scenario below -
 		// the first call above already certified the sibling, and leaving it set would make the
 		// second call return early without ever adopting the absent row this scenario tests.
@@ -121,7 +121,7 @@ class UpgradeMigrationTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-2: the guard used to read get_option()'s cache-trusting view. The database
+	 * The guard used to read get_option()'s cache-trusting view. The database
 	 * guard row is genuinely '1' (adoption already ran), but a stale persistent cache still claims
 	 * it is '0' (not yet run) - the exact reproduction from the finding. The old code would rerun
 	 * the migration and re-force DCR back on over the operator's later, deliberate opt-out.
@@ -136,8 +136,8 @@ class UpgradeMigrationTest extends TestCase {
 		// Operator deliberately turns it back off after the one-time adoption.
 		update_option( 'aafm_oauth_dcr_enabled', '0' );
 
-		// R2-9 (1.7.5 deferred, round 2): the same adoption call above also certified the
-		// independent B2 touched marker, in the database, untouched by the cache poisoning below.
+		// The same adoption call above also certified the
+		// independent touched marker, in the database, untouched by the cache poisoning below.
 		// Left in place, that marker's own guard reads its genuinely-'1' database row and returns
 		// early on its own, so this test would still pass even if the original guard under test
 		// (aafm_oauth_dcr_default_on_migrated) regressed back to a cache-trusting get_option()
@@ -165,7 +165,7 @@ class UpgradeMigrationTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-2, the other direction: the database guard row is genuinely absent
+	 * The other direction: the database guard row is genuinely absent
 	 * (adoption never ran), but a stale persistent cache claims it is already '1'. The old code
 	 * would skip the migration entirely, permanently leaving a legacy install stuck with DCR off
 	 * (the #90 footgun this migration exists to fix).
@@ -230,7 +230,7 @@ class UpgradeMigrationTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 5, R5-3: the absence check used to read get_option()'s cache-trusting view, so
+	 * The absence check used to read get_option()'s cache-trusting view, so
 	 * a stale persistent object cache still serving an old value after the real row was gone
 	 * would make the migration think a row already existed, skip the preservation write, and then
 	 * mark itself done for good - permanently losing the pre-upgrade "on" state. The row is
@@ -281,7 +281,7 @@ class UpgradeMigrationTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 8, R8-3: the migration-marker write's return value used to be discarded, so a
+	 * The migration-marker write's return value used to be discarded, so a
 	 * certification failure on the guard itself (not the preceding preservation write, which was
 	 * already checked) was indistinguishable from success. The guard must stay unset - so the
 	 * migration is retried rather than recorded as done when it was not - and the failure must be
@@ -309,7 +309,7 @@ class UpgradeMigrationTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 8, R8-3, the DCR sibling: same failure, same requirement - the guard stays
+	 * The DCR sibling: same failure, same requirement - the guard stays
 	 * unset and the failure is logged.
 	 */
 	public function test_dcr_adoption_marker_failure_is_logged_and_leaves_the_guard_unset(): void {
@@ -335,7 +335,7 @@ class UpgradeMigrationTest extends TestCase {
 	}
 
 	/**
-	 * B2 (1.7.5 deferred): the actual security property the second signal restores. The guard
+	 * The actual security property the second signal restores. The guard
 	 * row's own write keeps failing to certify forever (never recovers, unlike a one-off blip),
 	 * so under the old single-signal design every later request would re-read DCR from scratch
 	 * and re-flip an operator's own opt-out back on, since a stored '0' looked indistinguishable
@@ -366,10 +366,10 @@ class UpgradeMigrationTest extends TestCase {
 	}
 
 	/**
-	 * R2-4/R3-9 (1.7.5 deferred, rounds 2 and 3): the toggle-preservation migration already
+	 * The toggle-preservation migration already
 	 * completed for real, and 'aafm_oauth_enabled' was later deliberately deleted (e.g. an
 	 * uninstall-and-reinstall, or an operator reset) rather than merely left at '0' - that ABSENCE
-	 * is the one state that makes the function's own write path fire. R3-9 found the original
+	 * is the one state that makes the function's own write path fire. The original
 	 * fixture here left 'aafm_oauth_enabled' PRESENT at '0', so removing the guard-read abort still
 	 * left the function's own "row already present" branch as a no-op, and this test passed either
 	 * way - it never actually exercised the abort it claimed to. Absence is the only fixture that
@@ -395,7 +395,7 @@ class UpgradeMigrationTest extends TestCase {
 	}
 
 	/**
-	 * R2-4/R3-9 (1.7.5 deferred, rounds 2 and 3): R3-9 found the original fixture here also set
+	 * The original fixture here also set
 	 * the SECOND, independent 'aafm_oauth_dcr_default_on_touched' guard - which short-circuits the
 	 * function on its own, before the first guard's read failure is ever exercised, so this test
 	 * passed even with that failure's abort removed. Leaving the touched marker unset (set_up()

@@ -149,7 +149,7 @@ final class AbilityInvokedHookTest extends TestCase {
 	}
 
 	/**
-	 * Fix round 1, Codex finding 1: aafm_log_ability_invocation() pushes a pending row before core
+	 * Note: aafm_log_ability_invocation() pushes a pending row before core
 	 * does any work, but a real WP 7.1 execute() returns directly - without ever reaching
 	 * check_permissions() or the decorated execute_callback - when validate_input() fails on a
 	 * malformed input. Before the fix that pending entry stayed on the per-name stack, and a LATER
@@ -269,7 +269,7 @@ final class AbilityInvokedHookTest extends TestCase {
 	}
 
 	/**
-	 * Fix round 1, Codex finding 1, short-circuit variant: an intentional wp_pre_execute_ability
+	 * Short-circuit variant: an intentional wp_pre_execute_ability
 	 * short-circuit is the other real WP 7.1 exit path that returns from execute() without ever
 	 * reaching check_permissions() or the decorated execute_callback. Same contamination risk as the
 	 * validation-failure case above, same fix, separate proof.
@@ -330,7 +330,7 @@ final class AbilityInvokedHookTest extends TestCase {
 	}
 
 	/**
-	 * Test-quality finding 1: the plan's own regression, a denial reached through execute() itself
+	 * The plan's own regression, a denial reached through execute() itself
 	 * (not through check_permissions() called directly, which every pre-existing
 	 * test_denied_is_audited case uses instead), was never directly pinned. This is the minimal
 	 * dedicated proof: exactly one row, not a stuck 'started' row plus a separate 'denied' one.
@@ -364,7 +364,7 @@ final class AbilityInvokedHookTest extends TestCase {
 	}
 
 	/**
-	 * Test-quality finding 1's third requested case: a denial with genuinely nothing pending (no
+	 * A denial with genuinely nothing pending (no
 	 * wp_ability_invoked fire preceded it, matching every pre-existing test_denied_is_audited case)
 	 * must still fall back to a fresh insert rather than finding nothing and writing nothing.
 	 */
@@ -399,7 +399,7 @@ final class AbilityInvokedHookTest extends TestCase {
 	}
 
 	/**
-	 * Codex finding 1's suggested second case: a permission callback that throws and is configured
+	 * A permission callback that throws and is configured
 	 * to re-throw must not leak its pending-stack entry into a LATER, unrelated call for the same
 	 * ability name that completes normally.
 	 *
@@ -464,7 +464,7 @@ final class AbilityInvokedHookTest extends TestCase {
 	}
 
 	/**
-	 * Final-gate fix, Codex finding 1 (the minimum test it names): a wp_pre_execute_ability filter
+	 * A wp_pre_execute_ability filter
 	 * that recursively executes the SAME ability is not misuse - the Abilities API places no
 	 * restriction on same-name nesting. A per-name-only correlation stack cannot tell whose frame
 	 * is on top: the nested call's own cleanup discarded the OUTER call's still-open frame, so the

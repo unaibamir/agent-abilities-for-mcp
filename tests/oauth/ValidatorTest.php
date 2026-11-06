@@ -90,7 +90,7 @@ class ValidatorTest extends TestCase {
 		aafm_install_oauth_tables();
 		aafm_truncate_oauth_tables();
 
-		// R11-2: aafm_oauth_client_is_deactivated() now denies a client_id with no row at all
+		// aafm_oauth_client_is_deactivated() now denies a client_id with no row at all
 		// (not just a row confirmed inactive), so every synthetic client_id this file mints
 		// tokens for needs a real, active client row to resolve.
 		foreach ( array( 'c', 'wrong-audience-client', 'attribution_client' ) as $client_id ) {
@@ -736,7 +736,7 @@ class ValidatorTest extends TestCase {
 		);
 
 		// Plants a real, non-null row in $wpdb->last_result - a genuinely successful, unrelated
-		// lookup, the exact precondition R7-2/R8-1's shared shape depends on.
+		// lookup, the exact precondition the stale-reader class depends on.
 		$this->assertIsArray( aafm_oauth_get_access_token_row( $unrelated['access_token'] ) );
 
 		$row = QueryFaultInjector::fail_query(

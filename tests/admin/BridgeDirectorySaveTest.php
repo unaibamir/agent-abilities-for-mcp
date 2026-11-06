@@ -15,7 +15,7 @@ final class BridgeDirectorySaveTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		// The save handler audits its toggles (B18), so the log table has to exist or the write
+		// The save handler audits its toggles, so the log table has to exist or the write
 		// surfaces as raw wpdb output mid-test and corrupts the captured JSON body.
 		aafm_install_activity_log();
 		delete_option( 'aafm_enabled_bridged_abilities' );
@@ -147,7 +147,7 @@ final class BridgeDirectorySaveTest extends TestCase {
 	}
 
 	/**
-	 * B18: the bridge tab changes ability exposure outside the main save path and wrote no audit
+	 * The bridge tab changes ability exposure outside the main save path and wrote no audit
 	 * rows at all - no ability_enabled when a foreign tool became reachable, no ability_disabled
 	 * when it was turned off. It must route through the same toggle-diff logging the native save
 	 * uses.
@@ -190,7 +190,7 @@ final class BridgeDirectorySaveTest extends TestCase {
 	}
 
 	/**
-	 * B18, blocked half: while read-only mode is on, a posted bridged WRITE that is not already
+	 * Blocked half: while read-only mode is on, a posted bridged WRITE that is not already
 	 * stored is refused (it cannot have come from the screen, which rendered no switch for it),
 	 * and that refusal previously left no ability_enable_blocked row - the exact forged/stale-POST
 	 * event the row exists to record. The detail names read-only mode, never the high-risk floor.
@@ -390,7 +390,7 @@ final class BridgeDirectorySaveTest extends TestCase {
 	}
 
 	/**
-	 * Finding 3 (doc 214): unlike this plugin's own abilities, a bridged ability's output is never
+	 * Unlike this plugin's own abilities, a bridged ability's output is never
 	 * scanned or redacted (bridge.php returns the foreign ability's result unmodified). The
 	 * disclaimer must say so plainly rather than reading as blanket "governed" the way it did
 	 * before this fix, since the surrounding sentences about role scoping and the activity log are

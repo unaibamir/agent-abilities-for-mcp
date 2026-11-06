@@ -209,7 +209,7 @@ class CodesTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6, R6-2 (site 5): the consuming UPDATE's own query result used to be discarded,
+	 * The consuming UPDATE's own query result used to be discarded,
 	 * so a genuine query failure and a code that is simply invalid/expired/used both fell through
 	 * $wpdb->rows_affected to the same invalid_grant answer. Only the latter is a real
 	 * grant-validity finding.
@@ -243,7 +243,7 @@ class CodesTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6, R6-2 (site 6): the consuming UPDATE just stamped exactly one row by this
+	 * The consuming UPDATE just stamped exactly one row by this
 	 * exact hash, so a failed readback immediately after can never be a genuine grant-validity
 	 * finding - it used to report invalid_grant anyway.
 	 */

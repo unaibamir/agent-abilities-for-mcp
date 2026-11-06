@@ -299,7 +299,7 @@ class RestEndpointsTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 5 R5-4: a refresh_token grant with a genuinely valid, usable token must not be
+	 * A refresh_token grant with a genuinely valid, usable token must not be
 	 * told its GRANT is invalid when the failure is this pipeline's own operational fault (here,
 	 * a COMMIT that fails after the rotation already consumed the old row and minted a successor).
 	 * That used to collapse into the same invalid_grant/400 a replayed or expired token gets.
@@ -341,7 +341,7 @@ class RestEndpointsTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6, R6-2 (site 4): the authorization_code grant re-checks the client's live
+	 * The authorization_code grant re-checks the client's live
 	 * standing before redeeming. aafm_oauth_client_is_deactivated() correctly fails closed on an
 	 * unreadable clients table, but this site used to report invalid_grant regardless - telling a
 	 * client with a perfectly valid registration that its grant was rejected, when this pipeline
@@ -378,7 +378,7 @@ class RestEndpointsTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-3: the client check above used to run as two separate queries -
+	 * The client check above used to run as two separate queries -
 	 * aafm_oauth_client_is_deactivated() then, only when that returned true,
 	 * aafm_oauth_client_lookup_failed() - so a failed FIRST query followed by a SUCCESSFUL second
 	 * query could still read the client as genuinely deactivated rather than as a fault, and
@@ -423,7 +423,7 @@ class RestEndpointsTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-3, opposite direction: a genuinely deactivated client found by the first
+	 * Opposite direction: a genuinely deactivated client found by the first
 	 * (and, under the fix, only) client-select query must report invalid_grant even though a
 	 * SECOND such query - the old aafm_oauth_client_lookup_failed() re-probe - would have failed.
 	 * Deactivates the client for real after minting the code, then fails only a second occurrence
@@ -467,7 +467,7 @@ class RestEndpointsTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6, R6-2 (site 7): redemption re-checks consent, since it can be revoked in the
+	 * Redemption re-checks consent, since it can be revoked in the
 	 * window between authorize and redeem. aafm_oauth_has_consent() correctly fails closed on a
 	 * read failure, but this site used to COMMIT the code's consumption and report invalid_grant
 	 * regardless of the reason - permanently burning an otherwise-valid, unexpired code over a
@@ -679,7 +679,7 @@ class RestEndpointsTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 11, R11-4: aafm_oauth_count_active_clients() cast a failed COUNT(*) to 0, so
+	 * Note: aafm_oauth_count_active_clients() cast a failed COUNT(*) to 0, so
 	 * the DCR soft cap read an unreadable clients table as zero active clients - spare capacity -
 	 * and let registration through during an outage instead of refusing it the same way a
 	 * confirmed-at-cap read does. Fault only the cap's own COUNT query; registration must still
@@ -737,7 +737,7 @@ class RestEndpointsTest extends TestCase {
 	/**
 	 * A 192-character client_name - one character past the VARCHAR(191) storage column - is
 	 * rejected with a clear 400 at the REST boundary, not a generic storage failure at insert
-	 * (Codex round 9, R9-11: a 255-byte guard against a 191-character column let this through).
+	 * (a 255-byte guard against a 191-character column let this through).
 	 */
 	public function test_register_rejects_client_name_one_character_over_the_storage_boundary(): void {
 		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/register' );

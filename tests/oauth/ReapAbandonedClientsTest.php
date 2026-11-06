@@ -12,7 +12,7 @@ namespace AAFM\Tests\OAuth;
 use AAFM\Tests\TestCase;
 
 /**
- * Codex round 8, R8-3: the reaper's DELETEs used to trust the candidate list its own
+ * The reaper's DELETEs used to trust the candidate list its own
  * SELECT scan produced, with no re-check at the deletion boundary - a client approved
  * in the window between the scan and the delete was removed anyway. The fix folds the
  * scan's exact predicate into the DELETE's own WHERE clause, so the database decides
@@ -24,8 +24,8 @@ use AAFM\Tests\TestCase;
  * trigger, and the fix deliberately leaves no SQL statement between the scan and the
  * delete for anything else to land in). These tests therefore prove the DELETE's
  * predicate is correct and matches the scan's - not that the race is closed. That was
- * instead proven empirically with two genuinely concurrent connections; see
- * .scratch/1-7-5-deferred/r83-race-harness/ (not committed - environment-specific).
+ * instead proven empirically with two genuinely concurrent connections; see.
+ * scratch/1-7-5-deferred/r83-race-harness/ (not committed - environment-specific).
  */
 class ReapAbandonedClientsTest extends TestCase {
 

@@ -205,7 +205,7 @@ class SchemaTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 10, R10-3: R9-3's fix certified each table's DELETE against a fresh row-count
+	 * The fix certified each table's DELETE against a fresh row-count
 	 * read, but that read was a bare get_var(), which casts a failed read straight to
 	 * `(int) null === 0` - the same "unreadable, so call it empty" mistake as trusting the
 	 * DELETE's own affected-row count. Faulting the clients-table DELETE and its confirming COUNT
@@ -268,7 +268,7 @@ class SchemaTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-2: the version guard used to read get_option()'s cache-trusting view, so
+	 * The version guard used to read get_option()'s cache-trusting view, so
 	 * a stale persistent cache still claiming the current version was stored, over a database row
 	 * that was actually missing (or behind), would make the guard skip the installer for good.
 	 * Drop a table directly, delete the real version row, and plant a stale cache claiming the
@@ -301,7 +301,7 @@ class SchemaTest extends TestCase {
 	}
 
 	/**
-	 * B5 sibling: the OAuth schema self-heal is hooked on admin_init only in 1.6.1, so a
+	 * The OAuth schema self-heal is hooked on admin_init only in 1.6.1, so a
 	 * headless site whose plugin auto-updates over cron never upgrades its OAuth tables while
 	 * bearer traffic keeps hitting them. Same cheap option-version gate, hooked on the REST
 	 * path too.
@@ -350,7 +350,7 @@ class SchemaTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 8, R8-3: the version-stamp write's return value used to be discarded. A schema
+	 * The version-stamp write's return value used to be discarded. A schema
 	 * that is genuinely healthy but whose stamp write fails to persist must not be allowed to look
 	 * settled - the version must stay behind (so the self-heal keeps retrying) and the error
 	 * transient, already cleared on the strength of the schema check alone, must be re-set so the

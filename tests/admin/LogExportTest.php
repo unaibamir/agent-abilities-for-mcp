@@ -38,7 +38,7 @@ final class LogExportTest extends TestCase {
 	}
 
 	/**
-	 * R9-3: a failed page read used to be indistinguishable from "reached the end of the
+	 * A failed page read used to be indistinguishable from "reached the end of the
 	 * table" - both came back as an empty/short page, so the export loop stopped and the
 	 * download completed looking whole while everything after the failure was silently
 	 * missing. Fails the SECOND page's read (of a 205-row export, so a genuine third page
@@ -70,7 +70,7 @@ final class LogExportTest extends TestCase {
 	}
 
 	/**
-	 * R9-3, the sibling failure: the export's pagination snapshot (aafm_activity_max_id_result())
+	 * The sibling failure: the export's pagination snapshot (aafm_activity_max_id_result())
 	 * used to collapse a failed read to 0, the same value an empty table produces, so every page's
 	 * `id <= 0` filter came back empty and the export finished looking like a genuinely empty log
 	 * instead of a failed one.

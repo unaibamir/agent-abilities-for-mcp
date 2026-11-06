@@ -89,13 +89,13 @@ final class HighRiskSaveGuardTest extends TestCase {
 		$this->assertSame( 'aafm/wc-create-order-refund', $blocked[0]['ability'] );
 		$this->assertSame( 'denied', $blocked[0]['status'] );
 		$this->assertStringContainsString( 'aafm/wc-create-order-refund', $blocked[0]['detail'] );
-		// B37: with read-only mode off, the cause really is the high-risk lock, and the detail
+		// With read-only mode off, the cause really is the high-risk lock, and the detail
 		// says so (the read-only counterpart is pinned in ReadOnlyModeTest).
 		$this->assertStringContainsString( 'high-risk', $blocked[0]['detail'] );
 	}
 
 	/**
-	 * B10 (flipped from the 1.6.1 pin, deliberately): a locked ability already sitting in the
+	 * A locked ability already sitting in the
 	 * option is the operator's preserved choice, not stale data to clean up. The registration
 	 * floor (aafm_get_enabled_abilities()) keeps it out of tools/list while locked, so carrying
 	 * it in the option is inert - and stripping it, as 1.6.1 did, meant re-locking the category
@@ -132,7 +132,7 @@ final class HighRiskSaveGuardTest extends TestCase {
 	}
 
 	/**
-	 * B10 end to end: unlock, enable, re-lock, save, unlock again - the operator's selection has
+	 * End to end: unlock, enable, re-lock, save, unlock again - the operator's selection has
 	 * to come back, because that is the exact promise the floor's own docs make ("unlocking the
 	 * category restores exactly what was ticked before"). While locked, the stored name stays
 	 * inert: the floored reader refuses to register it.

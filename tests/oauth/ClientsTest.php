@@ -300,7 +300,7 @@ class ClientsTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 11, R11-2: aafm_oauth_client_is_deactivated() used to read a client_id with no
+	 * Note: aafm_oauth_client_is_deactivated() used to read a client_id with no
 	 * row at all as "not deactivated" - the same verdict as a confirmed-active row - so an access
 	 * token whose owning client was deleted (a partial table clear, a manual repair, a race with
 	 * the abandoned-client reaper) kept authenticating. Every live gate calling this function must

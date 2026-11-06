@@ -24,7 +24,7 @@ class TokensTest extends TestCase {
 	/**
 	 * Installs the OAuth tables and seeds the 'client_abc' row every test in this file
 	 * mints tokens under, so aafm_oauth_client_is_deactivated() resolves a confirmed active
-	 * row rather than denying a client_id it has never seen (Codex round 11, R11-2).
+	 * row rather than denying a client_id it has never seen.
 	 */
 	public function set_up(): void {
 		parent::set_up();
@@ -241,7 +241,7 @@ class TokensTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 10, R10-10: aafm_oauth_client_is_deactivated() used to cast a failed SELECT to
+	 * Note: aafm_oauth_client_is_deactivated() used to cast a failed SELECT to
 	 * false ("not deactivated"), so a live bearer token whose owning client could not actually be
 	 * checked kept validating for the duration of a transient database failure. The client here is
 	 * genuinely ACTIVE and the token is genuinely fresh; only the deactivation-check read fails.
@@ -276,7 +276,7 @@ class TokensTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 11, R11-2: aafm_oauth_client_is_deactivated() used to read a missing client row
+	 * Note: aafm_oauth_client_is_deactivated() used to read a missing client row
 	 * as "not deactivated" (the same as a confirmed-active row), so a token whose owning client
 	 * row was later deleted - a partial table clear, a manual repair, or a race with the
 	 * abandoned-client reaper - kept validating indefinitely. The token here is genuinely fresh;
@@ -523,7 +523,7 @@ class TokensTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 10, R10-10: same fail-open shape as test_validate_fails_closed_when_the_deactivation_read_fails()
+	 * Same fail-open shape as test_validate_fails_closed_when_the_deactivation_read_fails()
 	 * above, but at the refresh-rotation gate. The client is genuinely ACTIVE; only the
 	 * deactivation-check read fails. Rotation must still be rejected, not granted a fresh pair.
 	 */
@@ -555,7 +555,7 @@ class TokensTest extends TestCase {
 	}
 
 	/**
-	 * 1.7.5 round 4, R4-3: a failed START TRANSACTION must refuse the rotation rather than run
+	 * A failed START TRANSACTION must refuse the rotation rather than run
 	 * the consume+mint pair unwrapped and report success anyway.
 	 */
 	public function test_rotate_refresh_returns_error_when_start_transaction_fails(): void {
@@ -582,7 +582,7 @@ class TokensTest extends TestCase {
 	}
 
 	/**
-	 * 1.7.5 round 4, R4-3: a failed COMMIT must not report the minted tokens as issued - this
+	 * A failed COMMIT must not report the minted tokens as issued - this
 	 * function cannot confirm the consumption and the new pair actually persisted together.
 	 */
 	public function test_rotate_refresh_returns_error_when_commit_fails(): void {
@@ -743,7 +743,7 @@ class TokensTest extends TestCase {
 	}
 
 	/**
-	 * 1.7.5 round 4, R4-2: a genuine query failure must return null, not the same false a
+	 * A genuine query failure must return null, not the same false a
 	 * legitimate "no matching token" gets - the REST caller uses this to avoid reporting a
 	 * database failure as an ordinary 200 revocation no-op.
 	 */
@@ -767,7 +767,7 @@ class TokensTest extends TestCase {
 	}
 
 	/**
-	 * 1.7.5 round 4, R4-2: when the chain-revocation traversal cannot complete (a read fails
+	 * When the chain-revocation traversal cannot complete (a read fails
 	 * partway through), the reuse-detection error must not claim the chain was revoked.
 	 */
 	public function test_rotate_refresh_replay_does_not_overclaim_when_chain_traversal_fails(): void {
@@ -805,10 +805,10 @@ class TokensTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-1: three prior fixes (a one-shot post-UPDATE re-check, then a bounded
+	 * Three prior fixes (a one-shot post-UPDATE re-check, then a bounded
 	 * convergence loop) each collected the lineage first and deactivated it in one UPDATE at the
 	 * end, so a successor minted after the last read but before that final UPDATE was invisible
-	 * and the function still reported success. The round 7 fix inverts the walk: every node is
+	 * and the function still reported success. The fix inverts the walk: every node is
 	 * deactivated BEFORE its children are read, so a concurrent rotation attempt aimed at a node
 	 * already visited by this walk finds that node already inactive and cannot mint at all - there
 	 * is no successor for a later read to miss.
@@ -880,7 +880,7 @@ class TokensTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-1: the per-node deactivate-before-read guarantee the test above proves for
+	 * The per-node deactivate-before-read guarantee the test above proves for
 	 * the first hop off the seed must hold at any depth, not just one hop in. This builds a real
 	 * three-generation chain (gen0 -> gen1 -> gen2, all pre-existing, not injected) and injects a
 	 * concurrent rotation attempt against gen2 - the deepest node - in the same gap: right after
@@ -952,7 +952,7 @@ class TokensTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6, R6-2 (site 1): a failed refresh-token lookup used to read exactly like an
+	 * A failed refresh-token lookup used to read exactly like an
 	 * unknown token, both reported as invalid_grant. A database fault is this pipeline's own
 	 * fault, not evidence the presented token is bad.
 	 */
@@ -972,7 +972,7 @@ class TokensTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6, R6-2 (site 2): the single-winner consumption UPDATE returns false on a
+	 * The single-winner consumption UPDATE returns false on a
 	 * genuine query failure and an integer (0 on a lost race) on success - both used to report
 	 * invalid_grant. Only the race-loss case is a real grant-validity answer.
 	 */
@@ -1003,7 +1003,7 @@ class TokensTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6, R6-2 (site 3): aafm_oauth_client_is_deactivated() correctly fails closed on
+	 * Note: aafm_oauth_client_is_deactivated() correctly fails closed on
 	 * an unreadable clients table, but the caller used to always report "the client is no longer
 	 * active" - true only when the client was genuinely confirmed inactive, not when this
 	 * pipeline simply could not check.
@@ -1035,7 +1035,7 @@ class TokensTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-3: the client check above used to run as two separate queries -
+	 * The client check above used to run as two separate queries -
 	 * aafm_oauth_client_is_deactivated() then, only when that returned true,
 	 * aafm_oauth_client_lookup_failed() - so a failed FIRST query followed by a SUCCESSFUL second
 	 * query could still read the client as genuinely deactivated rather than as a fault. Fails
@@ -1076,7 +1076,7 @@ class TokensTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-3, opposite direction: a genuinely deactivated client found by the first
+	 * Opposite direction: a genuinely deactivated client found by the first
 	 * (and, under the fix, only) client-select query must report invalid_grant even though a
 	 * SECOND such query - the old aafm_oauth_client_lookup_failed() re-probe - would have failed.
 	 * Deactivates the client for real, then fails only a second occurrence of the client-select

@@ -250,7 +250,7 @@ final class OauthRevokeAjaxTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 9, R9-2: aafm_oauth_deactivate_client() used to collapse a real SQL failure
+	 * Note: aafm_oauth_deactivate_client() used to collapse a real SQL failure
 	 * and "0 rows matched" into the same false-turned-true(0) result, so the handler always sent
 	 * success. The client must stay active and the handler must report failure.
 	 */
@@ -277,7 +277,7 @@ final class OauthRevokeAjaxTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 9, R9-2: a failed access-token UPDATE left a live bearer token validating while
+	 * A failed access-token UPDATE left a live bearer token validating while
 	 * the handler still reported success. The token must stay valid and the handler must fail.
 	 */
 	public function test_revoke_grant_reports_failure_when_the_token_revoke_write_fails(): void {
@@ -317,7 +317,7 @@ final class OauthRevokeAjaxTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 10, R10-2: the round 9 fix above only faulted the mutation and left the
+	 * The fix above only faulted the mutation and left the
 	 * confirming read healthy, so it could not see that aafm_oauth_client_is_deactivated() also
 	 * casts a failed SELECT to "not deactivated" - the very read aafm_oauth_deactivate_client() now
 	 * uses to certify. Faulting the deactivating UPDATE and its confirming SELECT together must
@@ -347,7 +347,7 @@ final class OauthRevokeAjaxTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 10, R10-2: same shape as the client-deactivate case above, but for
+	 * Same shape as the client-deactivate case above, but for
 	 * aafm_oauth_delete_consent(), whose old certification (! aafm_oauth_has_consent()) folded a
 	 * failed confirming SELECT into "consent gone" the same way.
 	 */
@@ -395,7 +395,7 @@ final class OauthRevokeAjaxTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 10, R10-2: the revoke handlers call aafm_oauth_revoke_client_codes() and throw
+	 * The revoke handlers call aafm_oauth_revoke_client_codes() and throw
 	 * its result away entirely - the authorization-code table was never certified at all, only the
 	 * client and its tokens were. A code left behind by a failed delete is still redeemable within
 	 * its ~60-second window even after the client is deactivated and its tokens revoked. Faulting
@@ -467,10 +467,10 @@ final class OauthRevokeAjaxTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 11, R11-1: the round 9 fix (test_revoke_grant_reports_failure_when_the_token_-
+	 * The fix (test_revoke_grant_reports_failure_when_the_token_-
 	 * revoke_write_fails, above) faults only the token UPDATE and leaves its confirming
 	 * aafm_oauth_client_has_active_tokens() COUNT healthy, so it cannot see the same
-	 * cancel-two-failures-into-a-false-success shape the round 10 fixes above already cover for
+	 * cancel-two-failures-into-a-false-success shape the fixes above already cover for
 	 * the client-deactivate, consent-delete, and pending-code paths. Faulting the token UPDATE and
 	 * its exact confirming COUNT together must still report failure, and the token row itself
 	 * must still read active. The certification is scoped to aafm_oauth_get_access_token_row()
@@ -580,14 +580,14 @@ final class OauthRevokeAjaxTest extends TestCase {
 	}
 
 	/**
-	 * R2-10 (1.7.5 deferred, round 2): the two AJAX-level tests above fault BOTH the token
+	 * The two AJAX-level tests above fault BOTH the token
 	 * UPDATE and the confirming COUNT, but aafm_ajax_oauth_revoke_client()'s guard is
 	 * `-1 === $revoked || aafm_oauth_client_has_active_tokens(...) || ...` - PHP's `||`
 	 * short-circuits on the already-true `-1 === $revoked`, so the confirming reader is never
 	 * even called and its own fault injection above never actually ran. This asserts
 	 * aafm_oauth_client_has_active_tokens()'s fail-closed contract directly, with nothing else
 	 * able to short-circuit around it. Fails if that reader reverts to treating a failed COUNT
-	 * read as "no active tokens" (0), the R10-2 regression this reader's own docblock names.
+	 * read as "no active tokens" (0), the regression this reader's own docblock names.
 	 */
 	public function test_client_active_tokens_reader_fails_closed_when_its_count_query_fails(): void {
 		global $wpdb;
@@ -653,7 +653,7 @@ final class OauthRevokeAjaxTest extends TestCase {
 	}
 
 	/**
-	 * R2-10 (1.7.5 deferred, round 2): F6's fix (refuse success on `-1 === $revoked`) has never
+	 * F6's fix (refuse success on `-1 === $revoked`) has never
 	 * had a fixture where there is genuinely nothing left to "survive" - every existing fault
 	 * test also mints a real active token, so a regression that dropped the `-1` check entirely
 	 * would still be caught by that token's own confirming read, never by the -1 check itself.

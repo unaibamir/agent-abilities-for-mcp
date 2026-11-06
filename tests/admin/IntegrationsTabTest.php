@@ -319,7 +319,7 @@ final class IntegrationsTabTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 4 MEDIUM: Event Tickets abilities require TEC active too (they're gated
+	 * Event Tickets abilities require TEC active too (they're gated
 	 * on a parent event), but the card reported a bare 'active' from Event Tickets alone - the
 	 * operator could enable abilities that would never actually register. The card must report a
 	 * distinct status instead of claiming a readiness the runtime registration gate doesn't grant,
@@ -450,7 +450,7 @@ final class IntegrationsTabTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 4 MEDIUM: the below-floor status note hardcoded WooCommerce's own
+	 * The below-floor status note hardcoded WooCommerce's own
 	 * constant and version-reader function for EVERY integration, so a TEC site below its real
 	 * floor was told to install a WooCommerce version it likely already had. Must resolve the
 	 * minimum and installed version from TEC's own pair instead.

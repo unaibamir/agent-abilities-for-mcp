@@ -17,7 +17,7 @@
  * because that class of bug is about which cache entries get read and rewritten within one request,
  * not about crossing a network boundary. What this suite cannot exercise - a persistent backend that
  * actually diverges between processes, honors or ignores `$force` for real, or has a remote write
- * fail after already priming its own runtime cache (finding 6 in the 1.7.3 hotfix review) - is
+ * fail after already priming its own runtime cache - is
  * covered by the Redis-backed MCP-sim harness and by manual `ddev wp eval` checks against a live
  * Redis object-cache drop-in, never by this file.
  *
@@ -187,7 +187,7 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 		$this->assertTrue( aafm_read_only_mode() );
 		$this->assertTrue( $persisted );
 
-		// PARTIAL finding 6 (Codex hotfix re-check): a stale `notoptions` entry planted before the
+		// A stale `notoptions` entry planted before the
 		// write - the exact shape this test opens with - must not survive it either. get_option()
 		// consults `notoptions` BEFORE the database, so a write that leaves the option still listed
 		// there would certify as failed (or worse, read back as absent again on the very next
@@ -202,7 +202,7 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 	}
 
 	/**
-	 * MEDIUM (Codex hotfix review, finding 4): the on branch used to call update_option() before
+	 * The on branch used to call update_option() before
 	 * forgetting any stale cache entry. update_option() decides UPDATE-vs-INSERT from get_option()'s
 	 * cached idea of the current value, so with the row absent and the cache still claiming the
 	 * switch was already on, it ran an UPDATE against a row that did not exist, affected nothing,
@@ -247,7 +247,7 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 	}
 
 	/**
-	 * HIGH (Codex hotfix review, finding 2): the settings save used to write both governance
+	 * The settings save used to write both governance
 	 * switches unconditionally before checking either result, so a save that asked to lock
 	 * high-risk abilities AND turn read-only mode off in the same request could fail to persist the
 	 * lock (a stale cache) while still turning read-only mode off - leaving every high-risk ability
@@ -280,7 +280,7 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 	}
 
 	/**
-	 * HIGH (Codex hotfix re-check, new finding 1): the verified ordinary-settings loop used to run
+	 * The verified ordinary-settings loop used to run
 	 * BEFORE either governance switch, so a save that requested read-only mode ON and also happened
 	 * to include an ordinary setting that failed to persist would abort on the ordinary setting and
 	 * never even attempt the requested read-only-on - leaving the site wider open than the operator
@@ -310,7 +310,7 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 	}
 
 	/**
-	 * MEDIUM (Codex hotfix re-check, new finding 1): a deferred permissive switch used to be
+	 * A deferred permissive switch used to be
 	 * represented by a placeholder `true` before any write was attempted for it. When an unrelated
 	 * ordinary setting then failed to verify, the early-exit branch logged that placeholder as if it
 	 * were the switch's real, persisted result - so a request to unlock high-risk abilities that was
@@ -345,7 +345,7 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 	}
 
 	/**
-	 * MEDIUM (Codex hotfix re-check, new finding 1), the early-restrictive-failure branch's copy of
+	 * The early-restrictive-failure branch's copy of
 	 * the same bug: a restrictive failure (the requested high-risk lock cannot persist) used to log
 	 * the paired deferred permissive transition (read-only mode OFF) as a success too, even though
 	 * that write is never even attempted once the save aborts this early.
@@ -390,7 +390,7 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 	}
 
 	/**
-	 * PARTIAL finding 6 remainder (Codex hotfix re-check): certification must be checked against
+	 * Certification must be checked against
 	 * the database row and the object cache's own forced views (aafm_read_option_views()), not a
 	 * subsequent unforced get_option() read that a drop-in could satisfy from a runtime copy primed
 	 * before its own remote write's result was known. These three cases are exactly the ones the
@@ -444,7 +444,7 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 10, R10-1: aafm_read_option_views() used to detect a failed certification read
+	 * Note: aafm_read_option_views() used to detect a failed certification read
 	 * only from $wpdb->last_error, but $wpdb->query() (wp-includes/class-wpdb.php) returns false,
 	 * before last_error is ever touched, when $wpdb->ready is false - so a certifying read run
 	 * while the database connection itself is down used to look like a clean query that simply
@@ -475,7 +475,7 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 10, R10-1: the same unreachable-by-last_error branch, this time from the `query`
+	 * The same unreachable-by-last_error branch, this time from the `query`
 	 * filter returning an empty query - $wpdb->query() (wp-includes/class-wpdb.php) returns false
 	 * immediately in that case too, again without ever touching last_error.
 	 */
@@ -537,7 +537,7 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 	}
 
 	/**
-	 * Codex hotfix review, finding 9: this test's name previously said "enabled list", but it
+	 * This test's name previously said "enabled list", but it
 	 * plants and checks aafm_high_risk_abilities_unlocked, not aafm_enabled_abilities - the sibling
 	 * enabled-list case is test_reset_to_defaults_clears_a_stale_cached_enabled_list() above, which
 	 * covers reset rather than uninstall. Renamed to match what the test actually does.
@@ -581,14 +581,14 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 		$this->assertStringContainsString( 'object cache', strtolower( (string) ( $json['data']['message'] ?? '' ) ) );
 		$row = $this->latest_log_row( 'aafm/read-only-mode' );
 		$this->assertSame( 'error', $row['status'] ?? null, 'The activity log must record the failed switch as an error, never as success.' );
-		// Codex hotfix review, finding 8: the completion flag used to be written before this check,
+		// The completion flag used to be written before this check,
 		// so a reload after this exact failure would have shown the site as "finished" even though
 		// setup never actually completed. It must stay unset while the response is an error.
 		$this->assertFalse( aafm_quickconnect_is_finished(), 'The wizard must not be marked finished when the switch it flips did not persist.' );
 	}
 
 	/**
-	 * MEDIUM (Codex hotfix re-check, new finding 2): aafm_quickconnect_apply_abilities() used to
+	 * Note: aafm_quickconnect_apply_abilities() used to
 	 * discard aafm_set_enabled_abilities()'s verified-write boolean entirely, and the finish handler
 	 * checked only whether read-only mode persisted - so a run whose enabled-abilities write silently
 	 * failed under a stale persistent object cache still reported success and marked the wizard
@@ -618,7 +618,7 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 	}
 
 	/**
-	 * MEDIUM (Codex hotfix re-check, new finding 3): the Abilities-tab AJAX toggle used to log the
+	 * The Abilities-tab AJAX toggle used to log the
 	 * intended ability_enabled/ability_disabled diff BEFORE checking whether the write actually
 	 * persisted, so a stale persistent object cache could leave a success-style row on record for
 	 * an ability that was never actually made reachable. The row written on a failed persist must

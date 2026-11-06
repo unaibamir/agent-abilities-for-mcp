@@ -164,7 +164,7 @@ final class QuickConnectAbilitiesTest extends TestCase {
 	}
 
 	/**
-	 * B18: the wizard changes ability exposure outside the main save path, and those changes left
+	 * The wizard changes ability exposure outside the main save path, and those changes left
 	 * no ability_enabled / ability_disabled rows at all - the audit log's whole point is "when did
 	 * this become reachable, and who made it so", and a wizard run was invisible in it. The apply
 	 * must route through the same toggle-diff logging the main save uses.

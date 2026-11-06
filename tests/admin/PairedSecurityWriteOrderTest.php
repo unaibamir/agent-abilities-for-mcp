@@ -1,6 +1,6 @@
 <?php
 /**
- * Codex round 5, R5-1: the paired exposed/deny AJAX handlers in page.php write the deny
+ * The paired exposed/deny AJAX handlers in page.php write the deny
  * (restrictive) option before the exposed (permissive) one, so a second-write failure leaves the
  * site stricter than requested, never wider. Before this fix the order was reversed: an exposed
  * write that succeeded followed by a deny write that failed left a key reachable that the
@@ -233,7 +233,7 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6, B6-1: a single request that removes a key from BOTH the deny list and the
+	 * A single request that removes a key from BOTH the deny list and the
 	 * exposed list at once (the bundled UI can post both fields together). The simple round-5
 	 * "deny before exposed" order is not direction-aware here: the deny write below drops
 	 * 'secret' immediately, so if the exposed write (which still lists 'secret') then fails, the
@@ -269,7 +269,7 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6, B6-1, the other failure point in the same mixed-direction request: the
+	 * The other failure point in the same mixed-direction request: the
 	 * union write (stage 1) and the exposed write (stage 2) both land, but narrowing deny down
 	 * from the union to the final requested (empty) list (stage 3) fails. The key stays denied
 	 * (deny remains at the old, broader value), which is still at least as strict as requested,
@@ -319,7 +319,7 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-1: the deny-all sentinel `*` must survive the three-stage union even
+	 * The deny-all sentinel `*` must survive the three-stage union even
 	 * when both requested lists are submitted empty. Before this fix, the "old deny" half of
 	 * the union came from aafm_denied_meta_keys(), which strips `*` for display purposes, so
 	 * stage 1 certified an EMPTY union - discarding a live deny-all - and a subsequent exposed
@@ -352,7 +352,7 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-1's other origin for a wrong "old deny" snapshot: a persistent object
+	 * The other origin for a wrong "old deny" snapshot: a persistent object
 	 * cache still answering with a narrower value than the real database row. Before this fix,
 	 * the "old deny" half of the union came from a cache-trusting get_option(), so a stale cache
 	 * claiming the deny list was already empty would make stage 1 certify an empty union even
@@ -387,7 +387,7 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 	}
 
 	/**
-	 * R2-4 sibling (1.7.5 deferred, round 2): a query that itself FAILS reading the old deny row
+	 * A query that itself FAILS reading the old deny row
 	 * is not the same as a genuinely absent/empty row - the stale-cache test above already proves
 	 * the read must consult the database, but a failed database read must not then be treated as
 	 * "nothing was denied before", which would build the stage-1 union from an empty old-deny list
@@ -431,7 +431,7 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6, B6-1's settings.php half: the IP allowlist write already runs before any
+	 * The settings.php half: the IP allowlist write already runs before any
 	 * OAuth-on write in aafm_ajax_save_settings(), so if the allowlist write fails, OAuth must
 	 * never be turned on in the same request - even when the request explicitly asked for it.
 	 */

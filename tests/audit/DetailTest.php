@@ -678,7 +678,7 @@ final class DetailTest extends TestCase {
 	private const MAPPED_ARG_ENTRY_FLOOR = 26;
 
 	/**
-	 * B2-07's completeness guard, and the guard whose absence let nine of thirteen permanent
+	 * The completeness guard, and the guard whose absence let nine of thirteen permanent
 	 * deletes ship writing detail:null.
 	 *
 	 * The destructive set is DERIVED, never restated: aafm_permanent_delete_abilities() is the

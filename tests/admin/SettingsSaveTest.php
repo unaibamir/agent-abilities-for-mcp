@@ -190,8 +190,8 @@ final class SettingsSaveTest extends TestCase {
 	/**
 	 * One Save on the tab, in the shared sticky bar, inside the form. Two save controls would mean
 	 * two bindings and two status elements to keep in step, and this tab has already shipped one
-	 * bug from a hand-maintained parallel list drifting. The button classes and the
-	 * .aafm-save-status span are what admin.js binds to, so they are pinned here too.
+	 * bug from a hand-maintained parallel list drifting. The button classes and the.
+	 * aafm-save-status span are what admin.js binds to, so they are pinned here too.
 	 */
 	public function test_the_single_save_control_sits_in_the_sticky_bar_inside_the_form(): void {
 		ob_start();
@@ -443,7 +443,7 @@ final class SettingsSaveTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6, B6-4: locking the high-risk switch persists before the OAuth-off write is
+	 * Locking the high-risk switch persists before the OAuth-off write is
 	 * even attempted. If that later OAuth-off write then fails to persist, the handler used to
 	 * return straight to wp_send_json_error() without ever logging the lock that had already
 	 * landed - an applied restrictive change with no activity-log row to show for it. The fix logs

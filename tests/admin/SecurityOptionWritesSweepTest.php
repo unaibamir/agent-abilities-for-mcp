@@ -1,12 +1,12 @@
 <?php
 /**
- * Codex hunt F1: the six admin AJAX handlers that save security allowlist options (exposed post
+ * The six admin AJAX handlers that save security allowlist options (exposed post
  * types, post/user/term meta allow+deny) must route every write through
  * aafm_update_option_verified(), never a bare update_option(). A stale persistent object cache
  * can otherwise make the write silently no-op while the handler still reports success (the exact
  * shape aafm_update_option_verified() exists to catch - see includes/option-cache.php).
  *
- * Codex round 5, R5-3 widened this from a fixed scan of includes/admin/page.php alone: the same
+ * This is wider than a fixed scan of includes/admin/page.php alone: the same
  * risk applies to every security/configuration option this plugin defines, wherever in includes/
  * it might be written, not only the original seven. The scan now walks the whole includes/ tree
  * and checks the full guarded list, with an explicit, file-scoped allowlist for the rare bare
@@ -53,8 +53,8 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	 * options that live outside that list on purpose: migration guards, schema-version stamps,
 	 * an allowlist-override option, and aafm_delete_data_on_uninstall (which a reset
 	 * deliberately preserves, so it can never appear in the reset's own list). Deriving from
-	 * the canonical list rather than hand-keeping a second one is the fix for what Codex round 9
-	 * (R9-10) found: four options - the Quick Connect wizard's two flags, the menu-pointer flag,
+	 * the canonical list rather than hand-keeping a second one is the fix for this defect:
+	 * four options - the Quick Connect wizard's two flags, the menu-pointer flag,
 	 * and the review-request state - existed only in aafm_config_option_names(), never in this
 	 * file's own separately hand-kept copy, so their bare update_option()/add_option() calls went
 	 * unnoticed by this sweep even though the writers were sitting right there in includes/.
@@ -83,9 +83,9 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	/**
 	 * Strips one named top-level function's body out of source text, mirrors
 	 * SecurityRegressionTest::strip_function_body(). Used below to scope the discovery.php
-	 * exemption to the seed function alone rather than the whole file (Codex round 6, B6-7).
+	 * exemption to the seed function alone rather than the whole file.
 	 *
-	 * A real token walk, not a line-based brace-depth counter (Codex round 7, R7-7): the prior
+	 * A real token walk, not a line-based brace-depth counter: the prior
 	 * regex-and-line-count version matched the exempt function's declaration line (which also
 	 * carries the opening `{`) without ever counting that brace, so a bare `}` closing line made
 	 * the depth counter go negative without ever satisfying its own "line contains `{`" exit
@@ -204,7 +204,7 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	 * Find the next (direction 1) or previous (direction -1) significant token around a given
 	 * index, mirrors SecurityRegressionTest::significant_token(): whitespace, comments, and
 	 * docblocks never count as significant, so a comment sitting between a call's name and its
-	 * opening paren cannot hide the call from the scan (Codex round 8, R8-6).
+	 * opening paren cannot hide the call from the scan.
 	 *
 	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens token_get_all() output.
 	 * @param int                                           $index Index to look around.
@@ -249,11 +249,11 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	}
 
 	/**
-	 * `use function <name> as <alias>;` imports, mapped by lower-cased alias (Codex round 8,
-	 * R8-6: PHP resolves both function names and their aliases case-insensitively, so a call
+	 * `use function <name> as <alias>;` imports, mapped by lower-cased alias.
+	 * PHP resolves both function names and their aliases case-insensitively, so a call
 	 * through the alias in ANY case must still resolve).
 	 *
-	 * R4-6 (1.7.5 deferred, round 4): this used to be its own hand-rolled regex parser - one of
+	 * This used to be its own hand-rolled regex parser - one of
 	 * three near-identical copies across the test suite, each missing a different subset of legal
 	 * `use` syntax (comments anywhere in the import, comma-separated multiple imports, non-ASCII
 	 * aliases, PHP 8's combined name tokens). It now shares UseImportScanner::parse_aliases() with
@@ -270,11 +270,11 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 
 	/**
 	 * Whether a collapsed name token resolves - directly, or through an imported alias - to the
-	 * given target function name. Case-insensitive throughout (Codex round 8, R8-6): PHP resolves
+	 * given target function name. Case-insensitive throughout: PHP resolves
 	 * function names and `use` aliases case-insensitively, so a differently-cased call or alias
 	 * reference is still the same call.
 	 *
-	 * R4-6 (1.7.5 deferred, round 4): two fixes on top of the alias lookup itself. First, $tokens
+	 * Two fixes on top of the alias lookup itself. First, $tokens
 	 * is expected collapsed (see count_bare_option_writes()), so a PHP 8 fully qualified call like
 	 * `\add_option(...)` arrives here as one token whose text still carries its leading `\` -
 	 * stripped before comparing, since T_STRING-only matching used to miss it outright. Second, a
@@ -298,12 +298,12 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 8, R8-6: whether $tokens contains a real call to $name whose first argument is
+	 * Whether $tokens contains a real call to $name whose first argument is
 	 * the literal string $option. Replaces this test's own regex, which was case-sensitive and
 	 * required literal whitespace (never a comment) between the function name and its opening
 	 * paren - an uppercase call name, or a call with an inline comment before the paren, evaded
 	 * it entirely. A real call is identified the same way SecurityRegressionTest's scanner
-	 * already proved for R8-5: the name/alias match is case-insensitive, the gap to the opening
+	 * already proved: the name/alias match is case-insensitive, the gap to the opening
 	 * paren tolerates comments (significant_token() already skips them), and a method call,
 	 * static call, or declaration is never mistaken for a real call.
 	 *
@@ -318,12 +318,12 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	}
 
 	/**
-	 * R2-7 (1.7.5 deferred, round 2): the exact same matcher as has_bare_option_write(), but
+	 * The exact same matcher as has_bare_option_write(), but
 	 * counting every match rather than stopping at the first - F11's exemption needs to tell
 	 * "exactly the one accepted seed call" apart from "that call plus another one added later in
 	 * the same function," and a boolean existence check cannot make that distinction.
 	 *
-	 * R4-6 (1.7.5 deferred, round 4): $tokens is collapsed here (rather than requiring every
+	 * $tokens is collapsed here (rather than requiring every
 	 * caller to remember to) so a PHP 8 fully qualified call is matched the same as a bare one, and
 	 * the first argument's literal value is decoded with PhpStringLiteral, through a redundant
 	 * wrapping parenthesis if there is one, rather than compared as raw quoted token text - a
@@ -370,7 +370,7 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-7: a violation placed immediately after the exempt function's real
+	 * A violation placed immediately after the exempt function's real
 	 * closing brace must survive the strip. Before the token-based rewrite, the line-based
 	 * counter's depth went negative on the exempt function's own closing `}` without ever
 	 * satisfying its "line contains `{`" exit condition, so stripping ran on past the function's
@@ -391,7 +391,7 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-7: an option write made through a `use function ... as` alias must still
+	 * An option write made through a `use function ... as` alias must still
 	 * be caught. Before this fix, `use function update_option as persist; persist(...)` never
 	 * matched the sweep's regex, which is anchored on the literal name `update_option`.
 	 */
@@ -403,7 +403,7 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 8, R8-6: the retired regex was case-sensitive and required literal whitespace
+	 * The retired regex was case-sensitive and required literal whitespace
 	 * (not a comment) between the function name and its opening paren, so an uppercase call, or
 	 * one with a comment before the paren, evaded it entirely.
 	 */
@@ -420,7 +420,7 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	}
 
 	/**
-	 * R2-7 (1.7.5 deferred, round 2): count_bare_option_writes() must tell one matching call
+	 * Note: count_bare_option_writes() must tell one matching call
 	 * apart from two - has_bare_option_write() (a plain existence check) cannot, which is exactly
 	 * what let a second, unreviewed add_option() inside the exempt function pass the sweep
 	 * unnoticed. Fails if the counter reverts to stopping at the first match.
@@ -436,7 +436,7 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	}
 
 	/**
-	 * R4-6 (1.7.5 deferred, round 4): PHP 8 tokenizes `\add_option(...)` as a single
+	 * PHP 8 tokenizes `\add_option(...)` as a single
 	 * T_NAME_FULLY_QUALIFIED token, never a bare T_STRING. count_bare_option_writes() used to
 	 * match T_STRING only, so this exact spelling of the same call was invisible to the sweep.
 	 */
@@ -447,7 +447,7 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	}
 
 	/**
-	 * R4-6 (1.7.5 deferred, round 4): a fully qualified call bypasses every `use` import - an
+	 * A fully qualified call bypasses every `use` import - an
 	 * alias pointing the bare name "add_option" somewhere else must not stop `\add_option(...)`
 	 * from being recognised as the real global function.
 	 */
@@ -459,7 +459,7 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	}
 
 	/**
-	 * R4-6 (1.7.5 deferred, round 4): the retired regex-based alias parser only recognised a
+	 * The retired regex-based alias parser only recognised a
 	 * single, comment-free, ASCII `use function <name> as <alias>;` statement. A comment anywhere
 	 * inside it, a second comma-separated import in the same statement, or a non-ASCII alias each
 	 * defeated it. All three now go through the shared UseImportScanner.
@@ -476,7 +476,7 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	}
 
 	/**
-	 * R4-6 (1.7.5 deferred, round 4): count_bare_option_writes()'s literal-argument comparison used
+	 * Note: count_bare_option_writes()'s literal-argument comparison used
 	 * to be a raw `substr( $text, 1, -1 ) === $option`, which never decoded PHP's own escape
 	 * sequences - so a hex-escaped option name spelling `"aafm_oauth_\x65nabled"`, which is the
 	 * exact runtime string `aafm_oauth_enabled`, went unrecognised and could smuggle a guarded
@@ -496,7 +496,7 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	}
 
 	/**
-	 * R3-8 (1.7.5 deferred, round 3): extract_function_body() returns only the function's own
+	 * Note: extract_function_body() returns only the function's own
 	 * tokens - a file-level `use function add_option as seed;` never survives that extraction, so
 	 * re-parsing aliases from the extracted body alone (the old call site inside
 	 * test_no_bare_option_write_names_a_security_allowlist_option()) always finds none, and an
@@ -529,9 +529,8 @@ PHP;
 	}
 
 	/**
-	 * R2-7/R2-8/F11/R10-9 (1.7.5 deferred, rounds 2-4): the "duplicate-call fixture" every round
-	 * from R2-7 onward said was missing. The real exemption sweep below (`assertSame( 1,
-	 * $body_matches, ... )`) has, since round 3, correctly required EXACTLY one accepted call
+	 * The "duplicate-call fixture". The real exemption sweep below (`assertSame( 1,
+	 * $body_matches, ... )`) has correctly required EXACTLY one accepted call
 	 * inside each exempt function - but until now no test exercised that decision against a real
 	 * duplicate, so a sixth round could not have told "the exact-one policy still holds" from "the
 	 * production assertion silently regressed to existence-only" without re-deriving it from
@@ -543,7 +542,7 @@ PHP;
 	 * - a second, unreviewed literal call to the same option inside the same function (must
 	 *   count 2, which the real sweep's assertSame( 1, ... ) would reject);
 	 * - a second call reached only through a whole-file `use function add_option as seed;` alias
-	 *   (must also count 2 - a body-only alias re-parse, R3-8's bypass, would miss it and wrongly
+	 *   (must also count 2 - a body-only alias re-parse, the known bypass, would miss it and wrongly
 	 *   report 1).
 	 *
 	 * @return array<int,array{0:string,1:string}> Each row: [exempt function name, accepted option name].
@@ -632,7 +631,7 @@ PHP;
 
 	/**
 	 * Static source scan, mirrors PageBuilderGuardSweepTest's mechanical approach, widened from
-	 * includes/admin/page.php alone to every file under includes/ (Codex round 5, R5-3): a bare
+	 * includes/admin/page.php alone to every file under includes/: a bare
 	 * update_option()/delete_option()/add_option() call naming one of the guarded security
 	 * options is a regression, whichever file or function it appears in. Reading the source text
 	 * rather than running it catches a future edit that reintroduces a bare write even if it
@@ -643,15 +642,15 @@ PHP;
 	 * inside aafm_oauth_seed_default_options() (includes/oauth/discovery.php), which run once at
 	 * activation and seed both OAuth options to their safe default. A file-wide exemption for an
 	 * option name used to cover this case, but it also silently permitted a bare write to that
-	 * option ANYWHERE ELSE in the file (Codex round 6, B6-7). The exempt function's body is
+	 * option ANYWHERE ELSE in the file. The exempt function's body is
 	 * stripped out of its file's source before the scan runs instead, so the exemption is scoped
 	 * to the one call it actually covers, and every other line in the file - including every
 	 * guarded option - is checked like any other file.
 	 *
 	 * The single seed call inside aafm_quickconnect_flag_menu_pointer()
 	 * (includes/admin/onboarding-pointer.php) used to get the same whole-function strip, but that
-	 * hid more than the one safe call: the function's own certification logic (Codex round 10,
-	 * R10-9) sat inside the same stripped body, so a later edit that ripped the certification back
+	 * hid more than the one safe call: the function's own certification logic
+	 *  sat inside the same stripped body, so a later edit that ripped the certification back
 	 * out - or pasted in an unrelated bare write to a different guarded option - would have left
 	 * this test green either way. $allowed_add_option_calls named the exact (file, option) pair
 	 * instead: only a bare add_option() naming that option in that file was let through, so the
@@ -665,14 +664,14 @@ PHP;
 	 * fails like any other guarded write, and the loop separately proves the exempted call
 	 * genuinely exists inside that function, so removing the seed call is still noticed.
 	 *
-	 * The scan is token-based rather than regex-based (Codex round 8, R8-6): the retired regex
+	 * The scan is token-based rather than regex-based: the retired regex
 	 * was case-sensitive and required literal whitespace, never a comment, between the function
 	 * name and its opening paren, so `UPDATE_OPTION( ... )` or a call with an inline comment
 	 * before the paren evaded it entirely.
 	 */
 	public function test_no_bare_option_write_names_a_security_allowlist_option(): void {
 		$guarded_options = $this->guarded_security_options();
-		// Codex round 10, R10-9: a bare add_option() naming this exact option in this exact file
+		// A bare add_option() naming this exact option in this exact file
 		// is the accepted seed-once idiom (aafm_quickconnect_flag_menu_pointer(), includes/admin/
 		// onboarding-pointer.php) - never update_option() or delete_option(), and never any other
 		// guarded option, both of which stay violations anywhere in the file.
@@ -683,7 +682,7 @@ PHP;
 		// verifies no matching call exists anywhere in the file OUTSIDE that function, and that
 		// one genuinely exists inside it (so removing the seed call is itself still noticed).
 		//
-		// R3-8 (1.7.5 deferred, round 3): aafm_oauth_seed_default_options() (includes/oauth/
+		// aafm_oauth_seed_default_options() (includes/oauth/
 		// discovery.php) used to get its own, separate, whole-function-body strip ($exempt_functions
 		// below, now removed) instead of this precise per-call exemption - the exact defect this
 		// file's own docblock above already explains onboarding-pointer.php was rescued from. That
@@ -745,12 +744,12 @@ PHP;
 							"A bare {$bare_call}() naming {$option} was found in {$relative} outside {$pointer_exemption['function']}() - the accepted seed-once idiom is scoped to that one function only."
 						);
 						// And prove the exempted call exists EXACTLY ONCE inside that function
-						// (R2-7, 1.7.5 deferred round 2): a bare existence check would still pass
+						// A bare existence check would still pass
 						// if a second, unreviewed call to the same option were added alongside
 						// the accepted seed call, inside the same exempt function - the exemption
 						// is for one specific call, not an unlimited allowance for that function.
 						//
-						// R3-8 (1.7.5 deferred, round 3): extract_function_body() returns ONLY the
+						// extract_function_body() returns ONLY the
 						// body's own tokens - no file-level `use` statements survive the extraction,
 						// so re-parsing aliases from $body_tokens alone always finds none. A second
 						// call added via a file-level `use function add_option as seed;` then

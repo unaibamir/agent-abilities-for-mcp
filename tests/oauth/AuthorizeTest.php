@@ -223,7 +223,7 @@ class AuthorizeTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-2: a failed query leaves the PREVIOUS query's row sitting in
+	 * A failed query leaves the PREVIOUS query's row sitting in
 	 * $wpdb->last_result, so a consent check built on a bare $wpdb->get_var() could not tell "this
 	 * query itself failed" apart from "the previous query found something". At the live
 	 * authorization-code redemption call site, the query immediately before the consent check is
@@ -565,7 +565,7 @@ class AuthorizeTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 9, R9-6: a failed consent write must not let the approve submission mint and
+	 * A failed consent write must not let the approve submission mint and
 	 * redirect a code. Before the fix, aafm_oauth_record_consent() discarded $wpdb->replace()'s
 	 * result, so the approval carried on regardless and handed back a code that redemption would
 	 * later refuse as invalid_grant, after the client was already told approval succeeded.
@@ -760,8 +760,8 @@ class AuthorizeTest extends TestCase {
 		$this->assertStringContainsString( 'value="approve"', $html );
 		$this->assertStringContainsString( 'value="deny"', $html );
 
-		// Keyboard focus indicator (WCAG 2.4.7): the buttons paint a visible ring on
-		// :focus-visible. The admin ring token is not enqueued on this standalone page,
+		// Keyboard focus indicator (WCAG 2.4.7): the buttons paint a visible ring on:
+		// focus-visible. The admin ring token is not enqueued on this standalone page,
 		// so the consent stylesheet carries its own focus rule.
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a bundled static asset from disk in a test, not a remote URL.
 		$consent_css = (string) file_get_contents( AAFM_PLUGIN_DIR . 'assets/consent.css' );

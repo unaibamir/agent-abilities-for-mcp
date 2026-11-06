@@ -212,7 +212,7 @@ final class LogTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-2: the version guard used to read get_option()'s cache-trusting view, so
+	 * The version guard used to read get_option()'s cache-trusting view, so
 	 * a stale persistent cache claiming the current version was already stored, over a real
 	 * database row that is genuinely behind, would skip the self-heal for good - permanently,
 	 * since nothing else ever re-checks the row. Checks the real database row directly

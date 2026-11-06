@@ -121,7 +121,7 @@ final class ActivityTabTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 9, R9-8: a failed TRUNCATE used to still let the handler write the "Activity
+	 * A failed TRUNCATE used to still let the handler write the "Activity
 	 * log cleared" marker and report success, leaving the original row plus a marker falsely
 	 * claiming the clear happened. Both must now fail: the handler must report an error and the
 	 * original row must survive untouched by any marker.
@@ -163,7 +163,7 @@ final class ActivityTabTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 10, R10-3: the round 9 fix above only faulted the TRUNCATE and left the
+	 * The fix above only faulted the TRUNCATE and left the
 	 * confirming COUNT healthy, so it could not see that a get_var()-style confirming read that
 	 * itself fails casts straight to `(int) null === 0` - the same "unreadable, so call it empty"
 	 * mistake the TRUNCATE fix was meant to close, one query later. Faulting the TRUNCATE and its

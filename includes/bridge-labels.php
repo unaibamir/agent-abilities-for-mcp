@@ -198,7 +198,7 @@ function aafm_bridge_personal_data_kind( string $slug ): string {
 		'membership' => array( 'member', 'members', 'membership', 'subscriber', 'subscribers' ),
 		'orders'     => array( 'order', 'orders', 'customer', 'customers', 'billing', 'refund', 'refunds' ),
 		'payments'   => array( 'charge', 'charges', 'payment-intent', 'dispute', 'disputes', 'payout', 'payouts' ),
-		'users'      => array( 'user-activity', 'failed-logins', 'login-attempts' ),
+		'users'      => array( 'user', 'users', 'contact', 'contacts', 'lead', 'leads', 'user-activity', 'failed-logins', 'login-attempts' ),
 	);
 
 	$namespaces = array(
@@ -219,7 +219,7 @@ function aafm_bridge_personal_data_kind( string $slug ): string {
 	if ( isset( $namespaces[ $ns ] ) ) {
 		return $namespaces[ $ns ];
 	}
-	if ( is_array( $added ) && isset( $added[ $ns ], $tokens[ $added[ $ns ] ] ) ) {
+	if ( is_array( $added ) && isset( $added[ $ns ] ) && is_string( $added[ $ns ] ) && isset( $tokens[ $added[ $ns ] ] ) ) {
 		return (string) $added[ $ns ];
 	}
 

@@ -236,6 +236,16 @@ function aafm_bridge_personal_data_kind( string $slug ): string {
 }
 
 /**
+ * The short notice on one flagged tool. The group states the full reasoning once.
+ *
+ * @param string $kind Result of aafm_bridge_personal_data_kind().
+ * @return string '' when the tool is not flagged.
+ */
+function aafm_bridge_personal_data_row_notice( string $kind ): string {
+	return '' === $kind ? '' : __( 'May return personal data.', 'agent-abilities-for-mcp' );
+}
+
+/**
  * The notice for a tool that may return personal data. An indicator, never a determination.
  *
  * @param string $kind Result of aafm_bridge_personal_data_kind().

@@ -64,7 +64,7 @@ function aafm_tec_events_registry_definitions(): array {
 	return array(
 		'aafm/tec-get-events'   => array(
 			'label'        => __( 'Get events', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'List events via the Events Calendar ORM (tribe_events()), filtered by an optional free-text search term and an optional status (publish by default; draft, pending and future need edit access to events, private needs read-private access). Requires the object-independent read capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'List events via the Events Calendar ORM (tribe_events()), filtered by an optional free-text search term and an optional status (publish by default; draft, pending and future need edit access to events, private needs read-private access). Drafts, pending and future events are limited to the caller\'s own unless they can edit other people\'s events. Requires the object-independent read capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'tec',

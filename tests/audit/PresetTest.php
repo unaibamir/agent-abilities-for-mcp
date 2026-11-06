@@ -188,6 +188,15 @@ final class PresetTest extends TestCase {
 		}
 	}
 
+	public function test_the_summaries_name_playbooks_because_the_presets_reach_them(): void {
+		$presets = aafm_access_presets();
+
+		foreach ( array( 'content_editor', 'shop_manager' ) as $preset ) {
+			$this->assertTrue( aafm_preset_permits( $preset, 'aafm/get-playbook' ), $preset );
+			$this->assertStringContainsString( 'playbooks', $presets[ $preset ]['summary'], $preset );
+		}
+	}
+
 	public function test_count_includes_enabled_bridged_reads(): void {
 		$this->register_foreign();
 		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts', 'aafm/create-post', 'aafm/get-site-info' ) );

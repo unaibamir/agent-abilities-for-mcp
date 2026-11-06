@@ -141,6 +141,14 @@ The plugin calls no AI provider and sends no telemetry. It makes two kinds of re
 The Model Context Protocol is an open specification that Anthropic originally developed. Claude, ChatGPT, Cursor, VS Code, Gemini and other product names belong to their owners, and Agent Abilities for MCP is a third-party plugin that isn't affiliated with, endorsed by or sponsored by any of them.
 
 ## Changelog
+### 1.11.0
+
+* **Feature:** The Other plugins tab says which plugin provides each group of tools (or its namespace, when the plugin cannot be identified), labels each tool Read, Write or Destructive from the plugin's own annotations (an unlabelled tool is treated as destructive and says so), and marks tools that may return personal data such as form entries, orders, learner or member records. That mark is a hint from the plugin and tool name, not a full check.
+* **Feature:** When a plugin update or a newly activated plugin adds tools, a "New tools since your last review" card lists them. They stay off until you switch them on, and Settings can send a notification for them.
+* **Feature:** Each plugin on the Other plugins tab has an "Allow only read tools" button, and the Activity Log can filter to one plugin's tools.
+* **Fix:** A bridged tool's error names the plugin as WordPress shows it, for example "WPForms Lite" instead of "wpforms", or names the tool namespace and says so when the plugin cannot be identified. The Quick Connect note no longer promises deletes go to Trash, the upload tools name the upload-files capability, and Content editor and Shop manager say they can read playbooks.
+* **Chore:** The TEC events list says whose draft events it returns, the Avada descriptions lost a dash, and leftover internal notes came out of the code comments.
+
 ### 1.10.2
 
 * **Fix:** A request from another site's web page now gets a 403 even when it carries wrong credentials, and responses requested with ?_envelope=1 send Cache-Control: no-store like every other response.

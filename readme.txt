@@ -300,6 +300,14 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 
 == Changelog ==
 
+= 1.11.0 =
+
+* **Feature:** The Other plugins tab says which plugin provides each group of tools (or its namespace, when the plugin cannot be identified), labels each tool Read, Write or Destructive from the plugin's own annotations (an unlabelled tool is treated as destructive and says so), and marks tools that may return personal data such as form entries, orders, learner or member records. That mark is a hint from the plugin and tool name, not a full check.
+* **Feature:** When a plugin update or a newly activated plugin adds tools, a "New tools since your last review" card lists them. They stay off until you switch them on, and Settings can send a notification for them.
+* **Feature:** Each plugin on the Other plugins tab has an "Allow only read tools" button, and the Activity Log can filter to one plugin's tools.
+* **Fix:** A bridged tool's error names the plugin as WordPress shows it, for example "WPForms Lite" instead of "wpforms", or names the tool namespace and says so when the plugin cannot be identified. The Quick Connect note no longer promises deletes go to Trash, the upload tools name the upload-files capability, and Content editor and Shop manager say they can read playbooks.
+* **Chore:** The TEC events list says whose draft events it returns, the Avada descriptions lost a dash, and leftover internal notes came out of the code comments.
+
 = 1.10.2 =
 
 * **Fix:** A request from another site's web page now gets a 403 even when it carries wrong credentials, and responses requested with ?_envelope=1 send Cache-Control: no-store like every other response.
@@ -389,6 +397,10 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 [Full release history](https://agentabilitieswp.com/changelog/?utm_source=wordpress.org&utm_medium=readme&utm_campaign=plugin-listing).
 
 == Upgrade Notice ==
+
+= 1.11.0 =
+
+Tools that other plugins add after an update now wait for your review and stay off until you switch them on. Nothing you have switched on changes.
 
 = 1.10.2 =
 

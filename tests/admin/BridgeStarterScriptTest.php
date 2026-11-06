@@ -28,7 +28,7 @@ final class BridgeStarterScriptTest extends TestCase {
 		$start = strpos( $js, $token );
 		$this->assertNotFalse( $start, "$token not found in admin.js." );
 		$next = preg_match( '/\n\t\t(?:async )?#\w+\(.*\) \{/', $js, $m, PREG_OFFSET_CAPTURE, (int) $start + strlen( $token ) );
-		return substr( $js, (int) $start, 1 === $next ? (int) $m[0][1] - (int) $start : null );
+		return 1 === $next ? substr( $js, (int) $start, (int) $m[0][1] - (int) $start ) : substr( $js, (int) $start );
 	}
 
 	public function test_the_starter_handler_confirms_before_it_posts_on_every_path(): void {

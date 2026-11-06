@@ -75,7 +75,7 @@ final class BridgeDirectoryLabelsTest extends TestCase {
 		$this->assertNotFalse( $value, "No row for $slug." );
 		$start = (int) strrpos( substr( $html, 0, (int) $value ), 'aafm-ability-row' );
 		$end   = strpos( $html, 'aafm-ability-row', (int) $value );
-		return substr( $html, $start, false === $end ? null : $end - $start );
+		return false === $end ? substr( $html, $start ) : substr( $html, $start, $end - $start );
 	}
 
 	public function test_each_group_says_who_provides_it(): void {

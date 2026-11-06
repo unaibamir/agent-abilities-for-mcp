@@ -68,7 +68,7 @@ final class SafetyTest extends TestCase {
 	}
 
 	/**
-	 * Doc 214, finding 5: aafm_max_title_len() lacked the same post-filter re-clamp its sibling
+	 * Note: aafm_max_title_len() lacked the same post-filter re-clamp its sibling
 	 * aafm_rate_limit_per_min() already has, so a filter returning a negative value silently
 	 * disabled the cap (aafm_title_within_limit() treats $max <= 0 as unlimited).
 	 */

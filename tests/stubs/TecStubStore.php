@@ -178,7 +178,7 @@ namespace AAFM\Tests {
 			foreach ( $meta as $key => $value ) {
 				if ( '_EventOrganizerID' === $key ) {
 					delete_post_meta( $id, $key );
-					// Codex hunt F5: the real repository (Repositories/Event.php) silently
+					// The real repository (Repositories/Event.php) silently
 					// drops an organizer id that doesn't actually name a tribe_organizer post
 					// rather than erroring - reproduced here so a caller that skips this
 					// plugin's own aafm_tec_validate_venue_organizer_ids() check has something

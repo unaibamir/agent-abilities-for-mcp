@@ -548,7 +548,7 @@ final class HelpersTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7 R7-3: the probe used to pass the literal string 'post' as the object subtype
+	 * The probe used to pass the literal string 'post' as the object subtype
 	 * no matter what post type the meta actually belonged to. register_post_meta() for a
 	 * non-'post' type registers its sanitize_callback on the subtype-specific
 	 * sanitize_post_meta_{key}_for_{subtype} hook (wp-includes/meta.php), which sanitize_meta()
@@ -571,7 +571,7 @@ final class HelpersTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7 R7-3, term-meta sibling: the probe used to pass the literal string 'term',
+	 * Term-meta sibling: the probe used to pass the literal string 'term',
 	 * which is never a real taxonomy name, so a callback registered via
 	 * register_term_meta( $taxonomy, ... ) for ANY taxonomy was always invisible to it.
 	 */
@@ -679,10 +679,10 @@ final class HelpersTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-4: aafm_post_field_write_confirmed()'s "nothing asked" branch used to be
+	 * Note: aafm_post_field_write_confirmed()'s "nothing asked" branch used to be
 	 * judged from the raw values alone ($intended === $old), blind to whether $old was already in
 	 * the field's own canonical (sanitized) form - the same defect the retired meta confirmer's
-	 * round 6, R6-4 fix (2781422) closed for meta. Resubmitting a non-canonical $old is a real
+	 * fix closed for meta. Resubmitting a non-canonical $old is a real
 	 * ask, since the write is still expected to land on the canonical form a genuinely different
 	 * value would have to reach; a persistence veto that instead leaves storage at the old,
 	 * non-canonical value must not be waved through as a confirmed no-op just because the caller's
@@ -715,7 +715,7 @@ final class HelpersTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 8, R8-2: get_post_field() returns '' both when a field is genuinely empty and
+	 * Note: get_post_field() returns '' both when a field is genuinely empty and
 	 * when the read that was meant to confirm it failed - get_post() (wp-includes/post.php)
 	 * returns null on a failed query the same way it does on a real "no such row", and
 	 * get_post_field() maps that null to '' exactly like it maps a real empty field to ''. A

@@ -3,8 +3,8 @@
  * A test double for the part of Yoast SEO's WPSEO_Meta that decides what a post meta write
  * stores. Yoast deletes a field's row, and reports the write as done, when the value written is
  * that field's default; its readers then return the default for the missing row. The methods
- * below copy wordpress-seo 28.5, inc/class-wpseo-meta.php:590-603 (remove_meta_if_default) and
- * :633-635 (meta_value_is_default), with the default of each field the plugin writes.
+ * below copy wordpress-seo 28.5, inc/class-wpseo-meta.php:590-603 (remove_meta_if_default) and:
+ * 633-635 (meta_value_is_default), with the default of each field the plugin writes.
  *
  * Loaded by the tests that use it, never by the bootstrap. Each test attaches the filter itself.
  *

@@ -16,7 +16,7 @@ namespace AAFM\Tests;
 /**
  * Process-wide backing store for the WooCommerce payment gateway stubs.
  *
- * Doc 214, finding 6 originally noted that aafm_wc_gateway_shape() (gateways.php) read
+ * Note: aafm_wc_gateway_shape() (gateways.php) read
  * $gateway->title and ->description as plain public properties rather than through
  * get_title()/get_description(), so this store applied no WooCommerce filters to match. Register
  * 1.7 reversed that: get_title() and get_description() apply the 'woocommerce_gateway_title' and
@@ -48,7 +48,7 @@ class WcGatewayStubStore {
 	/**
 	 * Setting keys whose writes are rejected (value NOT persisted) while other keys keep working.
 	 * Models a PARTIAL persistence failure - e.g. the title landing while the enabled write dies -
-	 * so the executor's what-actually-persisted reporting is exercisable (B32).
+	 * so the executor's what-actually-persisted reporting is exercisable.
 	 *
 	 * @var array<int,string>
 	 */

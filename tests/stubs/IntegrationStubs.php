@@ -88,7 +88,7 @@ trait IntegrationStubs {
 	 * string. The rank_math_* post meta (incl. the serialized robots array and the dynamic schema
 	 * keys) is read/written with core get_post_meta/update_post_meta, so no extra store is needed.
 	 *
-	 * Also defines a stub \RankMath\Sitemap\Cache_Watcher (fix round 1, delegation audit sweep):
+	 * Also defines a stub \RankMath\Sitemap\Cache_Watcher:
 	 * the real class's invalidate_post() is a public static that records nothing, so a stub that
 	 * only records its calls is enough to prove which write paths call it and which do not, without
 	 * modelling the real sitemap cache itself.
@@ -134,10 +134,10 @@ trait IntegrationStubs {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
 			eval( $this->aafm_aioseo_post_model_source() );
 		}
-		// Fix round 2 (assertion-count reconciliation): the stubbed AIOSEO must look like a
+		// The stubbed AIOSEO must look like a
 		// SUPPORTED one, since that is what it is standing in for. aafm_aioseo_version() has no
 		// real AIOSEO_VERSION constant to read in this environment (only the marker function
-		// above is defined), so without this the version floor added in fix round 2 fails closed
+		// above is defined), so without this the version floor fails closed
 		// for every test that relies on real (unforced) detection rather than the outer
 		// aafm_integration_active_aioseo filter.
 		//
@@ -368,7 +368,7 @@ PHP;
 	protected function stub_wc_order_statuses(): void {
 		if ( ! function_exists( 'wc_get_order_statuses' ) ) {
 			// Serves WcOrderStubStore::$order_statuses (the default seven; a test can add custom
-			// statuses the way real WC's wc_order_statuses filter lets plugins do - B52).
+			// statuses the way real WC's wc_order_statuses filter lets plugins do).
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
 			eval( 'function wc_get_order_statuses() { return \AAFM\Tests\WcOrderStubStore::$order_statuses; }' );
 		}

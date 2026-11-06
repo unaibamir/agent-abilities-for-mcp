@@ -23,7 +23,7 @@ namespace AAFM\Tests;
  * it. stub_wc_shipping() reset()s and seeds it each test; reset_integration_stubs() clears it on
  * tear-down.
  *
- * Doc 214, finding 6: this store deliberately applies no WooCommerce filters, checked and
+ * This store deliberately applies no WooCommerce filters, checked and
  * confirmed rather than assumed, for both entities it backs. Zone shaping
  * (aafm_redact_wc_shipping_zone(), aafm_rich_wc_shipping_zone() in shipping.php) reads
  * $zone->get_data(), and real WC_Data::get_data() (abstract-wc-data.php) returns

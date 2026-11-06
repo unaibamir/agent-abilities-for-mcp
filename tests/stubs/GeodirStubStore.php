@@ -7,7 +7,7 @@
  * TecStubStore.php's own "not unconditionally at bootstrap" discipline, since defining a global
  * function is a one-way, process-wide operation that would otherwise leak into every later test.
  *
- * Codex final round 3 MEDIUM: this stub used to store fields as ordinary post meta, which meant
+ * This stub used to store fields as ordinary post meta, which meant
  * neither of the real geodir_get_post_info()'s two filter points ('geodir_post_info_query' on
  * the SQL, 'geodir_get_post_info' on the returned object - see includes/abilities/
  * geodirectory.php's own docblock) could be genuinely exercised against it, and a raw direct-DB

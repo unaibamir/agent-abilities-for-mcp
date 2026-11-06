@@ -22,7 +22,7 @@ namespace AAFM\Tests;
  * installed. seed_wc_orders() resets + seeds it per test, and reset_integration_stubs() clears it
  * via reset().
  *
- * Doc 214, finding 6: neither WC_Order nor WC_Order_Refund's getters applied a WooCommerce filter,
+ * Neither WC_Order nor WC_Order_Refund's getters applied a WooCommerce filter,
  * unlike real WC_Order (get_prop()-backed getters filtered 'woocommerce_order_get_{prop}', plus
  * get_order_number()'s own 'woocommerce_order_number' and get_items()'s
  * 'woocommerce_order_get_items') and real WC_Order_Refund ('woocommerce_order_refund_get_{prop}').
@@ -95,7 +95,7 @@ class WcOrderStubStore {
 	/**
 	 * The map wc_get_order_statuses() serves, mirroring the real function's default seven plus
 	 * whatever a test adds - real WooCommerce passes its map through the wc_order_statuses filter,
-	 * so plugins can register custom statuses (B52). reset() restores the default seven.
+	 * so plugins can register custom statuses. reset() restores the default seven.
 	 *
 	 * @var array<string,string>
 	 */
@@ -145,7 +145,7 @@ class WcOrderStubStore {
 
 	/**
 	 * When true, WC_Order::update_status() returns false without changing anything - the real
-	 * method swallows its own exceptions and returns false on a failed transition (B55).
+	 * method swallows its own exceptions and returns false on a failed transition.
 	 *
 	 * @var bool
 	 */
@@ -543,7 +543,7 @@ class WcOrderStubStore {
 						'added_by'      => $row['added_by_user'] ? 'AAFM Test User' : 'system',
 						'order_id'      => $order_id,
 					);
-					// Doc 214, finding 6: real wc_get_order_note() (wc-order-functions.php) applies this
+					// Real wc_get_order_note() (wc-order-functions.php) applies this
 					// exact filter over the whole note array before casting to an object. The second
 					// argument there is the backing WP_Comment; null here, since the stub has no real
 					// comment behind a note - passing a fabricated stand-in would be less honest than

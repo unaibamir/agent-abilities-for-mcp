@@ -153,7 +153,7 @@ function aafm_wc_get_variation( int $id ): ?\WC_Product_Variation {
 	// Anything else at this id (a non-variation product, or false) is not a valid variation
 	// target. A variation-type product is always returned as a WC_Product_Variation by
 	// wc_get_product(), so the instanceof check above already covers it - there is no separate
-	// "WC_Product whose type is variation" case to handle (B11).
+	// "WC_Product whose type is variation" case to handle.
 	return null;
 }
 
@@ -327,7 +327,7 @@ function aafm_exec_wc_list_product_variations( array $input ) {
 		return aafm_generic_error();
 	}
 
-	// B28: only variable products have variations. get_children() is NOT variation-specific - on a
+	// Only variable products have variations. get_children() is NOT variation-specific - on a
 	// grouped product it returns the grouped child PRODUCTS, so counting it as `total` while every
 	// row fails the variation check produced {variations:[], total:N}, a total contradicting its own
 	// rows. Refuse a non-variable parent with an actionable error instead.
@@ -604,7 +604,7 @@ function aafm_wc_unknown_variation_attributes_error( \WC_Product $parent_product
 	// variation attribute that WooCommerce's stored parent configuration can never match. The
 	// product write sibling already reads the parent in edit context for exactly this reason
 	// (products.php:722); this validator is newer and did not carry the guard across. Same lesson
-	// as R6-1, one file over.
+	// as the product write path, one file over.
 	$parent_attributes = $parent_product->get_attributes( 'edit' );
 	$declared          = array_map( 'strval', array_keys( $parent_attributes ) );
 	$for_variations    = array();
@@ -772,7 +772,7 @@ function aafm_wc_invalid_variation_attribute_values_error( array $parent_attribu
  * right answer. On a plugin whose whole point is least-privilege governance, a write-on-validate
  * path is not an acceptable shortcut. So the options are resolved here, read-only.
  *
- * Sweep finding 1 (208 FIX-2 item 3): the taxonomy branch used to resolve each option id one at a
+ * The taxonomy branch used to resolve each option id one at a
  * time via aafm_wc_find_attribute_term() (get_term_by() per id). This caller always reads the
  * parent in 'edit' context (aafm_wc_unknown_variation_attributes_error():608), which is exactly
  * the context WC_Product_Data_Store_CPT::read_attributes() populates a taxonomy attribute's
@@ -1019,7 +1019,7 @@ function aafm_exec_wc_update_product_variation( array $input ) {
 	// every real attribute the variation had is cleared, so the variation ends up reading "Any" on
 	// everything while the response reports success.
 	if ( array_key_exists( 'attributes', $input ) ) {
-		// 1.7.2 finding 1: 'edit' context, not the default 'view'. The variation's parent is
+		// 'edit' context, not the default 'view'. The variation's parent is
 		// resolved here to VALIDATE and APPLY the attribute write against - the same identity-
 		// sensitive use as the delete path's cache-bust parent id below, which already reads
 		// 'edit' for exactly this reason (WC_Data::get_prop() runs the

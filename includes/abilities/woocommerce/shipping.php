@@ -139,7 +139,7 @@ function aafm_wc_shipping_registry_definitions(): array {
 /**
  * Resolve a zone_id to a WC_Shipping_Zone, or null when unavailable or unknown.
  *
- * FIX-3 item 2 (sweep finding, A1 batch): this used to hand-instantiate
+ * This used to hand-instantiate
  * `new \WC_Shipping_Zone( $zone_id )` inside a try/catch plus a redundant id-match re-check.
  * WooCommerce ships the exact resolver for this job, \WC_Shipping_Zones::get_zone( $zone_id )
  * (class-wc-shipping-zones.php:78-80, a one-line wrapper around get_zone_by()), which does the
@@ -166,7 +166,7 @@ function aafm_wc_get_shipping_zone_object( int $zone_id ): ?\WC_Shipping_Zone {
 
 /**
  * The clean not-found error for an unknown shipping zone id - same contract as the tax sibling's
- * aafm_not_found (B33).
+ * aafm_not_found.
  *
  * @return \WP_Error
  */
@@ -626,7 +626,7 @@ function aafm_rich_wc_shipping_method( \WC_Shipping_Method $method ): array {
 	// catches names matching a known secret pattern (key/secret/token/password/api/...) and
 	// cannot be exhaustive: a carrier plugin storing a credential under an unlisted field name
 	// (e.g. iban, bic, sort_code, or the British spelling licence) still reaches the wire.
-	// Best-effort, not a completeness guarantee - see the final review's finding 4.
+	// Best-effort, not a completeness guarantee.
 	// $method->settings is WooCommerce's LEGACY GLOBAL bucket and is empty for every zone
 	// method instance on WC 2.6+. The real per-instance configuration (title, cost,
 	// tax_status) lives in instance_settings, which is also where our own write path
@@ -986,7 +986,7 @@ function aafm_exec_wc_update_shipping_method( array $input ) {
 	// by instance_id. WC core toggles it with a direct $wpdb->update() and then bumps the
 	// shipping transient version; there is no higher-level API for this column.
 	//
-	// B32 ordering: this is the only write in this executor whose failure is DETECTABLE
+	// This is the only write in this executor whose failure is DETECTABLE
 	// ($wpdb->update() returns false on a genuine DB error; update_option() cannot distinguish
 	// failure from an unchanged value). Running it before the title write means its error path
 	// returns while nothing has been changed yet - the old sequence persisted the title first and
@@ -1013,7 +1013,7 @@ function aafm_exec_wc_update_shipping_method( array $input ) {
 			);
 		}
 
-		// B42: WooCommerce fires this action from all three of its own toggle write paths (AJAX
+		// WooCommerce fires this action from all three of its own toggle write paths (AJAX
 		// shipping_zone_methods_save_changes, REST v2 shipping-zone-methods, and the v4
 		// ShippingZoneMethodService), each gated on the $wpdb->update() rows-affected count - a
 		// no-change toggle affects zero rows and fires nothing. Mirror the signature exactly:
@@ -1092,7 +1092,7 @@ function aafm_exec_wc_update_shipping_method( array $input ) {
 
 	// Re-resolve from the zone so the returned shape reflects what was just persisted. Every write
 	// above has already succeeded by this point, so a failed re-read must say the changes were
-	// saved rather than pretend the request failed outright (B32).
+	// saved rather than pretend the request failed outright.
 	$updated = aafm_wc_get_shipping_method_object( $zone_id, $instance_id );
 	if ( null === $updated ) {
 		return new \WP_Error(

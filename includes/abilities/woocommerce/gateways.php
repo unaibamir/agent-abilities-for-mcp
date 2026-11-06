@@ -667,7 +667,7 @@ function aafm_args_wc_update_payment_gateway(): array {
 /**
  * Build the error for a gateway update whose read-back verification found unpersisted fields.
  *
- * B32: the caller must never be told a bare "error" about a request that partially changed state.
+ * The caller must never be told a bare "error" about a request that partially changed state.
  * Two branches (the third, full success, never reaches here): nothing persisted, or a partial
  * write naming both sides. The machine-readable split rides in the error data.
  *
@@ -733,7 +733,7 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 	// error on unchanged values. Instead, apply every write, then verify the desired end-state by
 	// reading each value back; only a genuine read-back mismatch is a failure.
 	//
-	// B32: verification runs ONCE, after the whole batch, and a mismatch reports exactly which
+	// Verification runs ONCE, after the whole batch, and a mismatch reports exactly which
 	// fields persisted and which did not. The old sequence verified the order write mid-batch and
 	// bailed with a bare generic error on the first settings mismatch, so a caller could be told
 	// "error" after the title (or more) had already landed, with nothing saying so.
@@ -748,7 +748,7 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 		$desired['description'] = aafm_sanitize_multiline_text( (string) $input['description'] );
 	}
 
-	// R1-4: the display order lives in woocommerce_gateway_order, which a persistent object cache
+	// The display order lives in woocommerce_gateway_order, which a persistent object cache
 	// can hold a stale copy of. Core's update_option() judges "nothing changed" against that copy,
 	// so a stale entry equal to the request skips the write while get_option() shows it done. Before
 	// anything is written, refuse unless the row is readable and every cache copy agrees with it
@@ -780,7 +780,7 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 		);
 	}
 
-	// FIX-3 item 4 (sweep finding, B4 batch, the one live gap in this dispatch): WC_Settings_API::
+	// WC_Settings_API::
 	// process_admin_options() - the method that runs when a gateway is saved through wp-admin >
 	// WooCommerce > Settings > Payments - fires this action once per settings save, immediately
 	// before its own update_option() call (abstract-wc-settings-api.php:237). This ability wrote

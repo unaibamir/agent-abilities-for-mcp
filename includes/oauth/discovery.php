@@ -185,13 +185,13 @@ function aafm_oauth_seed_default_options(): void {
  * @return void
  */
 function aafm_oauth_preserve_toggle_on_upgrade(): void {
-	// The guard itself is read from the database row, not get_option()'s cache-trusting view
-	// (Codex round 7, R7-2): a stale cached '1' over an absent or '0' database row would make
+	// The guard itself is read from the database row, not get_option()'s cache-trusting view:
+	// a stale cached '1' over an absent or '0' database row would make
 	// this migration think it already ran and skip preserving the pre-upgrade "on" state for
 	// good, while a stale cached '0' over a genuinely completed migration would rerun it and
 	// potentially re-force the toggle on over an operator's later opt-out.
 	//
-	// R2-4 (1.7.5 deferred, round 2): a read the query itself could not complete (db_error) is
+	// A read the query itself could not complete (db_error) is
 	// NOT the same as a genuinely absent row - db_value/db_found both collapse to "not there"
 	// either way, so a transient read failure used to read exactly like "never migrated" and
 	// this function would proceed to overwrite aafm_oauth_enabled below, even when the row is
@@ -209,11 +209,11 @@ function aafm_oauth_preserve_toggle_on_upgrade(): void {
 	// includes/option-cache.php), not get_option()'s cache-trusting view: a stale persistent
 	// cache still serving an old value after the real row has been cleared would make this
 	// migration think a row already exists, skip preserving the pre-upgrade "on" state, and then
-	// mark itself done below - permanently, since the guard is never cleared (Codex round 5,
-	// R5-3). A stored toggle is always the string '0' or '1', so a genuinely absent row is the
+	// mark itself done below - permanently, since the guard is never cleared.
+	// A stored toggle is always the string '0' or '1', so a genuinely absent row is the
 	// only case that needs preserving.
 	//
-	// R2-4: same reasoning as the guard read above - a failed read of the toggle itself must not
+	// Same reasoning as the guard read above - a failed read of the toggle itself must not
 	// be treated as "row is absent", which would overwrite an operator's own stored value
 	// (including an explicit '0') that merely failed to read.
 	$enabled = aafm_read_option_views( 'aafm_oauth_enabled' );
@@ -230,7 +230,7 @@ function aafm_oauth_preserve_toggle_on_upgrade(): void {
 	}
 
 	if ( ! aafm_update_option_verified( 'aafm_oauth_toggle_migrated', '1' ) ) {
-		// Codex round 8 R8-3: this return value used to be discarded. Left uncaught, the guard
+		// This return value used to be discarded. Left uncaught, the guard
 		// would silently never record completion, so a later request retries the whole migration -
 		// including the "absent row" branch above, which by then may see a database row again (a
 		// stale cache having recovered) and skip straight to here, forever failing to record a
@@ -257,7 +257,7 @@ function aafm_oauth_preserve_toggle_on_upgrade(): void {
  * afterward is respected, and a developer who wants it off in code can use the
  * aafm_oauth_dcr_enabled filter regardless.
  *
- * B2 (1.7.5 deferred): the guard row above used to be the ONLY signal this migration had ever
+ * The guard row above used to be the ONLY signal this migration had ever
  * run. If ITS OWN write kept failing to certify (a persistently stale cache entry for that one
  * option, nothing else on the site), every request re-read the DCR value from scratch and could
  * not tell "still the genuine pre-migration off default" from "an operator deliberately turned
@@ -277,13 +277,13 @@ function aafm_oauth_preserve_toggle_on_upgrade(): void {
  * @return void
  */
 function aafm_oauth_dcr_adopt_on_by_default(): void {
-	// Same reasoning as aafm_oauth_preserve_toggle_on_upgrade() above (Codex round 7, R7-2): the
+	// Same reasoning as aafm_oauth_preserve_toggle_on_upgrade() above: the
 	// guard is read from the database row, not a cache-trusting get_option(), so a stale cache in
 	// either direction cannot make this migration decide from the wrong "already ran" state.
 	//
-	// R2-4 (1.7.5 deferred, round 2): all three reads in this function - both guards and the DCR
+	// All three reads in this function - both guards and the DCR
 	// value below - must abort the whole migration on a read that itself failed (db_error), not
-	// fall through as if the row were absent or falsy. B2 already stops a stuck WRITE from
+	// fall through as if the row were absent or falsy. The touched marker already stops a stuck WRITE from
 	// re-flipping an operator's opt-out forever; this closes the matching gap on the READ side,
 	// where a failed guard/value read used to read exactly like "off" and re-enable DCR over a
 	// deliberate opt-out that simply could not be read back at that moment.
@@ -294,7 +294,7 @@ function aafm_oauth_dcr_adopt_on_by_default(): void {
 	if ( '1' === (string) $migrated['db_value'] ) {
 		return;
 	}
-	// B2: the second, independently keyed signal - see this function's docblock. Read the same
+	// The second, independently keyed signal - see this function's docblock. Read the same
 	// way as the guard row above, direct from the database, for the identical reason.
 	$touched = aafm_read_option_views( 'aafm_oauth_dcr_default_on_touched' );
 	if ( $touched['db_error'] ) {
@@ -307,7 +307,7 @@ function aafm_oauth_dcr_adopt_on_by_default(): void {
 	// Read the database row directly for the same reason as
 	// aafm_oauth_preserve_toggle_on_upgrade() above: a stale cached '1' over a database '0' (or
 	// a stale cached '0' when the plugin has just written '1') would make this migration decide
-	// from the wrong state and then mark itself done for good (Codex round 5, R5-3).
+	// from the wrong state and then mark itself done for good.
 	$dcr = aafm_read_option_views( 'aafm_oauth_dcr_enabled' );
 	if ( $dcr['db_error'] ) {
 		return;
@@ -322,20 +322,20 @@ function aafm_oauth_dcr_adopt_on_by_default(): void {
 		}
 	}
 
-	// B2: the DCR value is now confirmed settled - either it was already fine, or the write
+	// The DCR value is now confirmed settled - either it was already fine, or the write
 	// above just landed. Record the second signal BEFORE attempting the guard row below, so a
 	// persistently failing guard write is no longer the only thing standing between a later
 	// operator opt-out and this function silently overriding it again.
 	aafm_persist_operator_switch( 'aafm_oauth_dcr_default_on_touched', true );
 
 	if ( ! aafm_update_option_verified( 'aafm_oauth_dcr_default_on_migrated', '1' ) ) {
-		// Codex round 8 R8-3: this return value used to be discarded. A failed marker write left
+		// This return value used to be discarded. A failed marker write left
 		// the migration to retry on the next request - concretely, if an operator turns DCR back
 		// off in the window before that retry, the retry reads the same "off, looks like the old
 		// default" state this function already flips on above, re-enabling DCR over the
 		// operator's deliberate opt-out and contradicting this function's own documented promise
 		// that a later opt-out is respected. Log the failure so it is visible instead of silent.
-		// B2: the second signal set just above is what actually stops this from repeating
+		// The second signal set just above is what actually stops this from repeating
 		// forever when this particular write keeps failing to certify.
 		aafm_log_ability_persist_failure( 'aafm_oauth_dcr_default_on_migrated', __( 'The DCR default-on migration marker', 'agent-abilities-for-mcp' ) );
 	}

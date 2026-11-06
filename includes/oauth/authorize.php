@@ -56,7 +56,7 @@ function aafm_oauth_local_error( string $code, string $message ): WP_Error {
 /**
  * Look up an active OAuth client row by client_id.
  *
- * Same stale-read class as R8-1 (aafm_oauth_get_client() in oauth/clients.php): a bare
+ * Same stale-read class as aafm_oauth_get_client() in oauth/clients.php: a bare
  * $wpdb->get_row() hands back the PREVIOUS query's row when this one fails, which here would let
  * a failed lookup for one client authorize the request as whichever OTHER client the connection
  * happened to look up last. This gates the whole authorize flow, so a failed lookup must DENY,
@@ -177,7 +177,7 @@ function aafm_oauth_validate_authorize_params( array $params ) {
  * Whether the user has already consented to this client, and whether that read could even be
  * completed - one query answering both.
  *
- * Codex round 7, R7-2: the plain `$wpdb->get_var()` this used to be built on returns the
+ * The plain `$wpdb->get_var()` this used to be built on returns the
  * PREVIOUS query's row when the current query itself fails ($wpdb->query() returns false before
  * ever touching last_result on some paths - see aafm_wpdb_scalar()'s docblock), so a failed
  * consent check could read as a positive consent left over from whatever query ran just before
@@ -187,8 +187,8 @@ function aafm_oauth_validate_authorize_params( array $params ) {
  * is reported as failed, never silently reused as a stale answer.
  *
  * This also replaces the query-per-decision pair aafm_oauth_has_consent() plus the former
- * aafm_oauth_consent_lookup_failed() used to require at the redemption call site (Codex round 6,
- * R6-2) - one read now answers both "does consent exist" and "could this even be checked",
+ * aafm_oauth_consent_lookup_failed() used to require at the redemption call site
+ *  - one read now answers both "does consent exist" and "could this even be checked",
  * so a caller that needs to distinguish a database fault from a genuine no-consent answer no
  * longer needs a second, separate query to do it.
  *
@@ -282,7 +282,7 @@ function aafm_oauth_record_consent( int $user_id, string $client_id, string $pre
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- prepared just above.
 	$wpdb->query( $sql );
 
-	// Certify against a fresh read rather than trusting the write's own result (Codex round 9, R9-6): a
+	// Certify against a fresh read rather than trusting the write's own result: a
 	// failed write must stop the approval handler from minting a code that redemption will refuse, and a
 	// stored preset must be the one that was asked for (another request can win the race to the row).
 	if ( ! aafm_oauth_has_consent( $user_id, $client_id ) ) {

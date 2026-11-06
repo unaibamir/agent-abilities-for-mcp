@@ -273,6 +273,18 @@ final class BridgeReviewScreenTest extends TestCase {
 		$this->assertDoesNotMatchRegularExpression( '/data-risk="destructive" data-aafm-stored-on/', $html, 'A locked tool that is not stored is not counted.' );
 	}
 
+	public function test_a_group_carries_its_count_of_stored_tools_that_are_not_registered(): void {
+		$this->register_new_plugin();
+		$this->register_foreign_abilities( 'otherplugin', array( 'list-widgets' => array( 'readonly' => true ) ) );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'screenplugin/dropped-one', 'screenplugin/dropped-two' ) );
+
+		$html = $this->render();
+
+		$this->assertStringContainsString( 'aafm-integration-screenplugin" data-bridge-plugin="screenplugin" data-bridge-unavailable="2">', $html );
+		$this->assertStringContainsString( 'aafm-integration-otherplugin" data-bridge-plugin="otherplugin">', $html, 'Nothing stored, nothing to count.' );
+		$this->assertStringContainsString( 'aafm-integration-unavailable is-disabled" data-bridge-plugin="unavailable">', $html, 'The stored tools stay listed in the Unavailable group.' );
+	}
+
 	public function test_all_new_strings_are_translatable(): void {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a plugin source file in a test.
 		$php   = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/bridge-directory.php' );

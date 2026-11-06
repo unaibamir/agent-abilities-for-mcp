@@ -35,7 +35,7 @@ final class BridgeStarterScriptTest extends TestCase {
 		$body = $this->method( '#bindBridgeStarter() {' );
 
 		$post    = strpos( $body, "this.#post( 'aafm_bridge_read_only_starter'" );
-		$noop    = strpos( $body, '0 === on && 0 === off' );
+		$noop    = strpos( $body, '0 === on && 0 === off && 0 === removed' );
 		$confirm = strpos( $body, 'window.confirm(' );
 
 		$this->assertNotFalse( $post );
@@ -43,7 +43,7 @@ final class BridgeStarterScriptTest extends TestCase {
 		$this->assertNotFalse( $confirm );
 		$this->assertLessThan( $confirm, $noop, 'The only path without a confirm is the no-op, which returns.' );
 		$this->assertLessThan( $post, $confirm );
-		$this->assertMatchesRegularExpression( '/if \( 0 === on && 0 === off \) \{[^}]*return;\s*\}/', $body );
+		$this->assertMatchesRegularExpression( '/if \( 0 === on && 0 === off && 0 === removed \) \{.*?return;\s*\}/s', $body );
 		$this->assertMatchesRegularExpression( '/if \( ! window\.confirm\([^;]*\) \{\s*return;\s*\}/', $body, 'Cancel posts nothing.' );
 		$this->assertSame( 1, substr_count( $body, 'this.#post(' ) );
 	}
@@ -51,10 +51,46 @@ final class BridgeStarterScriptTest extends TestCase {
 	public function test_the_confirm_names_both_counts_and_the_enable_only_case_has_its_own_string(): void {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a plugin source file in a test.
 		$page = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/page.php' );
-		foreach ( array( 'bridgeStarterOn', 'bridgeStarterOnOne', 'bridgeStarterAlsoOff', 'bridgeStarterAlsoOffOne', 'bridgeStarterOffOnly', 'bridgeStarterOffOnlyOne', 'bridgeStarterNoop' ) as $key ) {
+		foreach ( array( 'bridgeStarterOn', 'bridgeStarterOnOne', 'bridgeStarterAlsoOff', 'bridgeStarterAlsoOffOne', 'bridgeStarterOffOnly', 'bridgeStarterOffOnlyOne', 'bridgeStarterNoop', 'bridgeStarterNoopNoReads', 'bridgeStarterRemoved', 'bridgeStarterRemovedOne', 'bridgeStarterAlsoRemoved', 'bridgeStarterOneRemoved', 'bridgeStarterRemovedLine', 'bridgeStarterReload' ) as $key ) {
 			$this->assertStringContainsString( "'$key'", $page, "$key is not in the i18n bag." );
-			$this->assertStringContainsString( "'$key'", $this->method( '#bridgeStarterConfirm( on, off, name ) {' ) . $this->method( '#bindBridgeStarter() {' ), "$key is not used." );
+			$this->assertStringContainsString( "'$key'", $this->method( '#bridgeStarterConfirm( on, off, removed, name ) {' ) . $this->method( '#bindBridgeStarter() {' ), "$key is not used." );
 		}
+	}
+
+	public function test_the_starter_turns_off_writes_for_a_plugin_with_no_read_tools(): void {
+		$body    = $this->method( '#bindBridgeStarter() {' );
+		$confirm = $this->method( '#bridgeStarterConfirm( on, off, removed, name ) {' );
+
+		$this->assertDoesNotMatchRegularExpression( '/if \( 0 === on \) \{[^}]*return;/', $body, 'A plugin with nothing to turn on still posts when it has something to turn off.' );
+		$this->assertStringContainsString( 'if ( 0 === on ) {', $confirm );
+		$this->assertStringContainsString( "'bridgeStarterOffOnly'", $confirm );
+	}
+
+	public function test_a_no_read_plugin_never_hears_it_already_allows_only_its_read_tools(): void {
+		$body = $this->method( '#bindBridgeStarter() {' );
+
+		$this->assertStringContainsString( '.aafm-ability-row[data-risk="read"]', $body );
+		$this->assertStringContainsString( "'bridgeStarterNoopNoReads'", $body );
+	}
+
+	public function test_stored_tools_that_are_not_on_count_as_removals_never_as_turned_off(): void {
+		$counts = $this->method( '#bridgeStarterCounts( groupCard ) {' );
+
+		$this->assertMatchesRegularExpression( '/removed:\s*groupCard\.querySelectorAll\( \'\[data-aafm-stored-on\]\' \)\.length \+\s*Number\( groupCard\.dataset\.bridgeUnavailable \?\? 0 \)/', $counts );
+		$off = substr( $counts, (int) strpos( $counts, 'off:' ), (int) strpos( $counts, 'removed:' ) - (int) strpos( $counts, 'off:' ) );
+		$this->assertStringNotContainsString( 'data-aafm-stored-on', $off );
+
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a plugin source file in a test.
+		$page = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/page.php' );
+		$this->assertMatchesRegularExpression( "/'bridgeStarterRemoved'\s+=> __\( '[^']*removes %1\\\$s saved selections/", $page );
+		$this->assertDoesNotMatchRegularExpression( "/'bridgeStarter(Also)?Removed(One)?'\s+=> __\( '[^']*(that (is|are) on now|turns off)/", $page );
+	}
+
+	public function test_a_finished_starter_forgets_the_stored_tools_so_a_second_click_is_a_no_op(): void {
+		$body = $this->method( '#bindBridgeStarter() {' );
+
+		$this->assertStringContainsString( 'delete groupCard.dataset.bridgeUnavailable', $body );
+		$this->assertStringContainsString( "'bridgeStarterReload'", $body );
 	}
 
 	public function test_the_starter_marks_only_its_group_clean(): void {

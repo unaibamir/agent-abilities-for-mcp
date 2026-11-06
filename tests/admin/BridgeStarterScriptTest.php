@@ -93,6 +93,19 @@ final class BridgeStarterScriptTest extends TestCase {
 		$this->assertStringContainsString( "'bridgeStarterReload'", $body );
 	}
 
+	public function test_a_failed_review_write_keeps_the_block(): void {
+		$body = $this->method( '#bindBridgeStarter() {' );
+
+		$this->assertMatchesRegularExpression( '/const left = card && reviewed \? this\.#bridgeReviewBlockDone\( key, card \) : \'\';/', $body );
+	}
+
+	public function test_the_script_uses_the_reserved_key_the_server_takes(): void {
+		$js = $this->method( '#bindBridgeReview() {' ) . $this->method( '#bridgeReviewBlockDone( key, card ) {' );
+
+		$this->assertSame( 2, substr_count( $js, "'" . aafm_bridge_review_all_key() . "'" ) );
+		$this->assertStringNotContainsString( "'all'", $js );
+	}
+
 	public function test_the_starter_marks_only_its_group_clean(): void {
 		$body = $this->method( '#bindBridgeStarter() {' );
 

@@ -123,7 +123,7 @@ function aafm_render_bridge_review_card( array $groups, array $enabled ): void {
 	}
 
 	$body = '<p class="aafm-bridge-review-status" role="status"></p>'
-		. '<p class="aafm-bridge-review-all"><button type="button" class="aafm-btn aafm-btn-secondary aafm-bridge-mark-reviewed" data-bridge-plugin="all">' . esc_html__( 'Mark all as reviewed', 'agent-abilities-for-mcp' ) . '</button></p>';
+		. '<p class="aafm-bridge-review-all"><button type="button" class="aafm-btn aafm-btn-secondary aafm-bridge-mark-reviewed" data-bridge-plugin="' . esc_attr( aafm_bridge_review_all_key() ) . '">' . esc_html__( 'Mark all as reviewed', 'agent-abilities-for-mcp' ) . '</button></p>';
 
 	foreach ( $groups as $key => $group ) {
 		$rows = array();
@@ -1017,7 +1017,7 @@ function aafm_ajax_bridge_mark_reviewed(): void {
 	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	$key    = isset( $_POST['plugin'] ) ? sanitize_text_field( wp_unslash( $_POST['plugin'] ) ) : '';
 	$groups = aafm_bridge_group_slugs( aafm_bridge_foreign_slugs() );
-	if ( 'all' === $key ) {
+	if ( aafm_bridge_review_all_key() === $key ) {
 		$slugs = aafm_bridge_foreign_slugs();
 	} elseif ( isset( $groups[ $key ] ) ) {
 		$slugs = $groups[ $key ];

@@ -93,6 +93,16 @@ function aafm_bridge_new_tools(): array {
 }
 
 /**
+ * The group key that means "every new tool". The colon keeps it out of what core accepts as a namespace,
+ * so a plugin cannot own it. admin.js compares against the same literal.
+ *
+ * @return string
+ */
+function aafm_bridge_review_all_key(): string {
+	return 'AAFM-ALL:';
+}
+
+/**
  * Group slugs the way the directory groups them, through the same known-plugin merge.
  *
  * @param array<int,string> $slugs Foreign slugs.
@@ -218,7 +228,7 @@ function aafm_bridge_review_sync(): void {
  * selections from this write.
  *
  * @param string $group_key A key of aafm_bridge_group_slugs().
- * @return array{ok:bool,enabled:list<string>,disabled:list<string>,reads:int,message:string}
+ * @return array{ok:bool,enabled:list<string>,disabled:list<string>,reads:int,reviewed:bool,message:string}
  */
 function aafm_bridge_apply_read_only_starter( string $group_key ): array {
 	$result = array(
@@ -226,6 +236,7 @@ function aafm_bridge_apply_read_only_starter( string $group_key ): array {
 		'enabled'  => array(),
 		'disabled' => array(),
 		'reads'    => 0,
+		'reviewed' => false,
 		'message'  => '',
 	);
 
@@ -273,7 +284,8 @@ function aafm_bridge_apply_read_only_starter( string $group_key ): array {
 			count( $reads )
 		);
 
-	if ( ! aafm_bridge_mark_reviewed( $groups[ $group_key ] ) ) {
+	$result['reviewed'] = aafm_bridge_mark_reviewed( $groups[ $group_key ] );
+	if ( ! $result['reviewed'] ) {
 		aafm_bridge_review_log_failure();
 		$result['message'] .= ' ' . __( 'These tools could not be marked as reviewed.', 'agent-abilities-for-mcp' );
 	}

@@ -96,6 +96,7 @@ final class BridgeStarterTest extends TestCase {
 
 		$this->assertTrue( $result['ok'] );
 		$this->assertSame( 2, $result['reads'] );
+		$this->assertTrue( $result['reviewed'] );
 		$this->assertSame( array( 'plugina/read-one', 'plugina/read-two' ), $this->stored() );
 		$this->assertSame( array( 'plugina/read-one', 'plugina/read-two' ), $result['enabled'] );
 		$this->assertSame( array( 'plugina/delete', 'plugina/write-one' ), $result['disabled'] );
@@ -171,7 +172,7 @@ final class BridgeStarterTest extends TestCase {
 	public function test_a_persist_failure_returns_an_error_and_logs_no_success_rows(): void {
 		update_option( 'aafm_enabled_bridged_abilities', array( 'plugina/delete' ) );
 		add_filter( 'pre_update_option_aafm_enabled_bridged_abilities', static fn( $value, $old ) => $old, 10, 2 );
-		$this->register_foreign_abilities( 'late', array( 'read' => array( 'readonly' => true ) ) );
+		$this->register_foreign_abilities( 'plugina', array( 'read-new' => array( 'readonly' => true ) ) );
 
 		$json = $this->post( 'aafm_ajax_bridge_read_only_starter', 'plugina' );
 
@@ -179,7 +180,7 @@ final class BridgeStarterTest extends TestCase {
 		$this->assertSame( array(), $this->toggled( 'ability_enabled' ) );
 		$this->assertSame( array(), $this->toggled( 'ability_disabled' ) );
 		$this->assertCount( 1, aafm_query_activity( array( 'ability' => 'aafm_enabled_bridged_abilities' ) ) );
-		$this->assertContains( 'late/read', aafm_bridge_new_tools(), 'Nothing was marked reviewed.' );
+		$this->assertContains( 'plugina/read-new', aafm_bridge_new_tools(), 'Nothing was marked reviewed.' );
 	}
 
 	public function test_it_marks_the_groups_new_tools_reviewed_but_not_other_groups(): void {
@@ -191,11 +192,26 @@ final class BridgeStarterTest extends TestCase {
 		$this->assertSame( array( 'pluginb/b-new' ), aafm_bridge_new_tools() );
 	}
 
+	public function test_a_plugin_whose_namespace_is_all_marks_only_its_own_tools(): void {
+		$this->register_foreign_abilities( 'all', array( 'read-new' => array( 'readonly' => true ) ) );
+		$this->register_foreign_abilities( 'pluginb', array( 'b-new' => array( 'readonly' => true ) ) );
+
+		$json = $this->post( 'aafm_ajax_bridge_mark_reviewed', 'all' );
+
+		$this->assertTrue( $json['success'] ?? false );
+		$this->assertSame( array( 'pluginb/b-new' ), aafm_bridge_new_tools() );
+	}
+
+	public function test_the_reserved_key_is_one_core_cannot_register_as_a_namespace(): void {
+		$this->assertDoesNotMatchRegularExpression( '/^[a-z0-9-]+$/', aafm_bridge_review_all_key() );
+		$this->assertSame( aafm_bridge_review_all_key(), sanitize_text_field( aafm_bridge_review_all_key() ), 'It survives the handler.' );
+	}
+
 	public function test_mark_reviewed_all_clears_every_new_tool_and_enables_nothing(): void {
 		$this->register_foreign_abilities( 'plugina', array( 'read-new' => array( 'readonly' => true ) ) );
 		$this->register_foreign_abilities( 'pluginb', array( 'b-new' => array( 'readonly' => true ) ) );
 
-		$json = $this->post( 'aafm_ajax_bridge_mark_reviewed', 'all' );
+		$json = $this->post( 'aafm_ajax_bridge_mark_reviewed', aafm_bridge_review_all_key() );
 
 		$this->assertTrue( $json['success'] ?? false );
 		$this->assertSame( 0, $json['data']['count'] );
@@ -272,6 +288,7 @@ final class BridgeStarterTest extends TestCase {
 
 		$this->assertTrue( $result['ok'] );
 		$this->assertStringContainsString( 'could not be marked as reviewed', $result['message'] );
+		$this->assertFalse( $result['reviewed'], 'The screen keeps the tools in the card.' );
 		$this->assertContains( 'plugina/read-new', $this->stored() );
 		$this->assertContains( 'plugina/read-new', aafm_bridge_new_tools() );
 	}

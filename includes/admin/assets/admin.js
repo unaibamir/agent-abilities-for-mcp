@@ -1399,7 +1399,7 @@
 						return;
 					}
 					let done = this.#t( 'bridgeReviewedAll', 'All new tools marked as reviewed.' );
-					if ( 'all' !== key ) {
+					if ( 'AAFM-ALL:' !== key ) {
 						done = 1 === tools
 							? this.#format( this.#t( 'bridgeReviewedOne', '1 tool from %s marked as reviewed.' ), name )
 							: this.#format( this.#t( 'bridgeReviewed', '%1$s tools from %2$s marked as reviewed.' ), tools, name );
@@ -1449,7 +1449,7 @@
 						this.#focusAfterReview( btn, card );
 						return;
 					}
-					const { enabled = [], disabled = [], message = '' } = json.data;
+					const { enabled = [], disabled = [], reviewed = false, message = '' } = json.data;
 					groupCard.querySelectorAll( 'input[name="bridged_abilities[]"]' ).forEach( ( box ) => {
 						box.checked = enabled.includes( box.value );
 					} );
@@ -1469,7 +1469,7 @@
 						lines.push( this.#t( 'bridgeStarterReload', 'Reload the page to update the Unavailable group.' ) );
 					}
 					status.textContent = lines.join( ' ' );
-					const left = card ? this.#bridgeReviewBlockDone( key, card ) : '';
+					const left = card && reviewed ? this.#bridgeReviewBlockDone( key, card ) : '';
 					const cardStatus = card?.querySelector( '.aafm-bridge-review-status' );
 					if ( left && cardStatus ) {
 						cardStatus.textContent = `${ cardStatus.textContent }${ left }`.trim();
@@ -1550,12 +1550,12 @@
 		 * Take a finished plugin's block (or every block) out of the review card. The card itself stays
 		 * until the next page load, so focus and the status line have somewhere to live.
 		 *
-		 * @param {string}  key  Group key, or 'all'.
+		 * @param {string}  key  Group key, or the every-tool key.
 		 * @param {Element} card The review card.
 		 * @return {string} Text to add to the status line when nothing is left, otherwise ''.
 		 */
 		#bridgeReviewBlockDone( key, card ) {
-			const selector = 'all' === key ? '.aafm-bridge-review-block' : `.aafm-bridge-review-block[data-bridge-plugin="${ CSS.escape( key ) }"]`;
+			const selector = 'AAFM-ALL:' === key ? '.aafm-bridge-review-block' : `.aafm-bridge-review-block[data-bridge-plugin="${ CSS.escape( key ) }"]`;
 			card.querySelectorAll( selector ).forEach( ( block ) => block.remove() );
 			if ( card.querySelector( '.aafm-bridge-review-block' ) ) {
 				return '';

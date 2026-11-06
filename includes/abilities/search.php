@@ -191,7 +191,7 @@ function aafm_exec_search_content( array $input ) {
 		'include_content' => $include_content,
 	);
 
-	// Branch review fix (lang scope and result shaping, round 2): aafm_rich_post() must run
+	// aafm_rich_post() must run
 	// INSIDE the query's own aafm_with_language() scope on BOTH branches, not only 'all' - an
 	// explicit single language has the identical gap, since aafm_with_language() restores the
 	// original language before returning and the shape step used to run after that restore.

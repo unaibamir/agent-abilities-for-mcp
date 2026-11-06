@@ -205,7 +205,7 @@ function aafm_args_avada_replace_text(): array {
 /**
  * The Fusion shortcode tags this guard recognizes.
  *
- * Codex round C finding 2: a fixed 7-tag list misses every OTHER real Fusion Builder element
+ * A fixed 7-tag list misses every OTHER real Fusion Builder element
  * (fusion_button, fusion_alert, fusion_imageframe, the awb_* family, and dozens more) - an edit
  * inside an unrecognized shortcode is invisible to this guard entirely, since only recognized
  * tags contribute a tuple to the signature at all. Fixed by reading the REAL, complete set of
@@ -285,7 +285,7 @@ function aafm_fusion_attribute_quotes_balanced( string $attribute_str ): bool {
  * aafm_fusion_shortcode_tags()); this walk inherits that same substrate limitation, the same
  * limitation do_shortcode() itself has, rather than introducing a new one.
  *
- * Codex round C finding 2 (bullets 2 and 3), both closed here:
+ * Both closed here:
  * - A tuple now records whether a real closing tag was actually matched (`has_closer`), not just
  *   the tag/self_closing/atts/depth. Without it, `[fusion_text]Hello[/fusion_text]` and a version
  *   with the closing tag stripped produce IDENTICAL tuples - the "content+closer" span in
@@ -300,7 +300,7 @@ function aafm_fusion_attribute_quotes_balanced( string $attribute_str ): bool {
  *   quoted attribute value, which truncates the captured attribute span mid-quote (confirmed:
  *   `content="a[1]"` captures only `content="a[1`, an unterminated quote). This function does not
  *   attempt to recover the real boundary; it fails closed (null) instead, per the design's own
- *   fail-closed rule, rather than silently exposing a "safe-looking" span that Codex proved is not
+ *   fail-closed rule, rather than silently exposing a "safe-looking" span that is not
  *   actually protecting the real boundary WordPress's own parser lost track of.
  *
  * @param string $content Content to scan at this nesting level.
@@ -325,7 +325,7 @@ function aafm_fusion_shortcode_walk( string $content, int $depth ): ?array {
 		// capture ran off the rails (the literal-']'-in-a-quoted-value trap) - refuse rather than
 		// trust a span that does not cover what it looks like it covers.
 		//
-		// Codex final round 5 MEDIUM: counting each quote character independently (an odd count
+		// Counting each quote character independently (an odd count
 		// of '"' OR an odd count of "'") false-positives on a perfectly ordinary attribute like
 		// title="Bob's title" - one apostrophe INSIDE a double-quoted value is not a delimiter at
 		// all, just a literal character, but the old count-parity check could not tell the two
@@ -370,7 +370,7 @@ function aafm_fusion_shortcode_walk( string $content, int $depth ): ?array {
  * either. Either side failing to parse (null) refuses the write, per
  * 228-avada-guard-design.md §2 step 4's fail-closed rule.
  *
- * Codex hunt F7: 'atts' is shortcode_parse_atts()'s output, a normalized associative array -
+ * 'atts' is shortcode_parse_atts()'s output, a normalized associative array -
  * it discards the original quoting style and interior whitespace entirely, so two attribute
  * strings differing only in quote character or whitespace (or a duplicate attribute that
  * shadows an earlier one) parse to the identical array and pass this check unchanged. This
@@ -403,7 +403,7 @@ function aafm_exec_avada_replace_text( array $input ) {
 		return aafm_generic_error();
 	}
 
-	// Codex round C finding 3: this ability's whole reason to exist is a FINER write path for
+	// This ability's whole reason to exist is a FINER write path for
 	// Avada-owned content specifically - without this check it could edit an Elementor/Divi/
 	// Beaver-Builder-owned post (which carries no Fusion shortcodes at all, so both structural
 	// signatures come back empty and equal) even though the generic write path
@@ -454,11 +454,11 @@ function aafm_exec_avada_replace_text( array $input ) {
 	}
 
 	$fresh = aafm_exact_object( 'post', $id );
-	// Codex hunt F4: $replacements was computed from the ORIGINAL content before
+	// $replacements was computed from the ORIGINAL content before
 	// wp_update_post() ever ran, and never re-validated against what actually landed in
 	// storage - a wp_insert_post_data (or similar) filter revising the content on save would
 	// report a count and structure that no longer matched what was stored. Confirm the exact
-	// intended content actually landed before reporting success. Codex round 6 B6-3: compare
+	// intended content actually landed before reporting success. Compare
 	// against the CANONICAL sanitize_post_field() form, not $new itself, so a legitimate
 	// normalization is not mistaken for a veto.
 	if ( ! $fresh instanceof WP_Post || ! aafm_post_field_confirm_logged( $id, 'post_content', $new, $content ) ) {

@@ -304,7 +304,7 @@ function aafm_exec_get_posts( array $input ) {
 	// 'all' iterates every active language and concatenates: page/per_page apply PER language
 	// (documented on the lang schema fragment), total is the sum of each language's own count.
 	//
-	// Branch review fix (lang scope and result shaping, round 2): aafm_rich_post() must run
+	// aafm_rich_post() must run
 	// INSIDE the query's own aafm_with_language() scope, not after that scope restores to
 	// ambient - on BOTH branches, not only 'all'. Round 1's fix moved the shaping for 'all'
 	// but a query for a single EXPLICIT language had the identical gap: aafm_with_language()
@@ -419,7 +419,7 @@ function aafm_args_count_posts(): array {
  * removed content and auto-draft is abandoned editor scratch, neither of which is a live item.
  * This matches the non-trash "active" total convention used by the WooCommerce count siblings
  * (wc-count-products / wc-count-coupons / wc-count-orders). The per-status breakdown in
- * by_status still reports trash and auto-draft for transparency (B4).
+ * by_status still reports trash and auto-draft for transparency.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
@@ -573,7 +573,7 @@ function aafm_perm_get_post( array $input ): bool {
  */
 function aafm_get_post_lang_resolved_id( int $id, array $input ): int {
 	$lang = aafm_resolve_lang( $input );
-	// A WP_Error (invalid code, B48) resolves nothing here; the executor refuses it
+	// A WP_Error (invalid code) resolves nothing here; the executor refuses it
 	// before serving data, and the permission callback just checks the original id.
 	if ( ! is_string( $lang ) || 'all' === $lang ) {
 		return $id;
@@ -581,7 +581,7 @@ function aafm_get_post_lang_resolved_id( int $id, array $input ): int {
 	// WPML's wpml_object_id filter resolves per the element's REAL type (the post type slug).
 	// Pinning 'post' here made a lang request on any CPT resolve against the wrong element
 	// type, so WPML fell back to the original id and the untranslated item was served
-	// silently (B47). pages.php pins 'page' because its ids are type-pinned to pages; this
+	// silently. pages.php pins 'page' because its ids are type-pinned to pages; this
 	// getter serves every allowlisted type, so the type comes from the post itself.
 	$post = aafm_exact_object( 'post', $id );
 	if ( ! $post instanceof WP_Post ) {
@@ -851,7 +851,7 @@ function aafm_authorize_post_status( string $requested, string $publish_cap, ?ar
 	if ( ! in_array( $status, $recognized, true ) ) {
 		return new WP_Error( 'aafm_invalid_status', __( 'Unsupported or unauthorized post status.', 'agent-abilities-for-mcp' ) );
 	}
-	// Codex final round 9 MEDIUM: the TEC create/update chokepoints route status entirely
+	// The TEC create/update chokepoints route status entirely
 	// through this function (and aafm_resolve_create_status(), which delegates to it), but the
 	// operator's force-draft override was only ever applied by aafm_insert_post()'s own
 	// duplicate of this same coercion - TEC's writers never called that function, so an explicit
@@ -963,9 +963,9 @@ function aafm_insert_post( array $input, string $default_status, string $type, ?
 	}
 
 	// Validate enrichment BEFORE inserting so a bad term/attachment/meta aborts with nothing written.
-	// Codex round 7 R7-3: pass the real target post type ($type), not the default 'post', so the
+	// Pass the real target post type ($type), not the default 'post', so the
 	// meta probe is not blind to a sanitize_callback registered for this create's actual type.
-	// Codex round 8 R8-2: unlike the update path, there is no post id yet at this point, so
+	// Unlike the update path, there is no post id yet at this point, so
 	// get_object_subtype( 'post', $id ) cannot be resolved here - $type (the intended post type
 	// this create will be assigned) is the closest available proxy for it.
 	$enrichment = aafm_validate_write_enrichment( $input, $type );
@@ -1007,15 +1007,15 @@ function aafm_insert_post( array $input, string $default_status, string $type, ?
 		return aafm_generic_error();
 	}
 
-	// B3 (1.7.5 deferred): the reread above only proved the row exists, never that what came back
+	// The reread above only proved the row exists, never that what came back
 	// matches what this create actually asked for - a wp_insert_post_data filter silently vetoing
 	// or normalizing a field would still report success while the response carried the caller's
-	// stale intent instead of what storage actually holds. Same shape as R5-2, closed at other
+	// stale intent instead of what storage actually holds. The same defect is closed at other
 	// write sites through these same shared helpers. $sanitize_context_id is 0, not (int) $id:
 	// core's own sanitize_post( $postarr, 'db' ) inside wp_insert_post() ran BEFORE this row
-	// existed, with ID defaulted to 0 (aafm_post_field_write_confirmed()'s own docblock, R7-4).
+	// existed, with ID defaulted to 0 (aafm_post_field_write_confirmed()'s own docblock).
 	//
-	// F1/R2-1/R2-2/R2-3/R3-1 (1.7.5 deferred, three rounds): post_status and post_name are
+	// post_status and post_name are
 	// deliberately NOT confirmed here at all, not even through a replicated core pipeline. Three
 	// rounds of trying to replicate wp_insert_post()'s own status/slug resolution (the
 	// publish<->future date transition, wp_unique_post_slug()'s dedup, its filters, the
@@ -1290,8 +1290,8 @@ function aafm_exec_update_post( array $input ) {
 	}
 
 	// Validate enrichment BEFORE wp_update_post so a bad term/attachment/meta aborts
-	// with the post left exactly as it was (no half-applied update). Codex round 7 R7-3: pass the
-	// post's real, existing type, not the default 'post'. Codex round 8 R8-2: the id already
+	// with the post left exactly as it was (no half-applied update). Pass the
+	// post's real, existing type, not the default 'post'. The id already
 	// exists here, so resolve the same filterable get_object_subtype( 'post', $id ) call core
 	// itself makes at write time, rather than the raw $post->post_type, so a get_object_subtype_post
 	// filter is honoured the same way it is at write time.
@@ -1371,7 +1371,7 @@ function aafm_exec_update_post( array $input ) {
 		return aafm_generic_error();
 	}
 
-	// B3 (1.7.5 deferred): the reread above only proved the post still exists, never that what
+	// The reread above only proved the post still exists, never that what
 	// came back matches this update's own request - a wp_insert_post_data filter silently
 	// vetoing or normalizing one of these fields would still report success while the response
 	// carried the caller's stale intent instead of what storage actually holds. Only the fields
@@ -1379,7 +1379,7 @@ function aafm_exec_update_post( array $input ) {
 	// (aafm_post_field_write_confirmed()'s default $sanitize_context_id, the existing $id - this
 	// is an update, the row already existed at sanitize time).
 	//
-	// F1/R2-1/R2-2/R2-3/R3-1 (1.7.5 deferred, three rounds): post_status and post_name are
+	// post_status and post_name are
 	// deliberately NOT confirmed here - see the create path above for the full reasoning. Same
 	// accepted blind spot on this path: a filter swapping status or slug to another plausible
 	// value is not detected.
@@ -1684,11 +1684,11 @@ function aafm_replacement_preserves_structure( string $before, string $after ): 
  * Sanitizing only the inserted text is not enough. wp_kses_post() judges the replacement in
  * isolation, and `x" onmouseover="alert(1)" data-z="` contains no tags at all, so kses returns it
  * unchanged and is right to. Spliced into an existing attribute value it closes that attribute and
- * opens an event handler, and the assembled document was never looked at again (B2-02).
+ * opens an event handler, and the assembled document was never looked at again.
  *
  * Sanitizing the assembled document is not available either. That is what this used to do, and a
  * one-word edit silently stripped an unfiltered_html user's markup everywhere else in the post
- * while reporting success (B8, fixed in 687ff62). The invariant that no byte outside the replaced
+ * while reporting success. The invariant that no byte outside the replaced
  * spans changes is not negotiable.
  *
  * So the assembled document is VALIDATED rather than rewritten. Both versions are parsed twice -
@@ -1699,7 +1699,7 @@ function aafm_replacement_preserves_structure( string $before, string $after ): 
  * markup of its own. Refusing keeps both properties above; rewriting would have to give one up.
  *
  * The comparison is built on core's parsers rather than a hand-rolled scan because the first
- * attempt at this was wrong in BOTH directions at once (R6-2, R6-4). It ended a tag at the first
+ * attempt at this was wrong in BOTH directions at once. It ended a tag at the first
  * `>` even inside a quoted attribute value, so the break-out splice still went through, and it
  * treated a literal `<` in prose as a tag opener, so ordinary sentences were refused. An evadable
  * refusal is worse than no refusal, because it reads as protection. Quote state, raw-text elements
@@ -1762,7 +1762,7 @@ function aafm_exec_replace_in_post( array $input ) {
 
 	// Compare the assembled document's structure against the original before writing anything.
 	// Sanitizing the inserted text cannot settle this on its own: it is judged in isolation, where
-	// it is harmless, and only becomes an attribute break-out once spliced (B2-02).
+	// it is harmless, and only becomes an attribute break-out once spliced.
 	if ( ! aafm_replacement_preserves_structure( $content, $new ) ) {
 		return new WP_Error(
 			'aafm_replace_inside_markup',
@@ -1791,10 +1791,10 @@ function aafm_exec_replace_in_post( array $input ) {
 	}
 
 	$updated = aafm_exact_object( 'post', (int) $result );
-	// Codex round 5 R5-2: only is_wp_error() was checked here, so a wp_insert_post_data filter
+	// Only is_wp_error() was checked here, so a wp_insert_post_data filter
 	// that vetoed or reverted the content would report the pre-computed replacement count as
 	// though it had landed. Confirm the exact intended content actually made it to storage,
-	// matching Avada's replace-text fix (Codex hunt F4). Codex round 6 B6-3: compare against the
+	// matching Avada's replace-text fix. Compare against the
 	// CANONICAL sanitize_post_field() form, not $new itself, so a legitimate normalization (kses
 	// for a user without unfiltered_html re-running over the whole assembled document) is not
 	// mistaken for a veto.
@@ -2038,7 +2038,7 @@ const AAFM_REPLACE_SITEWIDE_MAX_POSTS = 50;
 /**
  * The upper bound on how many raw SQL matches a single call will examine (get_post() + a
  * permission/ownership check each) while filling AAFM_REPLACE_SITEWIDE_MAX_POSTS's editable-
- * candidate budget. Codex final round 3 MEDIUM: without a ceiling here, a search term matching
+ * candidate budget. Without a ceiling here, a search term matching
  * an enormous number of posts the caller cannot edit (all owned by someone else, all sitting
  * before the caller's own editable match in ID order) would scan every one of them looking for
  * 50 it could act on - unbounded work driven entirely by how the matches happen to be
@@ -2155,7 +2155,7 @@ function aafm_exec_replace_sitewide( array $input ) {
 	$replace = (string) $input['replace'];
 	$dry_run = ! array_key_exists( 'dry_run', $input ) || (bool) $input['dry_run'];
 
-	// Codex final round 4 MEDIUM: an unscoped 'posts_where' filter runs against EVERY WP_Query
+	// An unscoped 'posts_where' filter runs against EVERY WP_Query
 	// built while it's attached, not only this function's own two queries below - an unrelated
 	// nested query (fired from any hook during either query) would silently receive this same
 	// LIKE clause. A private, per-call marker in the query args (harmless to core - unrecognized
@@ -2180,7 +2180,7 @@ function aafm_exec_replace_sitewide( array $input ) {
 		);
 	};
 
-	// Codex final round 3 MEDIUM: that scan had no ceiling of its own, so a search term matching
+	// That scan had no ceiling of its own, so a search term matching
 	// an enormous number of non-editable posts could force scanning all of them (get_post() plus
 	// two checks each) looking for AAFM_REPLACE_SITEWIDE_MAX_POSTS editable ones -
 	// AAFM_REPLACE_SITEWIDE_MAX_SCAN bounds that worst case; see its own docblock for why this is
@@ -2191,7 +2191,7 @@ function aafm_exec_replace_sitewide( array $input ) {
 
 	add_filter( 'posts_where', $like_filter, 10, 2 );
 	try {
-		// Codex final round 4 MEDIUM: the real total used to come from fetching EVERY matching id
+		// The real total used to come from fetching EVERY matching id
 		// unpaginated (posts_per_page => -1) - for a search term matching an enormous number of
 		// posts, that alone materializes an enormous id array before any scanning even starts.
 		// WP_Query computes an exact row count via its own single SELECT COUNT(*) whenever
@@ -2211,7 +2211,7 @@ function aafm_exec_replace_sitewide( array $input ) {
 		$truncated     = $total_matches > AAFM_REPLACE_SITEWIDE_MAX_POSTS;
 
 		// The actual candidate-scanning fetch is bounded to $max_scan ids by the query itself -
-		// Codex final round 2 MEDIUM's own fix (scan in ID order, fill the cap with EDITABLE,
+		// The earlier fix (scan in ID order, fill the cap with EDITABLE,
 		// non-builder-owned candidates only; a skipped post costs nothing against the cap) still
 		// applies to this bounded list, it just no longer needs an enormous unbounded one to work
 		// from.
@@ -2257,7 +2257,7 @@ function aafm_exec_replace_sitewide( array $input ) {
 		return aafm_generic_error();
 	}
 
-	// Codex final round 2 MEDIUM: an SQL-side `LIMIT AAFM_REPLACE_SITEWIDE_MAX_POSTS` applied
+	// An SQL-side `LIMIT AAFM_REPLACE_SITEWIDE_MAX_POSTS` applied
 	// BEFORE permission/builder-ownership filtering meant that enough non-editable matching posts
 	// sitting earlier in ID order could occupy the entire cap, so the caller's own editable match
 	// was never even fetched, let alone processed - repeating the call selected the exact same
@@ -2355,10 +2355,10 @@ function aafm_exec_replace_sitewide( array $input ) {
 			++$failed;
 			continue;
 		}
-		// Codex round 5 R5-2: is_wp_error() alone does not catch a wp_insert_post_data filter
+		// is_wp_error() alone does not catch a wp_insert_post_data filter
 		// that vetoes or reverts the content, which would count a post as updated when nothing
 		// actually changed. Confirm the exact intended content landed, matching the single-post
-		// replace-text fix above. Codex round 6 B6-3: compare against the CANONICAL
+		// replace-text fix above. Compare against the CANONICAL
 		// sanitize_post_field() form, not $new itself, so a legitimate normalization is not
 		// mistaken for a veto.
 		$after = aafm_exact_object( 'post', (int) $result );

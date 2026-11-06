@@ -623,9 +623,9 @@ function aafm_exec_update_term_meta( array $input ) {
 	}
 	$term_id = absint( $input['term_id'] );
 	$key     = $request['key'];
-	// Codex round 7 R7-3: pass the term's real taxonomy, not the empty default, so a
+	// Pass the term's real taxonomy, not the empty default, so a
 	// sanitize_callback registered via register_term_meta() for that taxonomy is not invisible
-	// to the probe. Codex round 8 R8-2: resolve it through get_object_subtype(), the same
+	// to the probe. Resolve it through get_object_subtype(), the same
 	// filterable call core itself makes at write time, rather than the raw requested taxonomy - a
 	// get_object_subtype_term filter remapping the subtype is honoured here the same way it is
 	// at write time.

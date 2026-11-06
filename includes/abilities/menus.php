@@ -201,7 +201,7 @@ function aafm_args_get_menu(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			// Codex round 1 (1.7.6), R1-7: this used to list only id/name/slug/count by hand,
+			// This used to list only id/name/slug/count by hand,
 			// while the executor below (aafm_redact_menu()) already returns the same
 			// attached/registered theme-location fields list-menus/create-menu/update-menu
 			// advertise through this shared helper. Use it here too, so all four menu endpoints
@@ -719,7 +719,7 @@ function aafm_exec_create_menu_item( array $input ) {
 	}
 	// Re-read the saved item to return the canonical redacted shape. If the re-fetch comes back
 	// null (a hook deleted it, or a cache race), surface a generic error rather than redacting
-	// null into an empty object that would violate the menu-item output schema (B9).
+	// null into an empty object that would violate the menu-item output schema.
 	$saved = aafm_menu_item_by_id( $menu_id, (int) $item_id );
 	if ( null === $saved ) {
 		return aafm_generic_error();
@@ -1038,7 +1038,7 @@ function aafm_exec_update_menu_item( array $input ) {
 		}
 	}
 
-	// Same B9 guard as create-menu-item: a null re-fetch must not be redacted into an empty
+	// Same guard as create-menu-item: a null re-fetch must not be redacted into an empty
 	// object that violates the output schema.
 	$saved = aafm_menu_item_by_id( $menu_id, $item_id );
 	if ( null === $saved ) {

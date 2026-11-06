@@ -186,7 +186,7 @@ function aafm_exec_get_post_types(): array {
 			// writable type would pass schema validation on a create/update CPT call and then be
 			// rejected at execute, so the agent needs this flag to pick a valid post_type up front.
 			'writable'     => $exposed,
-			// `updatable` adds the update/delete half of the claim honestly (B46): the per-object
+			// `updatable` adds the update/delete half of the claim honestly: the per-object
 			// edit/delete gates (aafm_can_edit_post_object) refuse any map_meta_cap:false type
 			// because its degraded per-object caps can fail open, so such a type is create-only
 			// through these abilities. Reporting create+update as one flag told the agent an

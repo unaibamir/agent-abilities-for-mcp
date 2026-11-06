@@ -49,15 +49,12 @@ final class DescriptionTruthSweepTest extends TestCase {
 	 */
 	private const UNNAMED_BY_DESIGN = array(
 		// Described as edit access to the object, which is how WordPress states these capabilities to a user.
-		'aafm/delete-comment:moderate_comments'   => 'Described as edit access to that comment.',
-		'aafm/get-user-meta:edit_users'           => 'Described as a user the agent can edit.',
-		'aafm/update-user-meta:edit_users'        => 'Described as a user the agent can edit.',
-		'aafm/delete-user-meta:edit_users'        => 'Described as a user the agent can edit.',
-		'aafm/acf-get-user-fields:edit_users'     => 'Described as edit access to that user.',
-		'aafm/acf-update-user-fields:edit_users'  => 'Described as edit access to that user.',
-		// Real omissions in descriptions this release does not touch; reported for a later pass.
-		'aafm/upload-media:upload_files'          => 'The description never names the upload capability. Open.',
-		'aafm/upload-media-from-url:upload_files' => 'The description never names the upload capability. Open.',
+		'aafm/delete-comment:moderate_comments'  => 'Described as edit access to that comment.',
+		'aafm/get-user-meta:edit_users'          => 'Described as a user the agent can edit.',
+		'aafm/update-user-meta:edit_users'       => 'Described as a user the agent can edit.',
+		'aafm/delete-user-meta:edit_users'       => 'Described as a user the agent can edit.',
+		'aafm/acf-get-user-fields:edit_users'    => 'Described as edit access to that user.',
+		'aafm/acf-update-user-fields:edit_users' => 'Described as edit access to that user.',
 	);
 
 	public function set_up(): void {

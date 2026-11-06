@@ -532,8 +532,7 @@ function aafm_discover_foreign_abilities(): array {
 	// function's own exclusion loop below - this is a bypass of the filtering layer, not a
 	// delegation to it.
 	//
-	// Deliberate departure from core's documented contract (delegation audit, review round 1,
-	// 2026-08-26): core documents wp_get_abilities_item_include as enforcing "universal inclusion
+	// Deliberate departure from core's documented contract: core documents wp_get_abilities_item_include as enforcing "universal inclusion
 	// rules" that every caller is expected to respect, and get_all_registered() skips it entirely.
 	// The cost: a vendor that hides an internal, deprecated, license-gated or feature-flagged
 	// ability from wp_get_abilities() on purpose will see it listed here anyway, and an operator
@@ -979,7 +978,7 @@ function aafm_bridge_attribute_error( string $foreign_slug, \WP_Error $error ): 
  * Whether a tool_call_result belongs to a BRIDGED (aafm-bridge/*) ability, classified by the
  * backing ability's own identity rather than by the wire tool name.
  *
- * Final gate round 3: the wire-name prefix test alone is bypassable both directions. The adapter
+ * The wire-name prefix test alone is bypassable both directions. The adapter
  * applies the PUBLIC mcp_adapter_tool_name filter to rename a tool's wire name AFTER sanitizing
  * the ability name (RegisterAbilityAsMcpTool::resolve_tool_name), so a site hooking that filter
  * could rename a bridged wrapper OUT of the aafm-bridge- prefix (skipping the list wrap entirely) or
@@ -1054,7 +1053,7 @@ function aafm_bridge_result_is_for_a_bridged_tool( string $tool_name, $mcp_tool 
  * worse: it left a bare `[...]` in structuredContent against an advertised object schema, where
  * the unconditional wrap at least produces a valid JSON object.
  *
- * Known, deliberately unfixed limitation (plan finding M2): a foreign ability that declares
+ * Known, deliberately unfixed limitation: a foreign ability that declares
  * {type:object, additionalProperties:false} and returns array() for "nothing found" still
  * receives {"data":[]} from this filter, which its own schema forbids. The only alternative is to
  * leave that one case as a bare [], which is a top-level JSON array and violates the MCP spec for

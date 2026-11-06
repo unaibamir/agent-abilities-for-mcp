@@ -39,8 +39,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * The return value reports whether every `alloptions`/`notoptions` rewrite this call actually
  * attempted was accepted by `wp_cache_set()`. A drop-in that reports failure here (a remote write
  * that could not complete) means the blob rewrite this function exists to make did not really
- * happen, so a caller certifying a write must not treat the cache as repaired (Codex hotfix
- * re-check, finding 6 remainder) - see aafm_option_write_certified().
+ * happen, so a caller certifying a write must not treat the cache as repaired - see aafm_option_write_certified().
  *
  * @param string $option Option name.
  * @return bool True when every cache rewrite this call attempted was accepted; false if any
@@ -124,7 +123,7 @@ function aafm_option_write_observed( string $option, bool $is_delete, callable $
  * the outcome the same in both cases.
  *
  * The return value used to report only whether the cache cleanup succeeded, never whether the
- * row was actually gone (Codex round 9, R9-3): `delete_option()`'s own result was discarded, so a
+ * row was actually gone: `delete_option()`'s own result was discarded, so a
  * failed DELETE against a row the cache had never heard of certified as a clean success. This now
  * certifies the deletion itself with aafm_option_write_certified(), the same primitive
  * aafm_persist_operator_switch()'s off branch already uses, so a caller gets one honest answer
@@ -189,7 +188,7 @@ function aafm_force_refresh_option_caches( string $option ): void {
  * Run one already-prepared, single-column SELECT and report whether the query itself succeeded,
  * using $wpdb->query()'s own return value rather than $wpdb->last_error.
  *
- * $wpdb->last_error is not a reliable failure signal on its own (Codex round 10, R10-1):
+ * $wpdb->last_error is not a reliable failure signal on its own:
  * $wpdb->query() (wp-includes/class-wpdb.php) returns false, before ever touching last_error, on
  * three paths - $wpdb->ready is false, the `query` filter returns an empty query, and a failed
  * reconnection after the server has gone away. A caller that only checked last_error read all
@@ -240,7 +239,7 @@ function aafm_wpdb_scalar( string $sql ): array {
  * value, never $wpdb->last_error (see that function's docblock for why last_error alone is not a
  * reliable failure signal).
  *
- * Codex round 6, R6-2: several OAuth call sites used $wpdb->get_row()'s return value directly to
+ * Several OAuth call sites used $wpdb->get_row()'s return value directly to
  * decide whether a refresh token, authorization code, or consent row exists - but get_row()
  * returns null both when the query genuinely finds nothing AND when the query itself fails, so a
  * database fault read the same as "no such row" and was reported to the client as an invalid
@@ -279,7 +278,7 @@ function aafm_wpdb_row( string $sql ): array {
  * same way aafm_wpdb_row() does for a single row - via $wpdb->query()'s own return value, never
  * $wpdb->last_error.
  *
- * Codex round 7, R7-2: $wpdb->get_results() always returns $wpdb->last_result after calling
+ * $wpdb->get_results() always returns $wpdb->last_result after calling
  * query(), regardless of whether that call succeeded (wp-includes/class-wpdb.php) - so a caller
  * that only checked `is_array( $rows )` could not tell a genuinely empty result apart from a
  * failed query that left the PREVIOUS query's rows sitting in last_result. This closes that the
@@ -319,7 +318,7 @@ function aafm_wpdb_results( string $sql ): array {
  * succeeded, the same way aafm_wpdb_scalar() does for a single value - via $wpdb->query()'s own
  * return value, never $wpdb->last_error.
  *
- * Codex round 7, R7-2: $wpdb->get_col() shares get_results()'s defect - it always reads
+ * $wpdb->get_col() shares get_results()'s defect - it always reads
  * $wpdb->last_result after calling query(), regardless of success, so a failed query hands back
  * the PREVIOUS query's column values rather than an empty list.
  *
@@ -373,11 +372,11 @@ function aafm_wpdb_col( string $sql ): array {
  *
  * A query that errors (a broken table, a lost DB connection, anything short of a clean empty
  * result) and a query that simply finds no matching row both make `$wpdb->get_var()` return null -
- * `db_found` alone cannot tell "confirmed absent" from "could not check" apart (Codex round 9
- * re-check: this was the gap behind a failed configuration delete still certifying as a clean
- * reset - R9-3). `db_error` names that gap explicitly, from aafm_wpdb_row()'s own `ok` flag
- * rather than `$wpdb->last_error` alone: last_error is not set on every failure path (Codex round
- * 10, R10-1 - see that function's docblock for the three it misses), so a caller that trusted it
+ * `db_found` alone cannot tell "confirmed absent" from "could not check" apart
+ * (this was the gap behind a failed configuration delete still certifying as a clean
+ * reset). `db_error` names that gap explicitly, from aafm_wpdb_row()'s own `ok` flag
+ * rather than `$wpdb->last_error` alone: last_error is not set on every failure path
+ * (see that function's docblock for the three it misses), so a caller that trusted it
  * alone could still certify an unreadable database as proof the row was gone.
  *
  * @param string $option Option name.
@@ -483,7 +482,7 @@ function aafm_stored_id_matches( $stored, int $id ): bool {
  * value before its remote `set()` call's result is known can make a later `get_option()` in the
  * same request look repaired even when the remote write itself failed (see
  * aafm_forget_option_caches()'s docblock and the module-level note at the top of this file) - the
- * outstanding gap in the Codex hotfix re-check (finding 6). Certifying instead against
+ * outstanding gap. Certifying instead against
  * aafm_read_option_views()'s two independent reads closes that: the database view cannot be primed
  * by a runtime cache at all, and the cache view here is the same forced read `get_option()` itself
  * would use, kept separate rather than folded into one answer.
@@ -514,7 +513,7 @@ function aafm_stored_id_matches( $stored, int $id ): bool {
  * should treat the whole write as uncertified rather than call this function at all in that case.
  *
  * A database read that itself fails (aafm_read_option_views()'s `db_error`) is checked first and
- * fails certification outright, on either branch (Codex round 9 re-check, R9-3 remainder): the
+ * fails certification outright, on either branch: the
  * expect-absent branch below would otherwise read "the row can't be found" the same way whether
  * the row is genuinely gone or the query that would have found it just errored, so a broken read
  * could certify a delete that never actually happened as a clean success. There is no default to
@@ -661,7 +660,7 @@ function aafm_persist_operator_switch( string $option, bool $on ): bool {
  * the remainder of it - callers elsewhere rely on that read reflecting the write this function just
  * made - it is simply no longer where the boolean this function returns comes from.
  *
- * That warming read is deliberately skipped on an uncertified write (Codex round 9 re-check): a
+ * That warming read is deliberately skipped on an uncertified write: a
  * plain get_option() call for an option this request just deliberately forgot the cache of, run
  * while the database itself cannot answer for the option (the same condition certification just
  * failed under), does not merely read nothing - core's own get_option() (wp-includes/option.php)

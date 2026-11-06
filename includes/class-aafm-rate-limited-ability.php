@@ -23,9 +23,9 @@ if ( ! class_exists( 'WP_Ability' ) ) {
  * execute() refuses a schema-invalid input (and, on 7.0+, an output-schema violation or a callback
  * throw) BEFORE or INSTEAD OF that callback, leaving the allow memoized. The next tools/call for the
  * same ability in the same request then reused the stale allow and skipped its consume - a real
- * rate-limit bypass inside one JSON-RPC batch (finding B12, doc 167).
+ * rate-limit bypass inside one JSON-RPC batch.
  *
- * Fix round 1 (Codex finding 1) added the second responsibility: on WP 7.1+, wp_ability_invoked
+ * The second responsibility: on WP 7.1+, wp_ability_invoked
  * (includes/register.php, aafm_log_ability_invocation()) pushes a pending audit row onto a per-name
  * correlation stack the instant execute() begins, before core does any work. An intentional
  * wp_pre_execute_ability short-circuit, a normalize_input() failure, or a validate_input() failure
@@ -35,7 +35,7 @@ if ( ! class_exists( 'WP_Ability' ) ) {
  * and resolved it instead of writing its own row, misattributing the second call's outcome onto the
  * first and leaving the second with no row of its own.
  *
- * Final-gate fix (Codex finding 1, round 2): the fix round 1 version discarded whatever frame was
+ * An earlier version discarded whatever frame was
  * on top of the per-name stack, with no way to tell whose frame that was. That is exactly wrong
  * when the SAME ability is invoked recursively - a wp_pre_execute_ability filter that itself calls
  * the same ability, which the Abilities API does not forbid. The nested call's own cleanup would

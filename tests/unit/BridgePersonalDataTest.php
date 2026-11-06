@@ -60,6 +60,29 @@ final class BridgePersonalDataTest extends TestCase {
 		}
 	}
 
+	public function test_generic_person_words_in_a_tool_name_carry_the_indicator(): void {
+		foreach ( array( 'acme/list-users', 'acme/get-user', 'core/get-user-info', 'acme/get-contacts', 'acme/export-leads' ) as $slug ) {
+			$this->assertSame( 'users', aafm_bridge_personal_data_kind( $slug ), $slug );
+		}
+		$this->assertSame( '', aafm_bridge_personal_data_kind( 'acme/list-usergroups' ), 'Whole words only.' );
+	}
+
+	public function test_a_malformed_filter_value_is_ignored_and_does_not_fatal(): void {
+		add_filter(
+			'aafm_bridge_personal_data_namespaces',
+			static fn( $map ) => array_merge(
+				$map,
+				array(
+					'acme-array' => array( 'users' ),
+					'acme-int'   => 7,
+				)
+			)
+		);
+
+		$this->assertSame( '', aafm_bridge_personal_data_kind( 'acme-array/get-settings' ) );
+		$this->assertSame( '', aafm_bridge_personal_data_kind( 'acme-int/get-settings' ) );
+	}
+
 	public function test_the_filter_can_add_a_namespace(): void {
 		add_filter(
 			'aafm_bridge_personal_data_namespaces',

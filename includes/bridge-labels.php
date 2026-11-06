@@ -246,7 +246,7 @@ function aafm_bridge_personal_data_row_notice( string $kind ): string {
 }
 
 /**
- * The notice for a tool that may return personal data. An indicator, never a determination.
+ * The notice for a group with a tool that may return personal data. An indicator, never a determination.
  *
  * @param string $kind Result of aafm_bridge_personal_data_kind().
  * @return string '' when the tool is not flagged.
@@ -256,5 +256,5 @@ function aafm_bridge_personal_data_notice( string $kind ): string {
 		return '';
 	}
 
-	return __( 'This tool may return personal data, such as names, email addresses or order details. This notice is based on the plugin and tool name and is not a full check, so treat any tool from another plugin as able to return personal data.', 'agent-abilities-for-mcp' );
+	return __( 'Some of these tools may return personal data, such as names, email addresses or order details. This notice is based on the plugin and tool name and is not a full check, so treat any tool from another plugin as able to return personal data.', 'agent-abilities-for-mcp' );
 }

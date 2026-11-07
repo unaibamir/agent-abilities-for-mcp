@@ -14,7 +14,7 @@ WordPress MCP server for Claude and ChatGPT with limited access, a pause switch,
 
 = WordPress MCP server for Claude and ChatGPT, with limited access and an audit log =
 
-Agent Abilities for MCP is a WordPress MCP server. You connect Claude, ChatGPT, Cursor or another MCP client to your site. The AI then works as a WordPress user you pick and gets exactly that user's role, so an Editor connection means limited access, not admin: it can write and edit posts, and it can't install a plugin or change a setting.
+Agent Abilities for MCP is a WordPress MCP server that exposes WordPress abilities to AI agents. You connect Claude, ChatGPT, Cursor or another MCP client to your site. The AI then works as a WordPress user you pick and gets exactly that user's role, so an Editor connection means limited access, not admin: it can write and edit posts, and it can't install a plugin or change a setting.
 
 Once connected, you can ask things like:
 
@@ -41,7 +41,7 @@ Anthropic's [help article](https://support.claude.com/en/articles/11175166) list
 
 On ChatGPT web, open Plugins, select the plus button, then Add custom MCP server, name it, paste your endpoint under Connection, choose OAuth for authentication and select Create as a plugin. You don't need to turn on Developer Mode first.
 
-OpenAI's [help article](https://help.openai.com/en/articles/12584461) says custom MCP servers and full MCP, writes included, are available on Business and Enterprise/Edu, and that Pro can connect with read and fetch permissions, but it doesn't mention Free or Plus. On Business, admins and owners add the server, while on Enterprise/Edu admins can, and so can members they grant access to. It's a web feature only.
+OpenAI's [help article](https://help.openai.com/en/articles/12584461) says custom MCP servers and full MCP, writes included, are available on Business and Enterprise/Edu, and that Pro can connect with read and fetch permissions. It doesn't mention Free or Plus, but a Plus account connected through Plugins, Add custom MCP server when I tested 1.11.0. On Business, admins and owners add the server, while on Enterprise/Edu admins can, and so can members they grant access to. It's a web feature only.
 
 = Manage multiple WordPress sites from ChatGPT or Claude =
 
@@ -91,7 +91,9 @@ When one of these plugins is active, its abilities appear on the Integrations ta
 
 The Events Calendar has 13 abilities for events, venues and organizers, Event Tickets has 3 for reading tickets and attendees, and Avada has 2 that read a page's Fusion Builder markup and replace text inside it. GeoDirectory has 4 for business listings, and they stay off until you enable that integration on the Integrations tab, even when GeoDirectory is active.
 
-Plugins that register their own abilities with the WordPress Abilities API appear on the Other plugins tab, and this plugin does not filter what another plugin's ability returns. Each tool shows which plugin provides it (or its namespace, when the plugin cannot be identified), is labelled Read, Write or Destructive from the plugin's own annotations (a tool the plugin leaves unlabelled is treated as Destructive and says so), and carries a notice when it may return personal data (a hint based on the plugin and tool name, not a full check). Tools a plugin update adds wait for your review. The WP-CLI command `wp aafm catalog export` prints those abilities as JSON, and `--include-native` adds this plugin's own.
+Minimum versions: WooCommerce 9.1, All in One SEO 4.9.8, The Events Calendar 6.17.3.1 and Event Tickets 5.29.3.1. Below these, their tools stay hidden and the Integrations tab says why.
+
+Plugins that register their own abilities with the WordPress Abilities API appear on the Other plugins tab, and this plugin does not filter what another plugin's ability returns. Each tool shows which plugin provides it (or its namespace, when the plugin cannot be identified), is labelled Read, Write or Destructive from the plugin's own annotations (a tool the plugin leaves unlabelled is treated as Destructive and says so), and carries a notice when it may return personal data (a hint based on the plugin and tool name, not a full check). Tools a plugin update adds wait for your review. A plugin that doesn't mark its reads as read-only loses them in read-only mode. Lower roles can see the names of bridged tools they can't run, and the plugin's own check refuses the call. The WP-CLI command `wp aafm catalog export` prints those abilities as JSON, and `--include-native` adds this plugin's own.
 
 = Built on the Abilities API and the MCP Adapter =
 
@@ -99,7 +101,7 @@ WordPress 6.9 added the Abilities API, and the official MCP Adapter turns those 
 
 = Pages built with a page builder =
 
-Page builders keep their layout in their own data, so an edit to the post text can report success and change nothing on the page, or get overwritten the next time someone saves in the builder. For Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks and WPBakery the plugin checks first and refuses the write with an error naming the builder. Avada's two own tools are the exception and refuse shortcode changes.
+A page builder owns its page's layout, so an edit to the post text can report success and change nothing on the page, break the builder's markup, or get overwritten the next time someone saves in the builder. For Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks and WPBakery the plugin checks first and refuses the write with an error naming the builder. Avada's two own tools are the exception and refuse shortcode changes.
 
 = Compatible clients =
 
@@ -259,6 +261,10 @@ It's free on WordPress.org. There's no paid tier, the plugin adds no usage limit
 
 Click Check my connection on the Connection tab and the Connection Doctor runs its checks from your own server, then names the fix, whether that's a host stripping the Authorization header, a firewall emptying the JSON body, a redirect or a blocked discovery document. The nginx rule and the Cloudflare and WP Engine steps are in the [troubleshooting guide](https://agentabilitieswp.com/docs/troubleshooting/?utm_source=wordpress.org&utm_medium=readme&utm_campaign=plugin-listing), and server rules that block /.well-known/ or CDN rules such as Cloudflare's AI bot blocking are common causes.
 
+= Why does ChatGPT say my server must advertise PKCE? =
+
+That error means ChatGPT never got the plugin's discovery document, so it couldn't see the PKCE support listed there. The usual cause is a firewall or CDN rule blocking ChatGPT, or a host serving `.well-known` from disk before WordPress sees the request. Test from outside your network with `curl -sS -A "ChatGPT-User/1.0" https://your-site/.well-known/oauth-authorization-server`, and if the JSON doesn't come back, allow that path for ChatGPT.
+
 = Why is a tool I switched on missing from my agent? =
 
 The AI client may be showing an old tool list. To refresh it in ChatGPT, open Settings, then Integrations, then Plugins, pick the app and choose Refresh, and in Claude start a new chat or reconnect the connector. If that isn't it, the Why is my tool missing? card on the Dashboard lists each of this plugin's own tools that you switched on but agents can't see, with the reason, such as read-only mode, the high-risk lock or an inactive plugin.
@@ -282,7 +288,7 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 == Screenshots ==
 
 1. First-run setup walks you through connecting an agent in three steps: turn the connection on, choose what it can touch, then hand the endpoint to your AI client.
-2. The Abilities tab. Nothing is exposed until you switch it on. Abilities are grouped by section, here Menus with its reads on and its writes off, and each section has buttons to enable all reads or all writes.
+2. The Abilities tab. Nothing from this plugin is exposed until you switch it on. Abilities are grouped by section, here Menus with its reads on and its writes off, and each section has buttons to enable all reads or all writes.
 3. Read-only mode on. The header badge says Read-only and the Content section loses its Enable all writes button.
 4. The Read-only mode switch under Safety controls on the Settings tab. While it is on, the high-risk unlock beneath it is held too, and says so.
 5. WooCommerce tools that change orders, issue refunds or touch payment settings stay locked behind a second switch on the Settings tab.
@@ -305,7 +311,7 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 * **Feature:** The Other plugins tab says which plugin provides each group of tools (or its namespace, when the plugin cannot be identified), labels each tool Read, Write or Destructive from the plugin's own annotations (an unlabelled tool is treated as destructive and says so), and marks tools that may return personal data such as form entries, orders, learner or member records. That mark is a hint from the plugin and tool name, not a full check.
 * **Feature:** When a plugin update or a newly activated plugin adds tools, a "New tools since your last review" card lists them. They stay off until you switch them on, and Settings can send a notification for them.
 * **Feature:** Each plugin on the Other plugins tab has an "Allow only read tools" button, and the Activity Log can filter to one plugin's tools.
-* **Fix:** A bridged tool's error names the plugin as WordPress shows it, for example "WPForms Lite" instead of "wpforms", or names the tool namespace and says so when the plugin cannot be identified. The Quick Connect note no longer promises deletes go to Trash, the upload tools name the upload-files capability, and Content editor and Shop manager say they can read playbooks.
+* **Fix:** A bridged tool's error names the plugin, using the name from its header once cleaned up, for example "WPForms Lite" instead of "wpforms", or names the tool namespace and says so when the plugin cannot be identified. The Quick Connect note no longer promises deletes go to Trash, the upload tools name the upload-files capability, and Content editor and Shop manager say they can read playbooks.
 * **Chore:** The TEC events list says whose draft events it returns, the Avada descriptions lost a dash, and leftover internal notes came out of the plugin's PHP comments.
 
 = 1.10.2 =
@@ -392,7 +398,7 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 * **Fix:** A zero-match abilities search left the Save button stranded on an empty card; the savebar now hides and returns with the results.
 * **Fix:** The client picker's hover and selected states looked identical; hover is now a border outline only.
 * **Fix:** Ability order now survives a re-save, a stale search clears on keyboard navigation, a large allowlist no longer renders every checkbox at load, and new controls have accessible names and translations.
-* **Fix:** Post, block and template writes now confirm what landed, a stuck OAuth migration can no longer re-enable a switch you disabled, comment counts no longer hint at hidden comments, and a failed token revoke no longer reports success.
+* **Fix:** Post, block and template writes now confirm what landed, a stuck OAuth migration can no longer re-enable a switch you disabled, comment counts no longer include hidden comments, and a failed token revoke no longer reports success.
 
 [Full release history](https://agentabilitieswp.com/changelog/?utm_source=wordpress.org&utm_medium=readme&utm_campaign=plugin-listing).
 
@@ -400,7 +406,7 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 
 = 1.11.0 =
 
-Tools that other plugins add after an update now wait for your review and stay off until you switch them on. Nothing you have switched on changes.
+Tools that other plugins add after an update wait for your review and stay off until you switch them on. Nothing you have switched on changes.
 
 = 1.10.2 =
 

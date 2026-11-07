@@ -12,7 +12,7 @@ WordPress MCP server for Claude and ChatGPT with limited access, a pause switch,
 | **Stable tag** | 1.11.0 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
-This is the GitHub home of a free WordPress plugin that adds an MCP endpoint to a site, so Claude, ChatGPT, Cursor and other MCP clients can work on it as a WordPress user you choose. It ships 184 abilities (90 core, 94 for plugins such as WooCommerce, ACF and Yoast SEO) and every one starts switched off.
+This is the GitHub home of a free WordPress plugin that adds an MCP endpoint to a site and exposes WordPress abilities to AI agents, so Claude, ChatGPT, Cursor and other MCP clients can work on it as a WordPress user you choose. It ships 184 abilities (90 core, 94 for plugins such as WooCommerce, ACF and Yoast SEO) and every one starts switched off.
 
 The listing for site owners lives on [WordPress.org](https://wordpress.org/plugins/agent-abilities-for-mcp/). This page is for anyone who wants to read the code, wire the plugin into their own stack or send a patch.
 
@@ -23,6 +23,8 @@ Abilities are registered on the WordPress 6.9 Abilities API and served through t
 The admin screen has a switch for each ability, plus read-only mode, per-role and per-connection allowlists, a rate limit, an IP allowlist and Pause all access, and each OAuth connection gets its own pause, end date, rate limit and access preset. An Activity Log table in the site's own database records the acting user, the tool, the argument keys and an identifier-only note, and it never stores free-text content.
 
 Playbooks are step-by-step instructions the owner writes, and agents read the Active ones through two read tools, `aafm/list-playbooks` and `aafm/get-playbook`. Writes through the general content tools to pages owned by Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks or WPBakery are refused. Avada's two dedicated tools are the exception, and they refuse changes to its shortcodes.
+
+Integration tools need WooCommerce 9.1, All in One SEO 4.9.8, The Events Calendar 6.17.3.1 or Event Tickets 5.29.3.1 or newer. Below these, their tools stay hidden and the Integrations tab says why. A plugin that doesn't mark its reads as read-only loses them in read-only mode, and lower roles can see the names of bridged tools they can't run, though the plugin's own check refuses the call.
 
 One scope note: the Adapter has a default server that other plugins can publish tools to, and those tools are outside this plugin's controls. A Settings choice (Automatic, Always on, Always off) decides whether that server runs, and this plugin's own tools are never on it.
 
@@ -94,7 +96,9 @@ These are the main extension points. Every name starts with `aafm_`.
 | `aafm_ability_called` | action | Fires with the normalized record after an Activity Log row is written. |
 | `aafm_write_completed` | action | Fires with a copy of the result and the target once a write's outcome is decided, for every status. |
 | `aafm_force_read_only_mode` | filter | Return `true` to force read-only mode on. It can only turn the mode on, never off. |
-| `aafm_high_risk_abilities` | filter | Add `aafm/*` ability names to the high-risk set. The built-ins are merged back in, so it can only add. Bridged abilities are not affected. |
+| `aafm_high_risk_abilities` | filter | Add ability names or other plugins' slugs to the high-risk set. The built-ins are merged back in, so it can only add. |
+| `aafm_force_block_high_risk_abilities` | filter | Return `true` to keep the high-risk lock on whatever Settings says. It can only lock, never unlock. |
+| `aafm_bridge_discovery_capability` | filter | The capability a user needs to see a bridged tool whose own permission check needs an object id. Default `edit_posts`. Receives the wrapper tool name. |
 | `aafm_rate_limit_per_min`, `aafm_ip_allowlist`, `aafm_max_title_len` | filters | Adjust the stored value. A filter cannot switch off a limit the site owner set in Settings. |
 | `aafm_page_builder_markers` | filter | Map of post meta key to builder name used by the page builder guard. |
 | `aafm_allowed_post_types` | filter | Custom post types exposed to the content tools. Types that fail the eligibility check stay refused. |
@@ -146,7 +150,7 @@ The Model Context Protocol is an open specification that Anthropic originally de
 * **Feature:** The Other plugins tab says which plugin provides each group of tools (or its namespace, when the plugin cannot be identified), labels each tool Read, Write or Destructive from the plugin's own annotations (an unlabelled tool is treated as destructive and says so), and marks tools that may return personal data such as form entries, orders, learner or member records. That mark is a hint from the plugin and tool name, not a full check.
 * **Feature:** When a plugin update or a newly activated plugin adds tools, a "New tools since your last review" card lists them. They stay off until you switch them on, and Settings can send a notification for them.
 * **Feature:** Each plugin on the Other plugins tab has an "Allow only read tools" button, and the Activity Log can filter to one plugin's tools.
-* **Fix:** A bridged tool's error names the plugin as WordPress shows it, for example "WPForms Lite" instead of "wpforms", or names the tool namespace and says so when the plugin cannot be identified. The Quick Connect note no longer promises deletes go to Trash, the upload tools name the upload-files capability, and Content editor and Shop manager say they can read playbooks.
+* **Fix:** A bridged tool's error names the plugin, using the name from its header once cleaned up, for example "WPForms Lite" instead of "wpforms", or names the tool namespace and says so when the plugin cannot be identified. The Quick Connect note no longer promises deletes go to Trash, the upload tools name the upload-files capability, and Content editor and Shop manager say they can read playbooks.
 * **Chore:** The TEC events list says whose draft events it returns, the Avada descriptions lost a dash, and leftover internal notes came out of the plugin's PHP comments.
 
 ### 1.10.2
@@ -233,6 +237,6 @@ The Model Context Protocol is an open specification that Anthropic originally de
 * **Fix:** A zero-match abilities search left the Save button stranded on an empty card; the savebar now hides and returns with the results.
 * **Fix:** The client picker's hover and selected states looked identical; hover is now a border outline only.
 * **Fix:** Ability order now survives a re-save, a stale search clears on keyboard navigation, a large allowlist no longer renders every checkbox at load, and new controls have accessible names and translations.
-* **Fix:** Post, block and template writes now confirm what landed, a stuck OAuth migration can no longer re-enable a switch you disabled, comment counts no longer hint at hidden comments, and a failed token revoke no longer reports success.
+* **Fix:** Post, block and template writes now confirm what landed, a stuck OAuth migration can no longer re-enable a switch you disabled, comment counts no longer include hidden comments, and a failed token revoke no longer reports success.
 
 Full release history: [agentabilitieswp.com/changelog](https://agentabilitieswp.com/changelog/?utm_source=github&utm_medium=readme&utm_campaign=plugin-repo)

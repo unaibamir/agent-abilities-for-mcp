@@ -2016,4 +2016,15 @@ final class AcfTest extends TestCase {
 			$source
 		);
 	}
+
+	/**
+	 * A theme or plugin can define its own get_field() helper. That alone must not switch on the
+	 * ACF tools, which need ACF's own class.
+	 */
+	public function test_a_theme_defining_get_field_does_not_activate_acf(): void {
+		$this->stub_acf( array() ); // Defines get_field() and friends, as a theme helper would.
+		$this->assertTrue( function_exists( 'get_field' ), 'precondition: a get_field function exists.' );
+		$this->assertFalse( class_exists( 'ACF' ), 'precondition: ACF itself is not loaded.' );
+		$this->assertFalse( aafm_acf_active() );
+	}
 }

@@ -252,8 +252,9 @@ function aafm_quickconnect_apply_abilities( bool $write, ?bool &$read_only_persi
 		$enabled = array_values( array_diff( $enabled, $write_set ) );
 	}
 
-	// Only persist names that still exist in the registry.
-	$known   = array_keys( aafm_get_abilities_registry() );
+	// Only persist names that still exist in the full catalog. The host-gated registry would drop
+	// a saved tool whose plugin is inactive right now, the same rule the Abilities tab save keeps.
+	$known   = array_keys( aafm_get_abilities_registry_full() );
 	$enabled = array_values( array_intersect( $enabled, $known ) );
 
 	// aafm_set_enabled_abilities() is the single choke point for this option: it strips any

@@ -366,4 +366,18 @@ final class UninstallTest extends TestCase {
 		}
 		$this->assertFalse( get_transient( 'aafm_detected_meta_keys' ) );
 	}
+
+	/**
+	 * A delete-data uninstall must not leave the per-tool role limits behind.
+	 */
+	public function test_delete_data_removes_the_allowlist_overrides(): void {
+		aafm_install_activity_log();
+		aafm_install_oauth_tables();
+		update_option( 'aafm_ability_allowlist_overrides', array( 'aafm/get-posts' => array( 'editor' ) ) );
+		update_option( 'aafm_delete_data_on_uninstall', true );
+
+		aafm_uninstall_site_data();
+
+		$this->assertFalse( get_option( 'aafm_ability_allowlist_overrides', false ), 'Uninstall with delete data must remove the per-tool role limits.' );
+	}
 }

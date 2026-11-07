@@ -342,4 +342,17 @@ final class ResetPluginTest extends TestCase {
 		$json = json_decode( $body, true );
 		return is_array( $json ) ? $json : array();
 	}
+
+	/**
+	 * Per-tool role limits are configuration like any other; a reset must clear them.
+	 */
+	public function test_reset_removes_the_allowlist_overrides(): void {
+		aafm_install_activity_log();
+		aafm_install_oauth_tables();
+		update_option( 'aafm_ability_allowlist_overrides', array( 'aafm/get-posts' => array( 'editor' ) ) );
+
+		aafm_reset_plugin();
+
+		$this->assertFalse( get_option( 'aafm_ability_allowlist_overrides', false ), 'Reset must clear the per-tool role limits.' );
+	}
 }

@@ -647,6 +647,8 @@ function aafm_config_option_names(): array {
 		'aafm_denied_user_meta_keys',
 		'aafm_exposed_term_meta_keys',
 		'aafm_denied_term_meta_keys',
+		// Per-tool role limits set on the Abilities tab, read by includes/allowlist.php.
+		'aafm_ability_allowlist_overrides',
 		// First-run onboarding state. Clearing these on reset returns the site to first-run, so the
 		// Quick Connect wizard opens again; the menu-pointer flag is included so uninstall cleans it too.
 		'aafm_quickconnect_finished',

@@ -145,6 +145,14 @@ The plugin calls no AI provider and sends no telemetry. It makes two kinds of re
 The Model Context Protocol is an open specification that Anthropic originally developed. Claude, ChatGPT, Cursor, VS Code, Gemini and other product names belong to their owners, and Agent Abilities for MCP is a third-party plugin that isn't affiliated with, endorsed by or sponsored by any of them.
 
 ## Changelog
+### 1.11.1
+
+* **Fix:** Quick Connect kept deleting the saved tools of an inactive plugin and Reset left per-tool role limits behind; both are fixed. Deleting a subsite now drops the plugin's tables when the plugin is loaded on the site running the delete.
+* **Fix:** The high-risk lock now holds wc-create-order, WooCommerce's own order status and order update tools, and the Secure Custom Fields tools that can store a callback name, and its filter accepts other plugins' slugs. Order notes stay available, and Shop manager connections no longer reach wc-create-order. Post tools and update-cpt-item no longer reach a type whose own tool is off.
+* **Fix:** Agent writes to WPBakery, Bricks, Oxygen, Breakdance and Brizy pages are refused, and Force draft now covers product variations, which save as disabled.
+* **Fix:** A custom role with only read_private_posts no longer lists other people's drafts, protected excerpts are withheld, the user meta tools can't reach the MCP session store, and OAuth discovery works on subfolder installs. Empty meta, SEO head and search answers now say why, restore-revision confirms what landed, term backslashes survive, and LiteSpeed and WP Fastest Cache purge after agent meta writes.
+* **Chore:** Five old admin save actions are gone (a script calling them directly should use aafm_save_abilities_page), readme wording is corrected, and integration minimum versions are listed.
+
 ### 1.11.0
 
 * **Feature:** The Other plugins tab says which plugin provides each group of tools (or its namespace, when the plugin cannot be identified), labels each tool Read, Write or Destructive from the plugin's own annotations (an unlabelled tool is treated as destructive and says so), and marks tools that may return personal data such as form entries, orders, learner or member records. That mark is a hint from the plugin and tool name, not a full check.

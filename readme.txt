@@ -306,6 +306,14 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 
 == Changelog ==
 
+= 1.11.1 =
+
+* **Fix:** Quick Connect kept deleting the saved tools of an inactive plugin and Reset left per-tool role limits behind; both are fixed. Deleting a subsite now drops the plugin's tables when the plugin is loaded on the site running the delete.
+* **Fix:** The high-risk lock now holds wc-create-order, WooCommerce's own order status and order update tools, and the Secure Custom Fields tools that can store a callback name, and its filter accepts other plugins' slugs. Order notes stay available, and Shop manager connections no longer reach wc-create-order. Post tools and update-cpt-item no longer reach a type whose own tool is off.
+* **Fix:** Agent writes to WPBakery, Bricks, Oxygen, Breakdance and Brizy pages are refused, and Force draft now covers product variations, which save as disabled.
+* **Fix:** A custom role with only read_private_posts no longer lists other people's drafts, protected excerpts are withheld, the user meta tools can't reach the MCP session store, and OAuth discovery works on subfolder installs. Empty meta, SEO head and search answers now say why, restore-revision confirms what landed, term backslashes survive, and LiteSpeed and WP Fastest Cache purge after agent meta writes.
+* **Chore:** Five old admin save actions are gone (a script calling them directly should use aafm_save_abilities_page), readme wording is corrected, and integration minimum versions are listed.
+
 = 1.11.0 =
 
 * **Feature:** The Other plugins tab says which plugin provides each group of tools (or its namespace, when the plugin cannot be identified), labels each tool Read, Write or Destructive from the plugin's own annotations (an unlabelled tool is treated as destructive and says so), and marks tools that may return personal data such as form entries, orders, learner or member records. That mark is a hint from the plugin and tool name, not a full check.
@@ -403,6 +411,10 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 [Full release history](https://agentabilitieswp.com/changelog/?utm_source=wordpress.org&utm_medium=readme&utm_campaign=plugin-listing).
 
 == Upgrade Notice ==
+
+= 1.11.1 =
+
+The high-risk lock now holds wc-create-order (not under Shop manager), WooCommerce's order status and update tools, and SCF's type tools. Post tools skip a type whose own tool is off, read_private_posts alone no longer shows others' drafts, and five more page builders refuse writes.
 
 = 1.11.0 =
 

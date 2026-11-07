@@ -82,6 +82,37 @@ function aafm_activity_log_table(): string {
 }
 
 /**
+ * The plugin's own table names for one site, built from that site's prefix.
+ *
+ * @param int $blog_id Site id.
+ * @return list<string>
+ */
+function aafm_site_table_names( int $blog_id ): array {
+	global $wpdb;
+	$prefix = $wpdb->get_blog_prefix( $blog_id );
+	$tables = array( $prefix . 'aafm_activity_log' );
+	foreach ( aafm_oauth_table_suffixes() as $suffix ) {
+		$tables[] = $prefix . $suffix;
+	}
+	return $tables;
+}
+
+/**
+ * Add this plugin's tables to the list core drops when a site is deleted.
+ *
+ * Hooked to wpmu_drop_tables, so it runs only where the plugin is loaded: network active, active
+ * on the site running the delete, or a subsite deleting itself. A site that had the plugin active
+ * only on itself and is deleted from a main site without it keeps its tables; core has no other hook.
+ *
+ * @param array<int,string> $tables  Tables core is about to drop.
+ * @param int               $blog_id The site being deleted.
+ * @return array<int,string>
+ */
+function aafm_filter_wpmu_drop_tables( array $tables, int $blog_id ): array {
+	return array_values( array_unique( array_merge( $tables, aafm_site_table_names( $blog_id ) ) ) );
+}
+
+/**
  * Create (or upgrade) the activity log table, then record the schema version.
  *
  * Idempotent: dbDelta() only applies the diff. Mirrors aafm_install_oauth_tables().

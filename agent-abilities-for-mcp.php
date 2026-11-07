@@ -184,6 +184,7 @@ function aafm_initialize_new_site_tables( $new_site ): void {
 	restore_current_blog();
 }
 add_action( 'wp_initialize_site', 'aafm_initialize_new_site_tables', 100 );
+add_filter( 'wpmu_drop_tables', 'aafm_filter_wpmu_drop_tables', 10, 2 );
 
 /**
  * Schedule the daily OAuth cleanup event on activation, if not already scheduled.

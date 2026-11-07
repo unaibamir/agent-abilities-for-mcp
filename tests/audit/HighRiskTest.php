@@ -279,4 +279,26 @@ final class HighRiskTest extends TestCase {
 	public function test_wc_create_order_is_high_risk(): void {
 		$this->assertTrue( aafm_ability_is_high_risk( 'aafm/wc-create-order' ) );
 	}
+
+	public function test_a_foreign_slug_in_the_filter_is_high_risk(): void {
+		add_filter( 'aafm_high_risk_abilities', static fn( array $e ): array => array_merge( $e, array( 'demo/charge-card' ) ) );
+		$this->assertTrue( aafm_ability_is_high_risk( 'demo/charge-card' ) );
+		$this->assertTrue( aafm_ability_is_locked( 'demo/charge-card' ) );
+		$this->assertSame( 'high_risk', aafm_ability_lock_reason( 'demo/charge-card' ) );
+	}
+
+	public function test_a_wrapper_name_in_the_filter_locks_nothing(): void {
+		add_filter( 'aafm_high_risk_abilities', static fn( array $e ): array => array_merge( $e, array( 'aafm-bridge/woocommerce-order-update-status', 'demo/does-not-exist' ) ) );
+		$this->assertFalse( aafm_ability_is_high_risk( 'aafm-bridge/woocommerce-order-update-status' ) );
+		$this->assertNull( aafm_ability_lock_reason( 'aafm-bridge/woocommerce-order-update-status' ) );
+		$this->assertFalse( aafm_ability_is_high_risk( 'aafm/get-posts' ), 'A junk entry must not lock an unrelated native row.' );
+	}
+
+	public function test_the_held_woocommerce_and_scf_slugs_are_high_risk(): void {
+		foreach ( array( 'woocommerce/order-update-status', 'woocommerce/orders-update', 'scf/create-post-type', 'scf/update-post-type', 'scf/import-post-type', 'scf/create-taxonomy', 'scf/update-taxonomy', 'scf/import-taxonomy' ) as $slug ) {
+			$this->assertTrue( aafm_ability_is_high_risk( $slug ), $slug );
+		}
+		$this->assertFalse( aafm_ability_is_high_risk( 'woocommerce/order-add-note' ), 'Order notes stay open.' );
+		$this->assertFalse( aafm_ability_is_high_risk( 'woocommerce/orders-create' ) );
+	}
 }

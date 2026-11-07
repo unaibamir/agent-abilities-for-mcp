@@ -155,9 +155,14 @@ function aafm_render_bridge_review_card( array $groups, array $enabled ): void {
 
 			$body .= '<li><span class="aafm-badge aafm-badge-' . esc_attr( (string) $row['risk'] ) . '">' . esc_html( $risk_label['label'] ) . '</span> ';
 			if ( in_array( (string) $row['slug'], $enabled, true ) ) {
-				$body .= null === aafm_ability_lock_reason( (string) $row['slug'] )
-					? '<span class="aafm-pill aafm-pill-success">' . esc_html__( 'On', 'agent-abilities-for-mcp' ) . '</span> '
-					: '<span class="aafm-pill aafm-pill-neutral">' . esc_html__( 'Saved, read-only mode blocks it', 'agent-abilities-for-mcp' ) . '</span> ';
+				$row_lock = aafm_ability_lock_reason( (string) $row['slug'] );
+				if ( null === $row_lock ) {
+					$body .= '<span class="aafm-pill aafm-pill-success">' . esc_html__( 'On', 'agent-abilities-for-mcp' ) . '</span> ';
+				} elseif ( 'high_risk' === $row_lock ) {
+					$body .= '<span class="aafm-pill aafm-pill-neutral">' . esc_html__( 'Saved, the high-risk lock blocks it', 'agent-abilities-for-mcp' ) . '</span> ';
+				} else {
+					$body .= '<span class="aafm-pill aafm-pill-neutral">' . esc_html__( 'Saved, read-only mode blocks it', 'agent-abilities-for-mcp' ) . '</span> ';
+				}
 			}
 			$body .= '<code>' . esc_html( (string) $row['slug'] ) . '</code>';
 			if ( '' !== $risk_label['note'] ) {
@@ -785,22 +790,21 @@ function aafm_render_bridge_ability_row( array $ability, array $enabled, bool $d
 	$lock_reason = aafm_ability_lock_reason( $slug );
 
 	// A locked row has no switch, so this is how the starter's confirm counts a stored tool it would turn off.
+	$high_risk = aafm_ability_is_high_risk( $slug );
 	printf(
-		'<div class="aafm-ability-row%1$s" data-risk="%2$s"%3$s%4$s>',
+		'<div class="aafm-ability-row%1$s" data-risk="%2$s"%3$s%4$s%5$s>',
 		$destructive ? ' is-destructive' : '',
 		esc_attr( $risk ),
 		null !== $lock_reason && in_array( $slug, $enabled, true ) ? ' data-aafm-stored-on="1"' : '',
-		$disabled ? ' aria-disabled="true"' : ''
+		$disabled ? ' aria-disabled="true"' : '',
+		$high_risk ? ' data-high-risk="1"' : ''
 	);
 
 	// Read-only mode reaches bridged abilities too, classified by the foreign ability's own
-	// annotation. A locked row renders the lock glyph and NO <input>, exactly like the native
-	// renderer, so the group's "Enable all" cannot sweep it back in.
-	//
-	// aafm_ability_is_high_risk() is namespace-aware (native aafm/* only, see
-	// includes/audit/high-risk.php), so calling the shared aafm_ability_lock_reason() predicate
-	// here is now safe: a foreign slug named in the aafm_high_risk_abilities filter can never make
-	// it report 'high_risk'. Pinned by ReadOnlyUiTest::test_a_bridge_row_never_renders_a_high_risk_lock().
+	// annotation, and so does the high-risk lock for a held foreign slug (the built-in held slugs
+	// and any the aafm_high_risk_abilities filter names). A locked row renders the lock glyph and
+	// NO <input>, exactly like the native renderer, so the group's "Enable all" cannot sweep it
+	// back in. Pinned by ReadOnlyUiTest::test_a_held_bridge_row_renders_the_lock_and_no_switch().
 	if ( null !== $lock_reason ) {
 		printf(
 			'<span class="aafm-ability-locked" role="img" aria-label="%1$s">%2$s</span>',
@@ -826,6 +830,10 @@ function aafm_render_bridge_ability_row( array $ability, array $enabled, bool $d
 		esc_attr( $risk ),
 		esc_html( $risk_label['label'] )
 	);
+	// The badge marks what the tool can do, so it stays once the category is unlocked.
+	if ( $high_risk ) {
+		echo ' <span class="aafm-badge aafm-badge-high-risk">' . esc_html__( 'high-risk', 'agent-abilities-for-mcp' ) . '</span>';
+	}
 	echo '</div>';
 
 	printf( '<p class="aafm-ability-hint">%s</p>', esc_html( $hint ) );
@@ -907,58 +915,51 @@ function aafm_ajax_save_bridged_abilities(): void {
 
 	$stored = aafm_get_stored_bridged_abilities_raw();
 
-	// While read-only mode is on, a bridged write has no checkbox, so a posted one did not come
-	// from the screen. Refuse a slug that is not already stored, the same rule
-	// aafm_set_enabled_abilities() applies to native names: an existing choice is carried forward,
-	// a fresh one is not accepted from a form that never offered it. The refused slugs are kept
-	// so the refusal can be audited below, exactly as the native path audits its own.
-	$refused = array();
-	if ( aafm_read_only_mode() ) {
-		$kept = array_values(
-			array_filter(
-				$allowed,
-				static function ( string $slug ) use ( $stored ): bool {
-					return aafm_ability_is_read( $slug ) || in_array( $slug, $stored, true );
-				}
-			)
-		);
-
-		$refused = array_values( array_diff( $allowed, $kept ) );
-		$allowed = $kept;
+	// A locked row (read-only mode, or a held tool under the high-risk lock) has no checkbox, so a
+	// posted one did not come from the screen. Refuse a locked slug that is not already stored, the
+	// same rule aafm_set_enabled_abilities() applies to native names: an existing choice is carried
+	// forward, a fresh one is not accepted from a form that never offered it. The refused slugs are
+	// kept by reason so each refusal can be audited below, exactly as the native path audits its own.
+	$refused = array(
+		'read_only' => array(),
+		'high_risk' => array(),
+	);
+	$kept    = array();
+	foreach ( $allowed as $slug ) {
+		$reason = aafm_ability_lock_reason( $slug );
+		if ( null !== $reason && ! in_array( $slug, $stored, true ) ) {
+			$refused[ $reason ][] = $slug;
+			continue;
+		}
+		$kept[] = $slug;
 	}
+	$allowed = $kept;
 
 	// Enabled slugs whose host plugin is currently inactive are not in $available and their
 	// disabled checkboxes are never posted, so an unrelated save would silently drop them and
 	// reactivating the host would not restore the bridge. Union those orphans back in so an
 	// enabled-but-unavailable ability survives every save until it is explicitly turned off.
 	//
-	// A slug the read-only floor has hidden is the same story: its checkbox never rendered, so its
-	// absence from the POST is the lock speaking, not the operator turning it off. Preserve it, or
-	// the first bridge save while the mode is on discards a choice that was never restated and
-	// turning the mode off hands back a blank slate.
+	// A slug a lock has hidden is the same story: its checkbox never rendered, so its absence from
+	// the POST is the lock speaking, not the operator turning it off. Preserve it, or the first
+	// bridge save while locked discards a choice that was never restated and lifting the lock hands
+	// back a blank slate.
 	$orphans   = array_diff( $stored, $available );
-	$lock_kept = array();
-	if ( aafm_read_only_mode() ) {
-		foreach ( $stored as $slug ) {
-			if ( ! aafm_ability_is_read( $slug ) ) {
-				$lock_kept[] = $slug;
-			}
-		}
-	}
-	$enabled = array_values( array_unique( array_merge( $allowed, $orphans, $lock_kept ) ) );
+	$lock_kept = array_values( array_filter( $stored, static fn( string $slug ): bool => null !== aafm_ability_lock_reason( $slug ) ) );
+	$enabled   = array_values( array_unique( array_merge( $allowed, $orphans, $lock_kept ) ) );
 	// Verified, not a bare update_option(): see aafm_update_option_verified()'s docblock for why a
 	// persistent object cache can otherwise make the write silently no-op.
 	$enabled_persisted = aafm_update_option_verified( 'aafm_enabled_bridged_abilities', $enabled );
 
 	// The bridge tab changes ability exposure outside the main save path, so it carries the
 	// same audit contract - one ability_enabled/ability_disabled row per changed slug, and one
-	// ability_enable_blocked row per refused fresh write. The reason is passed explicitly:
-	// aafm_ability_lock_reason() is native-only and must never see a bridged slug, and the only
-	// floor that refuses a bridged enable is read-only mode. The refusal rows are logged regardless
-	// of what happens below - they describe what the floor refused to even attempt, not whether the
-	// write that follows persisted.
-	if ( ! empty( $refused ) ) {
-		aafm_log_blocked_ability_enables( $refused, 'read_only' );
+	// ability_enable_blocked row per refused fresh write, with the lock that refused it. The refusal
+	// rows are logged regardless of what happens below - they describe what the floor refused to
+	// even attempt, not whether the write that follows persisted.
+	foreach ( $refused as $reason => $slugs ) {
+		if ( ! empty( $slugs ) ) {
+			aafm_log_blocked_ability_enables( $slugs, $reason );
+		}
 	}
 
 	// The success-style diff must not be logged ahead of knowing whether the write actually took:

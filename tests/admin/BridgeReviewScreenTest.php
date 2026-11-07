@@ -296,4 +296,17 @@ final class BridgeReviewScreenTest extends TestCase {
 		$this->assertStringContainsString( 'esc_html__( \'Mark as reviewed\'', $body );
 		$this->assertStringContainsString( 'esc_html__( \'Mark all as reviewed\'', $body );
 	}
+
+	public function test_the_pill_names_the_high_risk_lock(): void {
+		$this->register_new_plugin();
+		update_option( 'aafm_enabled_bridged_abilities', array( 'screenplugin/save-thing' ) );
+		$hold = static fn( array $e ): array => array_merge( $e, array( 'screenplugin/save-thing' ) );
+		add_filter( 'aafm_high_risk_abilities', $hold );
+
+		$card = $this->card( $this->render() );
+		remove_filter( 'aafm_high_risk_abilities', $hold );
+
+		$this->assertStringNotContainsString( 'read-only mode blocks it', $card );
+		$this->assertMatchesRegularExpression( '#<span class="aafm-pill aafm-pill-neutral">Saved, the high-risk lock blocks it</span> <code>screenplugin/save-thing</code>#', $card );
+	}
 }

@@ -650,13 +650,19 @@ function aafm_get_stored_bridged_abilities_raw(): array {
  * read, and neither is one that declares nothing, since aafm_bridge_risk() already treats an
  * unannotated ability as destructive.
  *
- * The stored option is never rewritten by this, so turning the mode off restores exactly what was
- * enabled before.
+ * The high-risk lock applies too: a held slug (aafm_ability_is_high_risk()) is left out while the
+ * category is locked, in both modes.
+ *
+ * The stored option is never rewritten by this, so turning the mode off or unlocking restores
+ * exactly what was enabled before.
  *
  * @return array<int,string>
  */
 function aafm_get_enabled_bridged_abilities(): array {
 	$clean = aafm_get_stored_bridged_abilities_raw();
+	if ( ! aafm_high_risk_unlocked() ) {
+		$clean = array_values( array_filter( $clean, static fn( string $slug ): bool => ! aafm_ability_is_high_risk( $slug ) ) );
+	}
 
 	if ( ! aafm_read_only_mode() ) {
 		return $clean;

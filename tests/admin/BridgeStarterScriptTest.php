@@ -143,4 +143,10 @@ final class BridgeStarterScriptTest extends TestCase {
 		$js = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
 		$this->assertMatchesRegularExpression( '/this\.#bindBridgeBulk\(\);\s*this\.#bindBridgeReview\(\);\s*this\.#bindBridgeStarter\(\);/', $js );
 	}
+
+	public function test_enable_all_skips_a_held_row(): void {
+		$body = $this->method( '#bindBridgeBulk() {' );
+		$this->assertMatchesRegularExpression( "/if \\( enable && row\\?\\.hasAttribute\\( 'data-high-risk' \\) \\) \\{\\s*return;\\s*\\}/", $body );
+		$this->assertLessThan( (int) strpos( $body, 'box.checked = enable;' ), (int) strpos( $body, "hasAttribute( 'data-high-risk' )" ) );
+	}
 }

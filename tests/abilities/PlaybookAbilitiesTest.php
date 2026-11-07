@@ -373,4 +373,20 @@ final class PlaybookAbilitiesTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$this->assertSame( array( 'slug', 'title', 'description', 'uses_abilities', 'unavailable_abilities' ), array_keys( aafm_exec_list_playbooks()['playbooks'][0] ) );
 	}
+
+	/**
+	 * The floored bridged reader leaves a held tool out while locked, so building the playbook's
+	 * known list from it would drop the tool on the next save for good.
+	 */
+	public function test_saving_a_playbook_while_locked_keeps_a_held_tool(): void {
+		update_option( 'aafm_enabled_bridged_abilities', array( 'demo/charge-card' ) );
+		$hold = static fn( array $e ): array => array_merge( $e, array( 'demo/charge-card' ) );
+		add_filter( 'aafm_high_risk_abilities', $hold );
+
+		$cleaned = aafm_clean_playbook_abilities( array( 'aafm/get-post', 'demo/charge-card' ) );
+
+		remove_filter( 'aafm_high_risk_abilities', $hold );
+		delete_option( 'aafm_enabled_bridged_abilities' );
+		$this->assertSame( array( 'aafm/get-post', 'demo/charge-card' ), $cleaned );
+	}
 }

@@ -182,20 +182,64 @@ function aafm_exec_search_content( array $input ) {
 		}
 	}
 
-	$paging      = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
-	$build_query = static function () use ( $types, $status, $search, $paging ): WP_Query {
-		return new WP_Query(
-			array(
-				'post_type'              => $types,
-				'post_status'            => $status,
-				's'                      => $search,
-				'posts_per_page'         => $paging['per_page'],
-				'paged'                  => $paging['page'],
-				'no_found_rows'          => false,
-				'suppress_filters'       => false,
-				'update_post_meta_cache' => false,
-			)
+	// Someone else's draft, pending or scheduled item is found only in the types where this user
+	// may edit others' items. One query covers every type, so a global author limit would also hide
+	// drafts the caller may see in other types: the limit is per type, through a posts_where filter
+	// scoped to this query by a marker, which keeps pagination and total exact.
+	$restricted   = array_values(
+		array_filter(
+			$types,
+			static function ( string $t ) use ( $status ): bool {
+				$o = get_post_type_object( $t );
+				return $o instanceof WP_Post_Type && aafm_status_needs_own_posts_only( $status, $o );
+			}
+		)
+	);
+	$open         = array_values( array_diff( $types, $restricted ) );
+	$query_marker = array() === $restricted ? '' : 'aafm_search_own_' . wp_generate_password( 12, false, false );
+	$own_filter   = static function ( string $where, WP_Query $query ) use ( $restricted, $open, $query_marker ): string {
+		if ( '' === $query_marker || $query_marker !== $query->get( 'aafm_query_marker' ) ) {
+			return $where;
+		}
+		global $wpdb;
+		$own = $wpdb->prepare(
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- table name is internal; the IN list holds only generated %s placeholders.
+			"( {$wpdb->posts}.post_type IN (" . implode( ', ', array_fill( 0, count( $restricted ), '%s' ) ) . ") AND {$wpdb->posts}.post_author = %d )",
+			array_merge( $restricted, array( get_current_user_id() ) )
 		);
+		if ( array() === $open ) {
+			return $where . ' AND ' . $own;
+		}
+		$any = $wpdb->prepare(
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- table name is internal; the IN list holds only generated %s placeholders.
+			"{$wpdb->posts}.post_type IN (" . implode( ', ', array_fill( 0, count( $open ), '%s' ) ) . ')',
+			$open
+		);
+		return $where . ' AND ( ' . $any . ' OR ' . $own . ' )';
+	};
+
+	$paging      = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
+	$build_query = static function () use ( $types, $status, $search, $paging, $query_marker, $own_filter ): WP_Query {
+		$args = array(
+			'post_type'              => $types,
+			'post_status'            => $status,
+			's'                      => $search,
+			'posts_per_page'         => $paging['per_page'],
+			'paged'                  => $paging['page'],
+			'no_found_rows'          => false,
+			'suppress_filters'       => false,
+			'update_post_meta_cache' => false,
+		);
+		if ( '' === $query_marker ) {
+			return new WP_Query( $args );
+		}
+		$args['aafm_query_marker'] = $query_marker;
+		add_filter( 'posts_where', $own_filter, 10, 2 );
+		try {
+			return new WP_Query( $args );
+		} finally {
+			remove_filter( 'posts_where', $own_filter, 10 );
+		}
 	};
 
 	$format          = isset( $input['content_format'] ) ? (string) $input['content_format'] : 'rendered';

@@ -109,4 +109,77 @@ final class PostsReadTest extends TestCase {
 		$schema = wp_get_ability( 'aafm/get-posts' )->get_input_schema();
 		$this->assertArrayHasKey( 'lang', $schema['properties'] );
 	}
+
+	/**
+	 * A user who may read private posts but not edit other people's.
+	 *
+	 * @param string[] $caps Extra capabilities.
+	 * @return int User id.
+	 */
+	private function reader_with( array $caps ): int {
+		$id   = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$user = get_user_by( 'id', $id );
+		foreach ( $caps as $cap ) {
+			$user->add_cap( $cap );
+		}
+		wp_set_current_user( $id );
+		return $id;
+	}
+
+	public function test_read_private_posts_alone_does_not_list_others_drafts(): void {
+		$other = self::factory()->user->create( array( 'role' => 'editor' ) );
+		self::factory()->post->create(
+			array(
+				'post_author' => $other,
+				'post_status' => 'draft',
+				'post_title'  => 'others draft',
+			)
+		);
+		$me = $this->reader_with( array( 'read_private_posts' ) );
+		self::factory()->post->create(
+			array(
+				'post_author' => $me,
+				'post_status' => 'draft',
+				'post_title'  => 'my draft',
+			)
+		);
+
+		$out = aafm_exec_get_posts( array( 'status' => 'draft' ) );
+
+		$this->assertSame( array( 'my draft' ), array_column( $out['posts'], 'title' ) );
+		$this->assertSame( 1, $out['total'] );
+	}
+
+	public function test_it_still_lists_others_private_posts(): void {
+		$other = self::factory()->user->create( array( 'role' => 'editor' ) );
+		self::factory()->post->create(
+			array(
+				'post_author' => $other,
+				'post_status' => 'private',
+				'post_title'  => 'others private',
+			)
+		);
+		$this->reader_with( array( 'read_private_posts' ) );
+
+		$out = aafm_exec_get_posts( array( 'status' => 'private' ) );
+
+		$this->assertCount( 1, $out['posts'] );
+		$this->assertStringContainsString( 'others private', $out['posts'][0]['title'] );
+	}
+
+	public function test_edit_others_posts_still_lists_others_drafts(): void {
+		$other = self::factory()->user->create( array( 'role' => 'author' ) );
+		self::factory()->post->create(
+			array(
+				'post_author' => $other,
+				'post_status' => 'draft',
+				'post_title'  => 'others draft',
+			)
+		);
+		$this->acting_as( 'editor' );
+
+		$out = aafm_exec_get_posts( array( 'status' => 'draft' ) );
+
+		$this->assertSame( array( 'others draft' ), array_column( $out['posts'], 'title' ) );
+	}
 }

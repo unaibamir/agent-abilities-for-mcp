@@ -279,19 +279,24 @@ function aafm_exec_get_posts( array $input ) {
 	if ( is_wp_error( $lang ) ) {
 		return $lang;
 	}
-	$build_query = static function () use ( $type, $status, $input, $paging ): WP_Query {
-		return new WP_Query(
-			array(
-				'post_type'              => $type,
-				'post_status'            => $status,
-				's'                      => isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '',
-				'posts_per_page'         => $paging['per_page'],
-				'paged'                  => $paging['page'],
-				'no_found_rows'          => false,
-				'suppress_filters'       => false,
-				'update_post_meta_cache' => false,
-			)
+	// Someone else's draft, pending or scheduled item is listed only for a user who may edit it.
+	$own_only    = $type_object instanceof WP_Post_Type && aafm_status_needs_own_posts_only( $status, $type_object );
+	$build_query = static function () use ( $type, $status, $input, $paging, $own_only ): WP_Query {
+		$args = array(
+			'post_type'              => $type,
+			'post_status'            => $status,
+			's'                      => isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '',
+			'posts_per_page'         => $paging['per_page'],
+			'paged'                  => $paging['page'],
+			'no_found_rows'          => false,
+			'suppress_filters'       => false,
+			'update_post_meta_cache' => false,
 		);
+		if ( $own_only ) {
+			// author__in, not author: an author of 0 would drop the condition instead of matching nothing.
+			$args['author__in'] = array( get_current_user_id() );
+		}
+		return new WP_Query( $args );
 	};
 
 	$format          = isset( $input['content_format'] ) ? (string) $input['content_format'] : 'rendered';

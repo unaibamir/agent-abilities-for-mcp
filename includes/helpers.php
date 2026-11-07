@@ -2079,6 +2079,24 @@ function aafm_validate_post_status( string $status, bool $can_read_private ) {
 }
 
 /**
+ * Whether a list of this status and type must be limited to the current user's own items.
+ *
+ * The read_private_posts capability admits draft, pending and future, but WordPress only lets a
+ * user see other people's unpublished items when they may edit them. A list therefore keeps
+ * someone else's draft, pending or scheduled item only for a user holding that type's
+ * edit_others_posts.
+ * The private status keeps its meaning: read_private_posts is exactly the capability for it.
+ *
+ * @param string       $status Validated status.
+ * @param WP_Post_Type $type   Post type object.
+ * @return bool
+ */
+function aafm_status_needs_own_posts_only( string $status, WP_Post_Type $type ): bool {
+	return in_array( $status, array( 'draft', 'pending', 'future' ), true )
+		&& ! current_user_can( (string) $type->cap->edit_others_posts );
+}
+
+/**
  * Whether a requested status requires this content type's publish capability to set.
  *
  * Mirrors core's own gate: WP_REST_Posts_Controller::handle_status_param() requires

@@ -302,4 +302,82 @@ class MetaCacheRefreshTest extends TestCase {
 			aafm_meta_touched()
 		);
 	}
+
+	/**
+	 * Record each call to the page cache purge actions.
+	 *
+	 * @return \ArrayObject<int,array<int,mixed>>
+	 */
+	private function spy_purges(): \ArrayObject {
+		$calls = new \ArrayObject();
+		foreach ( array( 'litespeed_purge_post', 'litespeed_purge', 'wpfc_clear_post_cache_by_id', 'wpfc_clear_cache_by_url' ) as $hook ) {
+			add_action(
+				$hook,
+				static function ( ...$args ) use ( $hook, $calls ): void {
+					$calls[] = array_merge( array( $hook ), $args );
+				},
+				10,
+				2
+			);
+		}
+		return $calls;
+	}
+
+	public function test_a_post_meta_write_fires_the_litespeed_and_fastest_cache_purges(): void {
+		$id    = $this->published_post();
+		$calls = $this->spy_purges();
+		$this->update_note( $id );
+		$this->assertContains( array( 'litespeed_purge_post', $id ), $calls->getArrayCopy() );
+		$this->assertContains( array( 'wpfc_clear_post_cache_by_id', false, $id ), $calls->getArrayCopy() );
+	}
+
+	public function test_a_term_meta_write_fires_the_litespeed_term_purge(): void {
+		$term_id = (int) self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+		$calls   = $this->spy_purges();
+		$this->run_ability(
+			'aafm/update-term-meta',
+			array(
+				'taxonomy' => 'category',
+				'term_id'  => $term_id,
+				'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- tool argument.
+				'value'    => 'x',
+			)
+		);
+		$this->assertContains( array( 'litespeed_purge', 'T.' . $term_id ), $calls->getArrayCopy() );
+	}
+
+	public function test_a_term_meta_write_fires_the_fastest_cache_url_purge_with_the_term_link(): void {
+		$term_id = (int) self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+		$calls   = $this->spy_purges();
+		$this->run_ability(
+			'aafm/update-term-meta',
+			array(
+				'taxonomy' => 'category',
+				'term_id'  => $term_id,
+				'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- tool argument.
+				'value'    => 'x',
+			)
+		);
+		$this->assertContains( array( 'wpfc_clear_cache_by_url', get_term_link( $term_id ) ), $calls->getArrayCopy() );
+	}
+
+	public function test_a_draft_fires_no_purge(): void {
+		$id    = (int) self::factory()->post->create( array( 'post_status' => 'draft' ) );
+		$calls = $this->spy_purges();
+		$this->update_note( $id );
+		$this->assertCount( 0, $calls );
+	}
+
+	public function test_a_throwing_purge_listener_cannot_fail_the_write(): void {
+		$id = $this->published_post();
+		add_action(
+			'litespeed_purge_post',
+			static function (): void {
+				throw new \RuntimeException( 'purge failure' );
+			}
+		);
+		$result = $this->update_note( $id );
+		$this->assertFalse( is_wp_error( $result ) );
+		$this->assertSame( 'written', $result['status'] );
+	}
 }

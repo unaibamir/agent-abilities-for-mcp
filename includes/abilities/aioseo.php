@@ -633,6 +633,12 @@ function aafm_exec_aioseo_update_post( array $input ) {
 		}
 	}
 
+	// AIOSEO stores its fields in its own table, not post meta, so tell the meta-write refresh about
+	// the post: its page caches purge the same way after any other agent meta write.
+	if ( array() !== $data ) {
+		aafm_collect_meta_touch( 'post', $id );
+	}
+
 	return $after;
 }
 

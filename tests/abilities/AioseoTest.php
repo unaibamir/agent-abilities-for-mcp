@@ -760,4 +760,39 @@ final class AioseoTest extends TestCase {
 		$this->assertSame( 'ok', $res['head_status'] );
 		$this->assertArrayNotHasKey( 'note', $res );
 	}
+
+	/**
+	 * AIOSEO writes through its own model, not post meta, so the meta-write refresh never heard
+	 * it. A confirmed save must clear the published post's cache like any other meta write.
+	 */
+	public function test_an_aioseo_save_refreshes_a_published_post(): void {
+		$admin_id  = $this->acting_as( 'administrator' );
+		$post_id   = (int) self::factory()->post->create(
+			array(
+				'post_author' => $admin_id,
+				'post_status' => 'publish',
+			)
+		);
+		$refreshed = 0;
+		add_action(
+			'aafm_agent_meta_written',
+			static function ( $kind, $id ) use ( $post_id, &$refreshed ): void {
+				if ( 'post' === $kind && $post_id === (int) $id ) {
+					++$refreshed;
+				}
+			},
+			10,
+			2
+		);
+
+		$res = wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+			array(
+				'post_id' => $post_id,
+				'title'   => 'Refreshed title',
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 1, $refreshed );
+	}
 }

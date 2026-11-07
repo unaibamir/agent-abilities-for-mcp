@@ -539,7 +539,7 @@ final class RichPostTest extends TestCase {
 		}
 	}
 
-	public function test_rich_post_protected_post_surfaces_manual_excerpt_but_not_body(): void {
+	public function test_a_protected_posts_manual_excerpt_is_withheld(): void {
 		$post_id = self::factory()->post->create(
 			array(
 				'post_status'   => 'publish',
@@ -554,8 +554,9 @@ final class RichPostTest extends TestCase {
 			$shape = aafm_rich_post( $post, array( 'content_format' => $format ) );
 			$json  = (string) wp_json_encode( $shape );
 
-			// The hand-authored excerpt IS safe to surface.
-			$this->assertSame( 'Safe summary', $shape['excerpt'], "manual excerpt must survive ({$format})" );
+			// A manual excerpt is often a teaser of the protected body, so it is withheld too.
+			$this->assertSame( '', $shape['excerpt'], "manual excerpt must be withheld ({$format})" );
+			$this->assertStringNotContainsString( 'Safe summary', $json, "manual excerpt leaked ({$format})" );
 			// The body, however, never appears - no content key, no password.
 			$this->assertArrayNotHasKey( 'content', $shape, "content must be omitted for a protected post ({$format})" );
 			$this->assertStringNotContainsString( 'SECRETBODY', $json, "body leaked ({$format})" );

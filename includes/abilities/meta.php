@@ -185,6 +185,7 @@ function aafm_args_get_all_post_meta(): array {
 			'type'       => 'object',
 			'properties' => array(
 				'meta' => array( 'type' => 'object' ),
+				'note' => array( 'type' => 'string' ),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_get_all_post_meta',
@@ -261,10 +262,14 @@ function aafm_exec_get_all_post_meta( array $input ) {
 		$meta[ (string) $key ] = $value;
 	}
 
-	return array(
+	$out = array(
 		// Cast so an empty map JSON-encodes to "{}" (object) per the schema.
 		'meta' => (object) $meta,
 	);
+	if ( empty( $meta ) ) {
+		$out['note'] = __( "No allowed values to show. Keys that aren't allowed, are empty or hold arrays are left out, so an empty map doesn't mean the post has no meta.", 'agent-abilities-for-mcp' );
+	}
+	return $out;
 }
 
 /**

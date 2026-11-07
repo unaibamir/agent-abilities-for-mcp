@@ -553,16 +553,7 @@ function aafm_quickconnect_render(): void {
 									<div class="sc">
 										<div class="sl"><?php esc_html_e( 'Copy the config for your MCP client', 'agent-abilities-for-mcp' ); ?></div>
 										<div class="sd"><?php echo wp_kses( __( 'The endpoint and the <code>mcp-agent</code> username are already filled in.', 'agent-abilities-for-mcp' ), array( 'code' => array() ) ); ?></div>
-										<div class="aafm-qc-codeblock">
-											<div class="cbhead">
-												<span class="fn"><?php esc_html_e( 'mcp client config', 'agent-abilities-for-mcp' ); ?></span>
-												<button type="button" class="aafm-qc-cbcopy aafm-copy" data-copy="<?php echo esc_attr( $snippet ); ?>">
-													<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
-													<span class="aafm-copy-label"><?php esc_html_e( 'Copy', 'agent-abilities-for-mcp' ); ?></span>
-												</button>
-											</div>
-											<pre><?php echo esc_html( $snippet ); ?></pre>
-										</div>
+										<?php aafm_render_snippet_block( $snippet ); ?>
 										<p class="aafm-qc-nextline is-static">
 											<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>
 											<span><?php echo wp_kses( __( 'Paste your password over <b>PASTE-APPLICATION-PASSWORD-HERE</b>, then start your client.', 'agent-abilities-for-mcp' ), array( 'b' => array() ) ); ?></span>

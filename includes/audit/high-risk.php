@@ -125,16 +125,25 @@ function aafm_high_risk_unlocked(): bool {
 		$unlocked = $unlocked && $row['ok'] && $row['found'] && is_scalar( $row['value'] ) && (bool) $row['value'];
 	}
 
+	if ( aafm_high_risk_forced() ) {
+		return false;
+	}
+
+	return $unlocked;
+}
+
+/**
+ * Whether a host or site filter forces the high-risk floor shut, whatever the switch says.
+ *
+ * @return bool
+ */
+function aafm_high_risk_forced(): bool {
 	/**
 	 * Force the high-risk floor shut regardless of the settings-screen value.
 	 *
 	 * @param bool $forced Whether to force the floor shut.
 	 */
-	if ( (bool) apply_filters( 'aafm_force_block_high_risk_abilities', false ) ) {
-		return false;
-	}
-
-	return $unlocked;
+	return (bool) apply_filters( 'aafm_force_block_high_risk_abilities', false );
 }
 
 /**

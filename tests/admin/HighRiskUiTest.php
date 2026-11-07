@@ -349,4 +349,19 @@ final class HighRiskUiTest extends TestCase {
 
 		$this->assertSame( $checked, str_contains( $this->high_risk_input(), 'checked' ) );
 	}
+
+	public function test_settings_says_when_a_host_forces_the_lock(): void {
+		ob_start();
+		aafm_render_settings_tab();
+		$open = (string) ob_get_clean();
+		$this->assertStringNotContainsString( 'Your host or a site setting keeps this locked', $open );
+
+		add_filter( 'aafm_force_block_high_risk_abilities', '__return_true' );
+		ob_start();
+		aafm_render_settings_tab();
+		$forced = (string) ob_get_clean();
+		remove_filter( 'aafm_force_block_high_risk_abilities', '__return_true' );
+
+		$this->assertStringContainsString( 'Your host or a site setting keeps this locked, whatever this switch says.', $forced );
+	}
 }

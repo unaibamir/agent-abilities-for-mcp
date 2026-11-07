@@ -43,6 +43,14 @@ class RestEndpointsTest extends TestCase {
 		// The endpoints read and write the OAuth storage tables.
 		aafm_install_oauth_tables();
 
+		// A token exchange that reaches the code's own transaction commits the harness's one
+		// (MySQL has no nested transactions), so the throttle counters it bumped outlive the test.
+		// No test here is about the throttle: start each from empty counters.
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE option_name LIKE %s OR option_name LIKE %s', $wpdb->options, $wpdb->esc_like( '_transient_aafm_oauth_rl_' ) . '%', $wpdb->esc_like( '_transient_timeout_aafm_oauth_rl_' ) . '%' ) );
+		wp_cache_delete( 'alloptions', 'options' );
+
 		// OAuth is OFF by default now; these endpoint tests exercise the enabled surface, so turn
 		// it on explicitly. DCR is on by default, so enabling OAuth also enables registration. The
 		// disabled-path tests override per case.
@@ -659,9 +667,14 @@ class RestEndpointsTest extends TestCase {
 		$response = $this->token_code_request( $client_id, $code, $redirect, 'short12345' );
 
 		$this->assertSame( 400, $response->get_status() );
-		// The length check refuses before the code is redeemed: the right verifier still works.
-		// Without it the short verifier reaches the PKCE match, which burns the code.
-		$this->assertSame( 200, $this->token_code_request( $client_id, $code, $redirect, $verifier )->get_status() );
+		// The length check refuses before the code is redeemed, so the code is still unused.
+		// Without it the short verifier reaches the PKCE match, which burns the code. Read the row
+		// rather than redeem the code: a successful mint opens its own transaction, which would
+		// commit the test's and leak the rate counters into later tests.
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$used_at = $wpdb->get_var( $wpdb->prepare( 'SELECT used_at FROM %i WHERE code_hash = %s', $wpdb->prefix . 'aafm_oauth_codes', hash( 'sha256', $code ) ) );
+		$this->assertNull( $used_at, 'A too-short verifier must not burn the code.' );
 	}
 
 	/**

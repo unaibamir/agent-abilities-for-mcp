@@ -34,7 +34,7 @@ jobs:
       matrix:
         php: ['8.3']
         wp: ['latest']
-        woocommerce: ['9.1.0', '11.1.2']
+        woocommerce: ['9.1.0', '11.2.2']
     services:
       mysql:
         image: mysql:8.0

@@ -67,7 +67,7 @@ These controls cover this plugin's own tools, plus any tool from another plugin 
 
 When you approve an app, or run Quick Connect, you pick an access preset (Read only, Content editor, Shop manager or Custom), and a preset only ever narrows what is already switched on. **Read-only mode** goes further and unloads every write tool. Per-role and per-connection allowlists narrow things as well, because a tool has to be in the global list, the role's list and the connection's list before the AI can call it. The **rate limit**, the **IP allowlist**, Force draft on create and a maximum title length all sit on the Settings tab and do nothing until you set them, and the **audit log** records each call to this plugin's tools.
 
-Nine WooCommerce tools that move money or grant authority (refunds, order changes, customer updates, payment gateways, coupons and tax rates) stay locked until you unlock them in Settings, even if you've ticked them. Deletes work differently: the tools named Trash post and Trash page move content to the Trash, but most tools named Delete, such as Delete post, Delete page and Delete media, remove it permanently.
+Ten WooCommerce tools that move money or grant authority (refunds, creating and changing orders, customer updates, payment gateways, coupons and tax rates) stay locked until you unlock them in Settings, even if you've ticked them. Deletes work differently: the tools named Trash post and Trash page move content to the Trash, but most tools named Delete, such as Delete post, Delete page and Delete media, remove it permanently.
 
 = What these controls do not cover =
 

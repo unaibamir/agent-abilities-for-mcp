@@ -27,6 +27,7 @@ defined( 'ABSPATH' ) || exit;
  */
 function aafm_high_risk_abilities_builtin(): array {
 	return array(
+		'aafm/wc-create-order',
 		'aafm/wc-create-order-refund',
 		'aafm/wc-update-order-status',
 		'aafm/wc-update-order',

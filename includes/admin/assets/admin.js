@@ -878,8 +878,8 @@
 		 *
 		 * What counts as a write is read off the server-rendered row, never guessed: data-risk
 		 * is exactly "write", so destructive rows are excluded by class, and data-high-risk is
-		 * absent, so the nine money-and-identity abilities stay out even after the operator
-		 * unlocks that category (all nine are risk="write", so risk alone would sweep them in).
+		 * absent, so the ten money-and-identity abilities stay out even after the operator
+		 * unlocks that category (all ten are risk="write", so risk alone would sweep them in).
 		 * A locked row emits no checkbox at all, so read-only mode and a shut high-risk floor
 		 * are already unreachable here. That leaves nothing destructive or high-risk in range,
 		 * which is why this control needs no confirm where "Enable all" does.

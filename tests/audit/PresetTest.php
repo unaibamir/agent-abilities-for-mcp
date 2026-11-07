@@ -219,4 +219,11 @@ final class PresetTest extends TestCase {
 		$this->assertSame( aafm_preset_count( 'content_editor' ), aafm_preset_count( 'shop_manager' ), 'No WooCommerce tool enabled: Shop manager reaches the Content editor subset.' );
 		$this->assertSame( 4, aafm_preset_count( '' )['allowed'] );
 	}
+
+	public function test_shop_manager_does_not_reach_wc_create_order_even_when_unlocked(): void {
+		update_option( 'aafm_high_risk_abilities_unlocked', true );
+		$this->assertFalse( aafm_preset_permits( 'shop_manager', 'aafm/wc-create-order' ) );
+		$this->assertStringContainsString( 'the ten money and authority tools', aafm_access_presets()['shop_manager']['summary'] );
+		delete_option( 'aafm_high_risk_abilities_unlocked' );
+	}
 }

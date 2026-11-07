@@ -24,12 +24,16 @@ final class HighRiskTest extends TestCase {
 	 * permission callback was tightened in the same change to require edit_users plus per-object
 	 * edit_user, but the floor is the second, deliberate gate.
 	 *
+	 * The aafm/wc-create-order ability was added in 1.11.1: creating an order moves money the same
+	 * way changing one does, and the settings copy already promised no agent could.
+	 *
 	 * The aafm/wc-create-customer name is called out because it is the one most likely to be added
 	 * back in good faith. It is handled at the capability layer instead, not here.
 	 */
 	public function test_the_builtin_set_is_exactly_the_signed_off_set(): void {
 		$this->assertSame(
 			array(
+				'aafm/wc-create-order',
 				'aafm/wc-create-order-refund',
 				'aafm/wc-update-order-status',
 				'aafm/wc-update-order',
@@ -270,5 +274,9 @@ final class HighRiskTest extends TestCase {
 		foreach ( aafm_high_risk_abilities_builtin() as $name ) {
 			$this->assertArrayHasKey( $name, $registry, "{$name} is in the high-risk set but is not a registered ability." );
 		}
+	}
+
+	public function test_wc_create_order_is_high_risk(): void {
+		$this->assertTrue( aafm_ability_is_high_risk( 'aafm/wc-create-order' ) );
 	}
 }

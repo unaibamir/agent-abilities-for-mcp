@@ -2350,7 +2350,7 @@ function aafm_render_ability_row( array $ability, array $enabled, array $disclos
 	// the Integrations rows already carry so one JS binding serves both tabs.
 	//
 	// data-high-risk is the second axis "Enable all writes" has to scope on, and it exists because
-	// risk alone cannot express it: every one of the nine built-in high-risk abilities is
+	// risk alone cannot express it: every one of the ten built-in high-risk abilities is
 	// risk="write" (see aafm_high_risk_abilities_builtin()), so a plain data-risk="write" sweep
 	// would tick refunds, order-status changes, coupons and tax rates the moment the operator
 	// unlocked the category. While the category is locked there is no checkbox to sweep at all;

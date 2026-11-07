@@ -890,4 +890,19 @@ final class WooTaxTest extends TestCase {
 		$this->assertSame( 'aafm_not_found', $update->get_error_code() );
 		$this->assertSame( $before, $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM %i ORDER BY tax_rate_id', $wpdb->prefix . 'woocommerce_tax_rates' ), ARRAY_A ), 'nothing was written' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- checks the fixture table.
 	}
+
+	/**
+	 * WC_Tax cannot be undefined once the stubs load, so this pins the source: the executor checks
+	 * the class before it builds the list, and errors instead of returning Standard alone.
+	 */
+	public function test_the_tax_class_executor_checks_wc_tax_before_building_the_list(): void {
+		$source = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce/tax.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading local plugin source, not a remote URL.
+		$start  = strpos( $source, 'function aafm_exec_wc_list_tax_classes(' );
+		$this->assertNotFalse( $start );
+		$body  = substr( $source, (int) $start, (int) strpos( $source, "\n}\n", (int) $start ) - (int) $start );
+		$check = strpos( $body, "class_exists( 'WC_Tax' )" );
+		$this->assertNotFalse( $check, 'The executor must check WC_Tax.' );
+		$this->assertLessThan( (int) strpos( $body, 'aafm_wc_build_tax_class_list()' ), $check );
+		$this->assertStringContainsString( 'return aafm_generic_error();', substr( $body, (int) $check, 120 ) );
+	}
 }

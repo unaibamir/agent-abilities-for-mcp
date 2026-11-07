@@ -830,6 +830,10 @@ function aafm_exec_wc_list_tax_classes( array $input ) { // phpcs:ignore Generic
 	if ( ! aafm_integration_active( 'woocommerce' ) ) {
 		return aafm_generic_error();
 	}
+	// Without WC_Tax the list would hold only the implicit Standard class, an empty success.
+	if ( ! class_exists( 'WC_Tax' ) ) {
+		return aafm_generic_error();
+	}
 
 	$classes = aafm_wc_build_tax_class_list();
 	return array(

@@ -2004,4 +2004,16 @@ final class AcfTest extends TestCase {
 		$this->assertSame( array( 'option', null ), array( $details[0]['entity'], $details[0]['object_id'] ) );
 		$this->assertSame( array( 'post', '12' ), array( $details[1]['entity'], (string) $details[1]['object_id'] ) );
 	}
+
+	/**
+	 * The missing-function state cannot be provoked once the stubs load, so this pins the source:
+	 * the lister errors instead of returning an empty success.
+	 */
+	public function test_list_field_groups_errors_when_its_function_is_missing(): void {
+		$source = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/abilities/acf-integration.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading local plugin source, not a remote URL.
+		$this->assertMatchesRegularExpression(
+			"/if \\( ! function_exists\\( 'acf_get_field_groups' \\) \\) \\{\\s*return aafm_generic_error\\(\\);/",
+			$source
+		);
+	}
 }

@@ -1109,7 +1109,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 				// this throw resolves (core's own invoke_callback() converts it to a WP_Error before
 				// it ever reaches that finally, but the finally runs on that normal return too).
 				/** This filter is documented in includes/register.php, at the execute-side catch. */
-				if ( apply_filters( 'aafm_rethrow_ability_exceptions', defined( 'WP_DEBUG' ) && WP_DEBUG, $e ) ) {
+				if ( apply_filters( 'aafm_rethrow_ability_exceptions', defined( 'WP_DEBUG' ) && WP_DEBUG && 0 !== strpos( $name, 'aafm-bridge/' ), $e ) ) {
 					// The consume above may have memoized an allow before the callback crashed, and this
 					// throw skips the non-true reset below - release the memo here or the dead call's
 					// allow pays for the next same-ability fire (the batch rate-limit leak, on its crash path).
@@ -1257,23 +1257,24 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			 * Whether a Throwable escaping an ability should be re-thrown instead of converted to
 			 * a WP_Error.
 			 *
-			 * Defaults to WP_DEBUG, so a development site keeps programming errors loud while a
-			 * production site converts them to an audited error. Since 1.6.1 this governs an
-			 * ability's PERMISSION callback as well as its EXECUTE callback, so one switch covers
-			 * both phases.
+			 * Defaults to WP_DEBUG for this plugin's own abilities, so a development site keeps
+			 * programming errors loud while a production site converts them to an audited error.
+			 * Since 1.6.1 this governs an ability's PERMISSION callback as well as its EXECUTE
+			 * callback, so one switch covers both phases.
 			 *
-			 * When it re-throws, the source's exception text can reach the client on WordPress 6.9,
-			 * which is why the default is WP_DEBUG only.
+			 * A bridged (aafm-bridge/) ability defaults to false even under WP_DEBUG: on WordPress
+			 * 6.9 a source plugin's throw escapes core, and re-throwing it would hand the source's
+			 * exception text to the client and leave the row unresolved. A filter can still force it.
 			 *
 			 * Re-throwing deliberately leaves no resolved audit row: on the execute path the row
 			 * stays at 'started', on the permission path no row is written at all. That absence is
 			 * the forensic signal, and it is intentional - do not "fix" it.
 			 *
 			 * @since 1.6.0
-			 * @param bool       $rethrow Whether to re-throw. Default WP_DEBUG.
+			 * @param bool       $rethrow Whether to re-throw. Default WP_DEBUG, false for a bridged ability.
 			 * @param \Throwable $e       The caught throwable. @since 1.6.1
 			 */
-			$rethrow = apply_filters( 'aafm_rethrow_ability_exceptions', defined( 'WP_DEBUG' ) && WP_DEBUG, $e );
+			$rethrow = apply_filters( 'aafm_rethrow_ability_exceptions', defined( 'WP_DEBUG' ) && WP_DEBUG && 0 !== strpos( $name, 'aafm-bridge/' ), $e );
 			if ( $rethrow ) {
 				// Deliberately skips both the WP_Error below AND aafm_log_ability_exception(): the
 				// row is left stuck at 'started', same as before this catch existed. That stuck row

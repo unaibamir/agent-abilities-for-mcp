@@ -1394,6 +1394,49 @@ final class BridgeWrapperTest extends TestCase {
 	}
 
 	/**
+	 * On the 6.9 floor a source's throw escapes core and reaches the decorated catch. Under WP_DEBUG a
+	 * bridged throw must still give the client the static error and resolve its row; only this
+	 * plugin's own tools stay loud. The fixture's execute() throws, which models the floor on any core.
+	 */
+	public function test_a_bridged_throw_that_escapes_core_stays_static_under_wp_debug_and_the_row_resolves(): void {
+		$this->assertTrue( defined( 'WP_DEBUG' ) && WP_DEBUG, 'The suite runs with WP_DEBUG on, the case this pins.' );
+		$this->acting_as( 'administrator' );
+		$this->register_foreign_returning( 'vendor/escapes', static fn(): array => array() );
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				wp_unregister_ability( 'vendor/escapes' );
+				wp_register_ability(
+					'vendor/escapes',
+					array(
+						'label'               => 'vendor/escapes',
+						'description'         => 'Throws past core.',
+						'category'            => 'demo-things',
+						'input_schema'        => array(
+							'type'       => 'object',
+							'properties' => array(),
+						),
+						'execute_callback'    => static fn(): array => array(),
+						'permission_callback' => '__return_true',
+						'ability_class'       => \AAFM\Tests\Fixtures\ThrowingAbility::class,
+					)
+				);
+			}
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/escapes' ) );
+		$this->register_wrappers();
+
+		$result = wp_get_ability( 'aafm-bridge/vendor-escapes' )->execute( array() );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( aafm_ability_exception_message(), $result->get_error_message() );
+		$this->assertStringNotContainsString( 'secret-token', $result->get_error_message() );
+		$rows = aafm_query_activity( array( 'ability' => 'aafm-bridge/vendor-escapes' ) );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'error', (string) $rows[0]['status'] );
+	}
+
+	/**
 	 * A source that returns the core exception code on purpose, with its own text, is an ordinary
 	 * foreign error: its text is relayed and its code is recorded behind the foreign prefix.
 	 */

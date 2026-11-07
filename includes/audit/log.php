@@ -1136,19 +1136,22 @@ function aafm_clear_activity_log(): bool {
  * hardcoded option, so a newly added option is cleaned up automatically and none leaks on
  * uninstall. uninstall.php requires includes/admin/settings.php so that list is defined here.
  * Only this plugin's own options, transient, and table are touched - never another plugin's data.
+ * A delete that fails does not stop the rest; its option name is returned so the caller can
+ * report it.
  *
- * @return void
+ * @return string[] The option names whose delete could not be confirmed.
  */
-function aafm_uninstall_site(): void {
+function aafm_uninstall_site(): array {
 	global $wpdb;
-	$forget = function_exists( 'aafm_delete_option_cache_safe' ) ? 'aafm_delete_option_cache_safe' : 'delete_option';
-	if ( function_exists( 'aafm_config_option_names' ) ) {
-		foreach ( aafm_config_option_names() as $option ) {
-			$forget( $option );
+	$forget  = function_exists( 'aafm_delete_option_cache_safe' ) ? 'aafm_delete_option_cache_safe' : 'delete_option';
+	$options = function_exists( 'aafm_config_option_names' ) ? aafm_config_option_names() : array( 'aafm_enabled_abilities' );
+	$failed  = array();
+	foreach ( $options as $option ) {
+		// Only the cache-safe delete certifies the row is gone; delete_option() also answers false
+		// for a row that was never there, so the fallback reports nothing.
+		if ( ! $forget( $option ) && 'delete_option' !== $forget ) {
+			$failed[] = $option;
 		}
-	} else {
-		// Defensive fallback if settings.php was not loaded - never leave the core option behind.
-		$forget( 'aafm_enabled_abilities' );
 	}
 	// Cosmetic detected-keys cache (option-list sibling of the same data class).
 	delete_transient( 'aafm_detected_meta_keys' );
@@ -1161,4 +1164,6 @@ function aafm_uninstall_site(): void {
 	$table = aafm_activity_log_table();
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
 	$wpdb->query( $wpdb->prepare( 'DROP TABLE IF EXISTS %i', $table ) );
+
+	return $failed;
 }

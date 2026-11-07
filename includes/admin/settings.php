@@ -783,21 +783,24 @@ function aafm_uninstall_site_data(): void {
 		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', $observer_priority );
 	}
 
-	aafm_uninstall_site();
+	$failed = aafm_uninstall_site();
 	aafm_drop_oauth_tables();
-	aafm_delete_option_cache_safe( 'aafm_oauth_schema_version' );
-	aafm_delete_option_cache_safe( 'aafm_activity_log_schema_version' );
-	// The one-time OAuth upgrade-preserve guard and the DCR default-on adoption guard (both written by
-	// the plugins_loaded migrations). Cleared here so a delete-data uninstall leaves nothing behind.
-	// They are deliberately NOT in the reset set: clearing a guard on reset would let its migration
-	// re-run and could flip a toggle back on.
-	aafm_delete_option_cache_safe( 'aafm_oauth_toggle_migrated' );
-	aafm_delete_option_cache_safe( 'aafm_oauth_dcr_default_on_migrated' );
-	// The second, independently keyed DCR migration signal - see
-	// aafm_oauth_dcr_adopt_on_by_default()'s docblock. Same non-reset, uninstall-only treatment
-	// as the guard row above.
-	aafm_delete_option_cache_safe( 'aafm_oauth_dcr_default_on_touched' );
-	aafm_delete_option_cache_safe( 'aafm_delete_data_on_uninstall' );
+	// The schema versions; the one-time OAuth upgrade-preserve guard and the DCR default-on adoption
+	// guard (both written by the plugins_loaded migrations), cleared so a delete-data uninstall leaves
+	// nothing behind but deliberately NOT in the reset set, since clearing a guard on reset would let
+	// its migration re-run and could flip a toggle back on; the second, independently keyed DCR
+	// migration signal (see aafm_oauth_dcr_adopt_on_by_default()'s docblock), treated the same way;
+	// and the uninstall flag itself, last.
+	foreach ( array( 'aafm_oauth_schema_version', 'aafm_activity_log_schema_version', 'aafm_oauth_toggle_migrated', 'aafm_oauth_dcr_default_on_migrated', 'aafm_oauth_dcr_default_on_touched', 'aafm_delete_data_on_uninstall' ) as $option ) {
+		if ( ! aafm_delete_option_cache_safe( $option ) ) {
+			$failed[] = $option;
+		}
+	}
+	if ( array() !== $failed ) {
+		// Uninstall has no screen to report to, so the server's error log is the only place a
+		// leftover option can be named. Option names only, never a value.
+		error_log( 'Agent Abilities for MCP: uninstall could not delete these options: ' . implode( ', ', $failed ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- uninstall has no other surface; option names only.
+	}
 
 	if ( false !== $observer_priority ) {
 		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', $observer_priority, 2 );

@@ -26,7 +26,7 @@ final class YoastTest extends TestCase {
 		parent::set_up();
 		$this->force_integration( 'yoast' );
 		$this->stub_yoast();
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_yoast();
 	}
 
@@ -414,7 +414,7 @@ final class YoastTest extends TestCase {
 		remove_all_filters( 'aafm_integration_active_yoast' );
 		add_filter( 'aafm_yoast_active', '__return_false', 99 );
 		$this->assertFalse( aafm_integration_active( 'yoast' ) );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$registry = aafm_get_abilities_registry();
 		$this->assertArrayNotHasKey(
 			'aafm/yoast-get-post',

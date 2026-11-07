@@ -258,7 +258,7 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 		$this->force_integration( 'acf' );
 		$this->stub_acf( $this->config() );
 		AcfStubStore::$model_container_rekeying = true;
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		// The refusal names the caller's addresses only for a caller who could list fields.
 		update_option( 'aafm_enabled_abilities', $listing ? array( 'aafm/acf-update-post-fields', 'aafm/acf-list-field-groups' ) : array( 'aafm/acf-update-post-fields' ) );

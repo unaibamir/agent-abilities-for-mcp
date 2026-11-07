@@ -120,7 +120,7 @@ final class RegistryTest extends TestCase {
 		add_filter( 'aafm_integration_active_yoast', '__return_true' );
 		add_filter( 'aafm_integration_active_rankmath', '__return_true' );
 		add_filter( 'aafm_integration_active_aioseo', '__return_true' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 
 		$registry = aafm_get_abilities_registry();
 		foreach ( array( 'aafm/seo-get-post', 'aafm/seo-update-post', 'aafm/seo-get-schema', 'aafm/seo-update-schema', 'aafm/seo-get-head' ) as $dead ) {
@@ -137,6 +137,6 @@ final class RegistryTest extends TestCase {
 		remove_filter( 'aafm_integration_active_yoast', '__return_true' );
 		remove_filter( 'aafm_integration_active_rankmath', '__return_true' );
 		remove_filter( 'aafm_integration_active_aioseo', '__return_true' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 	}
 }

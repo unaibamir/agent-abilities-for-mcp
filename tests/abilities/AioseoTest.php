@@ -29,7 +29,7 @@ final class AioseoTest extends TestCase {
 		parent::set_up();
 		$this->force_integration( 'aioseo' );
 		$this->stub_aioseo();
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_aioseo();
 	}
 
@@ -613,7 +613,7 @@ final class AioseoTest extends TestCase {
 		remove_all_filters( 'aafm_integration_active_aioseo' );
 		add_filter( 'aafm_aioseo_active', '__return_false', 99 );
 		$this->assertFalse( aafm_integration_active( 'aioseo' ) );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$registry = aafm_get_abilities_registry();
 		$this->assertArrayNotHasKey( 'aafm/aioseo-get-post', $registry );
 	}

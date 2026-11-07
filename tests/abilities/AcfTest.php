@@ -43,7 +43,7 @@ final class AcfTest extends TestCase {
 				'values' => array( 'field_1' => 'Hello' ),
 			)
 		);
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_acf();
 	}
 
@@ -98,7 +98,7 @@ final class AcfTest extends TestCase {
 		remove_all_filters( 'aafm_integration_active_acf' );
 		add_filter( 'aafm_acf_active', '__return_false', 99 );
 		$this->assertFalse( aafm_integration_active( 'acf' ) );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->assertArrayNotHasKey( 'aafm/acf-list-field-groups', aafm_get_abilities_registry() );
 		remove_filter( 'aafm_acf_active', '__return_false', 99 );
 	}
@@ -444,7 +444,7 @@ final class AcfTest extends TestCase {
 				'values' => array( 'field_email' => $email ),
 			)
 		);
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_acf();
 	}
 
@@ -592,7 +592,7 @@ final class AcfTest extends TestCase {
 				'values' => array(),
 			)
 		);
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_acf();
 	}
 
@@ -678,7 +678,7 @@ final class AcfTest extends TestCase {
 				'values' => $vals,
 			)
 		);
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_acf();
 	}
 
@@ -832,7 +832,7 @@ final class AcfTest extends TestCase {
 				),
 			)
 		);
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_acf();
 	}
 
@@ -1074,7 +1074,7 @@ final class AcfTest extends TestCase {
 				),
 			)
 		);
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_acf();
 
 		$admin_id = $this->acting_as( 'administrator' );
@@ -1145,7 +1145,7 @@ final class AcfTest extends TestCase {
 		);
 		// Model the real ACF Pro container re-keying the verbatim stub otherwise hides.
 		\AAFM\Tests\AcfStubStore::$model_container_rekeying = true;
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_acf();
 
 		$admin_id = $this->acting_as( 'administrator' );
@@ -1229,7 +1229,7 @@ final class AcfTest extends TestCase {
 				),
 			)
 		);
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_acf();
 	}
 
@@ -1389,7 +1389,7 @@ final class AcfTest extends TestCase {
 		);
 		// Model the real ACF Pro container re-keying (now depth-recursive) the verbatim stub hides.
 		\AAFM\Tests\AcfStubStore::$model_container_rekeying = true;
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_acf();
 
 		$admin_id = $this->acting_as( 'administrator' );
@@ -1442,7 +1442,7 @@ final class AcfTest extends TestCase {
 		$this->force_integration( 'acf' );
 		$this->stub_acf_group_inside_flex();
 		\AAFM\Tests\AcfStubStore::$model_container_rekeying = true;
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_acf();
 
 		$admin_id = $this->acting_as( 'administrator' );
@@ -1495,7 +1495,7 @@ final class AcfTest extends TestCase {
 		$this->stub_acf_group_inside_flex();
 		\AAFM\Tests\AcfStubStore::$model_container_rekeying = true;
 		\AAFM\Tests\AcfStubStore::$fail_keys                = array( 'field_flex3' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_acf();
 
 		$admin_id = $this->acting_as( 'administrator' );

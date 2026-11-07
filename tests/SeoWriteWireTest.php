@@ -37,14 +37,14 @@ final class SeoWriteWireTest extends TestCase {
 		$this->force_integration( 'rankmath' );
 		$this->stub_yoast();
 		$this->stub_rankmath();
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->acting_as( 'administrator' );
 		$this->handler = $this->handler();
 	}
 
 	public function tear_down(): void {
 		$this->reset_integration_stubs();
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		parent::tear_down();
 	}
 

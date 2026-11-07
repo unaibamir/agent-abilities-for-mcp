@@ -30,7 +30,7 @@ final class WooCouponsTest extends TestCase {
 		$this->stub_woocommerce();
 		$this->stub_wc_coupons();
 		$this->seed_wc_coupons();
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_wc_coupons();
 	}
 
@@ -137,7 +137,7 @@ final class WooCouponsTest extends TestCase {
 		remove_all_filters( 'aafm_integration_active_woocommerce' );
 		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 		$this->assertFalse( aafm_integration_active( 'woocommerce' ) );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 
 		$registry = aafm_get_abilities_registry();
 		$this->assertArrayNotHasKey( 'aafm/wc-list-coupons', $registry );

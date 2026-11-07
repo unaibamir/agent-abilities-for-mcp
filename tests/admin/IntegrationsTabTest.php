@@ -157,7 +157,7 @@ final class IntegrationsTabTest extends TestCase {
 		// Flush so the live registry rebuilds WITH the WooCommerce rows: aafm_get_enabled_abilities()
 		// only honors enabled names that still exist in the live registry, so the WC abilities must be
 		// registered for the enabled subset to count.
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 
 		// Enable a known subset of WooCommerce's abilities, derived from the manifest so the test is
 		// robust to the catalog growing. Three is enough to prove a NON-ZERO count distinct from total.
@@ -171,7 +171,7 @@ final class IntegrationsTabTest extends TestCase {
 		aafm_render_integrations_tab();
 		$html = (string) ob_get_clean();
 		remove_filter( 'aafm_integration_active_woocommerce', '__return_true' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 
 		// Slice the WooCommerce card's own <summary> so the assertion can't match another card's count.
 		$wc_open = strpos( $html, 'aafm-integration-woocommerce' );
@@ -353,12 +353,12 @@ final class IntegrationsTabTest extends TestCase {
 	public function test_each_card_is_a_collapsed_details_accordion(): void {
 		$this->acting_as( 'administrator' );
 		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		ob_start();
 		aafm_render_integrations_tab();
 		$html = (string) ob_get_clean();
 		remove_filter( 'aafm_integration_active_woocommerce', '__return_true' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 
 		// Each integration card is a native <details> accordion that keeps the card classes, and
 		// every accordion starts collapsed (no open attribute on the integration <details>).
@@ -489,7 +489,7 @@ final class IntegrationsTabTest extends TestCase {
 		// per-ability toggles; any secondary control is a <div> + type="button".
 		$this->acting_as( 'administrator' );
 		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		ob_start();
 		aafm_render_integrations_tab();
 		$html = (string) ob_get_clean();

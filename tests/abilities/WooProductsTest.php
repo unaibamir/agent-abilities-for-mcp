@@ -26,7 +26,7 @@ final class WooProductsTest extends TestCase {
 		parent::set_up();
 		$this->force_integration( 'woocommerce' );
 		$this->stub_woocommerce();
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_wc_products();
 	}
 
@@ -308,7 +308,7 @@ final class WooProductsTest extends TestCase {
 		remove_all_filters( 'aafm_integration_active_woocommerce' );
 		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 		$this->assertFalse( aafm_integration_active( 'woocommerce' ) );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->assertArrayNotHasKey( 'aafm/wc-list-products', aafm_get_abilities_registry() );
 		remove_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 	}

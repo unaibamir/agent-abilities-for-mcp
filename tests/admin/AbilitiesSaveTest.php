@@ -69,7 +69,7 @@ final class AbilitiesSaveTest extends TestCase {
 				return $registry;
 			}
 		);
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 
 		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts', 'aafm/fake-wc' ) );
 
@@ -85,7 +85,7 @@ final class AbilitiesSaveTest extends TestCase {
 		$this->assertNotContains( 'aafm/fake-wc', $resolved, 'An in-scope ability the form turned off is removed.' );
 
 		remove_all_filters( 'aafm_abilities_registry' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 	}
 
 	public function test_menu_is_registered_for_admins(): void {
@@ -392,7 +392,7 @@ final class AbilitiesSaveTest extends TestCase {
 				return $registry;
 			}
 		);
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 
 		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts', 'aafm/fake-inactive-host' ) );
 
@@ -404,7 +404,7 @@ final class AbilitiesSaveTest extends TestCase {
 		$this->assertContains( 'aafm/get-posts', $enabled );
 
 		remove_all_filters( 'aafm_abilities_registry_integrations' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 	}
 
 	/**
@@ -421,7 +421,7 @@ final class AbilitiesSaveTest extends TestCase {
 				return $registry;
 			}
 		);
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 
 		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts', 'aafm/fake-inactive-host' ) );
 
@@ -436,7 +436,7 @@ final class AbilitiesSaveTest extends TestCase {
 		$this->assertContains( 'aafm/get-posts', $resolved );
 
 		remove_all_filters( 'aafm_abilities_registry_integrations' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 	}
 
 	public function test_saving_ability_from_a_non_default_subject_persists(): void {

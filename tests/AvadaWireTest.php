@@ -15,12 +15,12 @@ final class AvadaWireTest extends TestCase {
 	public function set_up(): void {
 		parent::set_up();
 		add_filter( 'aafm_integration_active_avada', '__return_true' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 	}
 
 	public function tear_down(): void {
 		remove_filter( 'aafm_integration_active_avada', '__return_true' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		parent::tear_down();
 	}
 

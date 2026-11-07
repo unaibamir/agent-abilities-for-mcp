@@ -45,7 +45,7 @@ final class WooVariationsTest extends TestCase {
 		parent::set_up();
 		$this->force_integration( 'woocommerce' );
 		$this->seed_variable_parent_with_variations();
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_wc_variations();
 	}
 
@@ -457,7 +457,7 @@ final class WooVariationsTest extends TestCase {
 		remove_all_filters( 'aafm_integration_active_woocommerce' );
 		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 		$this->assertFalse( aafm_integration_active( 'woocommerce' ) );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->assertArrayNotHasKey( 'aafm/wc-list-product-variations', aafm_get_abilities_registry() );
 		remove_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 	}
@@ -1110,7 +1110,7 @@ final class WooVariationsTest extends TestCase {
 		$this->reset_integration_stubs();
 		$this->force_integration( 'woocommerce' );
 		$this->seed_variable_parent_with_variations( 3 );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_wc_variations();
 
 		$this->acting_as( 'administrator' );

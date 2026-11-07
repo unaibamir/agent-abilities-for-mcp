@@ -67,7 +67,7 @@ final class AcfUnknownFieldTest extends TestCase {
 				),
 			)
 		);
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		update_option( 'aafm_enabled_abilities', $enabled );
 		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );

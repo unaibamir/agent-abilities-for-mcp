@@ -20,7 +20,7 @@ class MissingToolsTest extends TestCase {
 		remove_all_filters( 'aafm_abilities_registry_integrations' );
 		remove_all_filters( 'aafm_high_risk_abilities' );
 		remove_all_filters( 'query' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		parent::tear_down();
 	}
 
@@ -44,7 +44,7 @@ class MissingToolsTest extends TestCase {
 				return $registry;
 			}
 		);
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 	}
 
 	private function lock_create_post(): void {

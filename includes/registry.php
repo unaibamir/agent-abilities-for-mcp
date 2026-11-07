@@ -163,32 +163,6 @@ function aafm_registry_cache_should_flush_full(): bool {
 }
 
 /**
- * Raise (or read) the registry flush flag.
- *
- * The catalog is fixed once the plugin loads (every domain file adds its filter at
- * include time), so production never raises this. It exists so tests that add or
- * remove an 'aafm_abilities_registry' filter mid-run can force one rebuild.
- *
- * Internally this bumps a monotonic flush generation (aafm_registry_flush_generation()) so that BOTH
- * memoized views - the live registry and the full view - each observe the flush exactly once. The
- * historical signature is preserved: pass true to raise a flush, call with no argument to peek at
- * whether the live registry is currently behind the generation. Callers should prefer
- * aafm_flush_registry_cache(); this stays public because existing tests call it as
- * aafm_registry_cache_should_flush( true ).
- *
- * @param bool|null $set Internal: true to raise a flush generation, null to peek at the live view.
- * @return bool True when the live registry is currently behind the flush generation.
- */
-function aafm_registry_cache_should_flush( ?bool $set = null ): bool {
-	if ( true === $set ) {
-		aafm_registry_flush_generation( true );
-		return false;
-	}
-
-	return aafm_registry_flush_generation() > 0;
-}
-
-/**
  * The current registry flush generation, a monotonic counter raised on every flush.
  *
  * Each memoized view (live registry and full view) keeps its own "last consumed" generation and

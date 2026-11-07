@@ -27,7 +27,7 @@ final class RankMathTest extends TestCase {
 		parent::set_up();
 		$this->force_integration( 'rankmath' );
 		$this->stub_rankmath();
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_rankmath();
 	}
 
@@ -752,7 +752,7 @@ final class RankMathTest extends TestCase {
 		remove_all_filters( 'aafm_integration_active_rankmath' );
 		add_filter( 'aafm_rankmath_active', '__return_false', 99 );
 		$this->assertFalse( aafm_integration_active( 'rankmath' ) );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$registry = aafm_get_abilities_registry();
 		$this->assertArrayNotHasKey( 'aafm/rankmath-get-post', $registry );
 		$this->assertArrayNotHasKey( 'aafm/rankmath-update-schema', $registry );

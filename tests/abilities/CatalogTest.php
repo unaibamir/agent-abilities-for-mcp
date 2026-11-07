@@ -68,7 +68,7 @@ final class CatalogTest extends TestCase {
 		add_filter( 'aafm_integration_active_event_tickets', '__return_true' );
 		add_filter( 'aafm_integration_active_avada', '__return_true' );
 		add_filter( 'aafm_integration_active_geodirectory', '__return_true' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 	}
 
 	/**

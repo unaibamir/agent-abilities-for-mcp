@@ -31,7 +31,7 @@ final class WooOrdersTest extends TestCase {
 		$this->stub_woocommerce();
 		// Seed order test fixtures including a PII-carrying order.
 		$this->seed_wc_orders();
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_wc_orders();
 	}
 
@@ -510,7 +510,7 @@ final class WooOrdersTest extends TestCase {
 		remove_all_filters( 'aafm_integration_active_woocommerce' );
 		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 		$this->assertFalse( aafm_integration_active( 'woocommerce' ) );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 
 		$registry = aafm_get_abilities_registry();
 		$this->assertArrayNotHasKey( 'aafm/wc-list-orders', $registry );

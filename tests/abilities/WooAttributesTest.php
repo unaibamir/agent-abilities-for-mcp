@@ -29,7 +29,7 @@ final class WooAttributesTest extends TestCase {
 		$this->force_integration( 'woocommerce' );
 		$this->stub_woocommerce(); // also resets + caps admin.
 		$this->seed_wc_attributes(); // seeds id 1 = Color, id 2 = Size.
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_wc_attributes();
 	}
 
@@ -303,7 +303,7 @@ final class WooAttributesTest extends TestCase {
 		remove_all_filters( 'aafm_integration_active_woocommerce' );
 		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 		$this->assertFalse( aafm_integration_active( 'woocommerce' ) );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->assertArrayNotHasKey( 'aafm/wc-list-product-attributes', aafm_get_abilities_registry() );
 		remove_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 	}

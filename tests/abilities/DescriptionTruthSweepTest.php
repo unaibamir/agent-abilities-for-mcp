@@ -62,7 +62,7 @@ final class DescriptionTruthSweepTest extends TestCase {
 		foreach ( self::INTEGRATIONS as $slug ) {
 			add_filter( 'aafm_integration_active_' . $slug, '__return_true' );
 		}
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		// Discovery of a read asks whether the ability is switched on, so switch the whole catalog on.
 		update_option( 'aafm_high_risk_abilities_unlocked', true );
 		update_option( 'aafm_enabled_abilities', array_keys( aafm_get_abilities_registry_full() ) );
@@ -74,7 +74,7 @@ final class DescriptionTruthSweepTest extends TestCase {
 		foreach ( self::INTEGRATIONS as $slug ) {
 			remove_filter( 'aafm_integration_active_' . $slug, '__return_true' );
 		}
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		parent::tear_down();
 	}
 

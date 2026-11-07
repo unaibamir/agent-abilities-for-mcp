@@ -227,14 +227,14 @@ final class QuickConnectAbilitiesTest extends TestCase {
 				return $registry;
 			}
 		);
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts', 'aafm/fake-inactive-host' ) );
 
 		aafm_quickconnect_apply_abilities( false );
 		$stored = aafm_get_stored_enabled_abilities_raw();
 
 		remove_all_filters( 'aafm_abilities_registry_integrations' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 
 		$this->assertContains( 'aafm/fake-inactive-host', $stored, 'A saved tool of an inactive plugin must survive the wizard.' );
 	}

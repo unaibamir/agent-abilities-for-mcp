@@ -333,7 +333,7 @@ final class AcfContainerVerifyCorpusTest extends TestCase {
 		// carries every sub-field the definition declares. Without the second half of that the stub
 		// echoes the caller's partial row back and this whole corpus passes vacuously.
 		AcfStubStore::$model_container_rekeying = true;
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		update_option( 'aafm_enabled_abilities', array( 'aafm/acf-update-post-fields', 'aafm/acf-get-post-fields' ) );
 		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );

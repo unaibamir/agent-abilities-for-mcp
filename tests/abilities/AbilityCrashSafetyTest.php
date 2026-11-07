@@ -44,7 +44,7 @@ final class AbilityCrashSafetyTest extends TestCase {
 		// signal they exist to prove.
 		$this->stub_wc_coupons();
 		$this->unlock_high_risk_abilities();
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		update_option(
 			'aafm_enabled_abilities',

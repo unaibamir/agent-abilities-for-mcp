@@ -417,7 +417,7 @@ final class AbilitiesPageSaveTest extends TestCase {
 				return $registry;
 			}
 		);
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts', 'aafm/fake-wc' ) );
 
 		$json = $this->save(

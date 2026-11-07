@@ -23,7 +23,7 @@ final class TypeToolReachTest extends TestCase {
 		if ( post_type_exists( 'product' ) ) {
 			unregister_post_type( 'product' );
 		}
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		parent::tear_down();
 	}
 
@@ -112,7 +112,7 @@ final class TypeToolReachTest extends TestCase {
 
 	public function test_update_post_cannot_reach_a_product_while_wc_update_product_is_off(): void {
 		$this->force_integration( 'woocommerce' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$product = $this->register_product_type();
 		$this->acting_as( 'administrator' );
 		$this->enable( array( 'aafm/update-post' ) );
@@ -174,7 +174,7 @@ final class TypeToolReachTest extends TestCase {
 	public function test_a_product_type_on_a_site_without_woocommerce_is_unaffected(): void {
 		// The WooCommerce marker class another suite defines is process-permanent, so pin it inactive.
 		add_filter( 'aafm_woocommerce_active', '__return_false' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$product = $this->register_product_type();
 		$this->acting_as( 'administrator' );
 		$this->enable( array( 'aafm/update-post' ) );

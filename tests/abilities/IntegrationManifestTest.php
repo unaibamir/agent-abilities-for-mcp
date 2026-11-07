@@ -62,7 +62,7 @@ final class IntegrationManifestTest extends TestCase {
 		add_filter( 'aafm_integration_active_event_tickets', '__return_true' );
 		add_filter( 'aafm_integration_active_avada', '__return_true' );
 		add_filter( 'aafm_integration_active_geodirectory', '__return_true' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 
 		$registry      = aafm_get_abilities_registry();
 		$manifest      = aafm_integration_manifest();
@@ -88,7 +88,7 @@ final class IntegrationManifestTest extends TestCase {
 		);
 		$this->assertSame( 184, $core + $manifest_total );
 
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 	}
 
 	public function test_available_ability_count_is_the_single_source_of_truth(): void {
@@ -144,7 +144,7 @@ final class IntegrationManifestTest extends TestCase {
 		add_filter( 'aafm_integration_active_event_tickets', '__return_true' );
 		add_filter( 'aafm_integration_active_avada', '__return_true' );
 		add_filter( 'aafm_integration_active_geodirectory', '__return_true' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 
 		$registry   = aafm_get_abilities_registry();
 		$descriptor = aafm_integration_ability_manifest();
@@ -176,6 +176,6 @@ final class IntegrationManifestTest extends TestCase {
 			}
 		}
 
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 	}
 }

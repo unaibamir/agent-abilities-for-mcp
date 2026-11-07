@@ -30,7 +30,7 @@ final class ListPageBoundsTest extends TestCase {
 		add_filter( 'aafm_integration_active_aioseo', '__return_true' );
 		add_filter( 'aafm_integration_active_acf', '__return_true' );
 		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 	}
 
 	public function tear_down(): void {
@@ -39,7 +39,7 @@ final class ListPageBoundsTest extends TestCase {
 		remove_filter( 'aafm_integration_active_aioseo', '__return_true' );
 		remove_filter( 'aafm_integration_active_acf', '__return_true' );
 		remove_filter( 'aafm_integration_active_woocommerce', '__return_true' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		parent::tear_down();
 	}
 

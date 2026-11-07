@@ -63,7 +63,7 @@ final class SecurityRegressionTest extends TestCase {
 		add_filter( 'aafm_integration_active_aioseo', '__return_true' );
 		add_filter( 'aafm_integration_active_acf', '__return_true' );
 		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 	}
 
 	/**

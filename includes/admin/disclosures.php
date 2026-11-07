@@ -25,7 +25,9 @@ defined( 'ABSPATH' ) || exit;
  * through WordPress core's own rest_url(), which any active plugin can filter to a
  * different host - trusting that destination means trusting whatever rest_url filter the
  * site already runs, the same already-privileged trust any other installed plugin
- * requires, not attacker-controlled input. Carved out by name in
+ * requires, not attacker-controlled input. The admin's login cookies and REST nonce go only
+ * to this site's own origin (aafm_endpoint_is_same_origin()), with redirects off; another host
+ * gets the request without them. Carved out by name in
  * SecurityRegressionTest::test_source_tree_has_no_dangerous_primitives().
  *
  * @return array<string,string>

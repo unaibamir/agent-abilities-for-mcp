@@ -795,19 +795,24 @@ function aafm_ajax_test_connection(): void {
 		)
 	);
 
-	$response = wp_remote_post(
-		aafm_endpoint_url(),
-		array(
-			'timeout' => 10,
-			'cookies' => $cookies,
-			'headers' => array(
-				'Content-Type' => 'application/json',
-				// A cookie-authenticated REST call needs the REST nonce or core rejects it with 401.
-				'X-WP-Nonce'   => wp_create_nonce( 'wp_rest' ),
-			),
-			'body'    => $body,
-		)
+	// The login travels only to this site's own address. A rest_url filter or a mapped domain can
+	// point the endpoint at another host, and the request then runs without the login. With the
+	// login attached, redirects are off: WordPress would carry the domainless cookies and the nonce
+	// header to wherever a redirect points.
+	$same_origin = aafm_endpoint_is_same_origin();
+	$args        = array(
+		'timeout' => 10,
+		'headers' => array( 'Content-Type' => 'application/json' ),
+		'body'    => $body,
 	);
+	if ( $same_origin ) {
+		$args['cookies'] = $cookies;
+		// A cookie-authenticated REST call needs the REST nonce or core rejects it with 401.
+		$args['headers']['X-WP-Nonce'] = wp_create_nonce( 'wp_rest' );
+		$args['redirection']           = 0;
+	}
+
+	$response = wp_remote_post( aafm_endpoint_url(), $args );
 
 	if ( is_wp_error( $response ) ) {
 		wp_send_json_error( array( 'message' => $response->get_error_message() ) );
@@ -825,8 +830,22 @@ function aafm_ajax_test_connection(): void {
 			'http_code'        => $code,
 			'reachable'        => $reachable,
 			'admin_tool_count' => $tool_count, // The admin's-eye count, not the agent's.
+			'cookies_skipped'  => ! $same_origin,
+			'redirected'       => $same_origin && $code >= 300 && $code < 400,
 		)
 	);
+}
+
+/**
+ * Whether the MCP endpoint is on this site's own origin, so the Test connection call may carry the
+ * admin's login.
+ *
+ * @return bool
+ */
+function aafm_endpoint_is_same_origin(): bool {
+	$endpoint = aafm_site_origin( aafm_endpoint_url() );
+	return '' !== $endpoint
+		&& ( aafm_site_origin( home_url() ) === $endpoint || aafm_site_origin( site_url() ) === $endpoint );
 }
 
 /**

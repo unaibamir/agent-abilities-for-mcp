@@ -9,11 +9,14 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Admin;
 
+use AAFM\Tests\Support\AjaxHarness;
 use AAFM\Tests\TestCase;
 use WP_Application_Passwords;
 use WP_Error;
 
 final class ConnectionTest extends TestCase {
+
+	use AjaxHarness;
 
 	/**
 	 * These render-tab tests were written against the old OAuth-on default. OAuth is now OFF
@@ -23,6 +26,99 @@ final class ConnectionTest extends TestCase {
 	public function set_up(): void {
 		parent::set_up();
 		update_option( 'aafm_oauth_enabled', '1' );
+	}
+
+	public function tear_down(): void {
+		$this->reset_ajax_harness();
+		remove_all_filters( 'pre_http_request' );
+		remove_all_filters( 'rest_url' );
+		unset( $_COOKIE[ LOGGED_IN_COOKIE ] );
+		parent::tear_down();
+	}
+
+	/**
+	 * Run Test connection with a canned endpoint answer, returning the JSON and the request args.
+	 *
+	 * @param array<string,mixed> $answer Canned wp_remote_post() answer.
+	 * @return array{0:array<string,mixed>,1:array<string,mixed>}
+	 */
+	private function run_test_connection( array $answer ): array {
+		$_COOKIE[ LOGGED_IN_COOKIE ] = 'aafm-login-cookie';
+		$this->post_as( 'administrator' );
+		$sent = array();
+		add_filter(
+			'pre_http_request',
+			static function ( $pre, $args ) use ( &$sent, $answer ) {
+				$sent = $args;
+				return $answer;
+			},
+			10,
+			2
+		);
+		return array( $this->run_handler( 'aafm_ajax_test_connection' ), $sent );
+	}
+
+	/**
+	 * Point the endpoint at another host, the way a rest_url filter or a mapped domain does.
+	 */
+	private function endpoint_elsewhere(): void {
+		add_filter(
+			'rest_url',
+			static fn( string $url ): string => (string) preg_replace( '#^https?://[^/]+#', 'https://elsewhere.example', $url )
+		);
+	}
+
+	/**
+	 * A tools/list answer from the endpoint.
+	 *
+	 * @param int $code HTTP status.
+	 * @return array<string,mixed>
+	 */
+	private function answer( int $code ): array {
+		return array(
+			'headers'  => array(),
+			'body'     => (string) wp_json_encode( array( 'result' => array( 'tools' => array() ) ) ),
+			'response' => array(
+				'code'    => $code,
+				'message' => '',
+			),
+			'cookies'  => array(),
+		);
+	}
+
+	public function test_a_mismatched_origin_sends_no_cookies_and_no_nonce(): void {
+		$this->endpoint_elsewhere();
+		list( , $sent ) = $this->run_test_connection( $this->answer( 200 ) );
+
+		$this->assertEmpty( $sent['cookies'] ?? array() );
+		$this->assertArrayNotHasKey( 'X-WP-Nonce', $sent['headers'] );
+	}
+
+	public function test_a_mapped_domain_mismatch_still_runs_and_reports_skipped(): void {
+		$this->endpoint_elsewhere();
+		list( $json ) = $this->run_test_connection( $this->answer( 200 ) );
+
+		$this->assertTrue( $json['success'] );
+		$this->assertTrue( $json['data']['reachable'] );
+		$this->assertTrue( $json['data']['cookies_skipped'] );
+	}
+
+	public function test_the_same_origin_still_sends_cookies(): void {
+		list( $json, $sent ) = $this->run_test_connection( $this->answer( 200 ) );
+
+		$this->assertSame( 'aafm-login-cookie', $sent['cookies'][ LOGGED_IN_COOKIE ] ?? null );
+		$this->assertArrayHasKey( 'X-WP-Nonce', $sent['headers'] );
+		$this->assertSame( 0, $sent['redirection'] );
+		$this->assertFalse( $json['data']['cookies_skipped'] );
+	}
+
+	public function test_a_redirect_from_the_same_origin_reports_redirected_and_is_not_followed(): void {
+		list( $json, $sent ) = $this->run_test_connection( $this->answer( 302 ) );
+
+		$this->assertSame( 0, $sent['redirection'] );
+		$this->assertFalse( $json['data']['reachable'] );
+		$this->assertSame( 302, $json['data']['http_code'] );
+		$this->assertTrue( $json['data']['redirected'] );
 	}
 
 	public function test_diagnostics_report_adapter_and_endpoint(): void {

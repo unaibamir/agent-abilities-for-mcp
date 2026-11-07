@@ -236,6 +236,8 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'connectionOk'             => __( 'Reachable (HTTP %1$s) - %2$s tool(s) in your admin view.', 'agent-abilities-for-mcp' ),
 				/* translators: %s: HTTP status code returned by the endpoint. */
 				'connectionNoTools'        => __( 'Endpoint answered HTTP %s but did not return a tool list.', 'agent-abilities-for-mcp' ),
+				'connectionNoLogin'        => __( 'The endpoint is on a different address, so this test ran without your login.', 'agent-abilities-for-mcp' ),
+				'connectionRedirected'     => __( 'The endpoint redirected, so the test stopped before sending your login anywhere else. Run the Connection Doctor to see where it goes.', 'agent-abilities-for-mcp' ),
 				// Connection Doctor.
 				'doctorPass'               => __( 'Pass', 'agent-abilities-for-mcp' ),
 				'doctorWarn'               => __( 'Warning', 'agent-abilities-for-mcp' ),

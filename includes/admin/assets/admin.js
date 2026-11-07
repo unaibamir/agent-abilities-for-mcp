@@ -2133,7 +2133,12 @@
 				if ( ! status ) {
 					return;
 				}
-				if ( json?.success && json.data.reachable ) {
+				if ( json?.success && json.data.redirected ) {
+					status.textContent = this.#t(
+						'connectionRedirected',
+						'The endpoint redirected, so the test stopped before sending your login anywhere else. Run the Connection Doctor to see where it goes.'
+					);
+				} else if ( json?.success && json.data.reachable ) {
 					status.textContent = this.#format(
 						this.#t(
 							'connectionOk',
@@ -2154,6 +2159,15 @@
 					status.textContent = this.#format(
 						this.#t( 'errorWithMessage', 'Error: %s' ),
 						json?.data?.message ?? this.#t( 'errorUnknown', 'unknown' )
+					);
+				}
+				if ( json?.success && json.data.cookies_skipped ) {
+					status.append(
+						' ',
+						this.#t(
+							'connectionNoLogin',
+							'The endpoint is on a different address, so this test ran without your login.'
+						)
 					);
 				}
 			} );

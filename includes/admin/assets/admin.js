@@ -772,6 +772,25 @@
 		}
 
 		/**
+		 * POST a prepared body to admin-ajax. The one place the admin script calls fetch.
+		 *
+		 * @param {URLSearchParams} body The form body, action and nonce included.
+		 * @return {Promise<*>} The decoded JSON, or undefined when the request or the parse failed.
+		 */
+		async #postBody( body ) {
+			try {
+				const res = await fetch( this.#ajaxUrl, {
+					method: 'POST',
+					body,
+					credentials: 'same-origin',
+				} );
+				return await res.json();
+			} catch {
+				return undefined;
+			}
+		}
+
+		/**
 		 * POST an admin-ajax action with the nonce attached. Returns the parsed JSON,
 		 * or a synthetic failure object so callers never have to try/catch the transport.
 		 *
@@ -781,19 +800,10 @@
 		 */
 		async #post( action, data = {} ) {
 			const body = new URLSearchParams( { action, nonce: this.#nonce, ...data } );
-			try {
-				const res = await fetch( this.#ajaxUrl, {
-					method: 'POST',
-					body,
-					credentials: 'same-origin',
-				} );
-				return await res.json();
-			} catch {
-				return {
-					success: false,
-					data: { message: this.#t( 'requestFailed', 'Request failed.' ) },
-				};
-			}
+			return ( await this.#postBody( body ) ) ?? {
+				success: false,
+				data: { message: this.#t( 'requestFailed', 'Request failed.' ) },
+			};
 		}
 
 		#bindCopy() {
@@ -1148,17 +1158,7 @@
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
 				}
-				let json;
-				try {
-					const res = await fetch( this.#ajaxUrl, {
-						method: 'POST',
-						body,
-						credentials: 'same-origin',
-					} );
-					json = await res.json();
-				} catch {
-					json = { success: false };
-				}
+				const json = ( await this.#postBody( body ) ) ?? { success: false };
 				if ( json?.success ) {
 					this.#refreshLocalCounts(
 						form,
@@ -1204,17 +1204,7 @@
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
 				}
-				let json;
-				try {
-					const res = await fetch( this.#ajaxUrl, {
-						method: 'POST',
-						body,
-						credentials: 'same-origin',
-					} );
-					json = await res.json();
-				} catch {
-					json = { success: false };
-				}
+				const json = ( await this.#postBody( body ) ) ?? { success: false };
 				if ( json?.success ) {
 					this.#markClean( form, sent );
 				}
@@ -1843,15 +1833,9 @@
 
 				setBar( this.#t( 'saving', 'Saving…' ) );
 				inFlight = true;
-				let json;
-				try {
-					const res = await fetch( this.#ajaxUrl, { method: 'POST', body, credentials: 'same-origin' } );
-					json = await res.json();
-				} catch {
-					// Network failure or a body that is not JSON: json stays undefined.
-				} finally {
-					inFlight = false;
-				}
+				// A network failure or a body that is not JSON leaves json undefined.
+				const json = await this.#postBody( body );
+				inFlight = false;
 
 				// -1 is core's nonce refusal and 0 a logged-out session; both are what an admin
 				// gets from a tab left open overnight, and a reload fixes both.
@@ -1979,17 +1963,7 @@
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
 				}
-				let json;
-				try {
-					const res = await fetch( this.#ajaxUrl, {
-						method: 'POST',
-						body,
-						credentials: 'same-origin',
-					} );
-					json = await res.json();
-				} catch {
-					json = { success: false };
-				}
+				const json = ( await this.#postBody( body ) ) ?? { success: false };
 				if ( status ) {
 					if ( ! json?.success ) {
 						// A rejected save never wrote anything, so the generic line is right for it.

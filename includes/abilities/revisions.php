@@ -366,7 +366,7 @@ function aafm_exec_restore_revision( array $input ) {
 			__( 'Revisions are disabled for this post, so the current state cannot be saved before restoring and the restore would be irreversible. Refusing. Enable revisions for this post type to restore.', 'agent-abilities-for-mcp' )
 		);
 	}
-	$revision = get_post( $revision_id );
+	$revision = aafm_exact_object( 'post', $revision_id );
 	$old      = array();
 	foreach ( array( 'post_title', 'post_content', 'post_excerpt' ) as $field ) {
 		$old[ $field ] = (string) $parent->$field;
@@ -379,7 +379,7 @@ function aafm_exec_restore_revision( array $input ) {
 	// still reports success.
 	foreach ( $old as $field => $before ) {
 		$wanted = $revision instanceof WP_Post ? (string) $revision->$field : '';
-		if ( ! aafm_post_field_write_confirmed( $post_id, $field, $wanted, $before ) ) {
+		if ( ! aafm_post_field_confirm_logged( $post_id, $field, $wanted, $before ) ) {
 			return new WP_Error(
 				'aafm_restore_unconfirmed',
 				__( 'The restore ran, but the post does not match the revision afterwards, so it could not be confirmed. Read the post to check its current state.', 'agent-abilities-for-mcp' )

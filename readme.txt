@@ -99,7 +99,7 @@ WordPress 6.9 added the Abilities API, and the official MCP Adapter turns those 
 
 = Pages built with a page builder =
 
-Page builders keep their layout in their own data, so an edit to the post text can report success and change nothing on the page, or get overwritten the next time someone saves in the builder. For Elementor, Divi, Beaver Builder, Avada and Visual Composer the plugin checks first and refuses the write with an error naming the builder. Avada's two own tools are the exception and refuse shortcode changes.
+Page builders keep their layout in their own data, so an edit to the post text can report success and change nothing on the page, or get overwritten the next time someone saves in the builder. For Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks and WPBakery the plugin checks first and refuses the write with an error naming the builder. Avada's two own tools are the exception and refuse shortcode changes.
 
 = Compatible clients =
 
@@ -229,7 +229,7 @@ For layout, the AI can list block types and read one block's attributes, plus fi
 
 = Will an agent break my Elementor or Divi page? =
 
-Before any content write the plugin checks whether a page builder owns the post, and if one does it refuses with an error that names the builder. Elementor, Divi, Beaver Builder, Avada and Visual Composer are covered, so edit those pages in the builder itself. Avada's two dedicated tools can replace text in a page and refuse changes to its shortcodes.
+Before any content write the plugin checks whether a page builder owns the post, and if one does it refuses with an error that names the builder. Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks and WPBakery are covered, so edit those pages in the builder itself. Avada's two dedicated tools can replace text in a page and refuse changes to its shortcodes.
 
 = Can an AI agent manage my WooCommerce store? =
 

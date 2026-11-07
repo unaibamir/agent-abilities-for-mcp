@@ -85,8 +85,8 @@ final class DescriptionTruthSweepTest extends TestCase {
 	 */
 	private function builder_labels(): array {
 		$labels = array();
-		foreach ( array_unique( array_values( aafm_page_builder_default_markers() ) ) as $slug ) {
-			$labels[] = aafm_page_builder_label( (string) $slug );
+		foreach ( aafm_page_builder_slugs() as $slug ) {
+			$labels[] = aafm_page_builder_label( $slug );
 		}
 		return $labels;
 	}
@@ -175,15 +175,15 @@ final class DescriptionTruthSweepTest extends TestCase {
 
 	public function test_every_builder_marker_has_a_display_name(): void {
 		$readme = (string) file_get_contents( AAFM_PLUGIN_DIR . 'readme.txt' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading plugin source.
-		$this->assertSame( array( 'Elementor', 'Divi', 'Beaver Builder', 'Avada', 'Visual Composer' ), $this->builder_labels(), 'Update the readme FAQ and the descriptions with a new builder.' );
+		$this->assertSame( array( 'Elementor', 'Divi', 'Beaver Builder', 'Avada', 'Visual Composer', 'Oxygen', 'Breakdance', 'Brizy', 'Bricks', 'WPBakery' ), $this->builder_labels(), 'Update the readme FAQ and the descriptions with a new builder.' );
 		foreach ( $this->builder_labels() as $label ) {
 			$this->assertStringContainsString( $label, $readme, $label . ' is named in the readme.' );
 		}
-		$this->assertStringContainsString( 'Elementor, Divi, Beaver Builder, Avada and Visual Composer are covered', $readme );
+		$this->assertStringContainsString( 'Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks and WPBakery are covered', $readme );
 	}
 
-	public function test_the_helper_builds_the_list_from_the_default_markers(): void {
-		$this->assertSame( 'Elementor, Divi, Beaver Builder, Avada, and Visual Composer', aafm_page_builder_names() );
+	public function test_the_helper_builds_the_list_from_the_default_builders(): void {
+		$this->assertSame( 'Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks, and WPBakery', aafm_page_builder_names() );
 		add_filter(
 			'aafm_page_builder_markers',
 			static function ( array $markers ): array {
@@ -191,7 +191,7 @@ final class DescriptionTruthSweepTest extends TestCase {
 				return $markers;
 			}
 		);
-		$this->assertSame( 'Elementor, Divi, Beaver Builder, Avada, and Visual Composer', aafm_page_builder_names(), 'A site filter does not change registry text.' );
+		$this->assertSame( 'Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks, and WPBakery', aafm_page_builder_names(), 'A site filter does not change registry text.' );
 		remove_all_filters( 'aafm_page_builder_markers' );
 	}
 

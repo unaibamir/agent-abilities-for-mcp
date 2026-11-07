@@ -926,4 +926,34 @@ final class PostMetaTest extends TestCase {
 			$out->get_error_data()
 		);
 	}
+
+	public function test_an_agent_cannot_clear_a_new_marker_or_the_bricks_mode_under_the_star_allowlist(): void {
+		update_option( 'aafm_allowed_meta_keys', array( '*' ) );
+		$this->acting_as( 'administrator' );
+		$id = self::factory()->post->create();
+
+		foreach ( array( 'ct_builder_json', 'ct_builder_shortcodes', 'breakdance_data', 'brizy_enabled', '_oxygen_data', '_bricks_editor_mode', '_bricks_page_content_2', '_bricks_page_header_2', '_bricks_page_footer_2' ) as $key ) {
+			$input = array(
+				'post_id'  => $id,
+				'meta_key' => $key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+			);
+			$this->assertFalse( aafm_perm_update_post_meta( $input ), "$key must be blocked from update-post-meta." );
+			$this->assertFalse( aafm_perm_delete_post_meta( $input ), "$key must be blocked from delete-post-meta." );
+		}
+	}
+
+	public function test_the_bricks_keys_stay_blocked_when_a_filter_unprotects_them(): void {
+		$unprotect = static function ( $is_protected, $key ) {
+			return 0 === strpos( (string) $key, '_bricks_' ) ? false : $is_protected;
+		};
+		add_filter( 'is_protected_meta', $unprotect, 10, 2 );
+		try {
+			foreach ( array( '_bricks_editor_mode', '_bricks_page_content_2', '_bricks_page_header_2', '_bricks_page_footer_2' ) as $key ) {
+				$this->assertFalse( is_protected_meta( $key, 'post' ), "Premise: $key is unprotected." );
+				$this->assertTrue( aafm_hard_blocked_meta_key( $key ), "$key must stay hard-blocked." );
+			}
+		} finally {
+			remove_filter( 'is_protected_meta', $unprotect, 10 );
+		}
+	}
 }

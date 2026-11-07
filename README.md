@@ -22,7 +22,7 @@ Abilities are registered on the WordPress 6.9 Abilities API and served through t
 
 The admin screen has a switch for each ability, plus read-only mode, per-role and per-connection allowlists, a rate limit, an IP allowlist and Pause all access, and each OAuth connection gets its own pause, end date, rate limit and access preset. An Activity Log table in the site's own database records the acting user, the tool, the argument keys and an identifier-only note, and it never stores free-text content.
 
-Playbooks are step-by-step instructions the owner writes, and agents read the Active ones through two read tools, `aafm/list-playbooks` and `aafm/get-playbook`. Writes through the general content tools to pages owned by Elementor, Divi, Beaver Builder, Avada or Visual Composer are refused. Avada's two dedicated tools are the exception, and they refuse changes to its shortcodes.
+Playbooks are step-by-step instructions the owner writes, and agents read the Active ones through two read tools, `aafm/list-playbooks` and `aafm/get-playbook`. Writes through the general content tools to pages owned by Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks or WPBakery are refused. Avada's two dedicated tools are the exception, and they refuse changes to its shortcodes.
 
 One scope note: the Adapter has a default server that other plugins can publish tools to, and those tools are outside this plugin's controls. A Settings choice (Automatic, Always on, Always off) decides whether that server runs, and this plugin's own tools are never on it.
 

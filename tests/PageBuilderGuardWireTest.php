@@ -269,4 +269,39 @@ final class PageBuilderGuardWireTest extends TestCase {
 		$this->assertStringContainsString( 'Avada', $result->getContent()[0]->getText() );
 		$this->assertSame( $original_content, get_post( $listing_id )->post_content, 'The listing must be left byte-identical.' );
 	}
+
+	public function test_update_post_refuses_a_bricks_page_with_the_409_error(): void {
+		$this->register_enabled( array( 'aafm/update-post' ) );
+		$post_id        = self::factory()->post->create();
+		$original_title = get_post( $post_id )->post_title;
+		update_post_meta( $post_id, '_bricks_page_content_2', array( array( 'id' => 'abc' ) ) );
+		$this->acting_as( 'administrator' );
+
+		$direct = aafm_exec_update_post(
+			array(
+				'post_id' => $post_id,
+				'title'   => 'Should be refused',
+			)
+		);
+		$this->assertInstanceOf( \WP_Error::class, $direct );
+		$this->assertSame( 'aafm_page_builder_owned', $direct->get_error_code() );
+		$this->assertSame( array( 'status' => 409 ), $direct->get_error_data() );
+
+		$server  = $this->build_single_ability_server( \WP\MCP\Core\McpAdapter::instance() );
+		$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
+		$result  = $handler->call_tool(
+			array(
+				'name'      => aafm_mcp_tool_name( 'aafm/update-post' ),
+				'arguments' => array(
+					'post_id' => $post_id,
+					'title'   => 'Should be refused',
+				),
+			),
+			'req-page-builder-wire-bricks'
+		);
+
+		$this->assertTrue( $result->getIsError() );
+		$this->assertStringContainsString( 'Bricks', $result->getContent()[0]->getText() );
+		$this->assertSame( $original_title, get_post( $post_id )->post_title );
+	}
 }

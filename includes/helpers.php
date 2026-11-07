@@ -258,7 +258,10 @@ function aafm_hard_blocked_meta_keys( array $keys, string $scope = 'post' ): arr
 			// their leading underscore; `et_pb_use_builder`, `fusion_builder_status` and
 			// `fusion_builder_converted` are not. The whole marker map comes in, which is harmless
 			// for term meta, and keeps any marker added through aafm_page_builder_markers covered.
-			array_keys( aafm_page_builder_markers() )
+			array_keys( aafm_page_builder_markers() ),
+			// The Bricks mode and area keys: the leading underscore is not enough, since
+			// is_protected_meta() is filterable and a site can unprotect them.
+			aafm_page_builder_bricks_keys()
 		);
 		/**
 		 * Filters EXTRA meta keys to hard-block. Built-ins are re-merged after, so this

@@ -230,7 +230,10 @@ function aafm_hard_blocked_meta_keys( array $keys, string $scope = 'post' ): arr
 		 */
 		$extra   = (array) apply_filters( 'aafm_hard_blocked_user_meta_keys', array() );
 		$subtype = 'user';
-		$pattern = '/^' . preg_quote( $wpdb->prefix, '/' ) . '\d*_?(capabilities|user_level)$/i';
+		// The MCP adapter's session store is mcp_adapter_sessions, or mcp_adapter_sessions_{blog_id}
+		// on multisite (see aafm_mcp_guard_unpersisted_session() in server.php). An agent reading it
+		// could resume another session.
+		$pattern = '/^(?:' . preg_quote( $wpdb->prefix, '/' ) . '\d*_?(capabilities|user_level)|mcp_adapter_sessions(?:_\d+)?)$/i';
 	} else {
 		$builtin = array_merge(
 			array(

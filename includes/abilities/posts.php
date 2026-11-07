@@ -116,7 +116,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/replace-sitewide'] = array(
 		'label'        => __( 'Replace sitewide', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Literal find-and-replace across multiple posts, scoped by post type and status. Dry-run by default (previews the match count and which posts would change, writes nothing); pass dry_run:false to apply. Each candidate post is guarded by the same structure-preserving check as replace-in-post, so a match landing inside markup is skipped and reported, not applied. A candidate owned by a foreign page builder is likewise skipped and counted in skipped_builder_owned, not applied. Bounded to 50 posts per call; a larger match set reports truncated:true with the real total.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Literal find-and-replace across multiple posts, scoped by post type and status. Dry-run by default (previews the match count and which posts would change, writes nothing); pass dry_run:false to apply. Each candidate post is guarded by the same structure-preserving check as replace-in-post, so a match landing inside markup is skipped and reported, not applied. A candidate owned by a foreign page builder is likewise skipped and counted in skipped_builder_owned, not applied. One call changes at most 50 posts. If the response says truncated:true, run the call again, since changed posts stop matching. If the new text contains the search text, those posts keep matching, so check total_matches rather than repeating blindly.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',

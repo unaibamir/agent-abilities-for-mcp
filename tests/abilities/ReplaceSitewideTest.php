@@ -662,4 +662,21 @@ final class ReplaceSitewideTest extends TestCase {
 		$this->assertSame( 0, $out['failed_updates'] );
 		$this->assertSame( 'nothing to replace here', get_post( $other->ID )->post_content );
 	}
+
+	public function test_a_rerun_reaches_the_next_batch(): void {
+		self::factory()->post->create_many( 51, array( 'post_content' => 'the quick fox' ) );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		$args = array(
+			'search'  => 'quick',
+			'replace' => 'slow',
+			'dry_run' => false,
+		);
+
+		$first  = aafm_exec_replace_sitewide( $args );
+		$second = aafm_exec_replace_sitewide( $args );
+
+		$this->assertTrue( $first['truncated'] );
+		$this->assertFalse( $second['truncated'] );
+		$this->assertSame( 1, $second['total_matches'] );
+	}
 }

@@ -419,7 +419,7 @@ final class ReadOnlyUiTest extends TestCase {
 		foreach (
 			array(
 				'A bridged ability counts as a read only when the plugin that wrote it says so',
-				'Abilities bridged in from other plugins are not covered by it',
+				'held only if listed here or named with the aafm_high_risk_abilities filter',
 				'ordinary WordPress account credentials the plugin does not own',
 			) as $tail
 		) {

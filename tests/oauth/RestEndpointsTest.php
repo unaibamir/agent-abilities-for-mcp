@@ -260,7 +260,10 @@ class RestEndpointsTest extends TestCase {
 		$client_id = $this->register_client( $redirect );
 		$code      = $this->mint_code( $client_id, $redirect, $challenge );
 
-		$response = $this->token_code_request( $client_id, $code, $redirect, 'the-wrong-verifier' );
+		// A wrong verifier of valid length (43 characters), so only the PKCE match can refuse it.
+		$wrong = str_repeat( 'w', 43 );
+		$this->assertNotSame( $verifier, $wrong );
+		$response = $this->token_code_request( $client_id, $code, $redirect, $wrong );
 
 		$this->assertSame( 400, $response->get_status() );
 	}
@@ -656,6 +659,9 @@ class RestEndpointsTest extends TestCase {
 		$response = $this->token_code_request( $client_id, $code, $redirect, 'short12345' );
 
 		$this->assertSame( 400, $response->get_status() );
+		// The length check refuses before the code is redeemed: the right verifier still works.
+		// Without it the short verifier reaches the PKCE match, which burns the code.
+		$this->assertSame( 200, $this->token_code_request( $client_id, $code, $redirect, $verifier )->get_status() );
 	}
 
 	/**
@@ -818,9 +824,21 @@ class RestEndpointsTest extends TestCase {
 			)
 		);
 
+		// An unknown token also answers 400, so count the refresh lookups: the length check must
+		// refuse before any.
+		$lookups = 0;
+		$spy     = static function ( string $query ) use ( &$lookups ): string {
+			if ( false !== strpos( $query, 'refresh_hash' ) ) {
+				++$lookups;
+			}
+			return $query;
+		};
+		add_filter( 'query', $spy );
 		$response = rest_do_request( $request );
+		remove_filter( 'query', $spy );
 
 		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 0, $lookups, 'An over-long refresh token must be refused before it is looked up.' );
 	}
 
 	/**

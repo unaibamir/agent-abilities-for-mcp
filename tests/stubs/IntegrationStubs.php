@@ -269,8 +269,9 @@ PHP;
 	 *     'block_types' => array( 'acf/hero' ),  // names acf_has_block_type() reports as ACF blocks.
 	 *   )
 	 *
-	 * Defining get_field() makes real ACF detection true; the slice still forces the integration
-	 * filter explicitly, and the host-inactive test drives the aafm_acf_active seam to false.
+	 * Defining get_field() does not make real ACF detection true (that needs class ACF), so the
+	 * slice forces the integration filter explicitly, and the host-inactive test drives the
+	 * aafm_acf_active seam to false.
 	 *
 	 * @param array<string,mixed> $config Group + value seed.
 	 * @return void

@@ -178,4 +178,14 @@ final class IntegrationManifestTest extends TestCase {
 
 		aafm_registry_cache_should_flush( true );
 	}
+
+	/**
+	 * A theme or plugin can define its own get_field() helper. That alone must not switch on the
+	 * ACF tools, which need ACF's own class.
+	 */
+	public function test_a_theme_defining_get_field_does_not_activate_acf(): void {
+		$this->assertTrue( function_exists( 'get_field' ), 'precondition: a get_field function exists.' );
+		$this->assertFalse( class_exists( 'ACF' ), 'precondition: ACF itself is not loaded.' );
+		$this->assertFalse( aafm_acf_active() );
+	}
 }

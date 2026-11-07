@@ -230,11 +230,10 @@ function aafm_exec_search_content( array $input ) {
 			'suppress_filters'       => false,
 			'update_post_meta_cache' => false,
 		);
-		if ( '' === $query_marker ) {
-			return new WP_Query( $args );
+		if ( '' !== $query_marker ) {
+			$args['aafm_query_marker'] = $query_marker;
+			add_filter( 'posts_where', $own_filter, 10, 2 );
 		}
-		$args['aafm_query_marker'] = $query_marker;
-		add_filter( 'posts_where', $own_filter, 10, 2 );
 		try {
 			return new WP_Query( $args );
 		} finally {

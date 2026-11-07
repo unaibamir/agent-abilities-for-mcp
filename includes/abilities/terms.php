@@ -879,11 +879,12 @@ function aafm_exec_create_term( array $input ) {
 		return $parent;
 	}
 
+	// Core unslashes name and description, so slash them first or a backslash is lost.
 	$result = wp_insert_term(
-		aafm_sanitize_plain_text( (string) $input['name'] ),
+		wp_slash( aafm_sanitize_plain_text( (string) $input['name'] ) ),
 		$taxonomy,
 		array(
-			'description' => isset( $input['description'] ) ? wp_kses_post( (string) $input['description'] ) : '',
+			'description' => isset( $input['description'] ) ? wp_slash( wp_kses_post( (string) $input['description'] ) ) : '',
 			'parent'      => $parent,
 		)
 	);
@@ -981,11 +982,12 @@ function aafm_exec_update_term( array $input ) {
 	}
 
 	$args = array();
+	// Core unslashes name and description, so slash them first or a backslash is lost.
 	if ( isset( $input['name'] ) ) {
-		$args['name'] = aafm_sanitize_plain_text( (string) $input['name'] );
+		$args['name'] = wp_slash( aafm_sanitize_plain_text( (string) $input['name'] ) );
 	}
 	if ( isset( $input['description'] ) ) {
-		$args['description'] = wp_kses_post( (string) $input['description'] );
+		$args['description'] = wp_slash( wp_kses_post( (string) $input['description'] ) );
 	}
 	if ( isset( $input['parent'] ) ) {
 		$parent = aafm_validate_term_parent( absint( $input['parent'] ), $taxonomy );

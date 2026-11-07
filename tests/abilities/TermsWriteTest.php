@@ -416,4 +416,34 @@ final class TermsWriteTest extends TestCase {
 			'the taxonomy property must name the requirement, mirroring create-term.'
 		);
 	}
+
+	public function test_a_backslash_in_a_new_term_name_and_description_survives(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/create-term' )->execute(
+			array(
+				'name'        => 'C:\\Temp',
+				'description' => 'Path C:\\Temp\\logs',
+			)
+		);
+		$this->assertNotInstanceOf( \WP_Error::class, $res );
+		$term = get_term( (int) $res['term']['id'], 'category' );
+		$this->assertSame( 'C:\\Temp', $term->name );
+		$this->assertSame( 'Path C:\\Temp\\logs', $term->description );
+	}
+
+	public function test_a_backslash_survives_a_term_update(): void {
+		$this->acting_as( 'administrator' );
+		$term_id = self::factory()->category->create( array( 'name' => 'Plain' ) );
+		$res     = wp_get_ability( 'aafm/update-term' )->execute(
+			array(
+				'term_id'     => $term_id,
+				'name'        => 'A\\B',
+				'description' => 'x\\y',
+			)
+		);
+		$this->assertNotInstanceOf( \WP_Error::class, $res );
+		$term = get_term( $term_id, 'category' );
+		$this->assertSame( 'A\\B', $term->name );
+		$this->assertSame( 'x\\y', $term->description );
+	}
 }

@@ -137,6 +137,18 @@ final class AbilitiesTabSingleSaveTest extends TestCase {
 		}
 	}
 
+	public function test_the_five_old_save_actions_are_not_registered(): void {
+		$main = (string) file_get_contents( AAFM_PLUGIN_DIR . 'agent-abilities-for-mcp.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- this plugin's own local source.
+		$this->assertStringContainsString( "'wp_ajax_aafm_save_abilities_page'", $main );
+		$this->assertStringContainsString( "'wp_ajax_aafm_save_abilities'", $main, 'The Integrations tab still posts aafm_save_abilities.' );
+
+		foreach ( array( 'post_types', 'meta_keys', 'denied_meta_keys', 'user_meta_keys', 'term_meta_keys' ) as $old ) {
+			$this->assertStringNotContainsString( "'wp_ajax_aafm_save_{$old}'", $main, "aafm_save_{$old} must not be registered." );
+			$this->assertFalse( function_exists( "aafm_ajax_save_{$old}" ), "aafm_ajax_save_{$old}() must be gone." );
+			$this->assertFalse( has_action( "wp_ajax_aafm_save_{$old}" ) );
+		}
+	}
+
 	public function test_the_page_script_posts_no_old_section_action(): void {
 		$js = $this->js();
 

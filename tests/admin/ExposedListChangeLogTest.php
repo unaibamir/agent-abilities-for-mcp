@@ -328,10 +328,10 @@ final class ExposedListChangeLogTest extends TestCase {
 		$this->assertSame( array(), $this->success_rows() );
 	}
 
-	public function test_a_wrapper_save_logs_the_same_row(): void {
+	public function test_a_post_types_only_save_logs_its_row(): void {
 		update_option( 'aafm_allowed_post_types', array( 'aafm_film' ) );
 
-		$json = $this->post_handler( 'aafm_ajax_save_post_types', array( 'aafm_post_types' => array( 'aafm_book' ) ) );
+		$json = $this->save( array( 'aafm_post_types' => array( 'aafm_book' ) ), array( 'post_types' ) );
 
 		$this->assertTrue( $json['success'] ?? false );
 		$this->assertSame(

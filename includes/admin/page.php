@@ -640,8 +640,8 @@ function aafm_section_held( string $label ): array {
 }
 
 /**
- * Answer an AJAX save with one section's result, in the shape the single-section actions have
- * always used: the operator message on failure, the section's payload on success.
+ * Answer an AJAX save with one section's result, in the shape aafm_save_abilities has always
+ * used: the operator message on failure, the section's payload on success.
  *
  * @param array{ok:bool,message:string,data:array<string,mixed>} $result A section result.
  * @return void
@@ -821,19 +821,6 @@ function aafm_save_post_types_section( array $posted, bool $refuse_additions = f
 		'message' => '',
 		'data'    => array( 'post_types' => $types ),
 	);
-}
-
-/**
- * AJAX: save the exposed-content-types allowlist.
- *
- * @return void
- */
-function aafm_ajax_save_post_types(): void {
-	check_ajax_referer( 'aafm_admin', 'nonce' );
-	if ( ! current_user_can( 'manage_options' ) ) {
-		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
-	}
-	aafm_send_section_result( aafm_save_post_types_section( wp_unslash( $_POST ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 }
 
 /**
@@ -1176,80 +1163,10 @@ function aafm_save_meta_pair_section( string $kind, array $posted, bool $refuse_
 }
 
 /**
- * AJAX: save BOTH the exposed and denied post-meta lists in one request.
- *
- * Mirrors aafm_ajax_save_user_meta_keys() / aafm_ajax_save_term_meta_keys(): one request, one
- * success/failure verdict for the whole post-meta pair. The exposed list and
- * the deny list are persisted together so the UI can never report "Saved" while one of the two
- * writes silently failed (the prior split-handler design could). On this action the deny field
- * is optional, so a caller that posts only aafm_meta_keys simply clears the deny list, matching
- * the old standalone behavior. The tab's aafm_save_abilities_page refuses that shape instead.
- *
- * @return void
- */
-function aafm_ajax_save_meta_keys(): void {
-	check_ajax_referer( 'aafm_admin', 'nonce' );
-	if ( ! current_user_can( 'manage_options' ) ) {
-		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
-	}
-	aafm_send_section_result( aafm_save_meta_pair_section( 'post', wp_unslash( $_POST ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-}
-
-/**
- * AJAX: save the denied-post-meta list on its own.
- *
- * Retained for the registered aafm_save_denied_meta_keys action and any external caller; the
- * admin UI now sends the deny list together with the exposed list through aafm_save_abilities_page
- * (see aafm_save_meta_pair_section()), so this handler is no longer exercised by the bundled JS.
- *
- * @return void
- */
-function aafm_ajax_save_denied_meta_keys(): void {
-	check_ajax_referer( 'aafm_admin', 'nonce' );
-	if ( ! current_user_can( 'manage_options' ) ) {
-		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
-	}
-	$keys = aafm_sanitize_denied_meta_keys_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-
-	// Verified, not a bare update_option(): see aafm_save_meta_pair_section() above.
-	if ( ! aafm_update_option_verified( 'aafm_denied_meta_keys', $keys ) ) {
-		aafm_log_ability_persist_failure( 'aafm_denied_meta_keys', __( 'Denied post meta keys', 'agent-abilities-for-mcp' ) );
-		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Denied post meta keys', 'agent-abilities-for-mcp' ) ) ) );
-	}
-	wp_send_json_success( array( 'deny_meta_keys' => $keys ) );
-}
-
-/**
- * AJAX: save BOTH the exposed and denied user-meta lists in one request.
- *
- * @return void
- */
-function aafm_ajax_save_user_meta_keys(): void {
-	check_ajax_referer( 'aafm_admin', 'nonce' );
-	if ( ! current_user_can( 'manage_options' ) ) {
-		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
-	}
-	aafm_send_section_result( aafm_save_meta_pair_section( 'user', wp_unslash( $_POST ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-}
-
-/**
- * AJAX: save BOTH the exposed and denied term-meta lists in one request.
- *
- * @return void
- */
-function aafm_ajax_save_term_meta_keys(): void {
-	check_ajax_referer( 'aafm_admin', 'nonce' );
-	if ( ! current_user_can( 'manage_options' ) ) {
-		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
-	}
-	aafm_send_section_result( aafm_save_meta_pair_section( 'term', wp_unslash( $_POST ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-}
-
-/**
  * AJAX: save every section of the Abilities tab the request names, in one request.
  *
- * The request lists the sections it carries in aafm_sections[] and each one is written through the
- * same section function its single-section action uses. A section that is not named is never read
+ * The request lists the sections it carries in aafm_sections[] and each one is written through its
+ * own section function. A section that is not named is never read
  * or written. A named section whose fields are missing or the wrong type is refused rather than
  * read as empty (a missing deny field would otherwise clear the deny list); an empty list is sent
  * as a textarea's empty string or as a list field's single empty entry.

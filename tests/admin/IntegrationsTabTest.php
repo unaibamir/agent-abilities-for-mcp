@@ -484,6 +484,25 @@ final class IntegrationsTabTest extends TestCase {
 		}
 	}
 
+	public function test_an_aioseo_below_its_floor_shows_the_floor_reason(): void {
+		$this->acting_as( 'administrator' );
+		if ( ! function_exists( 'aioseo' ) ) {
+			eval( 'function aioseo() { return new \stdClass(); }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a function-only marker stub for tests; never shipped.
+		}
+		add_filter( 'aafm_aioseo_version', static fn() => '4.9.0' );
+
+		try {
+			$this->assertSame( 'below_floor', aafm_integration_status( 'aioseo' ) );
+
+			$note = aafm_integration_status_note( 'aioseo', 'below_floor' );
+
+			$this->assertStringContainsString( AAFM_AIOSEO_MIN_VERSION, $note );
+			$this->assertStringContainsString( '4.9.0', $note );
+		} finally {
+			remove_all_filters( 'aafm_aioseo_version' );
+		}
+	}
+
 	public function test_tab_has_exactly_one_form_and_no_nested_form(): void {
 		// The Wave-0 lesson: never nest a <form>. The tab renders one outer form for the
 		// per-ability toggles; any secondary control is a <div> + type="button".

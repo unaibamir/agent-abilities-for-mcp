@@ -184,7 +184,7 @@ Turn on read-only mode in Settings and no write tool is loaded, whatever else is
 
 = Can the agent only save drafts so I approve before anything goes live? =
 
-With Force draft on create switched on in Settings, anything the AI creates and any request to publish is saved as a draft, which covers posts, pages, custom content items, reusable blocks and WooCommerce products. Edits to a post that's already live still go live, so if every change should be reviewed, connect the AI as a Contributor, who can't edit published posts. The drafts wait on the Needs review card on the Dashboard.
+With Force draft on create switched on in Settings, anything the AI creates and any request to publish is saved as a draft, which covers posts, pages, custom content items, reusable blocks and WooCommerce products. Product variations save as disabled instead, because a draft variation disappears from WooCommerce's editor. Edits to a post that's already live still go live, so if every change should be reviewed, connect the AI as a Contributor, who can't edit published posts. The drafts wait on the Needs review card on the Dashboard.
 
 = Can I stop an AI agent from deleting my posts? =
 

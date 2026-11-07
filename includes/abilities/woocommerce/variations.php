@@ -78,7 +78,7 @@ function aafm_wc_variations_registry_definitions(): array {
 
 		'aafm/wc-create-product-variation' => array(
 			'label'        => __( 'Create WooCommerce product variation', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Creates a variation under a variable product (parent product id required) from optional status, description, prices, SKU, stock, image, and attribute values. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Creates a variation under a variable product (parent product id required) from optional status, description, prices, SKU, stock, image, and attribute values. With Force draft on, the variation saves as disabled (private), because a draft variation disappears from WooCommerce\'s editor. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -87,7 +87,7 @@ function aafm_wc_variations_registry_definitions(): array {
 
 		'aafm/wc-update-product-variation' => array(
 			'label'        => __( 'Update WooCommerce product variation', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Updates a product variation by id, changing only the fields you send. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Updates a product variation by id, changing only the fields you send. With Force draft on, a request to publish a disabled variation keeps it disabled (private), because a draft variation disappears from WooCommerce\'s editor. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -484,6 +484,32 @@ function aafm_wc_variation_write_properties(): array {
 }
 
 /**
+ * The status a variation write should save, or null to leave it alone.
+ *
+ * Force draft cannot use draft here: WooCommerce's editor lists only publish and private
+ * variations, so a draft one vanishes from the product screen. Under Force draft a new variation
+ * saves as private (an empty status would save as publish), and a publish request saves as private
+ * unless the variation is already published. Without Force draft the input passes through.
+ *
+ * @param \WC_Product_Variation $variation The variation being written.
+ * @param array<string,mixed>   $input     Validated input.
+ * @return string|null
+ */
+function aafm_wc_variation_status( \WC_Product_Variation $variation, array $input ): ?string {
+	$requested = array_key_exists( 'status', $input ) ? sanitize_key( (string) $input['status'] ) : null;
+	if ( ! aafm_force_draft() ) {
+		return $requested;
+	}
+	if ( 0 === $variation->get_id() ) {
+		return 'private';
+	}
+	if ( 'publish' === $requested && 'publish' !== $variation->get_status() ) {
+		return 'private';
+	}
+	return $requested;
+}
+
+/**
  * Apply a sanitized, validated input map onto a WC_Product_Variation via its setters. Only the keys
  * present in $input are written (PATCH semantics). Every value is sanitized for its kind before it
  * reaches a setter; caller input never reaches a setter raw.
@@ -501,8 +527,9 @@ function aafm_wc_variation_write_properties(): array {
  * @return \WP_Error|null Null on success, or a WP_Error naming the conflicting SKU.
  */
 function aafm_wc_apply_variation_input( \WC_Product_Variation $variation, array $input ): ?\WP_Error {
-	if ( array_key_exists( 'status', $input ) ) {
-		$variation->set_status( sanitize_key( (string) $input['status'] ) );
+	$status = aafm_wc_variation_status( $variation, $input );
+	if ( null !== $status ) {
+		$variation->set_status( $status );
 	}
 	if ( array_key_exists( 'sku', $input ) ) {
 		$sku = aafm_sanitize_plain_text( (string) $input['sku'] );

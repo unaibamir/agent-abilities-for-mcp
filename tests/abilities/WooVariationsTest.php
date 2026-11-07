@@ -1867,4 +1867,79 @@ final class WooVariationsTest extends TestCase {
 		$this->assertTrue( WcStubStore::exists( 601 ) );
 		$this->assertSame( array( $this->wc_row( 'variation', 601, 'refused' ) ), $this->outcome_details() );
 	}
+
+	/**
+	 * Force draft cannot use draft on a variation: WooCommerce's editor lists only publish and
+	 * private children, so a draft variation disappears. A new variation saves as private.
+	 */
+	public function test_force_draft_saves_a_new_variation_as_private(): void {
+		update_option( 'aafm_force_draft', true );
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id' => 500,
+				'status'     => 'publish',
+			)
+		);
+		delete_option( 'aafm_force_draft' );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'private', $res['status'] );
+	}
+
+	public function test_force_draft_saves_a_new_variation_with_no_status_as_private(): void {
+		update_option( 'aafm_force_draft', true );
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute( array( 'product_id' => 500 ) );
+		delete_option( 'aafm_force_draft' );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'private', $res['status'], 'An empty status saves as publish in WooCommerce, so force draft must set private.' );
+	}
+
+	public function test_force_draft_turns_a_publish_request_on_a_private_variation_into_private(): void {
+		$this->acting_as( 'administrator' );
+		$off = wp_get_ability( 'aafm/wc-update-product-variation' )->execute(
+			array(
+				'variation_id' => 601,
+				'status'       => 'private',
+			)
+		);
+		$this->assertSame( 'private', $off['status'], 'precondition: the variation is disabled.' );
+
+		update_option( 'aafm_force_draft', true );
+		$res = wp_get_ability( 'aafm/wc-update-product-variation' )->execute(
+			array(
+				'variation_id' => 601,
+				'status'       => 'publish',
+			)
+		);
+		delete_option( 'aafm_force_draft' );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'private', $res['status'] );
+	}
+
+	public function test_force_draft_leaves_a_live_variation_live_when_it_repeats_its_status(): void {
+		update_option( 'aafm_force_draft', true );
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-update-product-variation' )->execute(
+			array(
+				'variation_id' => 601,
+				'status'       => 'publish',
+			)
+		);
+		delete_option( 'aafm_force_draft' );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'publish', $res['status'] );
+	}
+
+	public function test_without_force_draft_a_variation_status_is_unchanged(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id' => 500,
+				'status'     => 'publish',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'publish', $res['status'] );
+	}
 }

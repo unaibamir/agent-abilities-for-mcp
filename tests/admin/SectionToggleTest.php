@@ -19,8 +19,23 @@ final class SectionToggleTest extends TestCase {
 		aafm_render_abilities_tab();
 		$html = (string) ob_get_clean();
 
-		$this->assertStringContainsString( 'aafm-section-toggle-all', $html );
-		$this->assertStringContainsString( 'data-subject="content"', $html );
+		$doc = new \DOMDocument();
+		libxml_use_internal_errors( true );
+		$doc->loadHTML( '<?xml encoding="utf-8"?>' . $html );
+		libxml_clear_errors();
+		$xpath  = new \DOMXPath( $doc );
+		$panels = $xpath->query( '//div[contains(concat(" ", normalize-space(@class), " "), " aafm-subject-panel ")]' );
+		$this->assertNotFalse( $panels );
+		$this->assertGreaterThan( 1, $panels->length, 'The tab renders more than one subject panel.' );
+
+		// Each panel carries its own control, for its own subject.
+		foreach ( $panels as $panel ) {
+			$subject = $panel->getAttribute( 'data-subject' );
+			$toggles = $xpath->query( './/button[contains(concat(" ", normalize-space(@class), " "), " aafm-section-toggle-all ")]', $panel );
+			$this->assertNotFalse( $toggles );
+			$this->assertSame( 1, $toggles->length, "The {$subject} panel must hold one toggle-all control." );
+			$this->assertSame( $subject, $toggles->item( 0 )->getAttribute( 'data-subject' ) );
+		}
 		$this->assertStringContainsString( 'data-has-destructive="1"', $html );
 	}
 
@@ -55,6 +70,9 @@ final class SectionToggleTest extends TestCase {
 	 * showed English on a localized site until reload. This pins the two i18n keys admin.js now
 	 * localizes through - it does not exercise the JS itself (see AllowlistAdminTest for the
 	 * server-rendered side of the same row shape).
+	 *
+	 * PHPUnit can't run the script, so the JS half is a static read of admin.js: the row label
+	 * comes from the two localized keys, and no hard-coded English label is left.
 	 */
 	public function test_the_allowlist_scope_row_labels_are_localized(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
@@ -63,5 +81,9 @@ final class SectionToggleTest extends TestCase {
 		$this->assertIsString( $data );
 		$this->assertStringContainsString( 'allowlistRoleLabel', $data );
 		$this->assertStringContainsString( 'allowlistConnectionLabel', $data );
+
+		$js = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- this plugin's own bundled asset.
+		$this->assertStringContainsString( "this.#t( isRole ? 'allowlistRoleLabel' : 'allowlistConnectionLabel',", $js );
+		$this->assertDoesNotMatchRegularExpression( '/[`\'"](Role|Connection): (\$\{|[`\'"]\s*\+)/', $js, 'admin.js must not build the scope label from a hard-coded English string.' );
 	}
 }

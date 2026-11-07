@@ -103,14 +103,17 @@ final class SecurityRegressionTest extends TestCase {
 			);
 		}
 
-		// The denials were recorded (auditing-with-denials is the product guarantee).
-		$denied = aafm_query_activity(
+		// Every denial was recorded (auditing-with-denials is the product guarantee): one row per
+		// attempted write, not just one somewhere.
+		$denied  = aafm_query_activity(
 			array(
 				'status'   => 'denied',
-				'per_page' => 100,
+				'per_page' => 500,
 			)
 		);
-		$this->assertNotEmpty( $denied, 'A denied write must write a denied audit row.' );
+		$audited = array_unique( array_map( static fn( array $row ): string => (string) $row['ability'], $denied ) );
+		$missing = array_values( array_diff( self::WRITES, $audited ) );
+		$this->assertSame( array(), $missing, "These denied writes left no denied audit row:\n" . implode( "\n", $missing ) );
 	}
 
 	/**
@@ -124,6 +127,17 @@ final class SecurityRegressionTest extends TestCase {
 		$this->assertNotTrue(
 			wp_get_ability( 'aafm/create-post' )->check_permissions( array() ),
 			'create-post (publish) must require publish capability a contributor lacks.'
+		);
+
+		$others = self::factory()->post->create(
+			array(
+				'post_status' => 'publish',
+				'post_author' => self::factory()->user->create( array( 'role' => 'editor' ) ),
+			)
+		);
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/delete-post' )->check_permissions( array( 'post_id' => $others ) ),
+			'delete-post must refuse a contributor on someone else\'s post.'
 		);
 	}
 

@@ -141,7 +141,7 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 	}
 	// Use filemtime() as the cache-buster so ?ver= changes whenever the file changes,
 	// defeating both the browser cache and any CDN/Cloudflare edge cache. A fixed
-	// AAFM_VERSION string never changes between plugin updates (we stay on 1.0.0), so
+	// AAFM_VERSION string does not change on every deploy, so
 	// old asset bytes stay cached across redeploys without this. Fall back to AAFM_VERSION
 	// when filemtime() returns false (opcache edge or path anomaly).
 	$css_path = AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.css';

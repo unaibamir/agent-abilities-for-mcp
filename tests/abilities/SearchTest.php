@@ -255,4 +255,57 @@ final class SearchTest extends TestCase {
 		$this->assertArrayHasKey( 'aafm/search-content', $reg );
 		$this->assertSame( 'reads', $reg['aafm/search-content']['group'] );
 	}
+
+	public function test_a_type_outside_the_allowlist_is_named_as_skipped(): void {
+		update_option( 'aafm_allowed_post_types', array() ); // Resolves to post + page.
+		$out = aafm_exec_search_content(
+			array(
+				'search'     => 'YETI',
+				'post_types' => array( 'page', 'Not Allowed' ),
+			)
+		);
+		$this->assertSame( array( 'notallowed' ), $out['skipped_post_types'] );
+		$this->assertArrayHasKey( 'skipped_post_types', aafm_args_search_content()['output_schema']['properties'] );
+
+		$none = aafm_exec_search_content(
+			array(
+				'search'     => 'YETI',
+				'post_types' => array( 'notallowed' ),
+			)
+		);
+		$this->assertSame( array( 'notallowed' ), $none['skipped_post_types'], 'The early empty return names the skip too.' );
+	}
+
+	public function test_a_type_dropped_by_the_private_read_filter_is_named_as_skipped(): void {
+		register_post_type(
+			'aafm_book',
+			array(
+				'public'          => true,
+				'label'           => 'Books',
+				'capability_type' => array( 'book', 'books' ),
+				'map_meta_cap'    => true,
+			)
+		);
+		update_option( 'aafm_allowed_post_types', array( 'post', 'aafm_book' ) );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+
+		$out = aafm_exec_search_content(
+			array(
+				'search' => 'QUOKKA',
+				'status' => 'private',
+			)
+		);
+		$this->assertSame( array( 'aafm_book' ), $out['skipped_post_types'] );
+	}
+
+	public function test_no_skipped_key_when_nothing_was_dropped(): void {
+		update_option( 'aafm_allowed_post_types', array() );
+		$out = aafm_exec_search_content(
+			array(
+				'search'     => 'YETI',
+				'post_types' => array( 'page' ),
+			)
+		);
+		$this->assertArrayNotHasKey( 'skipped_post_types', $out );
+	}
 }

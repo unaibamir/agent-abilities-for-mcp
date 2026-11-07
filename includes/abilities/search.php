@@ -51,7 +51,7 @@ function aafm_args_search_content(): array {
 					'post_types' => array(
 						'type'        => 'array',
 						'items'       => array( 'type' => 'string' ),
-						'description' => __( 'Content type slugs to narrow the search to. Only types already on the operator\'s exposed allowlist are searched; a requested type outside it is dropped rather than rejected. Omit to search every exposed type.', 'agent-abilities-for-mcp' ),
+						'description' => __( 'Content type slugs to narrow the search to. Only types already on the operator\'s exposed allowlist are searched; a requested type outside it is dropped rather than rejected and named in skipped_post_types. Omit to search every exposed type.', 'agent-abilities-for-mcp' ),
 					),
 					'status'     => array(
 						'type'        => 'string',
@@ -85,15 +85,20 @@ function aafm_args_search_content(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'results'  => array(
+				'results'            => array(
 					'type'  => 'array',
 					'items' => array(
 						'type'       => 'object',
 						'properties' => aafm_rich_post_output_properties(),
 					),
 				),
-				'total'    => array( 'type' => 'integer' ),
-				'language' => array(
+				'total'              => array( 'type' => 'integer' ),
+				'skipped_post_types' => array(
+					'type'        => 'array',
+					'items'       => array( 'type' => 'string' ),
+					'description' => __( 'Requested or exposed types left out of this search: outside the allowlist, or not privately readable by the caller for a non-public status. Present only when something was left out.', 'agent-abilities-for-mcp' ),
+				),
+				'language'           => array(
 					'type'        => array( 'string', 'null' ),
 					'description' => __( 'The WPML language the list was scoped to ("all" for every language), or null when WPML is inactive.', 'agent-abilities-for-mcp' ),
 				),
@@ -131,12 +136,23 @@ function aafm_exec_search_content( array $input ) {
 	}
 	$requested = ( isset( $input['post_types'] ) && is_array( $input['post_types'] ) ) ? $input['post_types'] : array();
 	$types     = aafm_resolve_search_post_types( $requested );
-	if ( empty( $types ) ) {
-		return array(
-			'results'  => array(),
-			'total'    => 0,
+	// Types the caller asked for but the allowlist dropped, so an empty or thin result is not read
+	// as "nothing matched there".
+	$skipped = array_values( array_diff( array_map( 'sanitize_key', array_map( 'strval', $requested ) ), $types ) );
+	$respond = static function ( array $results, int $total ) use ( $lang, &$skipped ): array {
+		$out     = array(
+			'results'  => $results,
+			'total'    => $total,
 			'language' => $lang,
 		);
+		$skipped = array_slice( array_values( array_unique( array_filter( $skipped ) ) ), 0, 50 );
+		if ( ! empty( $skipped ) ) {
+			$out['skipped_post_types'] = $skipped;
+		}
+		return $out;
+	};
+	if ( empty( $types ) ) {
+		return $respond( array(), 0 );
 	}
 
 	// read_private_posts is a deliberate FLOOR gate here, NOT the per-type cap that get-posts
@@ -150,7 +166,7 @@ function aafm_exec_search_content( array $input ) {
 	// Per-type private-read containment: for a non-public status, keep only types whose own
 	// read_private cap the caller holds, so a cross-type search can't leak private CPT content.
 	if ( ! in_array( $status, get_post_stati( array( 'public' => true ) ), true ) ) {
-		$types = array_values(
+		$readable = array_values(
 			array_filter(
 				$types,
 				static function ( string $t ): bool {
@@ -159,12 +175,10 @@ function aafm_exec_search_content( array $input ) {
 				}
 			)
 		);
+		$skipped  = array_merge( $skipped, array_values( array_diff( $types, $readable ) ) );
+		$types    = $readable;
 		if ( empty( $types ) ) {
-			return array(
-				'results'  => array(),
-				'total'    => 0,
-				'language' => $lang,
-			);
+			return $respond( array(), 0 );
 		}
 	}
 
@@ -216,9 +230,5 @@ function aafm_exec_search_content( array $input ) {
 
 	list( $results, $total ) = aafm_collect_by_language( $lang, $shape_language );
 
-	return array(
-		'results'  => $results,
-		'total'    => $total,
-		'language' => $lang,
-	);
+	return $respond( $results, (int) $total );
 }

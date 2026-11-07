@@ -301,4 +301,14 @@ final class ClientListTest extends TestCase {
 		aafm_install_oauth_tables();
 		$this->assertFalse( $grant['paused'], 'In the update window the listing reads the defaults instead of erroring.' );
 	}
+
+	public function test_an_editors_grant_row_is_not_marked_administrator(): void {
+		$user_id = self::factory()->user->create( array( 'role' => 'editor' ) );
+		$this->seed_client( 'client_abc', 'Claude', array( 'https://claude.ai/cb' ) );
+		$this->seed_consent( $user_id, 'client_abc' );
+
+		$grants = aafm_oauth_list_grants();
+		$this->assertTrue( $grants[0]['is_high_privilege'] );
+		$this->assertFalse( $grants[0]['is_administrator'] );
+	}
 }

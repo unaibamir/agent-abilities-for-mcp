@@ -282,7 +282,11 @@ function aafm_render_grants_card( array $data ): void {
 			if ( ! empty( $grant['is_high_privilege'] ) ) {
 				printf(
 					'<span class="aafm-pill aafm-pill-warn" title="%1$s">%2$s</span>',
-					esc_attr__( 'This connection currently acts with full administrator access.', 'agent-abilities-for-mcp' ),
+					esc_attr(
+						! empty( $grant['is_administrator'] )
+							? __( 'This connection currently acts with full administrator access.', 'agent-abilities-for-mcp' )
+							: __( 'This connection acts with elevated permissions.', 'agent-abilities-for-mcp' )
+					),
 					esc_html( $role_label )
 				);
 			} else {

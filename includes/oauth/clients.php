@@ -537,7 +537,7 @@ function aafm_oauth_list_clients(): array {
  * is skipped only when its user is certainly gone, meaning a query that ran found no
  * row (a deleted account has nothing to show or revoke). A consent whose user fails
  * to load for any other reason stays in the list with its ids, blank names, no roles
- * and is_high_privilege true, so a live grant never drops out of the table.
+ * and is_high_privilege and is_administrator true, so a live grant never drops out of the table.
  * Ordered newest first. Read-only, prepared query.
  *
  * Also reads each user's CURRENT role and privilege level, not a value stored at
@@ -552,7 +552,7 @@ function aafm_oauth_list_clients(): array {
  *
  * Each row also carries the grant's per-connection state (aafm_oauth_grant_from_row()).
  *
- * @return array<int,array{user_id:int,user_display:string,user_login:string,client_id:string,client_name:string,granted_at:string,user_roles:list<string>,is_high_privilege:bool,paused:bool,expired:bool,expires_at:?string,preset:string,rate:int,last_used_at:?string,last_used_ip:string}>
+ * @return array<int,array{user_id:int,user_display:string,user_login:string,client_id:string,client_name:string,granted_at:string,user_roles:list<string>,is_high_privilege:bool,is_administrator:bool,paused:bool,expired:bool,expires_at:?string,preset:string,rate:int,last_used_at:?string,last_used_ip:string}>
  */
 function aafm_oauth_list_grants(): array {
 	global $wpdb;
@@ -602,6 +602,7 @@ function aafm_oauth_list_grants(): array {
 					'user'              => $user,
 					'user_roles'        => array_values( array_map( 'strval', $user->roles ) ),
 					'is_high_privilege' => function_exists( 'aafm_oauth_user_is_high_privilege' ) && aafm_oauth_user_is_high_privilege( $user ),
+					'is_administrator'  => function_exists( 'aafm_oauth_user_is_administrator' ) && aafm_oauth_user_is_administrator( $user ),
 				);
 			},
 			aafm_generic_error()
@@ -620,6 +621,7 @@ function aafm_oauth_list_grants(): array {
 				'granted_at'        => (string) $row['granted_at'],
 				'user_roles'        => array(),
 				'is_high_privilege' => true,
+				'is_administrator'  => true,
 			) + $state;
 			continue;
 		}
@@ -633,6 +635,7 @@ function aafm_oauth_list_grants(): array {
 			'granted_at'        => (string) $row['granted_at'],
 			'user_roles'        => $loaded['user_roles'],
 			'is_high_privilege' => $loaded['is_high_privilege'],
+			'is_administrator'  => $loaded['is_administrator'],
 		) + $state;
 	}
 

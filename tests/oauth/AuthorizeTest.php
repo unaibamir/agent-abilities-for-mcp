@@ -1545,4 +1545,68 @@ class AuthorizeTest extends TestCase {
 		$this->assertStringNotContainsString( ' style=', $html );
 		$this->assertStringContainsString( '<fieldset class="presets">', $html );
 	}
+
+	/**
+	 * An Editor holds unfiltered_html on a single site, so the warning shows, but it must not call
+	 * the account an administrator.
+	 */
+	public function test_an_editor_is_not_called_an_administrator(): void {
+		$editor = get_userdata( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		$this->assertTrue( aafm_oauth_user_is_high_privilege( $editor ), 'precondition: the predicate still fires for an Editor.' );
+		$this->assertFalse( aafm_oauth_user_is_administrator( $editor ) );
+		$base = array(
+			'client_name'    => 'App',
+			'user_login'     => 'someone',
+			'site_name'      => 'Example Site',
+			'redirect_host'  => 'app.example',
+			'action_url'     => 'https://site.example/?aafm_oauth=authorize',
+			'nonce_field'    => '',
+			'hidden_inputs'  => array(),
+			'high_privilege' => true,
+		);
+
+		ob_start();
+		aafm_oauth_render_consent_page( array( 'is_administrator' => false ) + $base );
+		$html = (string) ob_get_clean();
+		$this->assertStringNotContainsString( 'This is an administrator account.', $html );
+		$this->assertStringContainsString( 'This account has elevated permissions.', $html );
+	}
+
+	public function test_an_administrator_keeps_the_administrator_warning(): void {
+		$admin = get_userdata( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$this->assertTrue( aafm_oauth_user_is_administrator( $admin ) );
+		$base = array(
+			'client_name'    => 'App',
+			'user_login'     => 'someone',
+			'site_name'      => 'Example Site',
+			'redirect_host'  => 'app.example',
+			'action_url'     => 'https://site.example/?aafm_oauth=authorize',
+			'nonce_field'    => '',
+			'hidden_inputs'  => array(),
+			'high_privilege' => true,
+		);
+
+		ob_start();
+		aafm_oauth_render_consent_page( array( 'is_administrator' => true ) + $base );
+		$html = (string) ob_get_clean();
+		$this->assertStringContainsString( 'This is an administrator account.', $html );
+	}
+
+	public function test_a_view_without_the_key_keeps_the_administrator_wording(): void {
+		$base = array(
+			'client_name'    => 'App',
+			'user_login'     => 'someone',
+			'site_name'      => 'Example Site',
+			'redirect_host'  => 'app.example',
+			'action_url'     => 'https://site.example/?aafm_oauth=authorize',
+			'nonce_field'    => '',
+			'hidden_inputs'  => array(),
+			'high_privilege' => true,
+		);
+
+		ob_start();
+		aafm_oauth_render_consent_page( $base );
+		$html = (string) ob_get_clean();
+		$this->assertStringContainsString( 'This is an administrator account.', $html );
+	}
 }

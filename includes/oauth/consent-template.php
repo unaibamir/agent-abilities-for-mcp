@@ -194,9 +194,11 @@ function aafm_oauth_render_consent_page( array $view ): void {
 	$site_name      = isset( $view['site_name'] ) ? (string) $view['site_name'] : '';
 	$redirect_host  = isset( $view['redirect_host'] ) ? (string) $view['redirect_host'] : '';
 	$high_privilege = ! empty( $view['high_privilege'] );
-	$action_url     = isset( $view['action_url'] ) ? (string) $view['action_url'] : '';
-	$nonce_field    = isset( $view['nonce_field'] ) ? (string) $view['nonce_field'] : '';
-	$hidden_inputs  = isset( $view['hidden_inputs'] ) && is_array( $view['hidden_inputs'] )
+	// Absent key keeps the administrator wording, the louder of the two.
+	$is_admin      = ! array_key_exists( 'is_administrator', $view ) || ! empty( $view['is_administrator'] );
+	$action_url    = isset( $view['action_url'] ) ? (string) $view['action_url'] : '';
+	$nonce_field   = isset( $view['nonce_field'] ) ? (string) $view['nonce_field'] : '';
+	$hidden_inputs = isset( $view['hidden_inputs'] ) && is_array( $view['hidden_inputs'] )
 		? $view['hidden_inputs']
 		: array();
 
@@ -333,9 +335,15 @@ function aafm_oauth_render_consent_page( array $view ): void {
 	if ( $high_privilege ) {
 		echo '<div class="hi-priv">';
 		echo wp_kses( $warn_icon, aafm_svg_allowed_html() );
-		echo '<p><strong>' . esc_html__( 'This is an administrator account.', 'agent-abilities-for-mcp' ) . '</strong> '
-			. esc_html__( 'Approving lets the app act with full administrator access, including changing settings, users, and content. If you do not need that, deny this and connect as a dedicated agent user on a limited role instead.', 'agent-abilities-for-mcp' )
-			. '</p>';
+		if ( $is_admin ) {
+			echo '<p><strong>' . esc_html__( 'This is an administrator account.', 'agent-abilities-for-mcp' ) . '</strong> '
+				. esc_html__( 'Approving lets the app act with full administrator access, including changing settings, users, and content. If you do not need that, deny this and connect as a dedicated agent user on a limited role instead.', 'agent-abilities-for-mcp' )
+				. '</p>';
+		} else {
+			echo '<p><strong>' . esc_html__( 'This account has elevated permissions.', 'agent-abilities-for-mcp' ) . '</strong> '
+				. esc_html__( "Approving lets the app do anything those permissions allow, such as editing other people's content or publishing unfiltered HTML. If you don't need that, deny this and connect as a dedicated agent user on a limited role instead.", 'agent-abilities-for-mcp' )
+				. '</p>';
+		}
 		echo '</div>';
 	}
 

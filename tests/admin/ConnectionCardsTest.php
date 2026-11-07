@@ -280,4 +280,11 @@ class ConnectionCardsTest extends TestCase {
 		preg_match( '/<tbody>(.*?)<\/tbody>/s', $html, $body );
 		$this->assertSame( count( aafm_connection_grants_data()['grants'] ?? array( 1 ) ), substr_count( $body[1], '<tr' ) );
 	}
+
+	public function test_an_editors_card_says_elevated_permissions(): void {
+		$this->seed_grant();
+		$html = $this->render( static fn() => aafm_render_grants_card( aafm_connection_grants_data() ) );
+		$this->assertStringContainsString( 'This connection acts with elevated permissions.', $html );
+		$this->assertStringNotContainsString( 'full administrator access', $html );
+	}
 }

@@ -2709,9 +2709,6 @@ function aafm_get_revision_payload( WP_Post $revision, array $input ): array {
 	$payload['excerpt'] = $is_protected ? '' : (string) $revision->post_excerpt;
 	$payload['diff']    = null;
 	if ( ! $is_protected && ! empty( $input['with_diff'] ) ) {
-		if ( ! function_exists( 'wp_text_diff' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/revision.php';
-		}
 		$current_content = $parent instanceof WP_Post ? (string) $parent->post_content : '';
 		// wp_text_diff returns '' when there is no difference; we surface that empty string
 		// (a string, not null) so the agent can tell "no change" from "not requested".

@@ -412,8 +412,9 @@ function aafm_exec_wc_list_products( array $input ) {
 		return $out;
 	}
 
-	$per_page = isset( $input['per_page'] ) ? min( 100, max( 1, (int) $input['per_page'] ) ) : 20;
-	$page     = isset( $input['page'] ) ? max( 1, (int) $input['page'] ) : 1;
+	$paging   = aafm_paginate_args( $input + array( 'per_page' => 20 ), AAFM_TERMS_PER_PAGE_MAX );
+	$per_page = $paging['per_page'];
+	$page     = $paging['page'];
 	$status   = isset( $input['status'] ) ? sanitize_key( (string) $input['status'] ) : 'any';
 
 	$build_page = static function () use ( $per_page, $page, $status ) {

@@ -187,13 +187,15 @@ function aafm_args_list_blocks(): array {
  * @return array<string,mixed>
  */
 function aafm_exec_list_blocks( array $input ): array {
-	$per_page = isset( $input['per_page'] ) ? min( 100, max( 1, (int) $input['per_page'] ) ) : 20;
+	$paging   = aafm_paginate_args( $input + array( 'per_page' => 20 ), AAFM_TERMS_PER_PAGE_MAX );
+	$per_page = $paging['per_page'];
+	$page     = $paging['page'];
 
 	$query_args = array(
 		'post_type'              => 'wp_block',
 		'post_status'            => array( 'publish', 'draft' ),
 		'posts_per_page'         => $per_page,
-		'paged'                  => isset( $input['page'] ) ? max( 1, (int) $input['page'] ) : 1,
+		'paged'                  => $page,
 		'no_found_rows'          => false,
 		'update_post_meta_cache' => false,
 	);

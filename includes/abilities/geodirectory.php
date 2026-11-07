@@ -451,8 +451,9 @@ function aafm_geodirectory_listing_is_visible( WP_Post $post, array $public_stat
  * @return array<string,mixed>
  */
 function aafm_exec_geodirectory_get_listings( array $input ) {
-	$per_page = isset( $input['per_page'] ) ? min( 100, max( 1, absint( $input['per_page'] ) ) ) : 20;
-	$page     = isset( $input['page'] ) ? min( AAFM_LIST_PAGE_MAX, max( 1, absint( $input['page'] ) ) ) : 1;
+	$paging   = aafm_paginate_args( $input + array( 'per_page' => 20 ), AAFM_TERMS_PER_PAGE_MAX );
+	$per_page = $paging['per_page'];
+	$page     = $paging['page'];
 
 	// Filtering AFTER WP_Query had already paginated and counted meant
 	// an inaccessible listing could displace an accessible one to a later page while `total` still

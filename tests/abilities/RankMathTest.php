@@ -893,4 +893,15 @@ final class RankMathTest extends TestCase {
 		$this->assertSame( 'refused', $res->get_error_data()['status'] );
 		$this->assertNull( $res->get_error_data()['key'] );
 	}
+
+	public function test_get_head_reports_ok_when_a_head_exists(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$res = wp_get_ability( 'aafm/rankmath-get-head' )->execute( array( 'post_id' => $post_id ) );
+
+		$this->assertSame( 'ok', $res['head_status'] );
+		$this->assertArrayNotHasKey( 'note', $res );
+		$this->assertArrayHasKey( 'head_status', aafm_args_rankmath_get_head()['output_schema']['properties'] );
+	}
 }

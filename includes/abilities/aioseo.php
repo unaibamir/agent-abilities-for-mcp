@@ -135,7 +135,7 @@ function aafm_aioseo_registry_definitions(): array {
 		),
 		'aafm/aioseo-get-head'    => array(
 			'label'        => __( 'Get post SEO head (All in One SEO)', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads the rendered SEO head markup for a post from All in One SEO, best-effort: the returned head string is empty when All in One SEO renders no head for that post. Requires the edit-posts capability and edit access to that post.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Reads the rendered SEO head markup for a post from All in One SEO, best-effort: the returned head string is empty when All in One SEO renders no head for that post, with head_status set to empty and a note; an empty head does not mean the page has no SEO tags. Requires the edit-posts capability and edit access to that post.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'aioseo',
@@ -660,11 +660,7 @@ function aafm_args_aioseo_get_head(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array(
-				'post_id' => array( 'type' => 'integer' ),
-				'plugin'  => array( 'type' => 'string' ),
-				'head'    => array( 'type' => 'string' ),
-			),
+			'properties' => aafm_seo_head_output_properties(),
 		),
 		'execute_callback'    => 'aafm_exec_aioseo_get_head',
 		'permission_callback' => 'aafm_perm_seo_get_head_floor',
@@ -697,9 +693,5 @@ function aafm_exec_aioseo_get_head( array $input ) {
 	/** This filter is documented in includes/abilities/yoast.php (the rendered-head seam). */
 	$head = (string) apply_filters( 'aafm_seo_rendered_head', '', $id, 'aioseo' );
 
-	return array(
-		'post_id' => $id,
-		'plugin'  => 'aioseo',
-		'head'    => $head,
-	);
+	return aafm_seo_head_response( $id, 'aioseo', $head );
 }

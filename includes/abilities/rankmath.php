@@ -762,11 +762,7 @@ function aafm_args_rankmath_get_head(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array(
-				'post_id' => array( 'type' => 'integer' ),
-				'plugin'  => array( 'type' => 'string' ),
-				'head'    => array( 'type' => 'string' ),
-			),
+			'properties' => aafm_seo_head_output_properties(),
 		),
 		'execute_callback'    => 'aafm_exec_rankmath_get_head',
 		'permission_callback' => 'aafm_perm_seo_get_head_floor',
@@ -815,9 +811,5 @@ function aafm_exec_rankmath_get_head( array $input ) {
 		);
 	}
 
-	return array(
-		'post_id' => $id,
-		'plugin'  => 'rankmath',
-		'head'    => $head,
-	);
+	return aafm_seo_head_response( $id, 'rankmath', $head );
 }

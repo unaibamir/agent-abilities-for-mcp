@@ -625,4 +625,30 @@ final class YoastTest extends TestCase {
 		$this->assertSame( 'aafm_yoast_write_unconfirmed', $res->get_error_code() );
 		$this->assertSame( 'unconfirmed', $res->get_error_data()['status'] );
 	}
+
+	public function test_get_head_reports_empty_with_a_note(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+		remove_all_filters( 'aafm_seo_rendered_head' );
+
+		$res = wp_get_ability( 'aafm/yoast-get-head' )->execute( array( 'post_id' => $post_id ) );
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( '', $res['head'] );
+		$this->assertSame( 'empty', $res['head_status'] );
+		$this->assertStringContainsString( "doesn't mean the page has no SEO tags", $res['note'] );
+		$props = aafm_args_yoast_get_head()['output_schema']['properties'];
+		$this->assertArrayHasKey( 'head_status', $props );
+		$this->assertArrayHasKey( 'note', $props );
+	}
+
+	public function test_get_head_reports_ok_when_a_head_exists(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$res = wp_get_ability( 'aafm/yoast-get-head' )->execute( array( 'post_id' => $post_id ) );
+
+		$this->assertSame( 'ok', $res['head_status'] );
+		$this->assertArrayNotHasKey( 'note', $res );
+	}
 }

@@ -36,6 +36,7 @@ function aafm_denial_reason_labels(): array {
 		'source_plugin'       => __( 'the source plugin check refused', 'agent-abilities-for-mcp' ),
 		'connection_paused'   => __( 'this connection is paused', 'agent-abilities-for-mcp' ),
 		'access_paused'       => __( 'all access is paused', 'agent-abilities-for-mcp' ),
+		'type_tool_off'       => __( 'this content type\'s own tool is off', 'agent-abilities-for-mcp' ),
 	);
 }
 
@@ -165,8 +166,9 @@ function aafm_meta_key_refusal_code( string $scope, string $key ): ?string {
  * The reason for a refusal that came from an ability's own permission callback.
  *
  * Meta abilities get the key reason, or "item not editable" when the key passes (the callback's only
- * other condition). A bridged ability's own check decides for it. Everything else is a WordPress
- * capability or object check, which the callback does not distinguish.
+ * other condition). A bridged ability's own check decides for it. A post tool refused because the
+ * page or product's own tool is off says so. Everything else is a WordPress capability or object
+ * check, which the callback does not distinguish.
  *
  * @param string              $name  Ability name.
  * @param array<string,mixed> $input The call's input.
@@ -182,6 +184,9 @@ function aafm_denial_reason_for_permission( string $name, array $input ): string
 	}
 	if ( 0 === strpos( $name, 'aafm-bridge/' ) ) {
 		return 'source_plugin';
+	}
+	if ( aafm_post_tool_reach_refused( $name, $input ) ) {
+		return 'type_tool_off';
 	}
 	return 'capability';
 }

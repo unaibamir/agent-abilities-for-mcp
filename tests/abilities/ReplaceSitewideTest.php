@@ -62,6 +62,7 @@ final class ReplaceSitewideTest extends TestCase {
 			)
 		);
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		update_option( 'aafm_enabled_abilities', array( 'aafm/replace-sitewide', 'aafm/update-page' ) );
 
 		aafm_exec_replace_sitewide(
 			array(

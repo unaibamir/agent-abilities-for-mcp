@@ -1631,6 +1631,90 @@ function aafm_can_edit_post_object( WP_Post $post ): bool {
 }
 
 /**
+ * The tool a content type has of its own for one verb, or '' when it has none.
+ *
+ * Pages and products have dedicated tools. A generic post tool must not reach them while that tool
+ * is off, or switching it off would not mean what the owner expects. A tool missing from the live
+ * registry counts as none, so a theme's own `product` type on a site without WooCommerce is not held
+ * by a tool that cannot exist there.
+ *
+ * @param string $post_type Post type.
+ * @param string $verb      One of update, trash, delete.
+ * @return string Ability name, or ''.
+ */
+function aafm_type_own_tool( string $post_type, string $verb ): string {
+	$map  = array(
+		'page'    => array(
+			'update' => 'aafm/update-page',
+			'trash'  => 'aafm/trash-page',
+			'delete' => 'aafm/delete-page',
+		),
+		'post'    => array(
+			'update' => 'aafm/update-post',
+			'trash'  => 'aafm/trash-post',
+			'delete' => 'aafm/delete-post',
+		),
+		'product' => array(
+			'update' => 'aafm/wc-update-product',
+			'trash'  => 'aafm/wc-delete-product',
+			'delete' => 'aafm/wc-delete-product',
+		),
+	);
+	$tool = $map[ $post_type ][ $verb ] ?? '';
+	return '' !== $tool && isset( aafm_get_abilities_registry()[ $tool ] ) ? $tool : '';
+}
+
+/**
+ * Whether a generic post tool may reach this object, given the object type's own tool.
+ *
+ * True for the tool's home type, so a post tool never depends on its own switch. Otherwise true when
+ * the type has no tool of its own, or when that tool is enabled and allowed for this principal (the
+ * same role, connection and preset narrowing the call itself passes through).
+ *
+ * @param WP_Post $post      Target object.
+ * @param string  $verb      One of update, trash, delete.
+ * @param string  $home_type The calling tool's own type ('post'), or '' to check every type.
+ * @return bool
+ */
+function aafm_post_tool_reach_allowed( WP_Post $post, string $verb, string $home_type = 'post' ): bool {
+	if ( $post->post_type === $home_type ) {
+		return true;
+	}
+	$own = aafm_type_own_tool( $post->post_type, $verb );
+	if ( '' === $own ) {
+		return true;
+	}
+	return aafm_is_ability_enabled( $own )
+		&& aafm_ability_allowed_for_principal( $own, get_current_user_id(), aafm_oauth_current_client_id() );
+}
+
+/**
+ * Whether a denied call was refused by the reach rule rather than by a WordPress capability.
+ *
+ * Used only to label the Activity Log row; it never decides access.
+ *
+ * @param string              $name  Ability name.
+ * @param array<string,mixed> $input The call's input.
+ * @return bool
+ */
+function aafm_post_tool_reach_refused( string $name, array $input ): bool {
+	$tools = array(
+		'aafm/update-post'     => array( 'update', 'post' ),
+		'aafm/replace-in-post' => array( 'update', 'post' ),
+		'aafm/replace-block'   => array( 'update', 'post' ),
+		'aafm/trash-post'      => array( 'trash', 'post' ),
+		'aafm/delete-post'     => array( 'delete', 'post' ),
+		'aafm/update-cpt-item' => array( 'update', '' ),
+	);
+	if ( ! isset( $tools[ $name ] ) ) {
+		return false;
+	}
+	$id   = isset( $input['post_id'] ) && is_numeric( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
+	return $post instanceof WP_Post && ! aafm_post_tool_reach_allowed( $post, $tools[ $name ][0], $tools[ $name ][1] );
+}
+
+/**
  * Whether the current user may remove a single object through the content abilities -
  * covers both trashing and permanent deletion. The delete_post meta-cap gate is the same
  * for either path, so the trash/page abilities and the permanent delete-post/delete-page

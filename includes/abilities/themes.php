@@ -448,7 +448,12 @@ function aafm_exec_update_template( array $input ) {
 
 	$wp_id = (int) ( $template->wp_id ?? 0 );
 	if ( $wp_id <= 0 ) {
-		return aafm_generic_error();
+		// The template exists (the caller already passed the theme-options capability), so say why it
+		// is refused instead of the generic error that hides existence.
+		return new WP_Error(
+			'aafm_template_not_customized',
+			__( 'This template comes from the theme files and has not been customized, so there is no saved copy to update. Open it once in the Site Editor and save a change to create one, then try again.', 'agent-abilities-for-mcp' )
+		);
 	}
 
 	$sanitized = aafm_kses_block_markup( (string) ( $input['content'] ?? '' ) );

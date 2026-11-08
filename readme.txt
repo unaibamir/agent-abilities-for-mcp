@@ -41,7 +41,7 @@ Anthropic's [help article](https://support.claude.com/en/articles/11175166) list
 
 On ChatGPT web, open Plugins, select the plus button, then Add custom MCP server, name it, paste your endpoint under Connection, choose OAuth for authentication and select Create as a plugin. You don't need to turn on Developer Mode first.
 
-OpenAI's [help article](https://help.openai.com/en/articles/12584461) says custom MCP servers and full MCP, writes included, are available on Business and Enterprise/Edu, and that Pro can connect with read and fetch permissions. It doesn't mention Free or Plus, but a Plus account did connect through Plugins, Add custom MCP server in a test against 1.11.0. On Business, admins and owners add the server, while on Enterprise/Edu admins can, and so can members they grant access to. It's a web feature only.
+OpenAI's [help article](https://help.openai.com/en/articles/12584461) says custom MCP servers and full MCP, writes included, are available on Business and Enterprise/Edu, and that Pro can connect with read and fetch permissions, but it doesn't mention Free or Plus. On Business, admins and owners add the server, while on Enterprise/Edu admins can, and so can members they grant access to. It's a web feature only.
 
 = Manage multiple WordPress sites from ChatGPT or Claude =
 
@@ -93,7 +93,7 @@ The Events Calendar has 13 abilities for events, venues and organizers, Event Ti
 
 Minimum versions: WooCommerce 9.1, All in One SEO 4.9.8, The Events Calendar 6.17.3.1 and Event Tickets 5.29.3.1. Below these, their tools stay hidden and the Integrations tab says why.
 
-Plugins that register their own abilities with the WordPress Abilities API appear on the Other plugins tab, and this plugin does not filter what another plugin's ability returns. Each tool shows which plugin provides it (or its namespace, when the plugin cannot be identified), is labelled Read, Write or Destructive from the plugin's own annotations (a tool the plugin leaves unlabelled is treated as Destructive and says so), and carries a notice when it may return personal data (a hint based on the plugin and tool name, not a full check). Tools a plugin update adds wait for your review. A plugin that doesn't mark its reads as read-only loses them in read-only mode. Lower roles can see the names of bridged tools they can't run, and the plugin's own check refuses the call. The WP-CLI command `wp aafm catalog export` prints those abilities as JSON, and `--include-native` adds this plugin's own.
+Plugins that register their own abilities with the WordPress Abilities API appear on the Other plugins tab, and this plugin does not filter what another plugin's ability returns. Each tool shows which plugin provides it (or its namespace, when the plugin cannot be identified), is labelled Read, Write or Destructive from the plugin's own annotations (a tool the plugin leaves unlabelled is treated as Destructive and says so), and carries a notice when it may return personal data (a hint based on the plugin and tool name, not a full check). Tools a plugin update adds wait for your review. A plugin that doesn't declare its reads as read-only has them treated as writes, so read-only mode unloads them. A tool whose own permission check needs an item id is listed for anyone who can edit posts, and the plugin's own check refuses the call if their role can't run it. The WP-CLI command `wp aafm catalog export` prints those abilities as JSON, and `--include-native` adds this plugin's own.
 
 = Built on the Abilities API and the MCP Adapter =
 

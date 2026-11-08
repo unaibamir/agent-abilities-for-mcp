@@ -22,9 +22,9 @@ Abilities are registered on the WordPress 6.9 Abilities API and served through t
 
 The admin screen has a switch for each ability, plus read-only mode, per-role and per-connection allowlists, a rate limit, an IP allowlist and Pause all access, and each OAuth connection gets its own pause, end date, rate limit and access preset. An Activity Log table in the site's own database records the acting user, the tool, the argument keys and an identifier-only note, and it never stores free-text content.
 
-Playbooks are step-by-step instructions the owner writes, and agents read the Active ones through two read tools, `aafm/list-playbooks` and `aafm/get-playbook`. Writes through the general content tools to pages owned by Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks or WPBakery are refused. Avada's two dedicated tools are the exception, and they refuse changes to its shortcodes.
+Playbooks are step-by-step instructions the owner writes, and agents read the Active ones through two read tools, `aafm/list-playbooks` and `aafm/get-playbook`. Writes through the general content tools to pages owned by Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks or WPBakery are refused. An edit that only sets the excerpt goes through and leaves the stored content as it was, unless the plugin can't tell which builder owns the post. Avada's two dedicated tools are a second exception: they can change text and refuse changes to its shortcodes.
 
-Minimum versions: WooCommerce 9.1, All in One SEO 4.9.8, The Events Calendar 6.17.3.1 and Event Tickets 5.29.3.1. Below these, their tools stay hidden and the Integrations tab says why. A plugin that doesn't mark its reads as read-only loses them in read-only mode, and lower roles can see the names of bridged tools they can't run, though the plugin's own check refuses the call.
+Minimum versions: WooCommerce 9.1, All in One SEO 4.9.8, The Events Calendar 6.17.3.1 and Event Tickets 5.29.3.1. Below these, their tools stay hidden and the Integrations tab says why. A plugin that doesn't declare its reads as read-only has them treated as writes, so read-only mode unloads them. A tool whose own permission check needs an item id is listed for anyone who can edit posts, and the plugin's own check refuses the call if their role can't run it.
 
 One scope note: the Adapter has a default server that other plugins can publish tools to, and those tools are outside this plugin's controls. A Settings choice (Automatic, Always on, Always off) decides whether that server runs, and this plugin's own tools are never on it.
 
@@ -98,7 +98,7 @@ These are the main extension points. Every name starts with `aafm_`.
 | `aafm_force_read_only_mode` | filter | Return `true` to force read-only mode on. It can only turn the mode on, never off. |
 | `aafm_high_risk_abilities` | filter | Add ability names or other plugins' slugs to the high-risk set. The built-ins are merged back in, so it can only add. |
 | `aafm_force_block_high_risk_abilities` | filter | Return `true` to keep the high-risk lock on whatever Settings says. It can only lock, never unlock. |
-| `aafm_serve_openid_configuration` | filter | Return `false` on a subfolder install that runs its own OpenID Connect provider, so `/.well-known/openid-configuration` is left to it. MCP clients still find the `oauth-authorization-server` document. Default `true`. |
+| `aafm_serve_openid_configuration` | filter | Return `false` on a subfolder install that runs its own OpenID Connect provider, so `/.well-known/openid-configuration` is left to it. Default `true`. |
 | `aafm_bridge_discovery_capability` | filter | The capability a user needs to see a bridged tool whose own permission check needs an object id. Default `edit_posts`. Receives the wrapper tool name. |
 | `aafm_rate_limit_per_min`, `aafm_ip_allowlist`, `aafm_max_title_len` | filters | Adjust the stored value. A filter cannot switch off a limit the site owner set in Settings. |
 | `aafm_page_builder_markers` | filter | Map of post meta key to builder name used by the page builder guard. |

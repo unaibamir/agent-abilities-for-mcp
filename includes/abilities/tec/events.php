@@ -577,6 +577,11 @@ function aafm_exec_tec_update_event( array $input ) {
 	if ( $id < 1 ) {
 		return aafm_generic_error();
 	}
+	// The event's own read comes first, as in every other guarded write, so a failed load is this
+	// ability's error rather than a builder refusal.
+	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
 
 	$owning_builder = aafm_post_has_foreign_builder_ownership( $id );
 	if ( false !== $owning_builder ) {

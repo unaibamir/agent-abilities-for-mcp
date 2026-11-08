@@ -208,6 +208,25 @@ final class ObjectLoadLeakTest extends TestCase {
 		$this->assert_refused_without_leak( $out, 'no change' );
 	}
 
+	/**
+	 * The page-builder guard answers unknown, which every write treats as owned, when its own
+	 * read of the post returns another row or fails: only a post whose row is really gone has
+	 * no owner.
+	 *
+	 * @dataProvider data_fault_shapes
+	 * @param string $shape Fault shape.
+	 */
+	public function test_the_builder_guard_fails_closed_when_its_post_read_returns_another_row( string $shape ): void {
+		$a = self::factory()->post->create( array( 'post_content' => 'Plain A' ) );
+		$b = $this->leaked_post( 'post' );
+
+		$out = $this->with_leak( 'post', $a, $b, $shape, static fn() => aafm_post_has_foreign_builder_ownership( $a ) );
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count(), 'the load was faulted' );
+		$this->assertSame( AAFM_BUILDER_OWNERSHIP_UNKNOWN, $out );
+		$this->assertFalse( aafm_post_has_foreign_builder_ownership( $b + 1000 ), 'a post that does not exist has no owner' );
+	}
+
 	public function test_get_event_whose_read_returns_another_events_row_is_refused(): void {
 		$this->acting_as( 'administrator' );
 		$b = $this->leaked_post( Tribe__Events__Main::POSTTYPE );

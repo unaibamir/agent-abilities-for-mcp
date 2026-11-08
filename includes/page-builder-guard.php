@@ -69,10 +69,11 @@ function aafm_post_has_foreign_builder_ownership( int $post_id, bool $pure_read 
 	}
 	$bricks = aafm_page_builder_bricks_keys();
 
-	// WPBakery has no marker: its layout is the shortcodes in post_content. A post that does not
-	// exist has no owner; a lookup that failed on a database error cannot be decided.
+	// WPBakery has no marker: its layout is the shortcodes in post_content. A post whose row is
+	// really gone has no owner; a lookup that failed, or that read another post's row, cannot be
+	// decided.
 	$post = aafm_exact_object( 'post', $post_id );
-	if ( ! $post instanceof WP_Post && ! $pure_read && '' !== (string) $wpdb->last_error ) {
+	if ( ! $post instanceof WP_Post && ! $pure_read && ( '' !== (string) $wpdb->last_error || ! aafm_object_absent( 'post', $post_id ) ) ) {
 		return AAFM_BUILDER_OWNERSHIP_UNKNOWN;
 	}
 	$wpbakery = $post instanceof WP_Post && 1 === preg_match( aafm_page_builder_content_pattern(), (string) $post->post_content );

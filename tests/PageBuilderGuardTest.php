@@ -299,6 +299,13 @@ final class PageBuilderGuardTest extends TestCase {
 				'settings' => (object) array( 'text' => 'Stewart platform layout' ),
 			),
 		);
+		$builder_draft    = array(
+			'node1' => (object) array(
+				'node'     => 'node1',
+				'type'     => 'module',
+				'settings' => (object) array( 'text' => 'Stewart platform draft' ),
+			),
+		);
 		$id               = self::factory()->post->create(
 			array(
 				'post_title'   => 'Stewart #1939',
@@ -308,6 +315,8 @@ final class PageBuilderGuardTest extends TestCase {
 			)
 		);
 		update_post_meta( $id, '_fl_builder_data', $builder_data );
+		update_post_meta( $id, '_fl_builder_draft', $builder_draft );
+		update_post_meta( $id, '_fl_builder_enabled', '1' );
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
 		// Force unfiltered_html off via map_meta_cap so core's wp_filter_post_kses would strip <script> if post_content were re-sanitized.
 		$revoke_unfiltered = static function ( array $caps, string $cap ): array {
@@ -345,30 +354,94 @@ final class PageBuilderGuardTest extends TestCase {
 			get_post_meta( $id, '_fl_builder_data', true ),
 			'Beaver Builder stored layout data must remain untouched.'
 		);
+		$this->assertEquals(
+			$builder_draft,
+			get_post_meta( $id, '_fl_builder_draft', true ),
+			'Beaver Builder draft layout data must remain untouched.'
+		);
+		$this->assertSame(
+			'1',
+			get_post_meta( $id, '_fl_builder_enabled', true ),
+			'Beaver Builder enabled flag must remain untouched.'
+		);
+
+		$revisions = wp_get_post_revisions( $id );
+		if ( ! empty( $revisions ) ) {
+			$latest_revision = reset( $revisions );
+			$this->assertSame(
+				$original_content,
+				$latest_revision->post_content,
+				'Any revision created for the excerpt update must preserve post_content byte-for-byte.'
+			);
+			$this->assertSame(
+				'Learn how six-degree-of-freedom Stewart platforms work.',
+				$latest_revision->post_excerpt
+			);
+		}
 	}
 
-	public function test_update_post_refuses_when_content_accompanies_excerpt_on_a_beaver_builder_post(): void {
+	public function test_update_post_refuses_when_content_or_secondary_fields_accompany_excerpt_on_a_beaver_builder_post(): void {
 		$id = self::factory()->post->create(
 			array(
 				'post_content' => '<p>Original Beaver Builder fallback</p>',
 				'post_excerpt' => 'Original excerpt',
+				'post_name'    => 'original-slug',
 			)
 		);
 		update_post_meta( $id, '_fl_builder_data', array( 'node1' => array( 'type' => 'row' ) ) );
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 
-		$result = aafm_exec_update_post(
-			array(
+		$combinations = array(
+			'content'        => array(
 				'post_id' => $id,
 				'excerpt' => 'New excerpt',
 				'content' => '<p>Replaced body</p>',
-			)
+			),
+			'title'          => array(
+				'post_id' => $id,
+				'excerpt' => 'New excerpt',
+				'title'   => 'Replaced title',
+			),
+			'status'         => array(
+				'post_id' => $id,
+				'excerpt' => 'New excerpt',
+				'status'  => 'draft',
+			),
+			'slug'           => array(
+				'post_id' => $id,
+				'excerpt' => 'New excerpt',
+				'slug'    => 'new-slug',
+			),
+			'featured_media' => array(
+				'post_id'        => $id,
+				'excerpt'        => 'New excerpt',
+				'featured_media' => 123,
+			),
+			'terms'          => array(
+				'post_id' => $id,
+				'excerpt' => 'New excerpt',
+				'terms'   => array( 'category' => array( 1 ) ),
+			),
+			'meta'           => array(
+				'post_id' => $id,
+				'excerpt' => 'New excerpt',
+				'meta'    => array( 'custom_field' => 'value' ),
+			),
 		);
 
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'aafm_page_builder_owned', $result->get_error_code() );
+		foreach ( $combinations as $label => $payload ) {
+			$result = aafm_exec_update_post( $payload );
+			$this->assertInstanceOf(
+				\WP_Error::class,
+				$result,
+				sprintf( 'Combining excerpt with %s on a Beaver Builder post must be refused.', $label )
+			);
+			$this->assertSame( 'aafm_page_builder_owned', $result->get_error_code() );
+		}
+
 		$this->assertSame( 'Original excerpt', get_post( $id )->post_excerpt );
 		$this->assertSame( '<p>Original Beaver Builder fallback</p>', get_post( $id )->post_content );
+		$this->assertSame( 'original-slug', get_post( $id )->post_name );
 	}
 
 	public function test_update_post_refuses_an_excerpt_only_write_when_builder_ownership_is_unknown(): void {

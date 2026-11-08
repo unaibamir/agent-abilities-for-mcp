@@ -1355,9 +1355,7 @@ function aafm_exec_update_post( array $input ) {
 		$postarr['post_status'] = $status;
 	}
 
-	if ( isset( $postarr['post_content'] ) ) {
-		$result = wp_update_post( wp_slash( $postarr ), true );
-	} else {
+	if ( false !== $owning_builder && ! isset( $postarr['post_content'] ) ) {
 		$result = aafm_with_locked_post_content(
 			$id,
 			(string) $post->post_content,
@@ -1365,6 +1363,8 @@ function aafm_exec_update_post( array $input ) {
 				return wp_update_post( wp_slash( $postarr ), true );
 			}
 		);
+	} else {
+		$result = wp_update_post( wp_slash( $postarr ), true );
 	}
 	if ( is_wp_error( $result ) ) {
 		return aafm_generic_error();
@@ -1380,7 +1380,7 @@ function aafm_exec_update_post( array $input ) {
 	if ( ! $updated instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
-	if ( ! isset( $postarr['post_content'] ) && (string) $updated->post_content !== (string) $post->post_content ) {
+	if ( false !== $owning_builder && ! isset( $postarr['post_content'] ) && (string) $updated->post_content !== (string) $post->post_content ) {
 		return aafm_generic_error();
 	}
 

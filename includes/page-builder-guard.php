@@ -212,46 +212,28 @@ function aafm_page_builder_owned_error( string $builder ): WP_Error {
 }
 
 /**
- * Whether an aafm/update-post (or update-page / update-cpt-item) input only touches independent
- * excerpt and enrichment fields that never overwrite or desync a known page builder's layout data.
+ * Whether an aafm/update-post input is a strict excerpt-only update (`post_id` + `excerpt` only)
+ * on a post with confirmed page-builder ownership.
  *
  * All five supported page builders (Elementor, Divi, Beaver Builder, Avada/Fusion Builder, and
  * Visual Composer) own the rendered body (`post_content` and their own marker/layout post meta),
  * while `post_excerpt` remains the standard WordPress excerpt field (for example, Beaver Builder's
- * FLBuilderLayoutPostSettings reads and writes `$post->post_excerpt` directly). A call that sets
- * `excerpt` (optionally alongside `slug`, `featured_media`, `terms`, or allowlisted `meta`, which
- * is already gated by aafm_hard_blocked_meta_key()) without `content`, `title`, or `status` is
- * safe to apply on a post with a known owning builder, provided `post_content` is locked against
- * core's `sanitize_post()` re-filtering during `wp_update_post()`. Unknown ownership
- * (`AAFM_BUILDER_OWNERSHIP_UNKNOWN`) is never allowed through.
+ * FLBuilderLayoutPostSettings reads and writes `$post->post_excerpt` directly). Only a strict
+ * `post_id` + `excerpt` input is allowed through on a builder-owned post, with `post_content`
+ * locked byte-for-byte against core's `sanitize_post()` re-filtering during `wp_update_post()`.
+ * Combinations with `slug`, `featured_media`, `terms`, `meta`, `content`, `title`, or `status`, as
+ * well as `page_id` updates or unknown ownership (`AAFM_BUILDER_OWNERSHIP_UNKNOWN`), are refused.
  *
  * @param array<string,mixed> $input          Ability input.
  * @param string|false        $owning_builder Result of aafm_post_has_foreign_builder_ownership().
  * @return bool
  */
 function aafm_update_post_allows_builder_safe_fields( array $input, $owning_builder ): bool {
-	if ( false === $owning_builder ) {
-		return true;
-	}
-	if ( AAFM_BUILDER_OWNERSHIP_UNKNOWN === $owning_builder ) {
+	if ( false === $owning_builder || AAFM_BUILDER_OWNERSHIP_UNKNOWN === $owning_builder ) {
 		return false;
 	}
-	if ( ! array_key_exists( 'excerpt', $input ) ) {
+	if ( 2 !== count( $input ) || ! array_key_exists( 'post_id', $input ) || ! array_key_exists( 'excerpt', $input ) ) {
 		return false;
-	}
-	$allowed_keys = array(
-		'post_id'        => true,
-		'page_id'        => true,
-		'excerpt'        => true,
-		'slug'           => true,
-		'featured_media' => true,
-		'terms'          => true,
-		'meta'           => true,
-	);
-	foreach ( array_keys( $input ) as $key ) {
-		if ( ! isset( $allowed_keys[ (string) $key ] ) ) {
-			return false;
-		}
 	}
 	return true;
 }

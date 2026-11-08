@@ -314,6 +314,20 @@ final class PageBuilderGuardWireTest extends TestCase {
 		);
 		$this->assertTrue( $refused->getIsError(), 'Combining content with excerpt on a Beaver Builder post must be refused.' );
 		$this->assertStringContainsString( 'Beaver Builder', $refused->getContent()[0]->getText() );
+
+		$refused_slug = $handler->call_tool(
+			array(
+				'name'      => aafm_mcp_tool_name( 'aafm/update-post' ),
+				'arguments' => array(
+					'post_id' => $post_id,
+					'excerpt' => 'Should not land with slug',
+					'slug'    => 'new-slug',
+				),
+			),
+			'req-page-builder-wire-excerpt-slug-refused'
+		);
+		$this->assertTrue( $refused_slug->getIsError(), 'Combining slug with excerpt on a Beaver Builder post must be refused.' );
+		$this->assertStringContainsString( 'Beaver Builder', $refused_slug->getContent()[0]->getText() );
 		$this->assertSame( 'Updated excerpt via MCP wire.', get_post( $post_id )->post_excerpt );
 		$this->assertSame( '<div class="fl-builder-content">Layout fallback</div>', get_post( $post_id )->post_content );
 	}

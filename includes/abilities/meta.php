@@ -22,7 +22,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_meta_definitions' );
 function aafm_register_meta_definitions( array $registry ): array {
 	$registry['aafm/get-post-meta']     = array(
 		'label'        => __( 'Get post meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Read a single allowlisted meta value from a post the agent can edit (scalar only).', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Read a single allowlisted meta value from a post the agent can edit (scalar only). Keys are opt-in: an administrator exposes each one under Exposed meta keys in the Content sub-tab of the Abilities tab.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',
@@ -30,7 +30,7 @@ function aafm_register_meta_definitions( array $registry ): array {
 	);
 	$registry['aafm/get-all-post-meta'] = array(
 		'label'        => __( 'Get all post meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Read every allowlisted scalar meta value from a post the agent can edit, returned as a key/value map. Protected, underscore, and non-scalar values are excluded.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Read every allowlisted scalar meta value from a post the agent can edit, returned as a key/value map. Protected, underscore, and non-scalar values are excluded. Keys are opt-in: an administrator exposes each one under Exposed meta keys in the Content sub-tab of the Abilities tab.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',
@@ -38,7 +38,7 @@ function aafm_register_meta_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-post-meta']  = array(
 		'label'        => __( 'Update post meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Write a single allowlisted scalar meta value to a post the agent can edit. The response returns the old value when it is plain text or a number.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Write a single allowlisted scalar meta value to a post the agent can edit. The response returns the old value when it is plain text or a number. Keys are opt-in: an administrator exposes each one under Exposed meta keys in the Content sub-tab of the Abilities tab.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -46,7 +46,7 @@ function aafm_register_meta_definitions( array $registry ): array {
 	);
 	$registry['aafm/delete-post-meta']  = array(
 		'label'        => __( 'Delete post meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Delete an allowlisted meta key from a post the agent can edit. Removes all values of that key. The response returns the old value when it is plain text or a number.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Delete an allowlisted meta key from a post the agent can edit. Removes all values of that key. The response returns the old value when it is plain text or a number. Keys are opt-in: an administrator exposes each one under Exposed meta keys in the Content sub-tab of the Abilities tab.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'content',

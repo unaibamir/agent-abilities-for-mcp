@@ -606,6 +606,16 @@ function aafm_wc_order_status_valid( string $status ): bool {
  *                                  mid-loop (already-written items rolled back; see the note below).
  */
 function aafm_wc_apply_order_input( \WC_Order $order, array $input, array &$added_item_ids = array() ) {
+	// Checked first so a refused request has changed nothing on the order. A customer id that is not
+	// a user used to be stored, leaving an order tied to nobody; 0 stays the guest order.
+	$customer_id = array_key_exists( 'customer_id', $input ) ? absint( $input['customer_id'] ) : 0;
+	if ( $customer_id > 0 && ! aafm_exact_object( 'user', $customer_id ) instanceof WP_User ) {
+		return new \WP_Error(
+			'aafm_wc_unknown_customer',
+			__( 'No user exists with that customer_id, so the order was not saved. Use a real customer id, or 0 for a guest order.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
+	}
 	if ( array_key_exists( 'status', $input ) ) {
 		// Normalise to short form before handing to set_status() -- strip any 'wc-' prefix so
 		// both 'processing' and 'wc-processing' produce the same stored/returned value (matching
@@ -615,7 +625,7 @@ function aafm_wc_apply_order_input( \WC_Order $order, array $input, array &$adde
 		$order->set_status( $short_status );
 	}
 	if ( array_key_exists( 'customer_id', $input ) ) {
-		$order->set_customer_id( absint( $input['customer_id'] ) );
+		$order->set_customer_id( $customer_id );
 	}
 	if ( array_key_exists( 'customer_note', $input ) ) {
 		$order->set_customer_note( aafm_sanitize_multiline_text( (string) $input['customer_note'] ) );

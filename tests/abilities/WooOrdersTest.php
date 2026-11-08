@@ -557,10 +557,11 @@ final class WooOrdersTest extends TestCase {
 		$this->register_wc_order_writes();
 		$this->acting_as( 'administrator' );
 
-		$res = wp_get_ability( 'aafm/wc-create-order' )->execute(
+		$customer_id = self::factory()->user->create( array( 'role' => 'customer' ) );
+		$res         = wp_get_ability( 'aafm/wc-create-order' )->execute(
 			array(
 				'status'        => 'processing',
-				'customer_id'   => 7,
+				'customer_id'   => $customer_id,
 				'customer_note' => 'Test note',
 				'billing'       => array(
 					'first_name' => 'Alice',
@@ -590,6 +591,33 @@ final class WooOrdersTest extends TestCase {
 		$get = wp_get_ability( 'aafm/wc-get-order' )->execute( array( 'order_id' => $res['id'] ) );
 		$this->assertNotInstanceOf( \WP_Error::class, $get );
 		$this->assertSame( $res['id'], $get['id'] );
+	}
+
+	public function test_create_order_refuses_a_customer_who_does_not_exist_but_allows_a_guest(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		$missing = wp_get_ability( 'aafm/wc-create-order' )->execute( array( 'customer_id' => 987654 ) );
+		$this->assertInstanceOf( \WP_Error::class, $missing );
+		$this->assertSame( 'aafm_wc_unknown_customer', $missing->get_error_code() );
+
+		$guest = wp_get_ability( 'aafm/wc-create-order' )->execute( array( 'customer_id' => 0 ) );
+		$this->assertNotInstanceOf( \WP_Error::class, $guest, 'customer_id 0 is a guest order.' );
+	}
+
+	public function test_update_order_refuses_a_customer_who_does_not_exist(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id'    => 5001,
+				'customer_id' => 987654,
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_unknown_customer', $res->get_error_code() );
 	}
 
 	public function test_create_order_denied_requires_manage_woocommerce(): void {
@@ -858,10 +886,11 @@ final class WooOrdersTest extends TestCase {
 			)
 		);
 
-		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
+		$customer_id = self::factory()->user->create( array( 'role' => 'customer' ) );
+		$res         = wp_get_ability( 'aafm/wc-update-order' )->execute(
 			array(
 				'order_id'    => 5052,
-				'customer_id' => 7,
+				'customer_id' => $customer_id,
 			)
 		);
 		$this->assertNotInstanceOf( \WP_Error::class, $res );

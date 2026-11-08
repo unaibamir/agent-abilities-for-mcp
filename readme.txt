@@ -41,7 +41,7 @@ Anthropic's [help article](https://support.claude.com/en/articles/11175166) list
 
 On ChatGPT web, open Plugins, select the plus button, then Add custom MCP server, name it, paste your endpoint under Connection, choose OAuth for authentication and select Create as a plugin. You don't need to turn on Developer Mode first.
 
-OpenAI's [help article](https://help.openai.com/en/articles/12584461) says custom MCP servers and full MCP, writes included, are available on Business and Enterprise/Edu, and that Pro can connect with read and fetch permissions. It doesn't mention Free or Plus, but a Plus account connected through Plugins, Add custom MCP server when I tested 1.11.0. On Business, admins and owners add the server, while on Enterprise/Edu admins can, and so can members they grant access to. It's a web feature only.
+OpenAI's [help article](https://help.openai.com/en/articles/12584461) says custom MCP servers and full MCP, writes included, are available on Business and Enterprise/Edu, and that Pro can connect with read and fetch permissions. It doesn't mention Free or Plus, but a Plus account did connect through Plugins, Add custom MCP server in a test against 1.11.0. On Business, admins and owners add the server, while on Enterprise/Edu admins can, and so can members they grant access to. It's a web feature only.
 
 = Manage multiple WordPress sites from ChatGPT or Claude =
 
@@ -263,7 +263,7 @@ Click Check my connection on the Connection tab and the Connection Doctor runs i
 
 = Why does ChatGPT say my server must advertise PKCE? =
 
-That error means ChatGPT never got the plugin's discovery document, so it couldn't see the PKCE support listed there. The usual cause is a firewall or CDN rule blocking ChatGPT, or a host serving `.well-known` from disk before WordPress sees the request. Test from outside your network with `curl -sS -A "ChatGPT-User/1.0" https://your-site/.well-known/oauth-authorization-server`, and if the JSON doesn't come back, allow that path for ChatGPT.
+That error means ChatGPT never got the plugin's discovery document, so it couldn't see the PKCE support listed there. The usual cause is a firewall or CDN rule blocking ChatGPT, or a host serving `.well-known` from disk before WordPress sees the request. Test from outside your network with `curl -sS -A "ChatGPT-User/1.0" https://your-site/.well-known/oauth-authorization-server` (on a subfolder install, add the folder: `https://your-site/blog/.well-known/oauth-authorization-server`), and if the JSON doesn't come back, allow that path for ChatGPT.
 
 = Why is a tool I switched on missing from my agent? =
 
@@ -414,7 +414,7 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 
 = 1.11.1 =
 
-The high-risk lock now holds wc-create-order (not under Shop manager), WooCommerce's order status and update tools, and SCF's type tools. Post tools skip a type whose own tool is off, read_private_posts alone no longer shows others' drafts, and five more page builders refuse writes.
+The high-risk lock now holds wc-create-order (not under Shop manager), WooCommerce's order status and update tools, and SCF's type tools. Post tools stop reaching a type whose own tool is off, read_private_posts alone no longer shows others' drafts, and five more page builders refuse writes.
 
 = 1.11.0 =
 

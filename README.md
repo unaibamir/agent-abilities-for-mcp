@@ -24,7 +24,7 @@ The admin screen has a switch for each ability, plus read-only mode, per-role an
 
 Playbooks are step-by-step instructions the owner writes, and agents read the Active ones through two read tools, `aafm/list-playbooks` and `aafm/get-playbook`. Writes through the general content tools to pages owned by Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks or WPBakery are refused. Avada's two dedicated tools are the exception, and they refuse changes to its shortcodes.
 
-Integration tools need WooCommerce 9.1, All in One SEO 4.9.8, The Events Calendar 6.17.3.1 or Event Tickets 5.29.3.1 or newer. Below these, their tools stay hidden and the Integrations tab says why. A plugin that doesn't mark its reads as read-only loses them in read-only mode, and lower roles can see the names of bridged tools they can't run, though the plugin's own check refuses the call.
+Minimum versions: WooCommerce 9.1, All in One SEO 4.9.8, The Events Calendar 6.17.3.1 and Event Tickets 5.29.3.1. Below these, their tools stay hidden and the Integrations tab says why. A plugin that doesn't mark its reads as read-only loses them in read-only mode, and lower roles can see the names of bridged tools they can't run, though the plugin's own check refuses the call.
 
 One scope note: the Adapter has a default server that other plugins can publish tools to, and those tools are outside this plugin's controls. A Settings choice (Automatic, Always on, Always off) decides whether that server runs, and this plugin's own tools are never on it.
 

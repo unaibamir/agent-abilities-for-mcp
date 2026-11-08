@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-08T14:42:51+05:00\n"
+"POT-Creation-Date: 2026-11-08T18:57:31+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -225,7 +225,7 @@ msgstr ""
 #: includes/abilities/posts.php:196
 #: includes/abilities/revisions.php:100
 #: includes/abilities/search.php:65
-#: includes/abilities/tec/events.php:173
+#: includes/abilities/tec/events.php:180
 #: includes/abilities/tec/organizers.php:152
 #: includes/abilities/tec/venues.php:207
 #: includes/abilities/terms.php:115
@@ -1429,7 +1429,7 @@ msgid "You do not have permission to set that status."
 msgstr ""
 
 #: includes/abilities/posts.php:857
-#: includes/abilities/tec/events.php:226
+#: includes/abilities/tec/events.php:233
 #: includes/abilities/tec/_shared.php:247
 #: includes/helpers.php:2099
 msgid "Unsupported or unauthorized post status."
@@ -1903,75 +1903,79 @@ msgstr ""
 msgid "Trash an event by ID (goes to Trash, matching this plugin's trash-post convention - never a permanent delete). Requires delete access to that event."
 msgstr ""
 
-#: includes/abilities/tec/events.php:163
+#: includes/abilities/tec/events.php:170
 msgid "Free-text search term matched against the event title."
 msgstr ""
 
-#: includes/abilities/tec/events.php:167
+#: includes/abilities/tec/events.php:174
 msgid "Post status to filter by. Defaults to \"publish\"; draft/pending/future require edit access to events (scoped to your own unless you can edit others' events); private requires read-private access."
 msgstr ""
 
-#: includes/abilities/tec/events.php:172
+#: includes/abilities/tec/events.php:179
 msgid "Number of events per page, clamped to the 1-50 range. Defaults to 10 when omitted."
 msgstr ""
 
-#: includes/abilities/tec/events.php:268
+#: includes/abilities/tec/events.php:278
 msgid "ID of the event to read."
 msgstr ""
 
 #. translators: %d: the invalid post id supplied as venue_id.
-#: includes/abilities/tec/events.php:383
+#: includes/abilities/tec/events.php:393
 #, php-format
 msgid "venue_id %d does not name an existing venue."
 msgstr ""
 
 #. translators: %d: the invalid post id found in organizer_ids.
-#: includes/abilities/tec/events.php:398
+#: includes/abilities/tec/events.php:408
 #, php-format
 msgid "organizer_ids contains %d, which does not name an existing organizer."
 msgstr ""
 
-#: includes/abilities/tec/events.php:424
+#: includes/abilities/tec/events.php:434
 msgid "Event title."
 msgstr ""
 
-#: includes/abilities/tec/events.php:428
+#: includes/abilities/tec/events.php:438
 msgid "Event description/body."
 msgstr ""
 
-#: includes/abilities/tec/events.php:432
+#: includes/abilities/tec/events.php:442
 msgid "Event start, e.g. 2027-01-01 09:00:00."
 msgstr ""
 
-#: includes/abilities/tec/events.php:436
+#: includes/abilities/tec/events.php:446
 msgid "Event end, e.g. 2027-01-01 12:00:00."
 msgstr ""
 
-#: includes/abilities/tec/events.php:440
+#: includes/abilities/tec/events.php:450
 msgid "Whether the event runs all day."
 msgstr ""
 
-#: includes/abilities/tec/events.php:445
+#: includes/abilities/tec/events.php:455
 msgid "ID of an existing venue to associate with this event."
 msgstr ""
 
-#: includes/abilities/tec/events.php:453
+#: includes/abilities/tec/events.php:463
 msgid "IDs of existing organizers to associate with this event."
 msgstr ""
 
-#: includes/abilities/tec/events.php:457
+#: includes/abilities/tec/events.php:467
 msgid "Post status, e.g. draft or publish. Defaults to draft."
 msgstr ""
 
-#: includes/abilities/tec/events.php:537
+#: includes/abilities/tec/events.php:547
 msgid "ID of the event to update."
 msgstr ""
 
-#: includes/abilities/tec/events.php:632
+#: includes/abilities/tec/events.php:549
+msgid "Post status, e.g. draft or publish. Leave it out to keep the event's current status."
+msgstr ""
+
+#: includes/abilities/tec/events.php:643
 msgid "The event was updated, but its all-day flag could not be confirmed as cleared."
 msgstr ""
 
-#: includes/abilities/tec/events.php:671
+#: includes/abilities/tec/events.php:682
 msgid "ID of the event to trash."
 msgstr ""
 
@@ -2162,7 +2166,11 @@ msgstr ""
 msgid "Venue name. Optional on update, required only on create."
 msgstr ""
 
-#: includes/abilities/tec/venues.php:392
+#: includes/abilities/tec/venues.php:390
+msgid "Publication status. Leave it out to keep the venue's current status. Setting publish requires the publish_tribe_venues capability."
+msgstr ""
+
+#: includes/abilities/tec/venues.php:394
 msgid "ID of the venue to update."
 msgstr ""
 
@@ -2410,6 +2418,10 @@ msgstr ""
 
 #: includes/abilities/themes.php:392
 msgid "The theme//slug identifier of the database template to update, as returned by list-templates or get-template. A theme-file template with no database override has no backing post and is refused."
+msgstr ""
+
+#: includes/abilities/themes.php:455
+msgid "This template comes from the theme files and has not been customized, so there is no saved copy to update. Open it once in the Site Editor and save a change to create one, then try again."
 msgstr ""
 
 #: includes/abilities/user-meta.php:27
@@ -6655,7 +6667,7 @@ msgstr ""
 
 #. translators: %s: the name of the setting, for example "Read-only mode".
 #: includes/admin/onboarding-pointer.php:102
-#: includes/helpers.php:3273
+#: includes/helpers.php:3279
 #, php-format
 msgid "%s could not be changed: the site's persistent object cache is still returning the old value. Flush the object cache (Redis, Memcached, or your host's cache) and save again."
 msgstr ""
@@ -9161,211 +9173,572 @@ msgid "%1$s. Refused: %2$s"
 msgstr ""
 
 #. translators: 1: meta key name. 2: the post's numeric ID.
-#: includes/audit/detail.php:174
+#: includes/audit/detail.php:180
 #, php-format
 msgid "Updated meta key `%1$s` on post #%2$s"
 msgstr ""
 
 #. translators: %s: the playbook slug.
-#: includes/audit/detail.php:189
+#: includes/audit/detail.php:195
 #, php-format
 msgid "Read playbook slug:%s"
 msgstr ""
 
 #. translators: 1: meta key name. 2: the post's numeric ID.
-#: includes/audit/detail.php:199
+#: includes/audit/detail.php:205
 #, php-format
 msgid "Read meta key `%1$s` on post #%2$s"
 msgstr ""
 
 #. translators: 1: meta key name. 2: the term's numeric ID.
-#: includes/audit/detail.php:214
+#: includes/audit/detail.php:220
 #, php-format
 msgid "Read meta key `%1$s` on term #%2$s"
 msgstr ""
 
 #. translators: 1: meta key name. 2: the user's numeric ID.
-#: includes/audit/detail.php:229
+#: includes/audit/detail.php:235
 #, php-format
 msgid "Read meta key `%1$s` on user #%2$s"
 msgstr ""
 
 #. translators: %s: the new page's numeric ID.
-#: includes/audit/detail.php:244
+#: includes/audit/detail.php:250
 #, php-format
 msgid "Created page #%s"
 msgstr ""
 
 #. translators: 1: the order's numeric ID. 2: the new order status key.
-#: includes/audit/detail.php:254
+#: includes/audit/detail.php:260
 #, php-format
 msgid "Set order #%1$s to status `%2$s`"
 msgstr ""
 
 #. translators: %s: the new post's numeric ID.
-#: includes/audit/detail.php:275
+#: includes/audit/detail.php:281
 #, php-format
 msgid "Created post #%s"
 msgstr ""
 
 #. translators: %s: the new draft's numeric ID.
-#: includes/audit/detail.php:283
+#: includes/audit/detail.php:289
 #, php-format
 msgid "Created draft #%s"
 msgstr ""
 
 #. translators: %s: the new user's numeric ID.
-#: includes/audit/detail.php:289
+#: includes/audit/detail.php:295
 #, php-format
 msgid "Created user #%s"
 msgstr ""
 
 #. translators: 1: meta key name. 2: the post's numeric ID.
-#: includes/audit/detail.php:297
+#: includes/audit/detail.php:303
 #, php-format
 msgid "Deleted meta key `%1$s` on post #%2$s"
 msgstr ""
 
 #. translators: %s: the post's numeric ID.
-#: includes/audit/detail.php:312
+#: includes/audit/detail.php:318
 #, php-format
 msgid "Updated post #%s"
 msgstr ""
 
 #. translators: %s: the page's numeric ID.
-#: includes/audit/detail.php:323
+#: includes/audit/detail.php:329
 #, php-format
 msgid "Updated page #%s"
 msgstr ""
 
 #. translators: %s: the post's numeric ID.
-#: includes/audit/detail.php:337
+#: includes/audit/detail.php:343
 #, php-format
 msgid "Deleted post #%s"
 msgstr ""
 
 #. translators: %s: the page's numeric ID.
-#: includes/audit/detail.php:348
+#: includes/audit/detail.php:354
 #, php-format
 msgid "Deleted page #%s"
 msgstr ""
 
 #. translators: %s: the post's numeric ID.
-#: includes/audit/detail.php:360
+#: includes/audit/detail.php:366
 #, php-format
 msgid "Trashed post #%s"
 msgstr ""
 
 #. translators: %s: the page's numeric ID.
-#: includes/audit/detail.php:371
+#: includes/audit/detail.php:377
 #, php-format
 msgid "Trashed page #%s"
 msgstr ""
 
 #. translators: %s: the restored revision's numeric ID.
-#: includes/audit/detail.php:383
+#: includes/audit/detail.php:389
 #, php-format
 msgid "Restored revision #%s"
 msgstr ""
 
 #. translators: %s: the user's numeric ID.
-#: includes/audit/detail.php:397
+#: includes/audit/detail.php:403
 #, php-format
 msgid "Updated user #%s"
 msgstr ""
 
 #. translators: %s: the user's numeric ID.
-#: includes/audit/detail.php:408
+#: includes/audit/detail.php:414
 #, php-format
 msgid "Deleted user #%s"
 msgstr ""
 
 #. translators: %s: the order's numeric ID.
-#: includes/audit/detail.php:419
+#: includes/audit/detail.php:425
 #, php-format
 msgid "Refunded order #%s"
 msgstr ""
 
 #. translators: %s: the payment gateway's id slug.
-#: includes/audit/detail.php:430
+#: includes/audit/detail.php:436
 #, php-format
 msgid "Updated payment gateway `%s`"
 msgstr ""
 
 #. translators: %s: the comment's numeric ID.
-#: includes/audit/detail.php:469
+#: includes/audit/detail.php:475
 #, php-format
 msgid "Deleted comment #%s"
 msgstr ""
 
 #. translators: %s: the attachment's numeric ID.
-#: includes/audit/detail.php:482
+#: includes/audit/detail.php:488
 #, php-format
 msgid "Deleted media #%s"
 msgstr ""
 
 #. translators: %s: the navigation menu's numeric ID.
-#: includes/audit/detail.php:494
+#: includes/audit/detail.php:500
 #, php-format
 msgid "Deleted menu #%s"
 msgstr ""
 
 #. translators: %s: the menu item's numeric ID.
-#: includes/audit/detail.php:507
+#: includes/audit/detail.php:513
 #, php-format
 msgid "Deleted menu item #%s"
 msgstr ""
 
 #. translators: %s: the deleted revision's numeric ID.
-#: includes/audit/detail.php:520
+#: includes/audit/detail.php:526
 #, php-format
 msgid "Deleted revision #%s"
 msgstr ""
 
 #. translators: 1: meta key name. 2: the term's numeric ID.
-#: includes/audit/detail.php:552
+#: includes/audit/detail.php:558
 #, php-format
 msgid "Updated meta key `%1$s` on term #%2$s"
 msgstr ""
 
 #. translators: 1: meta key name. 2: the user's numeric ID.
-#: includes/audit/detail.php:570
+#: includes/audit/detail.php:576
 #, php-format
 msgid "Updated meta key `%1$s` on user #%2$s"
 msgstr ""
 
 #. translators: 1: meta key name. 2: the term's numeric ID.
-#: includes/audit/detail.php:588
+#: includes/audit/detail.php:594
 #, php-format
 msgid "Deleted meta key `%1$s` on term #%2$s"
 msgstr ""
 
 #. translators: 1: meta key name. 2: the user's numeric ID.
-#: includes/audit/detail.php:607
+#: includes/audit/detail.php:613
 #, php-format
 msgid "Deleted meta key `%1$s` on user #%2$s"
 msgstr ""
 
 #. translators: %s: the product's numeric ID.
-#: includes/audit/detail.php:625
+#: includes/audit/detail.php:631
 #, php-format
 msgid "Deleted product #%s"
 msgstr ""
 
 #. translators: %s: comma-separated list of the site setting names that were changed.
-#: includes/audit/detail.php:648
+#: includes/audit/detail.php:654
 #, php-format
 msgid "Updated site settings: %s"
 msgstr ""
 
 #. translators: %s: the variation's numeric ID.
-#: includes/audit/detail.php:659
+#: includes/audit/detail.php:665
 #, php-format
 msgid "Deleted product variation #%s"
 msgstr ""
 
+#. translators: %s: the post's numeric ID.
+#: includes/audit/detail.php:684
+#, php-format
+msgid "Replaced text in post #%s"
+msgstr ""
+
+#. translators: %s: the post's numeric ID.
+#: includes/audit/detail.php:695
+#, php-format
+msgid "Replaced a block in post #%s"
+msgstr ""
+
+#. translators: %s: how many posts were changed.
+#: includes/audit/detail.php:706
+#, php-format
+msgid "Replaced text in %s posts"
+msgstr ""
+
+#. translators: %s: the new item's numeric ID.
+#: includes/audit/detail.php:712
+#, php-format
+msgid "Created content item #%s"
+msgstr ""
+
+#. translators: %s: the item's numeric ID.
+#: includes/audit/detail.php:718
+#, php-format
+msgid "Updated content item #%s"
+msgstr ""
+
+#. translators: %s: the new term's numeric ID.
+#: includes/audit/detail.php:729
+#, php-format
+msgid "Created term #%s"
+msgstr ""
+
+#. translators: %s: the term's numeric ID.
+#: includes/audit/detail.php:735
+#, php-format
+msgid "Updated term #%s"
+msgstr ""
+
+#. translators: %s: the post's numeric ID.
+#: includes/audit/detail.php:746
+#, php-format
+msgid "Added terms to post #%s"
+msgstr ""
+
+#. translators: 1: the comment's numeric ID. 2: the moderation action.
+#: includes/audit/detail.php:757
+#, php-format
+msgid "Moderated comment #%1$s: %2$s"
+msgstr ""
+
+#. translators: %s: the new comment's numeric ID.
+#: includes/audit/detail.php:772
+#, php-format
+msgid "Created comment #%s"
+msgstr ""
+
+#. translators: %s: the comment's numeric ID.
+#: includes/audit/detail.php:777
+#, php-format
+msgid "Updated comment #%s"
+msgstr ""
+
+#. translators: %s: the post's numeric ID.
+#: includes/audit/detail.php:787
+#, php-format
+msgid "Set the featured image on post #%s"
+msgstr ""
+
+#. translators: %s: the new attachment's numeric ID.
+#: includes/audit/detail.php:798
+#: includes/audit/detail.php:804
+#, php-format
+msgid "Uploaded media #%s"
+msgstr ""
+
+#. translators: %s: the attachment's numeric ID.
+#: includes/audit/detail.php:810
+#, php-format
+msgid "Updated media #%s"
+msgstr ""
+
+#. translators: %s: the new block's numeric ID.
+#: includes/audit/detail.php:821
+#, php-format
+msgid "Created block #%s"
+msgstr ""
+
+#. translators: %s: the block's numeric ID.
+#: includes/audit/detail.php:827
+#, php-format
+msgid "Updated block #%s"
+msgstr ""
+
+#. translators: %s: the block's numeric ID.
+#: includes/audit/detail.php:838
+#, php-format
+msgid "Deleted block #%s"
+msgstr ""
+
+#. translators: %s: the new menu's numeric ID.
+#: includes/audit/detail.php:849
+#, php-format
+msgid "Created menu #%s"
+msgstr ""
+
+#. translators: %s: the menu's numeric ID.
+#: includes/audit/detail.php:855
+#, php-format
+msgid "Updated menu #%s"
+msgstr ""
+
+#. translators: %s: the new menu item's numeric ID.
+#: includes/audit/detail.php:866
+#, php-format
+msgid "Created menu item #%s"
+msgstr ""
+
+#. translators: %s: the menu item's numeric ID.
+#: includes/audit/detail.php:872
+#, php-format
+msgid "Updated menu item #%s"
+msgstr ""
+
+#. translators: %s: the template's theme//slug identifier.
+#: includes/audit/detail.php:883
+#, php-format
+msgid "Updated template `%s`"
+msgstr ""
+
+#. translators: %s: the post's numeric ID.
+#: includes/audit/detail.php:893
+#, php-format
+msgid "Updated Yoast SEO fields on post #%s"
+msgstr ""
+
+#. translators: %s: the post's numeric ID.
+#: includes/audit/detail.php:904
+#, php-format
+msgid "Updated Rank Math fields on post #%s"
+msgstr ""
+
+#. translators: %s: the post's numeric ID.
+#: includes/audit/detail.php:915
+#, php-format
+msgid "Updated Rank Math schema on post #%s"
+msgstr ""
+
+#. translators: %s: the post's numeric ID.
+#: includes/audit/detail.php:926
+#, php-format
+msgid "Updated All in One SEO fields on post #%s"
+msgstr ""
+
+#. translators: %s: the post's numeric ID.
+#: includes/audit/detail.php:937
+#, php-format
+msgid "Updated Slim SEO fields on post #%s"
+msgstr ""
+
+#. translators: %s: the post's numeric ID.
+#: includes/audit/detail.php:948
+#, php-format
+msgid "Updated custom fields on post #%s"
+msgstr ""
+
+#. translators: %s: the term's numeric ID.
+#: includes/audit/detail.php:959
+#, php-format
+msgid "Updated custom fields on term #%s"
+msgstr ""
+
+#. translators: %s: the user's numeric ID.
+#: includes/audit/detail.php:970
+#, php-format
+msgid "Updated custom fields on user #%s"
+msgstr ""
+
+#. translators: %s: the new product's numeric ID.
+#: includes/audit/detail.php:981
+#, php-format
+msgid "Created product #%s"
+msgstr ""
+
+#. translators: %s: the product's numeric ID.
+#: includes/audit/detail.php:987
+#, php-format
+msgid "Updated product #%s"
+msgstr ""
+
+#. translators: %s: the new variation's numeric ID.
+#: includes/audit/detail.php:998
+#, php-format
+msgid "Created product variation #%s"
+msgstr ""
+
+#. translators: %s: the variation's numeric ID.
+#: includes/audit/detail.php:1004
+#, php-format
+msgid "Updated product variation #%s"
+msgstr ""
+
+#. translators: %s: the new attribute's numeric ID.
+#: includes/audit/detail.php:1015
+#, php-format
+msgid "Created product attribute #%s"
+msgstr ""
+
+#. translators: %s: the attribute's numeric ID.
+#: includes/audit/detail.php:1020
+#, php-format
+msgid "Updated product attribute #%s"
+msgstr ""
+
+#. translators: %s: the new order's numeric ID.
+#: includes/audit/detail.php:1030
+#, php-format
+msgid "Created order #%s"
+msgstr ""
+
+#. translators: %s: the order's numeric ID.
+#: includes/audit/detail.php:1036
+#, php-format
+msgid "Updated order #%s"
+msgstr ""
+
+#. translators: %s: the order's numeric ID.
+#: includes/audit/detail.php:1047
+#, php-format
+msgid "Added a note to order #%s"
+msgstr ""
+
+#. translators: %s: the new customer's numeric ID.
+#: includes/audit/detail.php:1058
+#, php-format
+msgid "Created customer #%s"
+msgstr ""
+
+#. translators: %s: the customer's numeric ID.
+#: includes/audit/detail.php:1064
+#, php-format
+msgid "Updated customer #%s"
+msgstr ""
+
+#. translators: %s: the new coupon's numeric ID.
+#: includes/audit/detail.php:1075
+#, php-format
+msgid "Created coupon #%s"
+msgstr ""
+
+#. translators: %s: the coupon's numeric ID.
+#: includes/audit/detail.php:1081
+#, php-format
+msgid "Updated coupon #%s"
+msgstr ""
+
+#. translators: %s: the new shipping zone's numeric ID.
+#: includes/audit/detail.php:1092
+#, php-format
+msgid "Created shipping zone #%s"
+msgstr ""
+
+#. translators: %s: the shipping zone's numeric ID.
+#: includes/audit/detail.php:1097
+#, php-format
+msgid "Updated shipping zone #%s"
+msgstr ""
+
+#. translators: %s: the new shipping method instance's numeric ID.
+#: includes/audit/detail.php:1107
+#, php-format
+msgid "Created shipping method #%s"
+msgstr ""
+
+#. translators: %s: the shipping method instance's numeric ID.
+#: includes/audit/detail.php:1112
+#, php-format
+msgid "Updated shipping method #%s"
+msgstr ""
+
+#. translators: %s: the new tax rate's numeric ID.
+#: includes/audit/detail.php:1122
+#, php-format
+msgid "Created tax rate #%s"
+msgstr ""
+
+#. translators: %s: the tax rate's numeric ID.
+#: includes/audit/detail.php:1127
+#, php-format
+msgid "Updated tax rate #%s"
+msgstr ""
+
+#. translators: %s: the new tax class's slug.
+#: includes/audit/detail.php:1137
+#, php-format
+msgid "Created tax class `%s`"
+msgstr ""
+
+#. translators: %s: the new event's numeric ID.
+#: includes/audit/detail.php:1143
+#, php-format
+msgid "Created event #%s"
+msgstr ""
+
+#. translators: %s: the event's numeric ID.
+#: includes/audit/detail.php:1149
+#, php-format
+msgid "Updated event #%s"
+msgstr ""
+
+#. translators: %s: the event's numeric ID.
+#: includes/audit/detail.php:1160
+#, php-format
+msgid "Trashed event #%s"
+msgstr ""
+
+#. translators: %s: the new venue's numeric ID.
+#: includes/audit/detail.php:1171
+#, php-format
+msgid "Created venue #%s"
+msgstr ""
+
+#. translators: %s: the venue's numeric ID.
+#: includes/audit/detail.php:1177
+#, php-format
+msgid "Updated venue #%s"
+msgstr ""
+
+#. translators: %s: the new organizer's numeric ID.
+#: includes/audit/detail.php:1188
+#, php-format
+msgid "Created organizer #%s"
+msgstr ""
+
+#. translators: %s: the organizer's numeric ID.
+#: includes/audit/detail.php:1194
+#, php-format
+msgid "Updated organizer #%s"
+msgstr ""
+
+#. translators: %s: the post's numeric ID.
+#: includes/audit/detail.php:1205
+#, php-format
+msgid "Replaced text in Avada page #%s"
+msgstr ""
+
+#. translators: %s: the new listing's numeric ID.
+#: includes/audit/detail.php:1216
+#, php-format
+msgid "Created listing #%s"
+msgstr ""
+
+#. translators: %s: the listing's numeric ID.
+#: includes/audit/detail.php:1222
+#, php-format
+msgid "Updated listing #%s"
+msgstr ""
+
 #. translators: %s: what the call tried to do, such as "Updated meta key `x` on post #5".
-#: includes/audit/detail.php:751
+#: includes/audit/detail.php:1311
 #, php-format
 msgid "Attempted: %s"
 msgstr ""
@@ -9843,22 +10216,28 @@ msgstr[1] ""
 msgid "These tools could not be marked as reviewed."
 msgstr ""
 
-#: includes/bridge.php:819
+#. translators: %s: semicolon-separated groups of required field names, one group per accepted input shape.
+#: includes/bridge.php:325
+#, php-format
+msgid "Accepted input shapes require: %s."
+msgstr ""
+
+#: includes/bridge.php:902
 msgid "The bridged ability is no longer available."
 msgstr ""
 
-#: includes/bridge.php:849
+#: includes/bridge.php:932
 msgid "This bridged ability ran, but its result held a raw object that cannot be safely relayed over MCP. If it changes data, check the site before you repeat the call. Contact the site administrator."
 msgstr ""
 
 #. translators: 1: the plugin's name, for example "WooCommerce". 2: the error text that plugin returned.
-#: includes/bridge.php:969
+#: includes/bridge.php:1052
 #, php-format
 msgid "The %1$s plugin returned an error: %2$s"
 msgstr ""
 
 #. translators: 1: an ability namespace, for example "writer". 2: the error text that plugin returned.
-#: includes/bridge.php:975
+#: includes/bridge.php:1058
 #, php-format
 msgid "A plugin that registers tools under the \"%1$s\" namespace returned an error: %2$s"
 msgstr ""
@@ -9968,22 +10347,26 @@ msgstr ""
 msgid "Byte length of the raw stored content (strlen of post_content), present even when include_content is false so a caller can preflight size before a full fetch. Reported as 0 for a password-protected post, regardless of its real length."
 msgstr ""
 
-#: includes/helpers.php:2858
+#: includes/helpers.php:2270
+msgid "True when the excerpt was generated by WordPress from the post body because the post has no excerpt of its own. False when the author wrote one, or for a password-protected post."
+msgstr ""
+
+#: includes/helpers.php:2864
 msgid "The request could not be completed."
 msgstr ""
 
-#: includes/helpers.php:3043
+#: includes/helpers.php:3049
 msgid "Trash is disabled on this site, so this content cannot be moved to the Trash. Refusing to permanently delete it."
 msgstr ""
 
 #. translators: 1: name of the value that saved, 2: name of the value that could not be.
-#: includes/helpers.php:3290
+#: includes/helpers.php:3296
 #, php-format
 msgid "%1$s was saved, but %2$s could not be changed: the site's persistent object cache is still returning the old value. The site is now stricter than requested. Flush the object cache (Redis, Memcached, or your host's cache) and save again."
 msgstr ""
 
 #. translators: 1: name of the value that saved, 2: name of the value that could not be.
-#: includes/helpers.php:3311
+#: includes/helpers.php:3317
 #, php-format
 msgid "%1$s was saved, but %2$s could not be changed: the site's persistent object cache is still returning the old value. Some of your changes did not take - re-check your settings rather than assuming this save either fully applied or fully failed. Flush the object cache (Redis, Memcached, or your host's cache) and save again."
 msgstr ""

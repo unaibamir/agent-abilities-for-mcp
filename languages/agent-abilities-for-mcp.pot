@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-08T20:07:16+05:00\n"
+"POT-Creation-Date: 2026-11-08T20:34:02+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -1888,7 +1888,7 @@ msgid "Get event"
 msgstr ""
 
 #: includes/abilities/tec/events.php:75
-msgid "Read a single event by ID, including its start/end dates, venue, and organizers."
+msgid "Read a single event by ID, including its start/end dates, venue, organizers, and description (the stored body, blank for a password-protected event)."
 msgstr ""
 
 #: includes/abilities/tec/events.php:82
@@ -2046,23 +2046,23 @@ msgid "ID of the organizer to read."
 msgstr ""
 
 #: includes/abilities/tec/organizers.php:275
-#: includes/abilities/tec/organizers.php:369
+#: includes/abilities/tec/organizers.php:373
 msgid "Organizer name."
 msgstr ""
 
 #: includes/abilities/tec/organizers.php:280
-#: includes/abilities/tec/organizers.php:374
+#: includes/abilities/tec/organizers.php:378
 msgid "Contact email."
 msgstr ""
 
 #: includes/abilities/tec/organizers.php:284
-#: includes/abilities/tec/organizers.php:378
+#: includes/abilities/tec/organizers.php:382
 #: includes/abilities/tec/venues.php:144
 msgid "Phone number."
 msgstr ""
 
 #: includes/abilities/tec/organizers.php:289
-#: includes/abilities/tec/organizers.php:383
+#: includes/abilities/tec/organizers.php:387
 #: includes/abilities/tec/venues.php:149
 msgid "Website URL."
 msgstr ""
@@ -2071,11 +2071,11 @@ msgstr ""
 msgid "Publication status. Defaults to draft. Setting publish requires the publish_tribe_organizers capability."
 msgstr ""
 
-#: includes/abilities/tec/organizers.php:365
+#: includes/abilities/tec/organizers.php:369
 msgid "ID of the organizer to update."
 msgstr ""
 
-#: includes/abilities/tec/organizers.php:388
+#: includes/abilities/tec/organizers.php:392
 msgid "Publication status. Setting publish requires the publish_tribe_organizers capability."
 msgstr ""
 
@@ -2184,15 +2184,15 @@ msgstr ""
 msgid "ID of the venue to read."
 msgstr ""
 
-#: includes/abilities/tec/venues.php:387
+#: includes/abilities/tec/venues.php:391
 msgid "Venue name. Optional on update, required only on create."
 msgstr ""
 
-#: includes/abilities/tec/venues.php:390
+#: includes/abilities/tec/venues.php:394
 msgid "Publication status. Leave it out to keep the venue's current status. Setting publish requires the publish_tribe_venues capability."
 msgstr ""
 
-#: includes/abilities/tec/venues.php:394
+#: includes/abilities/tec/venues.php:398
 msgid "ID of the venue to update."
 msgstr ""
 
@@ -3344,6 +3344,7 @@ msgid "The SKU \"%s\" is already in use by another product."
 msgstr ""
 
 #: includes/abilities/woocommerce/products.php:737
+#: includes/abilities/woocommerce/variations.php:567
 msgid "The sale price cannot be higher than the regular price, so nothing was saved. Lower the sale price or raise the regular price."
 msgstr ""
 
@@ -3804,55 +3805,55 @@ msgstr ""
 msgid "The SKU \"%s\" is already in use by another product or variation."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:573
+#: includes/abilities/woocommerce/variations.php:586
 msgid "stock_status cannot be set while this variation manages or inherits stock management: WooCommerce derives it from stock_quantity. Set stock_quantity instead, or set manage_stock to false on a variation whose parent does not manage stock."
 msgstr ""
 
 #. translators: %s: comma-separated list of the rejected attribute keys.
-#: includes/abilities/woocommerce/variations.php:676
+#: includes/abilities/woocommerce/variations.php:689
 #, php-format
 msgid "The parent product declares no attributes, so no attribute can be set on its variations. Rejected: %s. Add the attributes to the parent product first."
 msgstr ""
 
 #. translators: 1: comma-separated list of the rejected attribute keys. 2: comma-separated list of every attribute key the parent declares.
-#: includes/abilities/woocommerce/variations.php:685
+#: includes/abilities/woocommerce/variations.php:698
 #, php-format
 msgid "The parent product uses none of its attributes for variations, so no attribute can be set on its variations. Rejected: %1$s. It declares %2$s for display only; turn on \"Used for variations\" for one of those on the parent product first."
 msgstr ""
 
 #. translators: 1: comma-separated list of the rejected attribute keys. 2: comma-separated list of the parent's variation attribute keys.
-#: includes/abilities/woocommerce/variations.php:697
+#: includes/abilities/woocommerce/variations.php:710
 #, php-format
 msgid "The parent product does not declare these attributes: %1$s. Its variation attribute keys are: %2$s. Use those exactly (a global attribute is prefixed pa_)."
 msgstr ""
 
 #. translators: 1: comma-separated list of the rejected attribute keys. 2: comma-separated list of the parent's variation attribute keys.
-#: includes/abilities/woocommerce/variations.php:708
+#: includes/abilities/woocommerce/variations.php:721
 #, php-format
 msgid "The parent product declares these attributes but does not use them for variations, so setting them would apply nothing: %1$s. Its variation attribute keys are: %2$s. Use one of those, or turn on \"Used for variations\" for the attribute on the parent product first."
 msgstr ""
 
 #. translators: 1: attribute key. 2: the rejected value. 3: comma-separated list of the parent's options for that attribute.
-#: includes/abilities/woocommerce/variations.php:770
+#: includes/abilities/woocommerce/variations.php:783
 #, php-format
 msgid "%1$s=%2$s (its options are: %3$s)"
 msgstr ""
 
 #. translators: %s: semicolon-separated list of rejected key=value pairs, each with the parent's options for that attribute.
-#: includes/abilities/woocommerce/variations.php:785
+#: includes/abilities/woocommerce/variations.php:798
 #, php-format
 msgid "These attribute values are not options the parent product declares, so setting them would apply nothing: %s. Use one of the listed options exactly (the match is case-sensitive), or send an empty string to leave the attribute as \"Any\"."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:998
+#: includes/abilities/woocommerce/variations.php:1011
 msgid "The variation id to update."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:1005
+#: includes/abilities/woocommerce/variations.php:1018
 msgid "A flat map of attribute name to the chosen value (strings only). Every key must be one the PARENT product already declares, in the parent's own form: a global attribute uses its pa_-prefixed taxonomy slug (pa_size), a custom one its sanitized name (size). A key the parent does not declare is rejected, and the error names the keys that would have worked. Unlike every other field on this ability, this replaces the variation's entire attribute map: any attribute not included here is cleared, not preserved."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:1195
+#: includes/abilities/woocommerce/variations.php:1208
 msgid "The variation id to permanently delete."
 msgstr ""
 
@@ -10265,27 +10266,27 @@ msgid "These tools could not be marked as reviewed."
 msgstr ""
 
 #. translators: %s: semicolon-separated groups of required field names, one group per accepted input shape.
-#: includes/bridge.php:361
+#: includes/bridge.php:368
 #, php-format
 msgid "Accepted input shapes require: %s."
 msgstr ""
 
-#: includes/bridge.php:938
+#: includes/bridge.php:945
 msgid "The bridged ability is no longer available."
 msgstr ""
 
-#: includes/bridge.php:968
+#: includes/bridge.php:975
 msgid "This bridged ability ran, but its result held a raw object that cannot be safely relayed over MCP. If it changes data, check the site before you repeat the call. Contact the site administrator."
 msgstr ""
 
 #. translators: 1: the plugin's name, for example "WooCommerce". 2: the error text that plugin returned.
-#: includes/bridge.php:1088
+#: includes/bridge.php:1095
 #, php-format
 msgid "The %1$s plugin returned an error: %2$s"
 msgstr ""
 
 #. translators: 1: an ability namespace, for example "writer". 2: the error text that plugin returned.
-#: includes/bridge.php:1094
+#: includes/bridge.php:1101
 #, php-format
 msgid "A plugin that registers tools under the \"%1$s\" namespace returned an error: %2$s"
 msgstr ""
@@ -11277,7 +11278,7 @@ msgid "Site brief"
 msgstr ""
 
 #. translators: %s: the name of the input field that held the URL.
-#: includes/text.php:126
+#: includes/text.php:139
 #, php-format
 msgid "The %s value is not a valid URL, so nothing was changed. Use an https:// or http:// address, a mailto: or tel: link, a path starting with /, or an anchor starting with #."
 msgstr ""

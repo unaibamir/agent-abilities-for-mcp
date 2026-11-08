@@ -74,10 +74,15 @@ function aafm_render_bridge_directory(): void {
 	aafm_render_bridge_review_card( $groups, $enabled );
 
 	echo '<div class="aafm-integrations-disclaimer">';
+	// A short lead, with the caveats behind See more so the box stays readable on a phone.
+	$disclaimer_more = '<p>' . esc_html__( 'The same plugin also wrote each tool\'s read label, its permission check and the description the agent reads, and none of that has been reviewed here.', 'agent-abilities-for-mcp' ) . '</p>'
+		. '<p>' . esc_html__( 'A plugin that doesn\'t mark its reads as read-only loses them in read-only mode and under Allow only read tools. People on lower roles can see the names of tools they can\'t run, and the plugin\'s own check refuses the call.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo wp_kses(
 		aafm_get_notice_html(
 			'warning',
-			__( 'These abilities are written by other plugins, so what they read and change is up to them. Unlike this plugin\'s own abilities, a bridged ability\'s output is not filtered or redacted here: whatever the third-party ability returns is what the agent sees. It can still only touch what the connected account\'s WordPress role allows, and every call is recorded in the activity log. Turn on only what you trust the connected agent to run. The same plugin also wrote each tool\'s read label, its permission check and the description the agent reads, and none of that has been reviewed here. A plugin that doesn\'t mark its reads as read-only loses them in read-only mode and under Allow only read tools. People on lower roles can see the names of tools they can\'t run, and the plugin\'s own check refuses the call.', 'agent-abilities-for-mcp' )
+			'<p>' . esc_html__( 'These abilities are written by other plugins, so what they read and change is up to them, and their output is not filtered or redacted here. They can only touch what the connected account\'s WordPress role allows, and every call is recorded in the activity log. Turn on only what you trust the connected agent to run.', 'agent-abilities-for-mcp' ) . '</p>'
+				. aafm_get_set_more_html( __( 'See more about tools from other plugins', 'agent-abilities-for-mcp' ), $disclaimer_more ),
+			array( 'html' => true )
 		),
 		aafm_admin_allowed_html()
 	);

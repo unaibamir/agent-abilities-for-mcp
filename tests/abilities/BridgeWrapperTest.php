@@ -1437,6 +1437,19 @@ final class BridgeWrapperTest extends TestCase {
 	}
 
 	/**
+	 * Discovery has the same WP_DEBUG default as execute: a bridged tool's crashing permission check
+	 * is denied quietly during tools/list, while this plugin's own tools stay loud.
+	 */
+	public function test_a_bridged_permission_crash_during_discovery_is_denied_not_rethrown_under_wp_debug(): void {
+		$this->assertTrue( defined( 'WP_DEBUG' ) && WP_DEBUG, 'The suite runs with WP_DEBUG on, the case this pins.' );
+
+		$this->assertFalse( aafm_deny_crashed_permission_check( 'aafm-bridge/vendor-throws', new \RuntimeException( 'secret-token' ) ) );
+
+		$this->expectException( \RuntimeException::class );
+		aafm_deny_crashed_permission_check( 'aafm/get-posts', new \RuntimeException( 'own tool' ) );
+	}
+
+	/**
 	 * A source that returns the core exception code on purpose, with its own text, is an ordinary
 	 * foreign error: its text is relayed and its code is recorded behind the foreign prefix.
 	 */

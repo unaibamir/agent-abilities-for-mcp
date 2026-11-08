@@ -101,14 +101,22 @@ function aafm_checked_url( string $url, string $field ) {
 	}
 
 	$clean = esc_url_raw( $url );
-	$valid = '' !== $clean;
+
+	// What esc_url_raw() is allowed to hand back: the input with spaces written as %20, and a bare
+	// host name with http:// in front. Anything else it did (dropping characters, a different
+	// scheme, an empty result) is a rewrite, and a rewrite is a refusal.
+	$expected = str_replace( ' ', '%20', $url );
+	$valid    = '' !== $clean;
 	if ( $valid ) {
-		$has_scheme = 1 === preg_match( '/^([a-z][a-z0-9+.\-]*):/i', $url, $found );
-		if ( $has_scheme ) {
-			$valid = strtolower( (string) $found[1] ) === strtolower( (string) wp_parse_url( $clean, PHP_URL_SCHEME ) );
-		} elseif ( ! in_array( $url[0], array( '/', '#', '?' ), true ) ) {
-			$valid = 1 === preg_match( '~^(?:[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?\.)+[a-z]{2,}(?::\d+)?(?:[/?#]\S*)?$~i', $url );
+		$has_scheme = 1 === preg_match( '/^[a-z][a-z0-9+.\-]*:/i', $url );
+		if ( ! $has_scheme && ! in_array( $url[0], array( '/', '#', '?' ), true ) ) {
+			// A scheme-less host such as example.com/page, including punycode and Unicode hosts.
+			$valid    = 1 === preg_match( '~^(?:[^\s/?#:@.<>"\'\\\\]+\.)+[^\s/?#:@.<>"\'\\\\]{2,}(?::\d+)?(?:[/?#]\S*)?$~u', $url );
+			$expected = 'http://' . $expected;
+		} elseif ( 1 === preg_match( '~^[a-z][a-z0-9+.\-]*://[^/?#]*\s~i', $url ) ) {
+			$valid = false; // Whitespace inside the host.
 		}
+		$valid = $valid && $clean === $expected;
 	}
 	if ( ! $valid ) {
 		return new WP_Error(

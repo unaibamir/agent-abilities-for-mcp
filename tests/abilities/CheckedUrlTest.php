@@ -46,6 +46,10 @@ final class CheckedUrlTest extends TestCase {
 			'empty clears'    => array( '', '' ),
 			'blank clears'    => array( "  \t", '' ),
 			'padded'          => array( '  https://example.com/x  ', 'https://example.com/x' ),
+			'punycode tld'    => array( 'example.xn--p1ai', 'http://example.xn--p1ai' ),
+			'punycode path'   => array( 'example.xn--p1ai/page', 'http://example.xn--p1ai/page' ),
+			'space in path'   => array( 'https://example.com/a b', 'https://example.com/a%20b' ),
+			'port'            => array( 'https://example.com:8443/x', 'https://example.com:8443/x' ),
 		);
 	}
 
@@ -65,6 +69,13 @@ final class CheckedUrlTest extends TestCase {
 		$this->assertStringNotContainsString( $input, $result->get_error_message(), 'The refused value is not echoed back.' );
 	}
 
+	public function test_an_internationalized_host_is_accepted(): void {
+		$result = aafm_checked_url( "\u{43F}\u{440}\u{438}\u{43C}\u{435}\u{440}.\u{440}\u{444}/page", 'url' );
+
+		$this->assertIsString( $result );
+		$this->assertStringStartsWith( 'http://', $result );
+	}
+
 	/**
 	 * Inputs that are refused.
 	 *
@@ -72,12 +83,15 @@ final class CheckedUrlTest extends TestCase {
 	 */
 	public static function refused(): array {
 		return array(
-			'javascript'    => array( 'javascript:alert(1)' ),
-			'mixed case'    => array( 'JaVaScRiPt:alert(1)' ),
-			'data'          => array( 'data:text/html,<script>alert(1)</script>' ),
-			'junk sentence' => array( 'not a url at all' ),
-			'single word'   => array( 'nonsense' ),
-			'vbscript'      => array( 'vbscript:msgbox(1)' ),
+			'javascript'     => array( 'javascript:alert(1)' ),
+			'mixed case'     => array( 'JaVaScRiPt:alert(1)' ),
+			'data'           => array( 'data:text/html,<script>alert(1)</script>' ),
+			'junk sentence'  => array( 'not a url at all' ),
+			'single word'    => array( 'nonsense' ),
+			'vbscript'       => array( 'vbscript:msgbox(1)' ),
+			'markup in path' => array( 'https://example.com/<x>' ),
+			'braces in path' => array( 'https://example.com/a{b}' ),
+			'space in host'  => array( 'https://not a url.example/' ),
 		);
 	}
 }

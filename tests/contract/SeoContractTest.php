@@ -263,6 +263,12 @@ final class SeoContractTest extends TestCase {
 		if ( method_exists( $plugin, 'init_frontend' ) ) {
 			$plugin->init_frontend();
 		}
+		// The suite restores WordPress hooks after every test, but rank_math()->head built by an
+		// earlier test survives, so the renderer would find a head with no hooks behind it. Build the
+		// head objects here so their hooks belong to this test.
+		if ( isset( $plugin->frontend ) && is_object( $plugin->frontend ) ) {
+			$plugin->frontend->integrations();
+		}
 
 		$post_id = self::factory()->post->create(
 			array(

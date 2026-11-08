@@ -101,7 +101,7 @@ WordPress 6.9 added the Abilities API, and the official MCP Adapter turns those 
 
 = Pages built with a page builder =
 
-A page builder owns its page's layout, so an edit to the post text can report success and change nothing on the page, break the builder's markup, or get overwritten the next time someone saves in the builder. For Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks and WPBakery the plugin checks first and refuses the write with an error naming the builder. Avada's two own tools are the exception and refuse shortcode changes.
+A page builder owns its page's layout, so an edit to the post text can report success and change nothing on the page, break the builder's markup, or get overwritten the next time someone saves in the builder. For Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks and WPBakery the plugin checks first and refuses the write with an error naming the builder. There are two exceptions. An edit that only sets the excerpt goes through and leaves the post's stored content as it was, unless the plugin can't tell which builder owns the post. Avada's two own tools can change text and refuse shortcode changes.
 
 = Compatible clients =
 
@@ -231,7 +231,7 @@ For layout, the AI can list block types and read one block's attributes, plus fi
 
 = Will an agent break my Elementor or Divi page? =
 
-Before any content write the plugin checks whether a page builder owns the post, and if one does it refuses with an error that names the builder. Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks and WPBakery are covered, so edit those pages in the builder itself. Avada's two dedicated tools can replace text in a page and refuse changes to its shortcodes.
+Before any content write the plugin checks whether a page builder owns the post, and if one does it refuses with an error that names the builder. Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks and WPBakery are covered, so edit those pages in the builder itself. The one write it lets through is an edit that only sets the excerpt, which leaves the stored content as it was. Avada's two dedicated tools can replace text in a page and refuse changes to its shortcodes.
 
 = Can an AI agent manage my WooCommerce store? =
 
@@ -309,7 +309,7 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 = 1.11.1 =
 
 * **Fix:** The high-risk lock now holds wc-create-order, WooCommerce's own order status and order update tools, and the Secure Custom Fields tools that can store a callback name, and its filter accepts other plugins' slugs. Shop manager connections no longer reach wc-create-order, and post tools no longer reach a type whose own tool is off.
-* **Fix:** Agent writes to WPBakery, Bricks, Oxygen, Breakdance and Brizy pages are refused, but any page builder's post or page now accepts an edit that only sets the excerpt, and its layout stays as it was. A role with only read_private_posts no longer lists other people's drafts, the user meta tools can't reach the MCP session store, Test connection no longer sends your login cookies to another host, and a bridged tool's crash text no longer reaches the agent under WP_DEBUG.
+* **Fix:** Agent writes to WPBakery, Bricks, Oxygen, Breakdance and Brizy pages are refused, but a page builder's post or page now accepts an edit that only sets the excerpt and keeps its stored content as it was, unless the plugin can't tell which builder owns it. A role with only read_private_posts no longer lists other people's drafts, the user meta tools can't reach the MCP session store, Test connection no longer sends your login cookies to another host, and a bridged tool's crash text no longer reaches the agent under WP_DEBUG.
 * **Fix:** Bridged WooCommerce product create and update tools no longer leave ChatGPT stuck on an old tool list. Rank Math's get-head shows a post's own title and description, the Activity Log records which object each built-in write tool changed (a count for the site-wide replace), and invalid URLs, an event end before its start, a sale price above the regular price and similar bad input are refused with an error instead of being saved or ignored.
 * **Fix:** A batch of smaller fixes across Quick Connect and Reset, subsite deletion, Force draft on product variations, meta tools that now say why a key was refused, the product types wc-create-product offers, protected excerpts, term backslashes, empty meta, SEO head and search answers, OAuth discovery on subfolder installs, and LiteSpeed and WP Fastest Cache purging after agent meta writes.
 * **Chore:** Five old admin save actions are gone (a script calling them directly should use aafm_save_abilities_page), readme wording is corrected, and integration minimum versions are listed.

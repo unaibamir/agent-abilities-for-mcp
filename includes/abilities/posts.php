@@ -2156,6 +2156,12 @@ function aafm_exec_replace_sitewide( array $input ) {
 		return $status;
 	}
 
+	// Someone else's draft, pending or scheduled item is neither counted nor scanned for a user who
+	// may not edit it, so total_matches says nothing about its content.
+	$own_scope = $type_object instanceof WP_Post_Type && aafm_status_needs_own_posts_only( $status, $type_object )
+		? array( 'author__in' => array( get_current_user_id() ) )
+		: array();
+
 	$search  = (string) $input['search'];
 	$replace = (string) $input['replace'];
 	$dry_run = ! array_key_exists( 'dry_run', $input ) || (bool) $input['dry_run'];
@@ -2210,7 +2216,7 @@ function aafm_exec_replace_sitewide( array $input ) {
 				'posts_per_page'    => 1,
 				'no_found_rows'     => false,
 				'aafm_query_marker' => $query_marker,
-			)
+			) + $own_scope
 		);
 		$total_matches = (int) $count_probe->found_posts;
 		$truncated     = $total_matches > AAFM_REPLACE_SITEWIDE_MAX_POSTS;
@@ -2249,7 +2255,7 @@ function aafm_exec_replace_sitewide( array $input ) {
 					'order'             => 'ASC',
 					'no_found_rows'     => true,
 					'aafm_query_marker' => $query_marker,
-				)
+				) + $own_scope
 			);
 		} finally {
 			remove_filter( 'posts_pre_query', $scan_filter, PHP_INT_MAX );

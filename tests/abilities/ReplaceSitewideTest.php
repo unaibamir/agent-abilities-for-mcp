@@ -680,4 +680,52 @@ final class ReplaceSitewideTest extends TestCase {
 		$this->assertFalse( $second['truncated'] );
 		$this->assertSame( 1, $second['total_matches'] );
 	}
+
+	/**
+	 * A role that may read private posts but not edit other people's sees only its own drafts:
+	 * another author's draft is neither counted nor scanned, so total_matches says nothing about it.
+	 */
+	public function test_read_private_posts_alone_does_not_count_others_drafts(): void {
+		$other = self::factory()->user->create( array( 'role' => 'editor' ) );
+		self::factory()->post->create(
+			array(
+				'post_author'  => $other,
+				'post_status'  => 'draft',
+				'post_content' => 'acquisition of Acme',
+			)
+		);
+		$me   = self::factory()->user->create( array( 'role' => 'author' ) );
+		$user = get_user_by( 'id', $me );
+		$user->add_cap( 'read_private_posts' );
+		wp_set_current_user( $me );
+
+		$out = aafm_exec_replace_sitewide(
+			array(
+				'search'  => 'acquisition of Acme',
+				'replace' => 'x',
+				'status'  => 'draft',
+			)
+		);
+
+		$this->assertSame( 0, $out['total_matches'] );
+		$this->assertSame( 0, $out['matched_posts'] );
+		$this->assertFalse( $out['truncated'] );
+
+		self::factory()->post->create(
+			array(
+				'post_author'  => $me,
+				'post_status'  => 'draft',
+				'post_content' => 'acquisition of Acme',
+			)
+		);
+		$out = aafm_exec_replace_sitewide(
+			array(
+				'search'  => 'acquisition of Acme',
+				'replace' => 'x',
+				'status'  => 'draft',
+			)
+		);
+		$this->assertSame( 1, $out['total_matches'] );
+		$this->assertSame( 1, $out['matched_posts'] );
+	}
 }

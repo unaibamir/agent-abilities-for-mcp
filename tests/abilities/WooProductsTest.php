@@ -469,6 +469,28 @@ final class WooProductsTest extends TestCase {
 	 * report success. The schema enumerates variable/grouped/external but this generic create
 	 * only builds simple products, so a non-simple request is rejected with an error.
 	 */
+	public function test_create_product_schema_offers_only_simple_and_the_executor_says_why(): void {
+		$this->acting_as( 'administrator' );
+
+		$type = aafm_args_wc_create_product()['input_schema']['properties']['type'];
+		$this->assertSame( array( 'simple' ), $type['enum'], 'The schema only offers what the create can build.' );
+		$this->assertStringContainsString( 'wc-create-product-variation', $type['description'], 'And points at the route for variable products.' );
+
+		foreach ( array( 'variable', 'grouped', 'external' ) as $requested ) {
+			$res = aafm_exec_wc_create_product(
+				array(
+					'name' => 'Typed Product',
+					'type' => $requested,
+				)
+			);
+			$this->assertInstanceOf( WP_Error::class, $res, $requested );
+			$this->assertSame( 'aafm_wc_unsupported_product_type', $res->get_error_code() );
+		}
+
+		$update = aafm_args_wc_update_product()['input_schema']['properties']['type'];
+		$this->assertContains( 'variable', $update['enum'], 'An update may still send the product\'s current type.' );
+	}
+
 	public function test_create_product_rejects_non_simple_type(): void {
 		$this->acting_as( 'administrator' );
 

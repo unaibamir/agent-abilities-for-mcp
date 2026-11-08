@@ -1112,7 +1112,8 @@ function aafm_args_wc_create_product(): array {
 	// request is rejected rather than silently downgraded, so the create-only restriction is
 	// documented here rather than on the shared write-properties description, which is also the
 	// base for the update ability's own type description (aafm_args_wc_update_product()).
-	$properties['type']['description'] = __( "The product's type. This ability only creates simple products; requesting grouped, external, or variable fails.", 'agent-abilities-for-mcp' );
+	$properties['type']['enum']        = array( 'simple' );
+	$properties['type']['description'] = __( "The product's type. This ability only creates simple products. For a variable product, create the parent in WooCommerce and add its variations with wc-create-product-variation.", 'agent-abilities-for-mcp' );
 
 	return array(
 		'label'               => aafm_ability_label( 'aafm/wc-create-product' ),
@@ -1160,7 +1161,11 @@ function aafm_exec_wc_create_product( array $input ) {
 	// success. The schema enumerates the other types, but they are not honored here.
 	$requested_type = isset( $input['type'] ) ? (string) $input['type'] : 'simple';
 	if ( 'simple' !== $requested_type ) {
-		return aafm_generic_error();
+		return new \WP_Error(
+			'aafm_wc_unsupported_product_type',
+			__( 'This tool only creates simple products. For a variable product, create the parent in WooCommerce and add its variations with wc-create-product-variation.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
 	}
 
 	// WooCommerce's own create path

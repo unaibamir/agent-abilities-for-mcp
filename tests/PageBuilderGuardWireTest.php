@@ -331,6 +331,46 @@ final class PageBuilderGuardWireTest extends TestCase {
 		$this->assertSame( 'Wire excerpt', get_post( $post_id )->post_excerpt );
 	}
 
+	public function test_a_real_tools_call_by_an_author_without_unfiltered_html_keeps_the_stored_body(): void {
+		$this->register_enabled( array( 'aafm/update-post' ) );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		$body   = '<div class="fl-builder-content" data-json="a\\b">1 < 2<script>keep()</script></div>';
+		kses_remove_filters();
+		$post_id = self::factory()->post->create(
+			wp_slash(
+				array(
+					'post_author'  => $author,
+					'post_status'  => 'publish',
+					'post_content' => $body,
+				)
+			)
+		);
+		update_post_meta( $post_id, '_fl_builder_data', array( 'node1' => array( 'type' => 'row' ) ) );
+		wp_set_current_user( $author ); // kses_init() adds the save filters for this user.
+
+		try {
+			$this->assertFalse( current_user_can( 'unfiltered_html' ) );
+			$server  = $this->build_single_ability_server( \WP\MCP\Core\McpAdapter::instance() );
+			$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
+			$result  = $handler->call_tool(
+				array(
+					'name'      => aafm_mcp_tool_name( 'aafm/update-post' ),
+					'arguments' => array(
+						'post_id' => $post_id,
+						'excerpt' => 'Author excerpt',
+					),
+				),
+				'req-page-builder-wire-excerpt-author'
+			);
+		} finally {
+			kses_remove_filters();
+		}
+
+		$this->assertFalse( $result->getIsError(), 'An author may set the excerpt on their own builder post.' );
+		$this->assertSame( 'Author excerpt', get_post( $post_id )->post_excerpt );
+		$this->assertSame( $body, get_post( $post_id )->post_content, 'KSES must not touch the stored body over the wire.' );
+	}
+
 	public function test_update_post_refuses_a_bricks_page_with_the_409_error(): void {
 		$this->register_enabled( array( 'aafm/update-post' ) );
 		$post_id        = self::factory()->post->create();

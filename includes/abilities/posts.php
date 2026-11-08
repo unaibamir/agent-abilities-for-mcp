@@ -82,7 +82,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'label'        => __( 'Update post', 'agent-abilities-for-mcp' ),
 		'description'  => sprintf(
 			/* translators: %s: page builder names, for example Elementor and Divi. */
-			__( 'Update an existing post by ID (publishing is a separate gate). Reaches a page, product, event, venue, organizer or listing only while that type\'s own tool is on. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. When the post is owned by a foreign page builder (%s), only an excerpt-only edit (post_id and excerpt, nothing else) is accepted, and the builder\'s stored content is left exactly as it was; any other change is refused, since it would either have no visible effect or corrupt the builder\'s stored markup.', 'agent-abilities-for-mcp' ),
+			__( 'Update an existing post by ID (publishing is a separate gate). Reaches a page, product, event, venue, organizer or listing only while that type\'s own tool is on. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. When the post is owned by a foreign page builder (%s), an edit that sends only post_id and excerpt is accepted and the post\'s stored content is left as it was; any other change is refused, and so is every edit when the plugin cannot tell which builder owns it, since a write here would either have no visible effect or corrupt the builder\'s stored markup.', 'agent-abilities-for-mcp' ),
 			aafm_page_builder_names()
 		),
 		'group'        => 'writes',
@@ -142,7 +142,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'label'        => __( 'Update content item', 'agent-abilities-for-mcp' ),
 		'description'  => sprintf(
 			/* translators: %s: page builder names, for example Elementor and Divi. */
-			__( 'Update an item by ID: an allowlisted custom content type, or a post, page, product, event, venue, organizer or listing while that type\'s own update tool is on (publishing requires that type\'s publish capability). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. When the item is owned by a foreign page builder (%s), only an excerpt-only edit (post_id and excerpt, nothing else) is accepted, and the builder\'s stored content is left exactly as it was; any other change is refused, since it would either have no visible effect or corrupt the builder\'s stored markup.', 'agent-abilities-for-mcp' ),
+			__( 'Update an item by ID: an allowlisted custom content type, or a post, page, product, event, venue, organizer or listing while that type\'s own update tool is on (publishing requires that type\'s publish capability). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. When the item is owned by a foreign page builder (%s), an edit that sends only post_id and excerpt is accepted and the item\'s stored content is left as it was; any other change is refused, and so is every edit when the plugin cannot tell which builder owns it, since a write here would either have no visible effect or corrupt the builder\'s stored markup.', 'agent-abilities-for-mcp' ),
 			aafm_page_builder_names()
 		),
 		'group'        => 'writes',
@@ -1289,18 +1289,17 @@ function aafm_exec_update_post( array $input ) {
 		return aafm_generic_error();
 	}
 
-	// A builder-owned post accepts one write: the excerpt alone, with the stored body pinned. The
-	// cached body must match the stored row before anything is written, or the pin cannot be
-	// trusted and the write is refused.
+	// A builder-owned post accepts one write: the excerpt alone, with its stored content pinned. The
+	// cached post must match the stored row before anything is written, or the write is refused.
 	$owning_builder = aafm_post_has_foreign_builder_ownership( $id );
 	$builder_row    = null;
 	if ( false !== $owning_builder ) {
 		if ( AAFM_BUILDER_OWNERSHIP_UNKNOWN === $owning_builder || ! aafm_page_builder_excerpt_only_input( $input ) ) {
 			return aafm_page_builder_owned_error( $owning_builder );
 		}
-		$builder_row = aafm_page_builder_stored_row( $id );
-		if ( null === $builder_row || $builder_row['post_content'] !== (string) $post->post_content ) {
-			return aafm_page_builder_owned_error( $owning_builder );
+		$builder_row = aafm_page_builder_excerpt_start( $post );
+		if ( is_wp_error( $builder_row ) ) {
+			return $builder_row;
 		}
 	}
 

@@ -10,12 +10,21 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests;
 
+use AAFM\Tests\Support\QueryFaultInjector;
+
 final class PageBuilderExcerptOnlyTest extends TestCase {
 
 	/**
-	 * Fallback markup that KSES would strip for a user without unfiltered_html.
+	 * Fallback markup that KSES would strip for a user without unfiltered_html, with backslashes,
+	 * a bare less-than and block JSON, so a missing or doubled slash shows.
 	 */
-	private const BODY = '<div class="fl-builder-content" data-x="1">Fallback<script>keep()</script></div>';
+	private const BODY = '<!-- wp:html {"path":"C:\\dir\\file"} --><div class="fl-builder-content" data-x="1">1 < 2 \\ Fallback<script>keep("a\\b")</script></div><!-- /wp:html -->';
+
+	/**
+	 * A title and post_content_filtered that KSES would also rewrite on a restricted save.
+	 */
+	private const TITLE    = 'Fish & Chips <b>x</b>';
+	private const FILTERED = '<p>filtered</p><script>f()</script>';
 
 	/**
 	 * The map_meta_cap filter that takes unfiltered_html away, so core re-filters the body on save.
@@ -57,17 +66,23 @@ final class PageBuilderExcerptOnlyTest extends TestCase {
 	private function builder_post( string $type, string $body, array $markers ): int {
 		kses_remove_filters();
 		$id = self::factory()->post->create(
-			array(
-				'post_type'    => $type,
-				'post_status'  => 'publish',
-				'post_content' => $body,
-				'post_excerpt' => 'Old excerpt',
+			wp_slash(
+				array(
+					'post_type'             => $type,
+					'post_status'           => 'publish',
+					'post_title'            => self::TITLE,
+					'post_content'          => $body,
+					'post_content_filtered' => self::FILTERED,
+					'post_excerpt'          => 'Old excerpt',
+				)
 			)
 		);
 		foreach ( $markers as $key => $value ) {
 			update_post_meta( $id, $key, $value );
 		}
 		$this->assertSame( $body, get_post( $id )->post_content, 'precondition: raw body stored' );
+		$this->assertSame( self::TITLE, get_post( $id )->post_title, 'precondition: raw title stored' );
+		$this->assertSame( self::FILTERED, get_post( $id )->post_content_filtered, 'precondition: raw filtered content stored' );
 		return $id;
 	}
 
@@ -99,7 +114,7 @@ final class PageBuilderExcerptOnlyTest extends TestCase {
 					'_bricks_editor_mode'    => 'bricks',
 				),
 			),
-			'wpbakery'        => array( 'wpbakery', '[vc_row][vc_column]<script>keep()</script>Hi[/vc_column][/vc_row]', array() ),
+			'wpbakery'        => array( 'wpbakery', '[vc_row el_class="a\\b"][vc_column]<script>keep()</script>1 < 2[/vc_column][/vc_row]', array() ),
 		);
 	}
 
@@ -129,7 +144,10 @@ final class PageBuilderExcerptOnlyTest extends TestCase {
 		clean_post_cache( $id );
 		$this->assertSame( 'New excerpt', get_post( $id )->post_excerpt, 'The excerpt still goes through the plain-text sanitizer.' );
 		$this->assertSame( $body, get_post( $id )->post_content, 'The body must stay byte for byte as stored.' );
-		$this->assertSame( $meta_before, get_post_meta( $id ), 'The builder data must stay as it was.' );
+		$this->assertSame( self::TITLE, get_post( $id )->post_title, 'KSES must not rewrite the title on this save.' );
+		$this->assertSame( self::FILTERED, get_post( $id )->post_content_filtered, 'KSES must not rewrite post_content_filtered on this save.' );
+		$this->assertSame( $meta_before, get_post_meta( $id ), 'Core and this plugin leave the marker meta alone.' );
+		$this->assertSame( array(), $this->pin_callbacks(), 'The pin is removed after the call.' );
 		$this->assertSame( $builder, aafm_post_has_foreign_builder_ownership( $id ), 'The post is still owned by the same builder.' );
 	}
 
@@ -286,10 +304,157 @@ final class PageBuilderExcerptOnlyTest extends TestCase {
 		);
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'aafm_page_builder_owned', $result->get_error_code() );
+		$this->assertSame( 'aafm_page_builder_content_unverified', $result->get_error_code() );
+		$this->assertStringContainsString( 'saved nothing', $result->get_error_message() );
+		$this->assertSame( 'changed underneath', get_post( $id )->post_content, 'The refusal clears the stale cache entry.' );
+		$this->assertSame( 'Old excerpt', get_post( $id )->post_excerpt );
+
+		$retry = aafm_exec_update_post(
+			array(
+				'post_id' => $id,
+				'excerpt' => 'Lands on retry',
+			)
+		);
+		$this->assertIsArray( $retry, 'With the cache cleared, the next call goes through.' );
+		$this->assertSame( 'Lands on retry', get_post( $id )->post_excerpt );
+		$this->assertSame( 'changed underneath', get_post( $id )->post_content );
+	}
+
+	public function test_a_cached_title_that_differs_from_the_stored_row_is_refused_before_writing(): void {
+		global $wpdb;
+		$id = $this->builder_post( 'post', self::BODY, array( '_elementor_data' => '[{"id":"e"}]' ) );
+		get_post( $id );
+		$wpdb->update( $wpdb->posts, array( 'post_title' => 'Title changed underneath' ), array( 'ID' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- the test needs a stale cache.
+		$this->acting_as( 'administrator' );
+
+		$result = aafm_exec_update_post(
+			array(
+				'post_id' => $id,
+				'excerpt' => 'Should not land',
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'aafm_page_builder_content_unverified', $result->get_error_code() );
+		$this->assertSame( 'Old excerpt', get_post( $id )->post_excerpt );
+	}
+
+	public function test_a_failed_stored_row_read_refuses_before_writing(): void {
+		$id = $this->builder_post( 'post', self::BODY, array( '_elementor_data' => '[{"id":"e"}]' ) );
+		$this->acting_as( 'administrator' );
+
+		$result = QueryFaultInjector::break_query_with_real_error(
+			'SELECT post_content, post_content_filtered, post_title',
+			static function () use ( $id ) {
+				return aafm_exec_update_post(
+					array(
+						'post_id' => $id,
+						'excerpt' => 'Should not land',
+					)
+				);
+			}
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'aafm_page_builder_content_unverified', $result->get_error_code() );
 		clean_post_cache( $id );
 		$this->assertSame( 'Old excerpt', get_post( $id )->post_excerpt );
-		$this->assertSame( 'changed underneath', get_post( $id )->post_content );
+	}
+
+	public function test_an_empty_excerpt_clears_it_and_keeps_the_body(): void {
+		$id = $this->builder_post( 'post', self::BODY, array( '_elementor_data' => '[{"id":"e"}]' ) );
+		$this->act_as_filtered_editor();
+
+		$result = aafm_exec_update_post(
+			array(
+				'post_id' => $id,
+				'excerpt' => '',
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( '', get_post( $id )->post_excerpt );
+		$this->assertSame( self::BODY, get_post( $id )->post_content );
+	}
+
+	public function test_a_builder_save_landing_just_before_the_write_is_kept(): void {
+		global $wpdb;
+		$id     = $this->builder_post( 'post', self::BODY, array( '_elementor_data' => '[{"id":"e"}]' ) );
+		$later  = '<div class="fl-builder-content">Saved in the builder a moment ago</div>';
+		$racing = static function ( array $data, array $raw ) use ( $id, $wpdb, $later ): array {
+			if ( isset( $raw['ID'] ) && (int) $raw['ID'] === $id ) {
+				$wpdb->update( $wpdb->posts, array( 'post_content' => $later ), array( 'ID' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- simulates a builder save between the check and the write.
+			}
+			return $data;
+		};
+		add_filter( 'wp_insert_post_data', $racing, 10, 2 );
+		$this->act_as_filtered_editor();
+
+		try {
+			$result = aafm_exec_update_post(
+				array(
+					'post_id' => $id,
+					'excerpt' => 'Raced excerpt',
+				)
+			);
+		} finally {
+			remove_filter( 'wp_insert_post_data', $racing, 10 );
+		}
+
+		$this->assertIsArray( $result );
+		clean_post_cache( $id );
+		$this->assertSame( $later, get_post( $id )->post_content, 'The pin writes the body stored at write time, not an older copy.' );
+		$this->assertSame( 'Raced excerpt', get_post( $id )->post_excerpt );
+	}
+
+	public function test_the_pin_is_removed_when_a_hook_throws(): void {
+		$id    = $this->builder_post( 'post', self::BODY, array( '_elementor_data' => '[{"id":"e"}]' ) );
+		$throw = static function ( int $post_id ) use ( $id ): void {
+			if ( $post_id === $id ) {
+				throw new \RuntimeException( 'hook failed' );
+			}
+		};
+		add_action( 'save_post', $throw );
+		$this->acting_as( 'administrator' );
+		$trackers = $this->revision_hooks();
+
+		$thrown = false;
+		try {
+			aafm_exec_update_post(
+				array(
+					'post_id' => $id,
+					'excerpt' => 'x',
+				)
+			);
+		} catch ( \RuntimeException $e ) {
+			$thrown = true;
+		} finally {
+			remove_action( 'save_post', $throw );
+		}
+
+		$this->assertTrue( $thrown );
+		$this->assertSame( array(), $this->pin_callbacks(), 'The pin is removed even when a hook throws.' );
+		$this->assertSame( $trackers, $this->revision_hooks(), 'The revision tracker is removed too.' );
+	}
+
+	/**
+	 * Every callback on _wp_put_post_revision, by priority; core hooks it itself.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function revision_hooks(): array {
+		global $wp_filter;
+		return isset( $wp_filter['_wp_put_post_revision'] ) ? $wp_filter['_wp_put_post_revision']->callbacks : array();
+	}
+
+	/**
+	 * The callbacks hooked on wp_insert_post_data at PHP_INT_MAX, where the pin sits.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private function pin_callbacks(): array {
+		global $wp_filter;
+		return isset( $wp_filter['wp_insert_post_data'] ) ? ( $wp_filter['wp_insert_post_data']->callbacks[ PHP_INT_MAX ] ?? array() ) : array();
 	}
 
 	public function test_a_body_changed_during_the_write_is_rolled_back_and_reported_as_no_change(): void {
@@ -326,6 +491,78 @@ final class PageBuilderExcerptOnlyTest extends TestCase {
 		$this->assertSame( 'Old excerpt', $after->post_excerpt );
 		$this->assertSame( $modified, $after->post_modified );
 		$this->assertSame( $before, wp_get_post_revisions( $id, array( 'fields' => 'ids' ) ), 'The revision saved by the undone edit is removed.' );
+	}
+
+	public function test_the_rollback_keeps_a_revision_someone_else_saved_meanwhile(): void {
+		global $wpdb;
+		$id     = $this->builder_post( 'post', self::BODY, array( '_elementor_data' => '[{"id":"e"}]' ) );
+		$other  = self::factory()->user->create( array( 'role' => 'editor' ) );
+		$theirs = 0;
+		$tamper = static function ( int $post_id ) use ( $id, $wpdb, $other, &$theirs ): void {
+			if ( $post_id !== $id || 0 !== $theirs ) {
+				return;
+			}
+			$me = get_current_user_id();
+			wp_set_current_user( $other );
+			$theirs = (int) _wp_put_post_revision( get_post( $id ) );
+			wp_set_current_user( $me );
+			$wpdb->update( $wpdb->posts, array( 'post_content' => 'rewritten by another plugin' ), array( 'ID' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- simulates a plugin rewriting the body on save.
+			clean_post_cache( $id );
+		};
+		add_action( 'save_post', $tamper );
+		$this->act_as_filtered_editor();
+
+		try {
+			$result = aafm_exec_update_post(
+				array(
+					'post_id' => $id,
+					'excerpt' => 'Should be undone',
+				)
+			);
+		} finally {
+			remove_action( 'save_post', $tamper );
+		}
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'aafm_page_builder_content_changed', $result->get_error_code() );
+		$this->assertGreaterThan( 0, $theirs );
+		$this->assertInstanceOf( \WP_Post::class, get_post( $theirs ), 'Another user\'s revision is not deleted by the rollback.' );
+		$this->assertSame( self::BODY, get_post( $id )->post_content );
+	}
+
+	public function test_a_restore_that_cannot_be_confirmed_returns_500_and_does_not_claim_no_change(): void {
+		global $wpdb;
+		$id     = $this->builder_post( 'post', self::BODY, array( '_elementor_data' => '[{"id":"e"}]' ) );
+		$tamper = static function ( int $post_id ) use ( $id, $wpdb ): void {
+			if ( $post_id === $id ) {
+				$wpdb->update( $wpdb->posts, array( 'post_content' => 'rewritten by another plugin' ), array( 'ID' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- simulates a plugin rewriting the body on save.
+				clean_post_cache( $id );
+			}
+		};
+		add_action( 'save_post', $tamper );
+		$this->act_as_filtered_editor();
+
+		try {
+			$result = QueryFaultInjector::break_query_with_real_error(
+				array( 'UPDATE', 'Old excerpt' ),
+				static function () use ( $id ) {
+					return aafm_exec_update_post(
+						array(
+							'post_id' => $id,
+							'excerpt' => 'Lands, then cannot be undone',
+						)
+					);
+				}
+			);
+		} finally {
+			remove_action( 'save_post', $tamper );
+		}
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'aafm_page_builder_content_changed', $result->get_error_code() );
+		$this->assertSame( array( 'status' => 500 ), $result->get_error_data() );
+		$this->assertStringNotContainsString( 'Nothing was changed', $result->get_error_message() );
+		$this->assertStringContainsString( 'could not put it back', $result->get_error_message() );
 	}
 
 	public function test_a_plain_post_still_uses_the_ordinary_path(): void {

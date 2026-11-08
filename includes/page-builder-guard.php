@@ -342,46 +342,81 @@ function aafm_page_builder_excerpt_only_input( array $input ): bool {
 }
 
 /**
- * The post's stored body, excerpt and modified dates, read from the posts table past any cache.
+ * The columns an excerpt-only edit keeps exactly as stored. wp_update_post() re-sanitizes every
+ * column it carries over, and for a user without unfiltered_html core runs KSES on all three.
+ *
+ * @return string[]
+ */
+function aafm_page_builder_pinned_columns(): array {
+	return array( 'post_content', 'post_content_filtered', 'post_title' );
+}
+
+/**
+ * The post's pinned columns, excerpt and modified dates, read from the posts table past any cache.
  *
  * @param int $post_id Post id.
- * @return array{post_content:string,post_excerpt:string,post_modified:string,post_modified_gmt:string}|null Null when the read failed or found no row.
+ * @return array<string,string>|null Column => stored value, or null when the read failed or found no row.
  */
 function aafm_page_builder_stored_row( int $post_id ): ?array {
 	global $wpdb;
 	// The stored row itself, not a cached copy, is what this proves.
-	$read = aafm_wpdb_row( $wpdb->prepare( 'SELECT post_content, post_excerpt, post_modified, post_modified_gmt FROM %i WHERE ID = %d', $wpdb->posts, $post_id ) );
+	$read = aafm_wpdb_row( $wpdb->prepare( 'SELECT post_content, post_content_filtered, post_title, post_excerpt, post_modified, post_modified_gmt FROM %i WHERE ID = %d', $wpdb->posts, $post_id ) );
 	$row  = $read['value'];
 	if ( ! $read['ok'] || ! is_array( $row ) ) {
 		return null;
 	}
-	return array(
-		'post_content'      => (string) $row['post_content'],
-		'post_excerpt'      => (string) $row['post_excerpt'],
-		'post_modified'     => (string) $row['post_modified'],
-		'post_modified_gmt' => (string) $row['post_modified_gmt'],
+	return array_map( 'strval', $row );
+}
+
+/**
+ * The stored row an excerpt-only edit starts from, or an error when the cached post does not match it.
+ *
+ * Core's wp_update_post() merges the update into the cached post, so a cached copy that differs from the
+ * stored row cannot be trusted. The stale entry is cleared, so the next call reads the real row.
+ *
+ * @param WP_Post $post The post as loaded for the update.
+ * @return array<string,string>|WP_Error
+ */
+function aafm_page_builder_excerpt_start( WP_Post $post ) {
+	$row = aafm_page_builder_stored_row( (int) $post->ID );
+	if ( null !== $row ) {
+		$matches = true;
+		foreach ( aafm_page_builder_pinned_columns() as $column ) {
+			$matches = $matches && (string) $post->$column === $row[ $column ];
+		}
+		if ( $matches ) {
+			return $row;
+		}
+	}
+	clean_post_cache( (int) $post->ID );
+	return new WP_Error(
+		'aafm_page_builder_content_unverified',
+		__( 'The plugin could not confirm this post\'s stored content before saving the excerpt, so it saved nothing. Try again.', 'agent-abilities-for-mcp' ),
+		array( 'status' => 409 )
 	);
 }
 
 /**
- * Write an excerpt-only update to a builder-owned post with the stored body pinned.
+ * Write an excerpt-only update to a builder-owned post with its stored content pinned.
  *
  * Core's wp_update_post() re-runs sanitize_post() over the whole row, so for a user without
- * unfiltered_html core would put the builder's body through content_save_pre and KSES and strip
- * markup the builder relies on. A wp_insert_post_data filter at PHP_INT_MAX, scoped to this one
- * call, puts the stored body back for the post and for the revision the save creates; the filter
- * sees slashed data, so the body is slashed.
+ * unfiltered_html core would put the stored body, title and post_content_filtered through KSES. A
+ * wp_insert_post_data filter at PHP_INT_MAX, scoped to this one call, reads those columns from the
+ * stored row at write time (so a builder save that landed since the caller's check is kept, not
+ * overwritten) and puts them back for the post and for the revision the save creates. The filter
+ * sees slashed data, so the values are slashed.
  *
- * Another plugin can still rewrite the body after the row is saved (save_post and later). So the
- * stored row is read back, and when the body differs the excerpt, body and modified dates are put
- * back with one direct row update (a second wp_update_post() would re-run the same filters and
- * hooks) and the revisions this call saved are deleted. The caller is told nothing changed only
- * when the read-back proves it.
+ * Another plugin can still rewrite the post after the row is saved (save_post and later). So the
+ * stored row is read back, and when a pinned column differs, the pinned columns, the excerpt and
+ * the modified dates are put back with one direct row update (a second wp_update_post() would re-run
+ * the same filters and hooks), and the revisions this call saved for the current user are deleted.
+ * The caller is told nothing changed only when the read-back proves it. A revision WordPress pruned
+ * to honor WP_POST_REVISIONS during the write is not brought back.
  *
- * @param int                                                                                          $post_id Post id.
- * @param array<string,mixed>                                                                          $postarr ID and post_excerpt.
- * @param array{post_content:string,post_excerpt:string,post_modified:string,post_modified_gmt:string} $before  The stored row before the write.
- * @return int|WP_Error The post id, or an error after which the post is as it was.
+ * @param int                  $post_id Post id.
+ * @param array<string,mixed>  $postarr ID and post_excerpt.
+ * @param array<string,string> $before  The stored row before the write (aafm_page_builder_excerpt_start()).
+ * @return int|WP_Error The post id, or an error.
  */
 function aafm_page_builder_write_excerpt( int $post_id, array $postarr, array $before ) {
 	global $wpdb;
@@ -389,40 +424,53 @@ function aafm_page_builder_write_excerpt( int $post_id, array $postarr, array $b
 	if ( ! aafm_exact_object_chain( 'post', $post_id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
-	$revisions = aafm_page_builder_revision_ids( $post_id );
-	$body      = $before['post_content'];
-	$pin       = static function ( array $data, array $raw ) use ( $post_id, $body ): array {
-		$is_post     = isset( $raw['ID'] ) && (int) $raw['ID'] === $post_id;
-		$is_revision = 'revision' === ( $data['post_type'] ?? '' ) && (int) ( $data['post_parent'] ?? 0 ) === $post_id;
-		if ( $is_post || $is_revision ) {
-			$data['post_content'] = wp_slash( $body );
+	$columns = array_flip( aafm_page_builder_pinned_columns() );
+	$pinned  = array_intersect_key( $before, $columns );
+	$created = array();
+	$pin     = static function ( array $data, array $raw ) use ( $post_id, $columns, &$pinned ): array {
+		if ( isset( $raw['ID'] ) && (int) $raw['ID'] === $post_id ) {
+			$now    = aafm_page_builder_stored_row( $post_id );
+			$pinned = null === $now ? $pinned : array_intersect_key( $now, $columns );
+		} elseif ( 'revision' !== ( $data['post_type'] ?? '' ) || (int) ( $data['post_parent'] ?? 0 ) !== $post_id ) {
+			return $data;
 		}
-		return $data;
+		return array_merge( $data, wp_slash( $pinned ) );
+	};
+	$track   = static function ( $revision_id ) use ( $post_id, &$created ): void {
+		if ( wp_get_post_parent_id( (int) $revision_id ) === $post_id ) {
+			$created[] = (int) $revision_id;
+		}
 	};
 
 	add_filter( 'wp_insert_post_data', $pin, PHP_INT_MAX, 2 );
+	add_action( '_wp_put_post_revision', $track );
 	try {
 		$result = wp_update_post( wp_slash( $postarr ), true );
 	} finally {
 		remove_filter( 'wp_insert_post_data', $pin, PHP_INT_MAX );
+		remove_action( '_wp_put_post_revision', $track );
 	}
 	if ( is_wp_error( $result ) || (int) $result !== $post_id ) {
 		return aafm_generic_error();
 	}
 
 	$after = aafm_page_builder_stored_row( $post_id );
-	if ( null !== $after && $after['post_content'] === $body ) {
+	if ( null !== $after && array_intersect_key( $after, $columns ) === $pinned ) {
 		return $post_id;
 	}
 
+	$restore = array_merge( $before, $pinned );
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- restores the exact stored bytes, which a filtered save cannot.
-	$wpdb->update( $wpdb->posts, $before, array( 'ID' => $post_id ) );
-	foreach ( array_diff( aafm_page_builder_revision_ids( $post_id ), $revisions ) as $revision_id ) {
-		wp_delete_post_revision( $revision_id );
+	$wpdb->update( $wpdb->posts, $restore, array( 'ID' => $post_id ) );
+	foreach ( $created as $revision_id ) {
+		$revision = aafm_exact_object( 'post', $revision_id );
+		if ( $revision instanceof WP_Post && get_current_user_id() === (int) $revision->post_author ) {
+			wp_delete_post_revision( $revision_id );
+		}
 	}
 	clean_post_cache( $post_id );
 
-	if ( aafm_page_builder_stored_row( $post_id ) !== $before ) {
+	if ( aafm_page_builder_stored_row( $post_id ) !== $restore ) {
 		return new WP_Error(
 			'aafm_page_builder_content_changed',
 			__( 'Saving the excerpt changed this page builder\'s stored content, and the plugin could not put it back. Check the post in the page builder.', 'agent-abilities-for-mcp' ),
@@ -434,18 +482,4 @@ function aafm_page_builder_write_excerpt( int $post_id, array $postarr, array $b
 		__( 'Saving the excerpt would have changed this page builder\'s stored content, so the plugin put the post back the way it was. Nothing was changed.', 'agent-abilities-for-mcp' ),
 		array( 'status' => 409 )
 	);
-}
-
-/**
- * The ids of a post's revisions.
- *
- * @param int $post_id Post id.
- * @return int[]
- */
-function aafm_page_builder_revision_ids( int $post_id ): array {
-	$ids = array();
-	foreach ( wp_get_post_revisions( $post_id, array( 'fields' => 'ids' ) ) as $revision ) {
-		$ids[] = $revision instanceof WP_Post ? $revision->ID : (int) $revision;
-	}
-	return $ids;
 }

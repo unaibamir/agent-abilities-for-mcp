@@ -1203,6 +1203,7 @@
 				const sent = this.#snapshot( form );
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
+					status.classList.remove( 'is-error' );
 				}
 				const json = ( await this.#postBody( body ) ) ?? { success: false };
 				if ( json?.success ) {
@@ -1219,6 +1220,7 @@
 						text = json.data.message;
 					}
 					status.textContent = text;
+					status.classList.toggle( 'is-error', ! json?.success );
 				}
 			} );
 		}

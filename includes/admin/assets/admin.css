@@ -2273,9 +2273,10 @@
 		color: var(--aafm-text-subtle);
 	}
 
-	/* The Abilities tab's one Save bar shows an error summary in red. Scoped to this tab so the
-	   Settings, Integrations and Bridge bars that share .aafm-save-status are untouched. */
-	.aafm-abilities .aafm-savebar .aafm-save-status.is-error {
+	/* The Abilities Save bar and the Other plugins save show an error in red. Scoped so the
+	   Settings and Integrations bars that share .aafm-save-status are untouched. */
+	.aafm-abilities .aafm-savebar .aafm-save-status.is-error,
+	#aafm-bridge-form .aafm-save-status.is-error {
 		color: var(--aafm-red-text);
 		font-weight: 600;
 	}

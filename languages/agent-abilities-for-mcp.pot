@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-08T18:57:31+05:00\n"
+"POT-Creation-Date: 2026-11-08T19:17:52+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -284,19 +284,19 @@ msgid "Meta description override for the post."
 msgstr ""
 
 #: includes/abilities/aioseo.php:421
-#: includes/abilities/rankmath.php:408
+#: includes/abilities/rankmath.php:416
 #: includes/abilities/yoast.php:544
 msgid "Canonical URL override for the post, sanitized as a URL."
 msgstr ""
 
 #: includes/abilities/aioseo.php:422
-#: includes/abilities/rankmath.php:409
+#: includes/abilities/rankmath.php:417
 #: includes/abilities/yoast.php:545
 msgid "Open Graph (Facebook) title override for the post."
 msgstr ""
 
 #: includes/abilities/aioseo.php:423
-#: includes/abilities/rankmath.php:410
+#: includes/abilities/rankmath.php:418
 #: includes/abilities/yoast.php:546
 msgid "Open Graph (Facebook) description override for the post."
 msgstr ""
@@ -325,7 +325,7 @@ msgstr ""
 msgid "Whether to nofollow links on this post (see robots_noindex for the site-default interaction this also turns off)."
 msgstr ""
 
-#: includes/abilities/aioseo.php:661
+#: includes/abilities/aioseo.php:664
 msgid "ID of the post to render the All in One SEO head for."
 msgstr ""
 
@@ -949,87 +949,91 @@ msgstr ""
 msgid "ID of the navigation menu whose items to list. An unknown or empty menu returns an empty items list rather than an error."
 msgstr ""
 
-#: includes/abilities/menus.php:401
+#: includes/abilities/menus.php:407
 msgid "Name for the new navigation menu. Sanitized as plain text; a duplicate name is refused."
 msgstr ""
 
-#: includes/abilities/menus.php:465
+#: includes/abilities/menus.php:471
 msgid "ID of the navigation menu to rename. An unknown ID returns a generic error."
 msgstr ""
 
-#: includes/abilities/menus.php:469
+#: includes/abilities/menus.php:475
 msgid "New name for the menu. Sanitized as plain text."
 msgstr ""
 
-#: includes/abilities/menus.php:542
+#: includes/abilities/menus.php:548
 msgid "ID of the navigation menu to permanently delete, along with every item inside it. Navigation menus have no Trash, so this cannot be undone."
 msgstr ""
 
-#: includes/abilities/menus.php:615
+#: includes/abilities/menus.php:621
 msgid "ID of the navigation menu to add the item to. An unknown ID returns a generic error."
 msgstr ""
 
-#: includes/abilities/menus.php:619
+#: includes/abilities/menus.php:625
 msgid "The item's visible link text. Sanitized as plain text."
 msgstr ""
 
-#: includes/abilities/menus.php:623
-msgid "Destination URL for a custom link item. Sanitized with esc_url_raw. Omit when object_id and type point at an existing post, page, or term instead."
+#: includes/abilities/menus.php:629
+msgid "Destination URL for a custom link item. An invalid or unsafe URL is refused. Omit when object_id and type point at an existing post, page, or term instead."
 msgstr ""
 
-#: includes/abilities/menus.php:627
+#: includes/abilities/menus.php:633
 msgid "ID of an existing menu item this one should nest under, or omit for a top-level item. Not verified to exist or to belong to this menu before being applied."
 msgstr ""
 
-#: includes/abilities/menus.php:631
+#: includes/abilities/menus.php:637
 msgid "ID of the linked post, page, or term when this item points at existing content instead of a custom URL. Required for the post_type and taxonomy types, and it must exist: an id that resolves to nothing is refused rather than saved as a broken link."
 msgstr ""
 
-#: includes/abilities/menus.php:635
+#: includes/abilities/menus.php:641
 msgid "Menu item type, for example post_type, post_type_archive, taxonomy, or custom. Not validated against a fixed list; an unrecognized value is passed straight through to WordPress."
 msgstr ""
 
-#: includes/abilities/menus.php:639
+#: includes/abilities/menus.php:645
 msgid "Name of the thing the item points at: a post type slug such as page for the post_type and post_type_archive types, or a taxonomy name such as category for the taxonomy type. Omit it for post_type and taxonomy and it is looked up from object_id. Required for post_type_archive, which has no object_id to look up."
 msgstr ""
 
-#: includes/abilities/menus.php:737
+#: includes/abilities/menus.php:704
+msgid "The parent must be an existing menu item in this same menu, so nothing was created."
+msgstr ""
+
+#: includes/abilities/menus.php:757
 msgid "That menu item could not be linked to anything the site can resolve, so it was not created. Check object_id and object against the type you asked for."
 msgstr ""
 
-#: includes/abilities/menus.php:777
+#: includes/abilities/menus.php:797
 msgid "A post_type_archive menu item needs the object parameter set to the post type slug it should link to."
 msgstr ""
 
-#: includes/abilities/menus.php:785
+#: includes/abilities/menus.php:805
 msgid "That menu item type needs object_id, or object naming the post type or taxonomy it points at."
 msgstr ""
 
-#: includes/abilities/menus.php:796
+#: includes/abilities/menus.php:816
 msgid "No post exists with that object_id, so the menu item has nothing to link to."
 msgstr ""
 
-#: includes/abilities/menus.php:807
+#: includes/abilities/menus.php:827
 msgid "No term exists with that object_id, so the menu item has nothing to link to."
 msgstr ""
 
-#: includes/abilities/menus.php:907
+#: includes/abilities/menus.php:927
 msgid "ID of the navigation menu the item belongs to. The item must genuinely belong to this menu or the update is refused."
 msgstr ""
 
-#: includes/abilities/menus.php:911
+#: includes/abilities/menus.php:931
 msgid "ID of the menu item to update. Every field you do not send here (link target, order, CSS classes, and so on) is preserved from its current stored value; only title and url actually change."
 msgstr ""
 
-#: includes/abilities/menus.php:915
+#: includes/abilities/menus.php:935
 msgid "New link text for the item. Sanitized as plain text. Omit to leave the current title unchanged."
 msgstr ""
 
-#: includes/abilities/menus.php:919
-msgid "New destination URL for the item. Sanitized with esc_url_raw. Omit to leave the current URL unchanged."
+#: includes/abilities/menus.php:939
+msgid "New destination URL for the item. An invalid or unsafe URL is refused and the current URL stays. Omit to leave the current URL unchanged."
 msgstr ""
 
-#: includes/abilities/menus.php:1068
+#: includes/abilities/menus.php:1092
 msgid "ID of the menu item to permanently remove. Menu items have no Trash, so this cannot be undone."
 msgstr ""
 
@@ -1535,118 +1539,118 @@ msgstr ""
 msgid "ID of the post to permanently delete. This bypasses the Trash; there is no undo."
 msgstr ""
 
-#: includes/abilities/rankmath.php:133
+#: includes/abilities/rankmath.php:141
 msgid "Get post SEO (Rank Math)"
 msgstr ""
 
-#: includes/abilities/rankmath.php:134
+#: includes/abilities/rankmath.php:142
 msgid "Reads a post's Rank Math SEO fields (title, description, focus keyword, canonical, social, and robots) from its rank_math_* post meta. Requires edit access to that post."
 msgstr ""
 
-#: includes/abilities/rankmath.php:141
+#: includes/abilities/rankmath.php:149
 msgid "Update post SEO (Rank Math)"
 msgstr ""
 
-#: includes/abilities/rankmath.php:142
+#: includes/abilities/rankmath.php:150
 msgid "Writes a post's Rank Math SEO fields to its rank_math_* post meta. URL fields are sanitized as URLs and robots is stored as Rank Math's serialized directive array. Social images (og_image, twitter_image) must be URLs of existing media-library attachments so Rank Math can render them; a URL with no matching attachment is refused. Setting a Twitter field turns off the Facebook fallback so the Twitter values render. Requires edit access to that post. The response returns each field's old value when it is plain text or a number."
 msgstr ""
 
-#: includes/abilities/rankmath.php:149
+#: includes/abilities/rankmath.php:157
 msgid "Get post schema (Rank Math)"
 msgstr ""
 
-#: includes/abilities/rankmath.php:150
+#: includes/abilities/rankmath.php:158
 msgid "Reads a post's structured-data (JSON-LD) schema of a given type from Rank Math's rank_math_schema_{Type} post meta. Requires edit access to that post."
 msgstr ""
 
-#: includes/abilities/rankmath.php:157
+#: includes/abilities/rankmath.php:165
 msgid "Update post schema (Rank Math)"
 msgstr ""
 
-#: includes/abilities/rankmath.php:158
+#: includes/abilities/rankmath.php:166
 msgid "Writes a post's structured-data (JSON-LD) schema of a given type to Rank Math's rank_math_schema_{Type} post meta, recursively sanitized. Requires edit access to that post."
 msgstr ""
 
-#: includes/abilities/rankmath.php:165
+#: includes/abilities/rankmath.php:173
 msgid "Get post SEO head (Rank Math)"
 msgstr ""
 
-#: includes/abilities/rankmath.php:166
+#: includes/abilities/rankmath.php:174
 msgid "Reads the rendered SEO head markup for a post from Rank Math. When Rank Math cannot render a head, usually because its setup wizard was never completed, the call is refused with an error naming the cause instead of returning an empty string. Requires the edit-posts capability and edit access to that post."
 msgstr ""
 
-#: includes/abilities/rankmath.php:355
+#: includes/abilities/rankmath.php:363
 msgid "ID of the post whose Rank Math SEO fields to read. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/rankmath.php:401
+#: includes/abilities/rankmath.php:409
 msgid "ID of the post whose Rank Math SEO fields to write. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/rankmath.php:405
+#: includes/abilities/rankmath.php:413
 msgid "SEO title override for the post. Empty clears it and lets Rank Math fall back to its title template."
 msgstr ""
 
-#: includes/abilities/rankmath.php:406
+#: includes/abilities/rankmath.php:414
 msgid "Meta description override for the post. Empty clears it and lets Rank Math fall back to its description template."
 msgstr ""
 
-#: includes/abilities/rankmath.php:407
+#: includes/abilities/rankmath.php:415
 msgid "Rank Math's target focus keyword, used to score this post's on-page SEO."
 msgstr ""
 
-#: includes/abilities/rankmath.php:411
+#: includes/abilities/rankmath.php:419
 msgid "Open Graph (Facebook) share image. Must be the URL of an existing media-library attachment; a URL that does not resolve to one is refused, because Rank Math renders the image from the attachment ID rather than the URL itself."
 msgstr ""
 
-#: includes/abilities/rankmath.php:412
+#: includes/abilities/rankmath.php:420
 msgid "Twitter Card title override. Setting any twitter_* field turns off Rank Math's Twitter-to-Facebook fallback so this value actually renders."
 msgstr ""
 
-#: includes/abilities/rankmath.php:413
+#: includes/abilities/rankmath.php:421
 msgid "Twitter Card description override. Setting any twitter_* field turns off Rank Math's Twitter-to-Facebook fallback so this value actually renders."
 msgstr ""
 
-#: includes/abilities/rankmath.php:414
+#: includes/abilities/rankmath.php:422
 msgid "Twitter Card share image. Must be the URL of an existing media-library attachment (same rule as og_image); setting any twitter_* field also turns off the Twitter-to-Facebook fallback."
 msgstr ""
 
-#: includes/abilities/rankmath.php:424
+#: includes/abilities/rankmath.php:432
 msgid "Robots directives as a comma-separated list. Accepted tokens: index, noindex, nofollow, noarchive, noimageindex, nosnippet. Unknown tokens are dropped, and the value is stored as Rank Math's serialized directive array."
 msgstr ""
 
-#: includes/abilities/rankmath.php:429
+#: includes/abilities/rankmath.php:437
 msgid "Writes a post's Rank Math SEO fields. URL fields are sanitized as URLs and robots is stored as the serialized directive array. Social images (og_image, twitter_image) must be URLs of existing media-library attachments so Rank Math can render them; a URL with no matching attachment is refused. Setting a Twitter field turns off the Facebook fallback so the Twitter values render. Requires edit access to that post. The response returns each field's old value when it is plain text or a number."
 msgstr ""
 
 #. translators: %s: the social image field name, for example og_image.
-#: includes/abilities/rankmath.php:490
+#: includes/abilities/rankmath.php:501
 #, php-format
 msgid "The %s URL does not resolve to a media-library attachment, so Rank Math cannot render it. Add the image to the media library and pass its attachment URL."
 msgstr ""
 
-#: includes/abilities/rankmath.php:585
+#: includes/abilities/rankmath.php:604
 msgid "ID of the post whose Rank Math schema of this type to read. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/rankmath.php:590
-#: includes/abilities/rankmath.php:662
+#: includes/abilities/rankmath.php:609
+#: includes/abilities/rankmath.php:681
 msgid "The schema type suffix, for example Article, FAQPage, or HowTo. Must start with a letter and contain only letters and digits (PascalCase)."
 msgstr ""
 
-#: includes/abilities/rankmath.php:657
+#: includes/abilities/rankmath.php:676
 msgid "ID of the post whose Rank Math schema of this type to write. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/rankmath.php:666
+#: includes/abilities/rankmath.php:685
 msgid "The JSON-LD schema object to store for this type. Recursively sanitized: values under url-ish keys (url, image, logo, sameAs, @id) are treated as URLs and dropped if unsafe, other scalar leaves are stripped of markup, and the tree is depth-limited."
 msgstr ""
 
-#: includes/abilities/rankmath.php:757
+#: includes/abilities/rankmath.php:776
 msgid "ID of the post to render the Rank Math SEO head for."
 msgstr ""
 
-#: includes/abilities/rankmath.php:809
+#: includes/abilities/rankmath.php:828
 msgid "Rank Math could not render the SEO head for this post. This usually means the Rank Math setup wizard has not been completed or skipped, so its front-end head renderer is not initialised."
 msgstr ""
 
@@ -3970,7 +3974,7 @@ msgstr ""
 msgid "Writes a post's Yoast SEO fields. URL fields are sanitized as URLs and the robots directives are validated. Requires edit access to that post. The response returns each field's old value when it is plain text or a number."
 msgstr ""
 
-#: includes/abilities/yoast.php:683
+#: includes/abilities/yoast.php:691
 msgid "ID of the post to render the Yoast SEO head for."
 msgstr ""
 
@@ -11226,6 +11230,12 @@ msgstr ""
 
 #: includes/site-brief.php:120
 msgid "Site brief"
+msgstr ""
+
+#. translators: %s: the name of the input field that held the URL.
+#: includes/text.php:118
+#, php-format
+msgid "The %s value is not a valid URL, so nothing was changed. Use an https:// or http:// address, a mailto: or tel: link, a path starting with /, or an anchor starting with #."
 msgstr ""
 
 #: includes/wpml.php:68

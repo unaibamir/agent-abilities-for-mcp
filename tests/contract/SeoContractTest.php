@@ -254,7 +254,7 @@ final class SeoContractTest extends TestCase {
 	 */
 	public function test_rankmath_rendered_head_carries_the_custom_title_and_description(): void {
 		if ( ! function_exists( 'rank_math' ) || ! function_exists( 'aafm_rankmath_rendered_head' ) ) {
-			$this->markTestSkipped( 'Rank Math or the renderer not provisioned — run tests/bin/install-vendors.sh.' );
+			$this->markTestSkipped( 'Rank Math or the renderer not provisioned: run tests/bin/install-vendors.sh.' );
 		}
 		$plugin = rank_math();
 		if ( isset( $plugin->registration ) ) {

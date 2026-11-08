@@ -12,11 +12,18 @@ WordPress MCP server for Claude and ChatGPT with limited access, a pause switch,
 | **Stable tag** | 1.11.1 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
-This is the GitHub home of a free WordPress plugin that adds an MCP endpoint to a site and exposes WordPress abilities to AI agents, so Claude, ChatGPT, Cursor and other MCP clients can work on it as a WordPress user you choose. It ships 184 abilities (90 core, 94 for plugins such as WooCommerce, ACF and Yoast SEO) and every one starts switched off.
+Agent Abilities for MCP is a free WordPress MCP server plugin. It adds an MCP endpoint to a site and exposes WordPress abilities to AI agents, so Claude, ChatGPT, Cursor and other MCP clients can work on it as a WordPress user you choose, with that user's role and no more. It ships 184 abilities (90 core, 94 for plugins such as WooCommerce, ACF and Yoast SEO) and every one starts switched off.
 
-The listing for site owners lives on [WordPress.org](https://wordpress.org/plugins/agent-abilities-for-mcp/). This page is for anyone who wants to read the code, wire the plugin into their own stack or send a patch.
+This is the GitHub home of the plugin. The listing for site owners lives on [WordPress.org](https://wordpress.org/plugins/agent-abilities-for-mcp/), and this page is for anyone who wants to read the code, wire the plugin into their own stack or send a patch.
 
 ## What the plugin does
+
+Typical setups:
+
+* Connect Claude (custom connector) or ChatGPT (custom MCP server) to WordPress over OAuth, or connect Cursor, VS Code and other clients with OAuth or an Application Password.
+* Give an AI agent read-only access: read-only mode unloads every write tool this plugin serves.
+* Let Claude or ChatGPT draft posts without publishing: Force draft on create saves the posts, pages and products an agent creates as drafts, and the Needs review card on the Dashboard lists them.
+* Pause one OAuth connection, give it an end date or a lower rate limit, or refuse every MCP request at once with Pause all access.
 
 Abilities are registered on the WordPress 6.9 Abilities API and served through the official MCP Adapter, which is bundled, so if the standalone Adapter plugin is active too the plugin simply uses whichever copy loads first. Every call to its tools runs as the WordPress user the connection belongs to, over OAuth or an Application Password, and is checked against that user's capabilities.
 

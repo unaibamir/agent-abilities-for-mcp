@@ -181,7 +181,7 @@ final class TecEventsWireTest extends TestCase {
 			'update'    => static fn() => aafm_exec_tec_update_event(
 				array(
 					'event_id'   => $id,
-					'start_date' => '2027-01-02 09:00:00',
+					'start_date' => '2027-01-01 10:00:00',
 				)
 			),
 			'no change' => static function () use ( $id ) {

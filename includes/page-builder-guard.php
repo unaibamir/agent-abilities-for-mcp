@@ -3,15 +3,17 @@
  * Page-builder content-ownership detection.
  *
  * A write to post_content/post_excerpt made through this plugin's own content abilities can go wrong
- * three ways on a post owned by a page builder (Elementor, Divi, Beaver Builder, Avada or Visual
- * Composer). It can be silently ignored: Elementor, Divi and Beaver Builder do not use post_content
+ * three ways on a post owned by a page builder (Elementor, Divi, Beaver Builder, Avada, Visual
+ * Composer, Oxygen, Breakdance, Brizy, Bricks or WPBakery). It can be silently ignored: Elementor, Divi and Beaver Builder do not use post_content
  * as their rendering source, so the builder's own stored data (a separate meta key, or an external
  * asset file) is what actually renders, and the agent's edit appears to succeed but has no visible
  * effect. It can corrupt markup: Avada renders from Fusion shortcodes in post_content, so a generic
  * write can break that shortcode tree. And it can be overwritten later: Visual Composer also writes
  * rendered output into post_content, so a visible change is lost the next time someone saves in the
- * builder. This is a REFUSAL guard, not a builder integration: it never edits builder-owned data, it
- * only stops a write from landing where it will be ignored, corrupted or overwritten.
+ * builder. WPBakery keeps its layout as shortcodes in post_content itself, so a generic write can
+ * break it the same way. This is a REFUSAL guard, not a builder integration: it never edits builder-owned data, it
+ * only stops a write from landing where it will be ignored, corrupted or overwritten. The one write it lets through
+ * is an excerpt-only update, with the stored body pinned (aafm_page_builder_write_excerpt()).
  *
  * Avada/Fusion Builder's marker WAS confirmed (2026-09-05) against a real installed copy (Avada
  * 7.16.1 theme, Fusion Builder 3.16.1 plugin): `fusion_builder_status` post meta set to 'active'
@@ -60,7 +62,22 @@ if ( ! defined( 'AAFM_BUILDER_OWNERSHIP_UNKNOWN' ) ) {
  *                      when none is detected.
  */
 function aafm_post_has_foreign_builder_ownership( int $post_id, bool $pure_read = false ) {
+	global $wpdb;
+
 	$markers = aafm_page_builder_markers();
+	if ( array() === $markers ) {
+		return false; // A site that empties the map has switched the guard off.
+	}
+	$bricks = aafm_page_builder_bricks_keys();
+
+	// WPBakery has no marker: its layout is the shortcodes in post_content. A post whose row is
+	// really gone has no owner; a lookup that failed, or that read another post's row, cannot be
+	// decided.
+	$post = aafm_exact_object( 'post', $post_id );
+	if ( ! $post instanceof WP_Post && ! $pure_read && ( '' !== (string) $wpdb->last_error || ! aafm_object_absent( 'post', $post_id ) ) ) {
+		return AAFM_BUILDER_OWNERSHIP_UNKNOWN;
+	}
+	$wpbakery = $post instanceof WP_Post && 1 === preg_match( aafm_page_builder_content_pattern(), (string) $post->post_content );
 
 	if ( $pure_read ) {
 		foreach ( $markers as $meta_key => $builder ) {
@@ -70,10 +87,17 @@ function aafm_post_has_foreign_builder_ownership( int $post_id, bool $pure_read 
 			}
 			return (string) $builder;
 		}
-		return false;
+		$views = array();
+		foreach ( $bricks as $key ) {
+			$views[ $key ] = array( aafm_meta_get( 'post', $post_id, $key, true ) );
+		}
+		if ( aafm_page_builder_bricks_owned( $views[ $bricks[0] ], array_merge( $views[ $bricks[1] ], $views[ $bricks[2] ], $views[ $bricks[3] ] ) ) ) {
+			return 'bricks';
+		}
+		return $wpbakery ? 'wpbakery' : false;
 	}
 
-	$stored = aafm_meta_rows( 'post', $post_id, array_map( 'strval', array_keys( $markers ) ) );
+	$stored = aafm_meta_rows( 'post', $post_id, array_merge( array_map( 'strval', array_keys( $markers ) ), $bricks ) );
 	if ( ! $stored['ok'] ) {
 		return AAFM_BUILDER_OWNERSHIP_UNKNOWN;
 	}
@@ -81,6 +105,19 @@ function aafm_post_has_foreign_builder_ownership( int $post_id, bool $pure_read 
 		if ( $rows['aliased'] > 0 ) {
 			return AAFM_BUILDER_OWNERSHIP_UNKNOWN;
 		}
+	}
+
+	// Bricks and WPBakery count as one more owner each, so two builders still answer unknown.
+	$views = array();
+	foreach ( $bricks as $key ) {
+		$views[ $key ] = array( $stored['by_key'][ $key ]['value'] ?? null, aafm_meta_get( 'post', $post_id, $key, true ) );
+	}
+	$owners = array();
+	if ( aafm_page_builder_bricks_owned( $views[ $bricks[0] ], array_merge( $views[ $bricks[1] ], $views[ $bricks[2] ], $views[ $bricks[3] ] ) ) ) {
+		$owners[] = 'bricks';
+	}
+	if ( $wpbakery ) {
+		$owners[] = 'wpbakery';
 	}
 
 	$owner = false;
@@ -101,7 +138,65 @@ function aafm_post_has_foreign_builder_ownership( int $post_id, bool $pure_read 
 		$owner = (string) $builder;
 	}
 
+	foreach ( $owners as $builder ) {
+		if ( false !== $owner && $builder !== $owner ) {
+			return AAFM_BUILDER_OWNERSHIP_UNKNOWN;
+		}
+		$owner = $builder;
+	}
+
 	return $owner;
+}
+
+/**
+ * The WPBakery layout pattern: a root row, section or container shortcode in post_content.
+ *
+ * Matched as text, never through has_shortcode(), because WPBakery's tags may not be registered in
+ * an ability request. `\b` stops at the underscore of [vc_row_inner], and an inner row always sits
+ * inside a root this matches. The `_wpb_vc_js_status` meta is never read: it can say 'false' while
+ * the shortcodes still render.
+ *
+ * @return string
+ */
+function aafm_page_builder_content_pattern(): string {
+	return '/\[vc_(row|section|flexbox_container|grid_container)\b/';
+}
+
+/**
+ * The Bricks keys: the editor mode first, then the three stored areas.
+ *
+ * Bricks keeps its data after a page is switched back to Render with WordPress, so the mode vetoes
+ * it. Read in the same query as the markers, and hard-blocked from the meta tools beside them, since
+ * an agent clearing the mode would pass the guard.
+ *
+ * @return string[]
+ */
+function aafm_page_builder_bricks_keys(): array {
+	return array( '_bricks_editor_mode', '_bricks_page_content_2', '_bricks_page_header_2', '_bricks_page_footer_2' );
+}
+
+/**
+ * Whether Bricks owns a post, from every view of its mode and area values.
+ *
+ * False when every mode seen is the Render with WordPress value. Otherwise true when any area holds
+ * a non-empty array.
+ *
+ * @param array<int,mixed> $modes Every view's editor mode value.
+ * @param array<int,mixed> $areas Every view's area values.
+ * @return bool
+ */
+function aafm_page_builder_bricks_owned( array $modes, array $areas ): bool {
+	$seen = array_values( array_filter( $modes, static fn( $mode ): bool => '' !== (string) ( is_scalar( $mode ) ? $mode : '' ) ) );
+	if ( array() !== $seen && array() === array_diff( array_map( 'strval', $seen ), array( 'wordpress' ) ) ) {
+		return false;
+	}
+	foreach ( $areas as $area ) {
+		$area = maybe_unserialize( $area );
+		if ( is_array( $area ) && array() !== $area ) {
+			return true;
+		}
+	}
+	return false;
 }
 
 /**
@@ -147,6 +242,14 @@ function aafm_page_builder_default_markers(): array {
 		'fusion_builder_status'    => 'avada',
 		'fusion_builder_converted' => 'avada',
 		'vcv-pageContent'          => 'visual-composer',
+		'_ct_builder_json'         => 'oxygen',
+		'_ct_builder_shortcodes'   => 'oxygen',
+		'ct_builder_json'          => 'oxygen',
+		'ct_builder_shortcodes'    => 'oxygen',
+		'_oxygen_data'             => 'oxygen',
+		'_breakdance_data'         => 'breakdance',
+		'breakdance_data'          => 'breakdance',
+		'brizy_enabled'            => 'brizy',
 	);
 }
 
@@ -157,6 +260,9 @@ function aafm_page_builder_default_markers(): array {
  * @return string
  */
 function aafm_page_builder_label( string $slug ): string {
+	if ( 'wpbakery' === $slug ) {
+		return 'WPBakery';
+	}
 	return ucwords( str_replace( '-', ' ', $slug ) );
 }
 
@@ -165,14 +271,24 @@ function aafm_page_builder_label( string $slug ): string {
  * unfiltered defaults on purpose: a site filter that adds a marker must not change the registry text
  * that is catalogued and translated for every site.
  *
- * @return string For example "Elementor, Divi, Beaver Builder, Avada, and Visual Composer".
+ * @return string For example "Elementor, Divi, Beaver Builder, and WPBakery".
  */
 function aafm_page_builder_names(): string {
 	$labels = array();
-	foreach ( array_unique( array_values( aafm_page_builder_default_markers() ) ) as $slug ) {
-		$labels[] = aafm_page_builder_label( (string) $slug );
+	foreach ( aafm_page_builder_slugs() as $slug ) {
+		$labels[] = aafm_page_builder_label( $slug );
 	}
 	return wp_sprintf_l( '%l', $labels );
+}
+
+/**
+ * Every builder short name the shipped guard covers: the marker builders, then Bricks and WPBakery,
+ * which are detected without a flat marker.
+ *
+ * @return string[]
+ */
+function aafm_page_builder_slugs(): array {
+	return array_merge( array_map( 'strval', array_unique( array_values( aafm_page_builder_default_markers() ) ) ), array( 'bricks', 'wpbakery' ) );
 }
 
 /**
@@ -202,11 +318,168 @@ function aafm_page_builder_owned_error( string $builder ): WP_Error {
 		'aafm_page_builder_owned',
 		sprintf(
 			/* translators: 1: detected page builder name, e.g. Elementor. 2: same name, repeated for readability. 3: same name, repeated for readability. */
-			__( 'This content is owned by %1$s. Writing to it through this ability would either have no visible effect or corrupt %2$s\'s own stored markup, because %3$s renders from its own stored data rather than (or in addition to) the post content field. Edit it there directly.', 'agent-abilities-for-mcp' ),
+			__( 'This content belongs to %1$s. Writing to it through this ability could have no visible effect or damage %2$s\'s layout, because the builder controls how this content is stored and shown. Edit it in %3$s directly.', 'agent-abilities-for-mcp' ),
 			$label,
 			$label,
 			$label
 		),
+		array( 'status' => 409 )
+	);
+}
+
+/**
+ * Whether an update input asks for an excerpt and nothing else.
+ *
+ * The one write a builder-owned post accepts. The keys are an allowlist: the id keys update-post,
+ * update-cpt-item (post_id) and update-page (page_id, plus the post_id it adds) pass, and excerpt.
+ * Any other key, including one a later schema adds, keeps the builder refusal.
+ *
+ * @param array<string,mixed> $input Update input.
+ * @return bool
+ */
+function aafm_page_builder_excerpt_only_input( array $input ): bool {
+	return isset( $input['excerpt'] ) && array() === array_diff_key( $input, array_flip( array( 'post_id', 'page_id', 'excerpt' ) ) );
+}
+
+/**
+ * The columns an excerpt-only edit keeps exactly as stored. wp_update_post() re-sanitizes every
+ * column it carries over, and for a user without unfiltered_html core runs KSES on all three.
+ *
+ * @return string[]
+ */
+function aafm_page_builder_pinned_columns(): array {
+	return array( 'post_content', 'post_content_filtered', 'post_title' );
+}
+
+/**
+ * The post's pinned columns, excerpt and modified dates, read from the posts table past any cache.
+ *
+ * @param int $post_id Post id.
+ * @return array<string,string>|null Column => stored value, or null when the read failed or found no row.
+ */
+function aafm_page_builder_stored_row( int $post_id ): ?array {
+	global $wpdb;
+	// The stored row itself, not a cached copy, is what this proves.
+	$read = aafm_wpdb_row( $wpdb->prepare( 'SELECT post_content, post_content_filtered, post_title, post_excerpt, post_modified, post_modified_gmt FROM %i WHERE ID = %d', $wpdb->posts, $post_id ) );
+	$row  = $read['value'];
+	if ( ! $read['ok'] || ! is_array( $row ) ) {
+		return null;
+	}
+	return array_map( 'strval', $row );
+}
+
+/**
+ * The stored row an excerpt-only edit starts from, or an error when the cached post does not match it.
+ *
+ * Core's wp_update_post() merges the update into the cached post, so a cached copy that differs from the
+ * stored row cannot be trusted. The stale entry is cleared, so the next call reads the real row.
+ *
+ * @param WP_Post $post The post as loaded for the update.
+ * @return array<string,string>|WP_Error
+ */
+function aafm_page_builder_excerpt_start( WP_Post $post ) {
+	$row = aafm_page_builder_stored_row( (int) $post->ID );
+	if ( null !== $row ) {
+		$matches = true;
+		foreach ( aafm_page_builder_pinned_columns() as $column ) {
+			$matches = $matches && (string) $post->$column === $row[ $column ];
+		}
+		if ( $matches ) {
+			return $row;
+		}
+	}
+	clean_post_cache( (int) $post->ID );
+	return new WP_Error(
+		'aafm_page_builder_content_unverified',
+		__( 'The plugin could not confirm this post\'s stored content before saving the excerpt, so it saved nothing. Try again.', 'agent-abilities-for-mcp' ),
+		array( 'status' => 409 )
+	);
+}
+
+/**
+ * Write an excerpt-only update to a builder-owned post with its stored content pinned.
+ *
+ * Core's wp_update_post() re-runs sanitize_post() over the whole row, so for a user without
+ * unfiltered_html core would put the stored body, title and post_content_filtered through KSES. A
+ * wp_insert_post_data filter at PHP_INT_MAX, scoped to this one call, reads those columns from the
+ * stored row at write time (so a builder save that landed since the caller's check is kept, not
+ * overwritten) and puts them back for the post and for the revision the save creates. The filter
+ * sees slashed data, so the values are slashed.
+ *
+ * Another plugin can still rewrite the post after the row is saved (save_post and later). So the
+ * stored row is read back, and when a pinned column differs, the pinned columns, the excerpt and
+ * the modified dates are put back with one direct row update (a second wp_update_post() would re-run
+ * the same filters and hooks), and the revisions this call saved for the current user are deleted.
+ * The caller is told nothing changed only when the read-back proves it. A revision WordPress pruned
+ * to honor WP_POST_REVISIONS during the write is not brought back.
+ *
+ * @param int                  $post_id Post id.
+ * @param array<string,mixed>  $postarr ID and post_excerpt.
+ * @param array<string,string> $before  The stored row before the write (aafm_page_builder_excerpt_start()).
+ * @return int|WP_Error The post id, or an error.
+ */
+function aafm_page_builder_write_excerpt( int $post_id, array $postarr, array $before ) {
+	global $wpdb;
+
+	if ( ! aafm_exact_object_chain( 'post', $post_id ) instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	$columns = array_flip( aafm_page_builder_pinned_columns() );
+	$pinned  = array_intersect_key( $before, $columns );
+	$created = array();
+	$pin     = static function ( array $data, array $raw ) use ( $post_id, $columns, &$pinned ): array {
+		if ( isset( $raw['ID'] ) && (int) $raw['ID'] === $post_id ) {
+			$now    = aafm_page_builder_stored_row( $post_id );
+			$pinned = null === $now ? $pinned : array_intersect_key( $now, $columns );
+		} elseif ( 'revision' !== ( $data['post_type'] ?? '' ) || (int) ( $data['post_parent'] ?? 0 ) !== $post_id ) {
+			return $data;
+		}
+		return array_merge( $data, wp_slash( $pinned ) );
+	};
+	$track   = static function ( $revision_id ) use ( $post_id, &$created ): void {
+		if ( wp_get_post_parent_id( (int) $revision_id ) === $post_id ) {
+			$created[] = (int) $revision_id;
+		}
+	};
+
+	add_filter( 'wp_insert_post_data', $pin, PHP_INT_MAX, 2 );
+	add_action( '_wp_put_post_revision', $track );
+	try {
+		$result = wp_update_post( wp_slash( $postarr ), true );
+	} finally {
+		remove_filter( 'wp_insert_post_data', $pin, PHP_INT_MAX );
+		remove_action( '_wp_put_post_revision', $track );
+	}
+	if ( is_wp_error( $result ) || (int) $result !== $post_id ) {
+		return aafm_generic_error();
+	}
+
+	$after = aafm_page_builder_stored_row( $post_id );
+	if ( null !== $after && array_intersect_key( $after, $columns ) === $pinned ) {
+		return $post_id;
+	}
+
+	$restore = array_merge( $before, $pinned );
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- restores the exact stored bytes, which a filtered save cannot.
+	$wpdb->update( $wpdb->posts, $restore, array( 'ID' => $post_id ) );
+	foreach ( $created as $revision_id ) {
+		$revision = aafm_exact_object( 'post', $revision_id );
+		if ( $revision instanceof WP_Post && get_current_user_id() === (int) $revision->post_author ) {
+			wp_delete_post_revision( $revision_id );
+		}
+	}
+	clean_post_cache( $post_id );
+
+	if ( aafm_page_builder_stored_row( $post_id ) !== $restore ) {
+		return new WP_Error(
+			'aafm_page_builder_content_changed',
+			__( 'Saving the excerpt changed this page builder\'s stored content, and the plugin could not put it back. Check the post in the page builder.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 500 )
+		);
+	}
+	return new WP_Error(
+		'aafm_page_builder_content_changed',
+		__( 'Saving the excerpt would have changed this page builder\'s stored content, so the plugin put the post back the way it was. Nothing was changed.', 'agent-abilities-for-mcp' ),
 		array( 'status' => 409 )
 	);
 }

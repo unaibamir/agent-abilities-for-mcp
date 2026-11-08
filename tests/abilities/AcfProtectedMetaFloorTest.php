@@ -315,7 +315,7 @@ final class AcfProtectedMetaFloorTest extends TestCase {
 	private function boot( string $selector_type ): int {
 		$this->force_integration( 'acf' );
 		$this->stub_acf( $this->config() );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		update_option(
 			'aafm_enabled_abilities',

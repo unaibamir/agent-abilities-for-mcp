@@ -428,24 +428,19 @@ function aafm_sanitize_schema_array( array $schema, int $depth = 0 ): array {
 /**
  * Whether ACF (or its fork SCF) is active, behind a filterable seam.
  *
- * Real detection is class_exists('ACF') || function_exists('get_field'). This is wrapped in its
- * own filter for the same reason the SEO sub-detection is: the PHPUnit suite stubs the ACF host
- * API by defining get_field() (and friends) process-wide, and a defined function can never be
- * undefined. So the host-inactive registry test cannot flip detection back off by removing the
- * aafm_integration_active_acf force filter alone - real detection would still see the stubbed
- * get_field and report ACF active. Driving this seam to false through aafm_acf_active lets that
- * test force detection OFF deterministically, mirroring how aafm_seo_active_plugin is pinned.
- * Production passes the real detection through unchanged.
+ * Detection is class_exists('ACF'), which both ACF Pro and Secure Custom Fields define. A bare
+ * get_field() function is not enough: themes and other plugins define their own helper by that
+ * name, and the ACF tools need ACF itself. The filter lets a test pin detection either way;
+ * production passes the real detection through unchanged.
  *
  * @return bool
  */
 function aafm_acf_active(): bool {
-	$active = class_exists( 'ACF' ) || function_exists( 'get_field' );
+	$active = class_exists( 'ACF' );
 
 	/**
 	 * Filters whether ACF/SCF is reported active. Production passes real detection through; the
-	 * test suite uses this to pin ACF inactive deterministically (the get_field marker stub it
-	 * defines is process-permanent, so removing the force filter alone is not enough).
+	 * test suite uses this to pin ACF on or off deterministically.
 	 *
 	 * @param bool $active Detected active state.
 	 */

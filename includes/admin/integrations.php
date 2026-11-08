@@ -131,6 +131,9 @@ function aafm_integration_status( string $slug ): string {
 	if ( 'event_tickets' === $slug && aafm_event_tickets_below_version_floor() ) {
 		return 'below_floor';
 	}
+	if ( 'aioseo' === $slug && aafm_aioseo_below_version_floor() ) {
+		return 'below_floor';
+	}
 
 	$cards = aafm_integration_cards();
 	$files = $cards[ $slug ]['plugins'] ?? array();
@@ -161,6 +164,20 @@ function aafm_woocommerce_below_version_floor(): bool {
 	}
 	$version = aafm_woocommerce_version();
 	return null !== $version && ! version_compare( $version, AAFM_WOOCOMMERCE_MIN_VERSION, '>=' );
+}
+
+/**
+ * Whether All in One SEO is installed and active, but below AAFM_AIOSEO_MIN_VERSION.
+ * Mirrors aafm_woocommerce_below_version_floor()'s shape, with AIOSEO's aioseo() marker.
+ *
+ * @return bool
+ */
+function aafm_aioseo_below_version_floor(): bool {
+	if ( ! function_exists( 'aioseo' ) ) {
+		return false;
+	}
+	$version = aafm_aioseo_version();
+	return null !== $version && ! version_compare( $version, AAFM_AIOSEO_MIN_VERSION, '>=' );
 }
 
 /**
@@ -435,6 +452,7 @@ function aafm_integration_status_note( string $slug, string $status ): string {
 				'woocommerce'   => array( AAFM_WOOCOMMERCE_MIN_VERSION, 'aafm_woocommerce_version' ),
 				'tec'           => array( AAFM_TEC_MIN_VERSION, 'aafm_tec_version' ),
 				'event_tickets' => array( AAFM_EVENT_TICKETS_MIN_VERSION, 'aafm_event_tickets_version' ),
+				'aioseo'        => array( AAFM_AIOSEO_MIN_VERSION, 'aafm_aioseo_version' ),
 			);
 			[ $min_version, $version_reader ] = $version_floor[ $slug ] ?? array( '', '__return_null' );
 			return sprintf(
@@ -551,11 +569,10 @@ function aafm_render_integration_ability_row( array $ability, array $enabled, ar
 	$title_id = 'aafm-int-ability-title-' . sanitize_key( $name );
 
 	// data-high-risk mirrors the Abilities tab so one JS binding can scope on it. It matters most
-	// here: all nine built-in high-risk abilities are WooCommerce writes and render on this tab, so
-	// this is the attribute that keeps a write-scoped bulk control off refunds, order status,
+	// here: all ten native built-in high-risk abilities are WooCommerce writes and render on this
+	// tab, so this is the attribute that keeps a write-scoped bulk control off refunds, orders,
 	// coupons and tax rates once the operator unlocks the category. See the fuller note in
-	// aafm_render_ability_row(). Bridge rows deliberately carry no equivalent: the high-risk floor
-	// is native-only and never enforced against a bridged slug.
+	// aafm_render_ability_row(). Held bridge rows carry the same attribute on the Other plugins tab.
 	printf(
 		'<div class="aafm-ability-row" data-risk="%1$s"%2$s%3$s>',
 		esc_attr( $risk ),

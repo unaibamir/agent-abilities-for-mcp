@@ -642,6 +642,38 @@ class TokensTest extends TestCase {
 	}
 
 	/**
+	 * Two rotations of the same token that both read the row as active: the competing one runs
+	 * between the outer call's read and its consume, so only the atomic consume can pick one
+	 * winner. A sequential replay can't show this, because the second call already reads the
+	 * row as inactive.
+	 */
+	public function test_interleaved_rotations_of_one_token_mint_one_successor(): void {
+		global $wpdb;
+		aafm_install_oauth_tables();
+
+		$ctx    = $this->ctx();
+		$tokens = aafm_oauth_mint_tokens( $ctx );
+		$table  = $wpdb->prefix . 'aafm_oauth_access_tokens';
+
+		$inner = null;
+		$race  = static function ( string $query ) use ( &$race, &$inner, $table, $tokens, $ctx ): string {
+			if ( 0 === strpos( ltrim( $query ), 'UPDATE' ) && false !== strpos( $query, $table ) && false !== strpos( $query, 'is_active' ) ) {
+				remove_filter( 'query', $race );
+				$inner = aafm_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
+			}
+			return $query;
+		};
+		add_filter( 'query', $race );
+		$outer = aafm_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
+		remove_filter( 'query', $race );
+
+		$this->assertIsArray( $inner, 'The competing rotation ran first and won.' );
+		$this->assertInstanceOf( WP_Error::class, $outer, 'The outer rotation lost the consume and must not mint a second successor.' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$this->assertSame( 2, (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $table ) ), 'The original row plus exactly one successor.' );
+	}
+
+	/**
 	 * Replaying a consumed MIDDLE refresh token revokes the lineage in BOTH
 	 * directions.
 	 *
@@ -666,6 +698,14 @@ class TokensTest extends TestCase {
 		$gen2 = aafm_oauth_rotate_refresh( $gen1['refresh_token'], $ctx['client_id'] );
 		$this->assertIsArray( $gen2 );
 
+		// An active sibling under gen0, outside gen1's branch: only the walk UP to gen0 reaches it.
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$gen0_id = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM %i WHERE refresh_hash = %s', $wpdb->prefix . 'aafm_oauth_access_tokens', hash( 'sha256', $gen0['refresh_token'] ) ) );
+		$this->assertGreaterThan( 0, $gen0_id );
+		$sibling = aafm_oauth_mint_tokens( $ctx + array( 'refresh_parent_id' => $gen0_id ) );
+		$this->assertSame( (int) $ctx['wp_user_id'], aafm_oauth_validate_access_token( $sibling['access_token'] ), 'Precondition: the sibling is live.' );
+
 		// Only the newest generation's row is still active - each rotation consumes
 		// the row it rotated from, deactivating that generation's access token too.
 		// So before the replay, gen2 is live while gen0 and gen1 are already
@@ -680,6 +720,7 @@ class TokensTest extends TestCase {
 		$this->assertFalse( aafm_oauth_validate_access_token( $gen0['access_token'] ) );
 		$this->assertFalse( aafm_oauth_validate_access_token( $gen1['access_token'] ) );
 		$this->assertFalse( aafm_oauth_validate_access_token( $gen2['access_token'] ) );
+		$this->assertFalse( aafm_oauth_validate_access_token( $sibling['access_token'] ), 'The sibling under gen0 dies too, which needs the walk UP.' );
 
 		// Confirm at the row level that every generation is now inactive.
 		$gen0_row = $this->row_by_access( $gen0['access_token'] );

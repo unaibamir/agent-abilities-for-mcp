@@ -33,7 +33,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->unlock_high_risk_abilities();
 		$this->stub_woocommerce();
 		$this->seed_wc_orders();
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 	}
 
 	public function tear_down(): void {
@@ -563,6 +563,24 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->assertSame( 'Item returned.', $res['reason'] );
 	}
 
+	public function test_create_order_refund_refuses_a_zero_amount(): void {
+		$this->register_group_c();
+		$this->acting_as( 'administrator' );
+		WcOrderStubStore::seed_refunds( 5001, array() );
+
+		foreach ( array( '0', '0.0', '0.00' ) as $zero ) {
+			$res = wp_get_ability( 'aafm/wc-create-order-refund' )->execute(
+				array(
+					'order_id' => 5001,
+					'amount'   => $zero,
+				)
+			);
+			$this->assertInstanceOf( WP_Error::class, $res, "amount $zero" );
+			$this->assertSame( 'aafm_wc_invalid_refund_amount', $res->get_error_code() );
+		}
+		$this->assertSame( array(), WcOrderStubStore::get_refunds_for_order( 5001 ), 'A refused refund creates nothing.' );
+	}
+
 	/**
 	 * Refund reason is PII-adjacent and is returned as-is - must not be stripped.
 	 * It is returned under the Integrations security disclaimer.
@@ -982,7 +1000,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		remove_all_filters( 'aafm_integration_active_woocommerce' );
 		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 		$this->assertFalse( aafm_integration_active( 'woocommerce' ) );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 
 		$registry = aafm_get_abilities_registry();
 		$this->assertArrayNotHasKey( 'aafm/wc-list-order-notes', $registry );

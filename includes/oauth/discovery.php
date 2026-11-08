@@ -547,11 +547,22 @@ function aafm_oauth_filter_allowed_cors_headers( array $headers ): array {
  * The leading slash is optional and any query string is ignored by the caller
  * before this runs. Returns a stable key the request wrapper maps to a builder.
  *
+ * On a subfolder install the home path is stripped first, and the authorization server document
+ * is also served at .well-known/openid-configuration under it.
+ *
  * @param string $path Request path (no query string).
  * @return string 'protected-resource', 'authorization-server', or '' for no match.
  */
 function aafm_oauth_match_well_known( string $path ): string {
 	$path = ltrim( $path, '/' );
+
+	// A subfolder install only sees requests under its own path, so a client following the
+	// challenge header asks for /blog/.well-known/... Strip the home path, as a whole segment so
+	// /blog never matches /blogger, then match as a root install would.
+	$home = trim( (string) wp_parse_url( home_url(), PHP_URL_PATH ), '/' );
+	if ( '' !== $home && 0 === strpos( $path, $home . '/' ) ) {
+		$path = substr( $path, strlen( $home ) + 1 );
+	}
 
 	if ( '.well-known/oauth-protected-resource' === $path ) {
 		return 'protected-resource';
@@ -568,6 +579,24 @@ function aafm_oauth_match_well_known( string $path ): string {
 	}
 
 	if ( '.well-known/oauth-authorization-server' === $path ) {
+		return 'authorization-server';
+	}
+
+	// With a path in the issuer, the third form MCP clients try is /blog/.well-known/openid-configuration,
+	// and it is the only one that reaches WordPress on a subfolder install. It serves the same RFC 8414
+	// document and makes no OpenID claim beyond the URL. A root install never answers it.
+	/**
+	 * Filters whether a subfolder install answers /.well-known/openid-configuration with this
+	 * plugin's authorization server document.
+	 *
+	 * Return false on a site that runs its own OpenID Connect provider, so that provider's
+	 * discovery document is served instead. MCP clients still find the oauth-authorization-server
+	 * form.
+	 *
+	 * @since 1.11.1
+	 * @param bool $serve Whether to serve it. Default true.
+	 */
+	if ( '' !== $home && '.well-known/openid-configuration' === $path && (bool) apply_filters( 'aafm_serve_openid_configuration', true ) ) {
 		return 'authorization-server';
 	}
 

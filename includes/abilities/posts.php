@@ -82,7 +82,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'label'        => __( 'Update post', 'agent-abilities-for-mcp' ),
 		'description'  => sprintf(
 			/* translators: %s: page builder names, for example Elementor and Divi. */
-			__( 'Update an existing post by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
+			__( 'Update an existing post by ID (publishing is a separate gate). Reaches a page, product, event, venue, organizer or listing only while that type\'s own tool is on. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. When the post is owned by a foreign page builder (%s), an edit that sends only post_id and excerpt is accepted and the post\'s stored content is left as it was; any other change is refused, and so is every edit when the plugin cannot tell which builder owns it, since a write here would either have no visible effect or corrupt the builder\'s stored markup.', 'agent-abilities-for-mcp' ),
 			aafm_page_builder_names()
 		),
 		'group'        => 'writes',
@@ -94,7 +94,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'label'        => __( 'Replace in post', 'agent-abilities-for-mcp' ),
 		'description'  => sprintf(
 			/* translators: %s: page builder names, for example Elementor and Divi. */
-			__( 'Literal find-and-replace inside a post\'s content. Sanitizes the replacement text and edits only the replaced spans of the body; untouched content is left byte-for-byte as it was, and status is never touched. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
+			__( 'Literal find-and-replace inside a post\'s content. Sanitizes the replacement text and edits only the replaced spans of the body; untouched content is left byte-for-byte as it was, and status is never touched. Reaches a page, product, event, venue, organizer or listing only while that type\'s own tool is on. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
 			aafm_page_builder_names()
 		),
 		'group'        => 'writes',
@@ -106,7 +106,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'label'        => __( 'Replace block', 'agent-abilities-for-mcp' ),
 		'description'  => sprintf(
 			/* translators: %s: page builder names, for example Elementor and Divi. */
-			__( 'Replace one whole block in a post or page with new block markup, without resending the rest of the content. The block is addressed by path: its index among the top-level blocks, then among that block\'s inner blocks, counting only real blocks (the blank lines between blocks are not counted), so [2, 0] is the first block inside the third top-level block. Read the post with content_format raw to count them; classic HTML between blocks is not counted. Pass expect_block (for example core/group) to refuse the write if the block at that path is a different one. The plugin leaves other blocks\' parsed attributes and HTML unchanged; WordPress may sanitize the whole page on save for users who cannot post unfiltered HTML. Content warnings and strict-mode refusals cover the whole resulting page, not only the new block. Refuses when the post\'s existing block markup does not survive being re-serialized (for example a block with invalid attribute JSON); use aafm-update-post for those. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
+			__( 'Replace one whole block in a post or page with new block markup, without resending the rest of the content. The block is addressed by path: its index among the top-level blocks, then among that block\'s inner blocks, counting only real blocks (the blank lines between blocks are not counted), so [2, 0] is the first block inside the third top-level block. Reaches a page, product, event, venue, organizer or listing only while that type\'s own tool is on. Read the post with content_format raw to count them; classic HTML between blocks is not counted. Pass expect_block (for example core/group) to refuse the write if the block at that path has a different block name; it checks the name only, not the content, so two blocks of the same type cannot be told apart and the post should be read again just before writing if it may have changed. The plugin leaves other blocks\' parsed attributes and HTML unchanged; WordPress may sanitize the whole page on save for users who cannot post unfiltered HTML. Content warnings and strict-mode refusals cover the whole resulting page, not only the new block. Refuses when the post\'s existing block markup does not survive being re-serialized (for example a block with invalid attribute JSON); use aafm-update-post for those. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
 			aafm_page_builder_names()
 		),
 		'group'        => 'writes',
@@ -116,7 +116,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/replace-sitewide'] = array(
 		'label'        => __( 'Replace sitewide', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Literal find-and-replace across multiple posts, scoped by post type and status. Dry-run by default (previews the match count and which posts would change, writes nothing); pass dry_run:false to apply. Each candidate post is guarded by the same structure-preserving check as replace-in-post, so a match landing inside markup is skipped and reported, not applied. A candidate owned by a foreign page builder is likewise skipped and counted in skipped_builder_owned, not applied. Bounded to 50 posts per call; a larger match set reports truncated:true with the real total.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Literal find-and-replace across multiple posts, scoped by post type and status. Skips pages, products, events, venues, organizers and listings while that type\'s own update tool is off. Dry-run by default (previews the match count and which posts would change, writes nothing); pass dry_run:false to apply. Each candidate post is guarded by the same structure-preserving check as replace-in-post, so a match landing inside markup is skipped and reported, not applied. A candidate owned by a foreign page builder is likewise skipped and counted in skipped_builder_owned, not applied. One call changes at most 50 posts. If the response says truncated:true, run the call again, since changed posts stop matching. Skipped posts keep matching, and so do posts whose new text contains the search text, so stop when a call changes nothing rather than repeating blindly.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -124,7 +124,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/trash-post']       = array(
 		'label'        => __( 'Trash post', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Move a post to trash (recoverable, never permanently deleted).', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Move a post to trash (recoverable, never permanently deleted). Reaches a page, product or event only while that type\'s own tool is on.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'content',
@@ -142,7 +142,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'label'        => __( 'Update content item', 'agent-abilities-for-mcp' ),
 		'description'  => sprintf(
 			/* translators: %s: page builder names, for example Elementor and Divi. */
-			__( 'Update an item of an allowlisted custom content type by ID (publishing requires that type\'s publish capability). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the item is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
+			__( 'Update an item by ID: an allowlisted custom content type, or a post, page, product, event, venue, organizer or listing while that type\'s own update tool is on (publishing requires that type\'s publish capability). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. When the item is owned by a foreign page builder (%s), an edit that sends only post_id and excerpt is accepted and the item\'s stored content is left as it was; any other change is refused, and so is every edit when the plugin cannot tell which builder owns it, since a write here would either have no visible effect or corrupt the builder\'s stored markup.', 'agent-abilities-for-mcp' ),
 			aafm_page_builder_names()
 		),
 		'group'        => 'writes',
@@ -152,7 +152,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/delete-post']      = array(
 		'label'        => __( 'Delete post', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Permanently delete a post, bypassing the Trash. This cannot be undone - use trash-post to remove a post recoverably instead.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Permanently delete a post, bypassing the Trash. This cannot be undone - use trash-post to remove a post recoverably instead. Reaches a page or product only while that type\'s own tool is on.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'content',
@@ -279,19 +279,24 @@ function aafm_exec_get_posts( array $input ) {
 	if ( is_wp_error( $lang ) ) {
 		return $lang;
 	}
-	$build_query = static function () use ( $type, $status, $input, $paging ): WP_Query {
-		return new WP_Query(
-			array(
-				'post_type'              => $type,
-				'post_status'            => $status,
-				's'                      => isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '',
-				'posts_per_page'         => $paging['per_page'],
-				'paged'                  => $paging['page'],
-				'no_found_rows'          => false,
-				'suppress_filters'       => false,
-				'update_post_meta_cache' => false,
-			)
+	// Someone else's draft, pending or scheduled item is listed only for a user who may edit it.
+	$own_only    = $type_object instanceof WP_Post_Type && aafm_status_needs_own_posts_only( $status, $type_object );
+	$build_query = static function () use ( $type, $status, $input, $paging, $own_only ): WP_Query {
+		$args = array(
+			'post_type'              => $type,
+			'post_status'            => $status,
+			's'                      => isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '',
+			'posts_per_page'         => $paging['per_page'],
+			'paged'                  => $paging['page'],
+			'no_found_rows'          => false,
+			'suppress_filters'       => false,
+			'update_post_meta_cache' => false,
 		);
+		if ( $own_only ) {
+			// author__in, not author: an author of 0 would drop the condition instead of matching nothing.
+			$args['author__in'] = array( get_current_user_id() );
+		}
+		return new WP_Query( $args );
 	};
 
 	$format          = isset( $input['content_format'] ) ? (string) $input['content_format'] : 'rendered';
@@ -1256,7 +1261,7 @@ function aafm_args_update_post(): array {
 function aafm_perm_update_post( array $input ): bool {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
 	$post = $id ? aafm_exact_object( 'post', $id ) : null;
-	if ( ! $post instanceof WP_Post || ! aafm_can_edit_post_object( $post ) ) {
+	if ( ! $post instanceof WP_Post || ! aafm_can_edit_post_object( $post ) || ! aafm_post_tool_reach_allowed( $post, 'update' ) ) {
 		return false;
 	}
 	if ( isset( $input['status'] ) && aafm_status_requires_publish_cap( (string) $input['status'] ) ) {
@@ -1284,9 +1289,18 @@ function aafm_exec_update_post( array $input ) {
 		return aafm_generic_error();
 	}
 
+	// A builder-owned post accepts one write: the excerpt alone, with its stored content pinned. The
+	// cached post must match the stored row before anything is written, or the write is refused.
 	$owning_builder = aafm_post_has_foreign_builder_ownership( $id );
+	$builder_row    = null;
 	if ( false !== $owning_builder ) {
-		return aafm_page_builder_owned_error( $owning_builder );
+		if ( AAFM_BUILDER_OWNERSHIP_UNKNOWN === $owning_builder || ! aafm_page_builder_excerpt_only_input( $input ) ) {
+			return aafm_page_builder_owned_error( $owning_builder );
+		}
+		$builder_row = aafm_page_builder_excerpt_start( $post );
+		if ( is_wp_error( $builder_row ) ) {
+			return $builder_row;
+		}
 	}
 
 	// Validate enrichment BEFORE wp_update_post so a bad term/attachment/meta aborts
@@ -1355,9 +1369,16 @@ function aafm_exec_update_post( array $input ) {
 		$postarr['post_status'] = $status;
 	}
 
-	$result = wp_update_post( wp_slash( $postarr ), true );
-	if ( is_wp_error( $result ) ) {
-		return aafm_generic_error();
+	if ( null !== $builder_row ) {
+		$result = aafm_page_builder_write_excerpt( $id, $postarr, $builder_row );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+	} else {
+		$result = wp_update_post( wp_slash( $postarr ), true );
+		if ( is_wp_error( $result ) ) {
+			return aafm_generic_error();
+		}
 	}
 
 	// Apply the pre-validated enrichment after the core fields land.
@@ -1465,7 +1486,7 @@ function aafm_args_replace_in_post(): array {
 function aafm_perm_replace_in_post( array $input ): bool {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
 	$post = $id ? aafm_exact_object( 'post', $id ) : null;
-	return $post instanceof WP_Post && aafm_can_edit_post_object( $post );
+	return $post instanceof WP_Post && aafm_can_edit_post_object( $post ) && aafm_post_tool_reach_allowed( $post, 'update' );
 }
 
 /**
@@ -1850,7 +1871,7 @@ function aafm_args_replace_block(): array {
 				),
 				'expect_block' => array(
 					'type'        => 'string',
-					'description' => __( 'Optional block name, such as core/group, that the block at path must have. The write is refused if it differs.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'Optional block name, such as core/group, that the block at path must have. The write is refused if the name differs. Only the name is compared, not the content, so it does not guard against another edit to a neighbouring block of the same type.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id', 'path', 'markup' ),
@@ -2151,6 +2172,12 @@ function aafm_exec_replace_sitewide( array $input ) {
 		return $status;
 	}
 
+	// Someone else's draft, pending or scheduled item is neither counted nor scanned for a user who
+	// may not edit it, so total_matches says nothing about its content.
+	$own_scope = $type_object instanceof WP_Post_Type && aafm_status_needs_own_posts_only( $status, $type_object )
+		? array( 'author__in' => array( get_current_user_id() ) )
+		: array();
+
 	$search  = (string) $input['search'];
 	$replace = (string) $input['replace'];
 	$dry_run = ! array_key_exists( 'dry_run', $input ) || (bool) $input['dry_run'];
@@ -2205,7 +2232,7 @@ function aafm_exec_replace_sitewide( array $input ) {
 				'posts_per_page'    => 1,
 				'no_found_rows'     => false,
 				'aafm_query_marker' => $query_marker,
-			)
+			) + $own_scope
 		);
 		$total_matches = (int) $count_probe->found_posts;
 		$truncated     = $total_matches > AAFM_REPLACE_SITEWIDE_MAX_POSTS;
@@ -2244,7 +2271,7 @@ function aafm_exec_replace_sitewide( array $input ) {
 					'order'             => 'ASC',
 					'no_found_rows'     => true,
 					'aafm_query_marker' => $query_marker,
-				)
+				) + $own_scope
 			);
 		} finally {
 			remove_filter( 'posts_pre_query', $scan_filter, PHP_INT_MAX );
@@ -2294,7 +2321,8 @@ function aafm_exec_replace_sitewide( array $input ) {
 			++$failed;
 			continue;
 		}
-		if ( ! $can_edit ) {
+		if ( ! $can_edit || ! aafm_post_tool_reach_allowed( $post, 'update' ) ) {
+			// A type whose own update tool is off is skipped like a post this user can't edit.
 			++$no_perm;
 			continue;
 		}
@@ -2431,7 +2459,7 @@ function aafm_args_update_cpt_item(): array {
 function aafm_perm_update_cpt_item( array $input ): bool {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
 	$post = $id ? aafm_exact_object( 'post', $id ) : null;
-	if ( ! $post instanceof WP_Post || ! aafm_can_edit_post_object( $post ) ) {
+	if ( ! $post instanceof WP_Post || ! aafm_can_edit_post_object( $post ) || ! aafm_post_tool_reach_allowed( $post, 'update', '' ) ) {
 		return false;
 	}
 	if ( isset( $input['status'] ) && aafm_status_requires_publish_cap( (string) $input['status'] ) ) {
@@ -2510,7 +2538,7 @@ function aafm_args_trash_post(): array {
 function aafm_perm_trash_post( array $input ): bool {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
 	$post = $id ? aafm_exact_object( 'post', $id ) : null;
-	return $post instanceof WP_Post && aafm_can_delete_post_object( $post );
+	return $post instanceof WP_Post && aafm_can_delete_post_object( $post ) && aafm_post_tool_reach_allowed( $post, 'trash' );
 }
 
 /**
@@ -2580,7 +2608,7 @@ function aafm_args_delete_post(): array {
 function aafm_perm_delete_post( array $input ): bool {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
 	$post = $id ? aafm_exact_object( 'post', $id ) : null;
-	return $post instanceof WP_Post && aafm_can_delete_post_object( $post );
+	return $post instanceof WP_Post && aafm_can_delete_post_object( $post ) && aafm_post_tool_reach_allowed( $post, 'delete' );
 }
 
 /**

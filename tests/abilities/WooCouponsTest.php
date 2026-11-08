@@ -30,7 +30,7 @@ final class WooCouponsTest extends TestCase {
 		$this->stub_woocommerce();
 		$this->stub_wc_coupons();
 		$this->seed_wc_coupons();
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_wc_coupons();
 	}
 
@@ -137,7 +137,7 @@ final class WooCouponsTest extends TestCase {
 		remove_all_filters( 'aafm_integration_active_woocommerce' );
 		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 		$this->assertFalse( aafm_integration_active( 'woocommerce' ) );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 
 		$registry = aafm_get_abilities_registry();
 		$this->assertArrayNotHasKey( 'aafm/wc-list-coupons', $registry );
@@ -269,6 +269,49 @@ final class WooCouponsTest extends TestCase {
 		$this->assertSame( 'newcoupon', $res['code'] ); // WC lowercases coupon codes.
 		$this->assertSame( '15.00', $res['amount'] );
 		$this->assertSame( 'percent', $res['discount_type'] );
+	}
+
+	public function test_create_and_update_coupon_refuse_an_empty_code(): void {
+		$this->acting_as( 'administrator' );
+
+		foreach ( array( '', '   ' ) as $code ) {
+			$create = wp_get_ability( 'aafm/wc-create-coupon' )->execute( array( 'code' => $code ) );
+			$this->assertInstanceOf( WP_Error::class, $create, 'create with code "' . $code . '"' );
+			$this->assertSame( 'aafm_wc_invalid_coupon_code', $create->get_error_code() );
+		}
+
+		$update = wp_get_ability( 'aafm/wc-update-coupon' )->execute(
+			array(
+				'coupon_id' => 5001,
+				'code'      => '',
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $update );
+		$this->assertSame( 'aafm_wc_invalid_coupon_code', $update->get_error_code() );
+	}
+
+	public function test_coupon_product_lists_must_name_products_that_exist(): void {
+		$this->acting_as( 'administrator' );
+
+		foreach ( array( 'product_ids', 'excluded_product_ids' ) as $field ) {
+			$res = wp_get_ability( 'aafm/wc-create-coupon' )->execute(
+				array(
+					'code' => 'GHOST' . strtoupper( substr( $field, 0, 3 ) ),
+					$field => array( 101, 987654 ),
+				)
+			);
+			$this->assertInstanceOf( WP_Error::class, $res, $field );
+			$this->assertSame( 'aafm_wc_unknown_coupon_product', $res->get_error_code() );
+		}
+
+		$ok = wp_get_ability( 'aafm/wc-create-coupon' )->execute(
+			array(
+				'code'        => 'REALPRODUCT',
+				'product_ids' => array( 101 ),
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $ok, 'An existing product id is accepted.' );
+		$this->assertSame( array( 101 ), $ok['product_ids'] );
 	}
 
 	/**

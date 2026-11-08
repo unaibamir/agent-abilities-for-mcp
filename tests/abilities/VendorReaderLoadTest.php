@@ -405,6 +405,7 @@ final class VendorReaderLoadTest extends TestCase {
 				'all_day'       => false,
 				'venue_id'      => 0,
 				'organizer_ids' => array(),
+				'description'   => '',
 			),
 			$out
 		);

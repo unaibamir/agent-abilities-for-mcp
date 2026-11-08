@@ -42,6 +42,18 @@ final class UserMetaPrecedenceTest extends TestCase {
 	}
 
 	/**
+	 * The MCP adapter's session store, in its single-site and multisite forms, stays blocked
+	 * even when listed explicitly and under allow-all. A near name is not caught.
+	 */
+	public function test_the_session_key_and_its_multisite_form_are_hard_blocked(): void {
+		$this->set_user_meta_options( array( '*', 'mcp_adapter_sessions', 'mcp_adapter_sessions_2' ), array() );
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_user_meta_key( 'mcp_adapter_sessions' ) );
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_user_meta_key( 'mcp_adapter_sessions_2' ) );
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_user_meta_key( 'MCP_Adapter_Sessions_17' ) );
+		$this->assertNotInstanceOf( WP_Error::class, aafm_validate_user_meta_key( 'mcp_adapter_sessions_note' ) );
+	}
+
+	/**
 	 * Row 2 - hard-block beats an explicit allow entry (capabilities key stays blocked).
 	 */
 	public function test_hard_block_beats_explicit_allow(): void {

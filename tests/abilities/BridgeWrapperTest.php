@@ -1177,6 +1177,167 @@ final class BridgeWrapperTest extends TestCase {
 	}
 
 	/**
+	 * A foreign input schema with a top-level oneOf (WooCommerce product-create/update) makes ChatGPT
+	 * silently drop the whole tools/list refresh. The wrapper advertises one plain object instead:
+	 * branch properties merged, enum values unioned, only keys every branch requires still required.
+	 */
+	public function test_bridged_input_schema_with_a_top_level_oneof_is_flattened_to_a_plain_object(): void {
+		$this->register_foreign_with_schema( 'demo/one-of', array( 'type' => 'object' ), static fn() => array(), $this->one_of_input_schema() );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'demo/one-of' ) );
+		$this->register_wrappers();
+
+		$schema = wp_get_ability( 'aafm-bridge/demo-one-of' )->get_input_schema();
+
+		$this->assertSame( 'object', $schema['type'] );
+		foreach ( array( 'oneOf', 'anyOf', 'allOf', 'not' ) as $keyword ) {
+			$this->assertArrayNotHasKey( $keyword, $schema, "Top-level $keyword must not reach an MCP client." );
+		}
+		$this->assertSame( array( 'id', 'kind', 'sku', 'note' ), array_keys( $schema['properties'] ) );
+		$this->assertSame( array( 'a', 'b' ), $schema['properties']['kind']['enum'], 'Branch enums are unioned so either branch value validates.' );
+		$this->assertSame( array( 'id', 'kind' ), $schema['required'], 'Only keys every branch requires stay required.' );
+	}
+
+	/**
+	 * Branches that define the same property differently (a string in one, an integer in the other)
+	 * must not leave the wrapper rejecting a call the foreign ability accepts.
+	 */
+	public function test_flattening_does_not_reject_a_value_one_branch_accepts(): void {
+		$this->acting_as( 'administrator' );
+		$schema = array(
+			'type'  => 'object',
+			'oneOf' => array(
+				array(
+					'type'       => 'object',
+					'required'   => array( 'ref' ),
+					'properties' => array(
+						'ref' => array(
+							'type'        => 'string',
+							'minLength'   => 3,
+							'description' => 'A reference.',
+						),
+					),
+				),
+				array(
+					'type'       => 'object',
+					'required'   => array( 'ref' ),
+					'properties' => array(
+						'ref' => array(
+							'type'    => 'integer',
+							'minimum' => 1,
+						),
+					),
+				),
+			),
+		);
+		$this->register_foreign_with_schema( 'demo/mixed', array( 'type' => 'object' ), static fn() => array( 'ok' => true ), $schema );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'demo/mixed' ) );
+		$this->register_wrappers();
+		$wrapper = wp_get_ability( 'aafm-bridge/demo-mixed' );
+
+		$ref = $wrapper->get_input_schema()['properties']['ref'];
+		$this->assertEqualsCanonicalizing( array( 'string', 'integer' ), $ref['type'], 'Branches disagree on the type, so the wrapper allows both.' );
+		$this->assertArrayNotHasKey( 'minLength', $ref );
+		$this->assertArrayNotHasKey( 'minimum', $ref );
+
+		$this->assertSame( array( 'ok' => true ), $wrapper->execute( array( 'ref' => 7 ) ), 'The integer branch passes the wrapper and the foreign validator.' );
+		$this->assertSame( array( 'ok' => true ), $wrapper->execute( array( 'ref' => 'abc' ) ), 'The string branch passes too.' );
+		$this->assertInstanceOf( \WP_Error::class, $wrapper->execute( array( 'ref' => 'ab' ) ), 'The foreign validator still refuses what no branch accepts.' );
+	}
+
+	public function test_a_combined_enum_keeps_values_that_loosely_compare_equal(): void {
+		$merged = aafm_merge_branch_property(
+			array(
+				'type' => array( 'integer', 'string' ),
+				'enum' => array( 0, 1 ),
+			),
+			array(
+				'type' => array( 'integer', 'string' ),
+				'enum' => array( 'auto', '1', 1 ),
+			)
+		);
+
+		$this->assertSame( array( 0, 1, 'auto', '1' ), $merged['enum'], 'Uniqueness is strict: 0 and "auto" both stay, and so do 1 and "1".' );
+	}
+
+	/**
+	 * Flattening only changes what is advertised. The foreign ability's own validation still runs on
+	 * execute, against its original oneOf schema.
+	 */
+	public function test_a_flattened_bridged_schema_still_gets_the_foreign_oneof_validation_on_execute(): void {
+		$this->acting_as( 'administrator' );
+		$this->register_foreign_with_schema( 'demo/one-of', array( 'type' => 'object' ), static fn() => array( 'ok' => true ), $this->one_of_input_schema() );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'demo/one-of' ) );
+		$this->register_wrappers();
+		$wrapper = wp_get_ability( 'aafm-bridge/demo-one-of' );
+
+		$valid = $wrapper->execute(
+			array(
+				'id'   => 1,
+				'kind' => 'a',
+				'sku'  => 'x',
+			)
+		);
+		$this->assertSame( array( 'ok' => true ), $valid, 'A valid branch passes.' );
+
+		$bad = $wrapper->execute(
+			array(
+				'id'   => 1,
+				'kind' => 'a',
+			)
+		);
+		$this->assertInstanceOf( \WP_Error::class, $bad, 'Input matching no branch is refused by the foreign validator.' );
+	}
+
+	/**
+	 * A schema without a combinator comes back unchanged.
+	 */
+	public function test_a_flattened_schema_leaves_a_plain_object_schema_untouched(): void {
+		$plain = array(
+			'type'       => 'object',
+			'properties' => array( 'v' => array( 'type' => 'string' ) ),
+			'required'   => array( 'v' ),
+		);
+		$this->assertSame( $plain, aafm_flatten_schema_combinators( $plain ) );
+	}
+
+	/**
+	 * A two-branch oneOf input schema: both branches require id and kind, each adds its own field.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private function one_of_input_schema(): array {
+		$kind = static fn( string $value ): array => array(
+			'type' => 'string',
+			'enum' => array( $value ),
+		);
+		return array(
+			'type'  => 'object',
+			'oneOf' => array(
+				array(
+					'type'                 => 'object',
+					'required'             => array( 'id', 'kind', 'sku' ),
+					'properties'           => array(
+						'id'   => array( 'type' => 'integer' ),
+						'kind' => $kind( 'a' ),
+						'sku'  => array( 'type' => 'string' ),
+					),
+					'additionalProperties' => false,
+				),
+				array(
+					'type'                 => 'object',
+					'required'             => array( 'id', 'kind', 'note' ),
+					'properties'           => array(
+						'id'   => array( 'type' => 'integer' ),
+						'kind' => $kind( 'b' ),
+						'note' => array( 'type' => 'string' ),
+					),
+					'additionalProperties' => false,
+				),
+			),
+		);
+	}
+
+	/**
 	 * Register a foreign ability whose OUTPUT schema carries a keyword outside the client
 	 * allow-list, mirroring register_foreign_with_unsupported_schema_keyword() above but for
 	 * get_output_schema() instead of get_input_schema().
@@ -1391,6 +1552,62 @@ final class BridgeWrapperTest extends TestCase {
 		}
 		$this->assertCount( 1, $fired );
 		$this->assertSame( $rows[0]['detail'], $fired[0]['detail'], 'The announced detail is the column.' );
+	}
+
+	/**
+	 * On the 6.9 floor a source's throw escapes core and reaches the decorated catch. Under WP_DEBUG a
+	 * bridged throw must still give the client the static error and resolve its row; only this
+	 * plugin's own tools stay loud. The fixture's execute() throws, which models the floor on any core.
+	 */
+	public function test_a_bridged_throw_that_escapes_core_stays_static_under_wp_debug_and_the_row_resolves(): void {
+		$this->assertTrue( defined( 'WP_DEBUG' ) && WP_DEBUG, 'The suite runs with WP_DEBUG on, the case this pins.' );
+		$this->acting_as( 'administrator' );
+		$this->register_foreign_returning( 'vendor/escapes', static fn(): array => array() );
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				wp_unregister_ability( 'vendor/escapes' );
+				wp_register_ability(
+					'vendor/escapes',
+					array(
+						'label'               => 'vendor/escapes',
+						'description'         => 'Throws past core.',
+						'category'            => 'demo-things',
+						'input_schema'        => array(
+							'type'       => 'object',
+							'properties' => array(),
+						),
+						'execute_callback'    => static fn(): array => array(),
+						'permission_callback' => '__return_true',
+						'ability_class'       => \AAFM\Tests\Fixtures\ThrowingAbility::class,
+					)
+				);
+			}
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/escapes' ) );
+		$this->register_wrappers();
+
+		$result = wp_get_ability( 'aafm-bridge/vendor-escapes' )->execute( array() );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( aafm_ability_exception_message(), $result->get_error_message() );
+		$this->assertStringNotContainsString( 'secret-token', $result->get_error_message() );
+		$rows = aafm_query_activity( array( 'ability' => 'aafm-bridge/vendor-escapes' ) );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'error', (string) $rows[0]['status'] );
+	}
+
+	/**
+	 * Discovery has the same WP_DEBUG default as execute: a bridged tool's crashing permission check
+	 * is denied quietly during tools/list, while this plugin's own tools stay loud.
+	 */
+	public function test_a_bridged_permission_crash_during_discovery_is_denied_not_rethrown_under_wp_debug(): void {
+		$this->assertTrue( defined( 'WP_DEBUG' ) && WP_DEBUG, 'The suite runs with WP_DEBUG on, the case this pins.' );
+
+		$this->assertFalse( aafm_deny_crashed_permission_check( 'aafm-bridge/vendor-throws', new \RuntimeException( 'secret-token' ) ) );
+
+		$this->expectException( \RuntimeException::class );
+		aafm_deny_crashed_permission_check( 'aafm/get-posts', new \RuntimeException( 'own tool' ) );
 	}
 
 	/**

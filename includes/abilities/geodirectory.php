@@ -451,8 +451,9 @@ function aafm_geodirectory_listing_is_visible( WP_Post $post, array $public_stat
  * @return array<string,mixed>
  */
 function aafm_exec_geodirectory_get_listings( array $input ) {
-	$per_page = isset( $input['per_page'] ) ? min( 100, max( 1, absint( $input['per_page'] ) ) ) : 20;
-	$page     = isset( $input['page'] ) ? min( AAFM_LIST_PAGE_MAX, max( 1, absint( $input['page'] ) ) ) : 1;
+	$paging   = aafm_paginate_args( $input + array( 'per_page' => 20 ), AAFM_TERMS_PER_PAGE_MAX );
+	$per_page = $paging['per_page'];
+	$page     = $paging['page'];
 
 	// Filtering AFTER WP_Query had already paginated and counted meant
 	// an inaccessible listing could displace an accessible one to a later page while `total` still
@@ -757,8 +758,18 @@ function aafm_args_geodirectory_create_listing(): array {
 	foreach ( aafm_geodirectory_address_fields() as $field ) {
 		$properties[ $field ] = array( 'type' => 'string' );
 	}
-	$properties['latitude']  = array( 'type' => 'number' );
-	$properties['longitude'] = array( 'type' => 'number' );
+	$properties['latitude']  = array(
+		'type'        => 'number',
+		'minimum'     => -90,
+		'maximum'     => 90,
+		'description' => __( 'Latitude in degrees, from -90 to 90. A value outside that range is refused.', 'agent-abilities-for-mcp' ),
+	);
+	$properties['longitude'] = array(
+		'type'        => 'number',
+		'minimum'     => -180,
+		'maximum'     => 180,
+		'description' => __( 'Longitude in degrees, from -180 to 180. A value outside that range is refused.', 'agent-abilities-for-mcp' ),
+	);
 
 	return array(
 		'label'               => aafm_ability_label( 'aafm/geodirectory-create-listing' ),
@@ -925,8 +936,18 @@ function aafm_args_geodirectory_update_listing(): array {
 	foreach ( aafm_geodirectory_address_fields() as $field ) {
 		$properties[ $field ] = array( 'type' => 'string' );
 	}
-	$properties['latitude']  = array( 'type' => 'number' );
-	$properties['longitude'] = array( 'type' => 'number' );
+	$properties['latitude']  = array(
+		'type'        => 'number',
+		'minimum'     => -90,
+		'maximum'     => 90,
+		'description' => __( 'Latitude in degrees, from -90 to 90. A value outside that range is refused.', 'agent-abilities-for-mcp' ),
+	);
+	$properties['longitude'] = array(
+		'type'        => 'number',
+		'minimum'     => -180,
+		'maximum'     => 180,
+		'description' => __( 'Longitude in degrees, from -180 to 180. A value outside that range is refused.', 'agent-abilities-for-mcp' ),
+	);
 
 	return array(
 		'label'               => aafm_ability_label( 'aafm/geodirectory-update-listing' ),

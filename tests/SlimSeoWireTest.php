@@ -19,12 +19,12 @@ final class SlimSeoWireTest extends TestCase {
 		// prior test's slim-seo-inactive registry snapshot survives and the ability never
 		// actually registers here, so a real tools/call reports "tool not found" even though
 		// the direct-call SlimSeoTest suite (which never touches the registry cache) passes.
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 	}
 
 	public function tear_down(): void {
 		remove_filter( 'aafm_integration_active_slim_seo', '__return_true' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		parent::tear_down();
 	}
 

@@ -22,7 +22,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_meta_definitions' );
 function aafm_register_meta_definitions( array $registry ): array {
 	$registry['aafm/get-post-meta']     = array(
 		'label'        => __( 'Get post meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Read a single allowlisted meta value from a post the agent can edit (scalar only).', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Read a single allowlisted meta value from a post the agent can edit (scalar only). Keys are opt-in: an administrator exposes each one under Exposed meta keys in the Content sub-tab of the Abilities tab.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',
@@ -30,7 +30,7 @@ function aafm_register_meta_definitions( array $registry ): array {
 	);
 	$registry['aafm/get-all-post-meta'] = array(
 		'label'        => __( 'Get all post meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Read every allowlisted scalar meta value from a post the agent can edit, returned as a key/value map. Protected, underscore, and non-scalar values are excluded.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Read every allowlisted scalar meta value from a post the agent can edit, returned as a key/value map. Protected, underscore, and non-scalar values are excluded. Keys are opt-in: an administrator exposes each one under Exposed meta keys in the Content sub-tab of the Abilities tab.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',
@@ -38,7 +38,7 @@ function aafm_register_meta_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-post-meta']  = array(
 		'label'        => __( 'Update post meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Write a single allowlisted scalar meta value to a post the agent can edit. The response returns the old value when it is plain text or a number.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Write a single allowlisted scalar meta value to a post the agent can edit. The response returns the old value when it is plain text or a number. Keys are opt-in: an administrator exposes each one under Exposed meta keys in the Content sub-tab of the Abilities tab.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -46,7 +46,7 @@ function aafm_register_meta_definitions( array $registry ): array {
 	);
 	$registry['aafm/delete-post-meta']  = array(
 		'label'        => __( 'Delete post meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Delete an allowlisted meta key from a post the agent can edit. Removes all values of that key. The response returns the old value when it is plain text or a number.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Delete an allowlisted meta key from a post the agent can edit. Removes all values of that key. The response returns the old value when it is plain text or a number. Keys are opt-in: an administrator exposes each one under Exposed meta keys in the Content sub-tab of the Abilities tab.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'content',
@@ -185,6 +185,7 @@ function aafm_args_get_all_post_meta(): array {
 			'type'       => 'object',
 			'properties' => array(
 				'meta' => array( 'type' => 'object' ),
+				'note' => array( 'type' => 'string' ),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_get_all_post_meta',
@@ -261,10 +262,14 @@ function aafm_exec_get_all_post_meta( array $input ) {
 		$meta[ (string) $key ] = $value;
 	}
 
-	return array(
+	$out = array(
 		// Cast so an empty map JSON-encodes to "{}" (object) per the schema.
 		'meta' => (object) $meta,
 	);
+	if ( empty( $meta ) ) {
+		$out['note'] = __( "No allowed values to show. Keys that aren't allowed, are empty or hold arrays are left out, so an empty map doesn't mean the post has no meta.", 'agent-abilities-for-mcp' );
+	}
+	return $out;
 }
 
 /**

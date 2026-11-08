@@ -97,20 +97,39 @@ final class AllowlistAdminTest extends TestCase {
 		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $admin );
 
+		// Seed a real list first, so a refusal is told apart from a save of the same empty state.
+		$nonce                   = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']          = $nonce;
+		$_REQUEST['nonce']       = $nonce;
+		$_POST['allowlist_json'] = wp_json_encode(
+			array(
+				array(
+					'scope_type'        => 'role',
+					'scope_id'          => 'editor',
+					'allowed_abilities' => array( 'aafm/get-posts' ),
+				),
+			)
+		);
+		$this->intercept_die();
+		$this->assertTrue( $this->run_handler()['success'] ?? false, 'Precondition: the seed list saves.' );
+		$seeded = aafm_allowlist_overrides();
+		$this->assertCount( 1, $seeded );
+
+		// A different, valid list under a bad nonce.
 		$_POST['nonce']          = 'not-a-real-nonce';
 		$_REQUEST['nonce']       = 'not-a-real-nonce';
-		$_POST['allowlist_json'] = wp_json_encode( array() );
+		$_POST['allowlist_json'] = wp_json_encode(
+			array(
+				array(
+					'scope_type'        => 'role',
+					'scope_id'          => 'author',
+					'allowed_abilities' => 'all',
+				),
+			)
+		);
+		$this->run_handler();
 
-		$this->intercept_die();
-		ob_start();
-		try {
-			aafm_ajax_save_allowlist();
-		} catch ( \WPDieException $e ) {
-			unset( $e );
-		}
-		ob_end_clean();
-
-		$this->assertSame( array(), aafm_allowlist_overrides() );
+		$this->assertSame( $seeded, aafm_allowlist_overrides(), 'A bad nonce must leave the stored list unchanged.' );
 	}
 
 	public function test_an_admin_can_save_a_valid_role_and_client_row(): void {
@@ -659,6 +678,8 @@ final class AllowlistAdminTest extends TestCase {
 		$json = $this->run_handler();
 
 		$this->assertFalse( $json['success'] ?? true );
+		// The rows name clients that don't exist, so only the cap's own message proves the cap refused it.
+		$this->assertSame( sprintf( 'An allowlist can hold at most %d rows.', AAFM_ALLOWLIST_MAX_ROWS ), $json['data']['message'] ?? '' );
 		$this->assertSame( array(), aafm_allowlist_overrides() );
 	}
 }

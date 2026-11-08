@@ -353,7 +353,11 @@ function aafm_exec_tec_create_venue( array $input ) {
 	if ( is_wp_error( $status ) ) {
 		return $status;
 	}
-	$args                = aafm_tec_venue_orm_args( $input );
+	$checked = aafm_tec_checked_website( $input );
+	if ( is_wp_error( $checked ) ) {
+		return $checked;
+	}
+	$args                = aafm_tec_venue_orm_args( $checked );
 	$args['post_status'] = $status;
 
 	$safety = aafm_tec_enforce_content_safety( $args, 'venue' );
@@ -381,12 +385,14 @@ function aafm_exec_tec_create_venue( array $input ) {
  * @return array<string,mixed>
  */
 function aafm_args_tec_update_venue(): array {
-	$properties             = aafm_tec_venue_input_properties();
-	$properties['title']    = array(
+	$properties          = aafm_tec_venue_input_properties();
+	$properties['title'] = array(
 		'type'        => 'string',
 		'description' => __( 'Venue name. Optional on update, required only on create.', 'agent-abilities-for-mcp' ),
 	);
-	$properties['venue_id'] = array(
+	unset( $properties['status']['default'] );
+	$properties['status']['description'] = __( 'Publication status. Leave it out to keep the venue\'s current status. Setting publish requires the publish_tribe_venues capability.', 'agent-abilities-for-mcp' );
+	$properties['venue_id']              = array(
 		'type'        => 'integer',
 		'minimum'     => 1,
 		'description' => __( 'ID of the venue to update.', 'agent-abilities-for-mcp' ),
@@ -428,7 +434,11 @@ function aafm_exec_tec_update_venue( array $input ) {
 	if ( $id < 1 ) {
 		return aafm_generic_error();
 	}
-	$args = aafm_tec_venue_orm_args( $input );
+	$checked = aafm_tec_checked_website( $input );
+	if ( is_wp_error( $checked ) ) {
+		return $checked;
+	}
+	$args = aafm_tec_venue_orm_args( $checked );
 	if ( isset( $input['status'] ) ) {
 		$status = aafm_authorize_post_status( (string) $input['status'], aafm_tec_venue_publish_cap(), null, aafm_current_post_status( $id ) );
 		if ( is_wp_error( $status ) ) {

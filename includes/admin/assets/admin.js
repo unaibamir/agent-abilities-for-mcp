@@ -511,7 +511,7 @@
 				if ( allPanel ) {
 					allPanel.hidden = ! all;
 				}
-				// Codex admin-ui-r1 M2: a click and an Arrow/Home/End key both land here (the
+				// A click and an Arrow/Home/End key both land here (the
 				// keydown handler wired by #wireTablistKeys() calls this same function), so
 				// dispatching from one place lets #bindAbilitiesSearch() clear a stale query on
 				// either input method instead of only on click.
@@ -581,7 +581,7 @@
 			// as a query rather than a fixed class list so a future flat "All abilities" tab can
 			// reuse it without maintaining a second copy. .aafm-ability-list is excluded here on
 			// purpose - it holds rows, not chrome - and gets its own visibility pass in apply()/
-			// clear() below, hidden only once every row inside it is hidden (Codex admin-ui-r1 L2).
+			// clear() below, hidden only once every row inside it is hidden.
 			const panelChrome = ( panel ) =>
 				panel.querySelectorAll( ':scope > :not(.aafm-ability-list):not(.aafm-subject-search-label)' );
 
@@ -652,9 +652,9 @@
 							panelMatches += 1;
 						}
 					} );
-					// Codex admin-ui-r1 L2: a panel with both a Reads and a Writes list, where
-					// the query matches only one of them, used to leave the other as an empty
-					// bordered .aafm-card - panelChrome() deliberately skips .aafm-ability-list
+					// A panel with both a Reads and a Writes list, where the query matches only
+					// one of them, would otherwise leave the other as an empty bordered
+					// .aafm-card - panelChrome() deliberately skips .aafm-ability-list
 					// (it holds rows, not chrome), so nothing else here was hiding it. Hide a
 					// list once every row inside it is hidden; #clear() above already restores all
 					// of them.
@@ -694,7 +694,7 @@
 			search.addEventListener( 'input', apply );
 
 			// A sub-tab change - by click or by Arrow/Home/End (both dispatch this event from
-			// #bindSubjectTabs()'s shared activate(), Codex admin-ui-r1 M2) - is a request to see
+			// #bindSubjectTabs()'s shared activate()) - is a request to see
 			// only that one tab, the way it always has been. Reconcile the search box with it
 			// rather than leaving a stale query active over a view that no longer matches what it
 			// filtered: before this fix, a keyboard move could reveal a panel with no matches
@@ -772,6 +772,25 @@
 		}
 
 		/**
+		 * POST a prepared body to admin-ajax. The one place the admin script calls fetch.
+		 *
+		 * @param {URLSearchParams} body The form body, action and nonce included.
+		 * @return {Promise<*>} The decoded JSON, or undefined when the request or the parse failed.
+		 */
+		async #postBody( body ) {
+			try {
+				const res = await fetch( this.#ajaxUrl, {
+					method: 'POST',
+					body,
+					credentials: 'same-origin',
+				} );
+				return await res.json();
+			} catch {
+				return undefined;
+			}
+		}
+
+		/**
 		 * POST an admin-ajax action with the nonce attached. Returns the parsed JSON,
 		 * or a synthetic failure object so callers never have to try/catch the transport.
 		 *
@@ -781,19 +800,10 @@
 		 */
 		async #post( action, data = {} ) {
 			const body = new URLSearchParams( { action, nonce: this.#nonce, ...data } );
-			try {
-				const res = await fetch( this.#ajaxUrl, {
-					method: 'POST',
-					body,
-					credentials: 'same-origin',
-				} );
-				return await res.json();
-			} catch {
-				return {
-					success: false,
-					data: { message: this.#t( 'requestFailed', 'Request failed.' ) },
-				};
-			}
+			return ( await this.#postBody( body ) ) ?? {
+				success: false,
+				data: { message: this.#t( 'requestFailed', 'Request failed.' ) },
+			};
 		}
 
 		#bindCopy() {
@@ -878,8 +888,8 @@
 		 *
 		 * What counts as a write is read off the server-rendered row, never guessed: data-risk
 		 * is exactly "write", so destructive rows are excluded by class, and data-high-risk is
-		 * absent, so the nine money-and-identity abilities stay out even after the operator
-		 * unlocks that category (all nine are risk="write", so risk alone would sweep them in).
+		 * absent, so the ten money-and-identity abilities stay out even after the operator
+		 * unlocks that category (all ten are risk="write", so risk alone would sweep them in).
 		 * A locked row emits no checkbox at all, so read-only mode and a shut high-risk floor
 		 * are already unreachable here. That leaves nothing destructive or high-risk in range,
 		 * which is why this control needs no confirm where "Enable all" does.
@@ -1148,17 +1158,7 @@
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
 				}
-				let json;
-				try {
-					const res = await fetch( this.#ajaxUrl, {
-						method: 'POST',
-						body,
-						credentials: 'same-origin',
-					} );
-					json = await res.json();
-				} catch {
-					json = { success: false };
-				}
+				const json = ( await this.#postBody( body ) ) ?? { success: false };
 				if ( json?.success ) {
 					this.#refreshLocalCounts(
 						form,
@@ -1203,25 +1203,24 @@
 				const sent = this.#snapshot( form );
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
+					status.classList.remove( 'is-error' );
 				}
-				let json;
-				try {
-					const res = await fetch( this.#ajaxUrl, {
-						method: 'POST',
-						body,
-						credentials: 'same-origin',
-					} );
-					json = await res.json();
-				} catch {
-					json = { success: false };
-				}
+				const json = ( await this.#postBody( body ) ) ?? { success: false };
 				if ( json?.success ) {
 					this.#markClean( form, sent );
 				}
 				if ( status ) {
-					status.textContent = json?.success
-						? this.#t( 'saved', 'Saved' )
-						: this.#t( 'errorSaving', 'Error saving' );
+					// Say what failed when the server gives a reason; -1 and 0 are an expired page.
+					let text = this.#t( 'errorSaving', 'Error saving' );
+					if ( json?.success ) {
+						text = this.#t( 'saved', 'Saved' );
+					} else if ( -1 === json || 0 === json ) {
+						text = this.#t( 'saveExpired', 'Could not save because this page has expired. Copy any unsaved changes, reload the page, and save again.' );
+					} else if ( 'string' === typeof json?.data?.message ) {
+						text = json.data.message;
+					}
+					status.textContent = text;
+					status.classList.toggle( 'is-error', ! json?.success );
 				}
 			} );
 		}
@@ -1341,8 +1340,9 @@
 		 * Per-group Enable all / Disable all for the bridge directory. Flips every ability
 		 * checkbox inside the button's own plugin card (skipping disabled/orphan rows). Bulk
 		 * enable is a deliberate action, so it turns destructive abilities on directly and hides
-		 * any open per-row confirm strip rather than firing a modal. The save reads whatever is
-		 * checked, so no other wiring is needed.
+		 * any open per-row confirm strip rather than firing a modal. It never ticks a high-risk
+		 * row (data-high-risk), matching the native rule; Disable all still unticks one. The save
+		 * reads whatever is checked, so no other wiring is needed.
 		 */
 		#bindBridgeBulk() {
 			const form = document.querySelector( '#aafm-bridge-form' );
@@ -1361,10 +1361,12 @@
 							'input[name="bridged_abilities[]"]:not([disabled])'
 						)
 						.forEach( ( box ) => {
+							const row = box.closest( '.aafm-ability-row' );
+							if ( enable && row?.hasAttribute( 'data-high-risk' ) ) {
+								return;
+							}
 							box.checked = enable;
-							const confirm = box
-								.closest( '.aafm-ability-row' )
-								?.querySelector( '.aafm-bridge-confirm' );
+							const confirm = row?.querySelector( '.aafm-bridge-confirm' );
 							if ( confirm ) {
 								confirm.hidden = true;
 							}
@@ -1622,7 +1624,7 @@
 			const norm = ( text ) => text.split( /\r\n|\r|\n/ ).map( ( l ) => l.trim() ).filter( Boolean );
 			const asList = ( v ) => ( Array.isArray( v ) ? v : Object.values( v ?? {} ) );
 			// Controls as values: a pair is its two textarea strings, anything else the checked
-			// values. `live` reads what the user sees, otherwise what PHP rendered (ADR-5).
+			// values. `live` reads what the user sees, otherwise what PHP rendered.
 			const read = ( d, live ) =>
 				d.pair
 					? d.pair.map( ( n ) => {
@@ -1840,15 +1842,9 @@
 
 				setBar( this.#t( 'saving', 'Saving…' ) );
 				inFlight = true;
-				let json;
-				try {
-					const res = await fetch( this.#ajaxUrl, { method: 'POST', body, credentials: 'same-origin' } );
-					json = await res.json();
-				} catch {
-					// Network failure or a body that is not JSON: json stays undefined.
-				} finally {
-					inFlight = false;
-				}
+				// A network failure or a body that is not JSON leaves json undefined.
+				const json = await this.#postBody( body );
+				inFlight = false;
 
 				// -1 is core's nonce refusal and 0 a logged-out session; both are what an admin
 				// gets from a tab left open overnight, and a reload fixes both.
@@ -1976,17 +1972,7 @@
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
 				}
-				let json;
-				try {
-					const res = await fetch( this.#ajaxUrl, {
-						method: 'POST',
-						body,
-						credentials: 'same-origin',
-					} );
-					json = await res.json();
-				} catch {
-					json = { success: false };
-				}
+				const json = ( await this.#postBody( body ) ) ?? { success: false };
 				if ( status ) {
 					if ( ! json?.success ) {
 						// A rejected save never wrote anything, so the generic line is right for it.
@@ -1997,7 +1983,7 @@
 							json?.data?.message ??
 							this.#t(
 								'settingsNotSaved',
-								'Could not save - your previous settings are still in effect.'
+								'Could not save. Your previous settings are still in effect.'
 							);
 					} else {
 						const serverState = form.querySelector( '#aafm-default-server-state' );
@@ -2130,7 +2116,12 @@
 				if ( ! status ) {
 					return;
 				}
-				if ( json?.success && json.data.reachable ) {
+				if ( json?.success && json.data.redirected ) {
+					status.textContent = this.#t(
+						'connectionRedirected',
+						'The endpoint redirected, so the test stopped before sending your login anywhere else. Run the Connection Doctor to see where it goes.'
+					);
+				} else if ( json?.success && json.data.reachable ) {
 					status.textContent = this.#format(
 						this.#t(
 							'connectionOk',
@@ -2151,6 +2142,15 @@
 					status.textContent = this.#format(
 						this.#t( 'errorWithMessage', 'Error: %s' ),
 						json?.data?.message ?? this.#t( 'errorUnknown', 'unknown' )
+					);
+				}
+				if ( json?.success && json.data.cookies_skipped ) {
+					status.append(
+						' ',
+						this.#t(
+							'connectionNoLogin',
+							'The endpoint is on a different address, so this test ran without your login.'
+						)
 					);
 				}
 			} );
@@ -3536,10 +3536,10 @@
 
 			const picker = document.createElement( 'div' );
 			picker.className = 'aafm-allowlist-picker';
-			// Codex admin-ui-r1 M1: the order this row was stored in, kept so
+			// The order this row was stored in, kept so
 			// #serializeAllowlistRow() can write it back unchanged instead of catalog order.
 			picker.originalOrder = isAll ? [] : Array.from( names );
-			// F4 (1.7.5 deferred): read by #serializeAllowlistRow() so an unmaterialized row (see
+			// Read by #serializeAllowlistRow() so an unmaterialized row (see
 			// buildGroups()/the IntersectionObserver below) serializes its untouched original
 			// selection instead of an empty DOM query.
 			picker.groupsBuilt = false;
@@ -3578,7 +3578,7 @@
 			searchInput.type = 'search';
 			searchInput.className = 'aafm-allowlist-picker-search aafm-integration-search';
 			searchInput.placeholder = this.#t( 'allowlistSearch', 'Search abilities…' );
-			// Codex admin-ui-r1 M3: this field is built entirely with createElement, so it has no
+			// This field is built entirely with createElement, so it has no
 			// <label> the way a server-rendered one gets - an aria-label is the only way to give it
 			// a persistent accessible name.
 			searchInput.setAttribute( 'aria-label', this.#t( 'allowlistSearch', 'Search abilities…' ) );
@@ -3588,7 +3588,7 @@
 			groupsEl.className = 'aafm-allowlist-picker-groups';
 
 			const updateCount = () => {
-				// F4 (1.7.5 deferred): before the grid is built there is nothing to query in the
+				// Before the grid is built there is nothing to query in the
 				// DOM - names.size (the row's untouched stored selection) is the correct count,
 				// not zero.
 				const checked = picker.groupsBuilt
@@ -3598,13 +3598,12 @@
 				warning.hidden = 0 !== checked;
 			};
 
-			// Codex admin-ui-r1 M4 / F4 (1.7.5 deferred): at the supported cap (AAFM_ALLOWLIST_MAX_ROWS
-			// rows x the full catalog) building every row's grid eagerly means tens of thousands of
-			// checkboxes, labels and change listeners at page load. An "all" row defers the cost
-			// until "All abilities" is unchecked or its search is used (below); a row that starts
-			// narrowed used to build right away instead, since its body starts visible - M4 only
-			// closed the "all" half, so a set of narrowed rows was still the worst case. Both now
-			// defer to first real need: an explicit interaction, or (for a narrowed row) the row
+			// At the supported cap (AAFM_ALLOWLIST_MAX_ROWS rows x the full catalog) building
+			// every row's grid eagerly means tens of thousands of checkboxes, labels and change
+			// listeners at page load. An "all" row defers the cost until "All abilities" is
+			// unchecked or its search is used (below). A row that starts narrowed has a visible
+			// body, so deferring only the "all" rows would still leave a set of narrowed rows as
+			// the worst case. Both defer to first real need: an explicit interaction, or (for a narrowed row) the row
 			// actually scrolling into view (the IntersectionObserver below). One delegated change
 			// listener on the container replaces one per checkbox either way.
 			let groupsBuilt = false;
@@ -3644,18 +3643,17 @@
 			} );
 
 			if ( ! isAll ) {
-				// F4 (1.7.5 deferred): build a narrowed row's grid the first time it actually
-				// scrolls into view rather than unconditionally at page load - 200 narrowed rows
-				// against the full catalog otherwise still build roughly 35,800 checkboxes up
-				// front, the same cost M4 removed from the "all" case. observe() on a
+				// Build a narrowed row's grid the first time it actually scrolls into view rather
+				// than unconditionally at page load - 200 narrowed rows against the full catalog
+				// otherwise still build roughly 35,800 checkboxes up front, the same cost the
+				// "all" case already defers. observe() on a
 				// not-yet-attached element is safe: it simply reports nothing until the row is
 				// appended and laid out.
 				//
-				// R2-5 (1.7.5 deferred, round 2): the only prior disconnect() was inside the
-				// callback itself, so a row removed from the DOM before it ever scrolled into
-				// view (reconciled away as a duplicate, or removed by the operator) left this
-				// observer watching a detached element, and its callback closure (over picker,
-				// buildGroups, updateCount) alive, indefinitely. Recorded on the picker itself so
+				// A disconnect() inside the callback alone is not enough: a row removed from the
+				// DOM before it ever scrolled into view (reconciled away as a duplicate, or removed
+				// by the operator) would leave this observer watching a detached element, and its
+				// callback closure (over picker, buildGroups, updateCount) alive, indefinitely. Recorded on the picker itself so
 				// #disconnectAllowlistObserver() can dispose of it from either removal site below.
 				const observer = new IntersectionObserver( ( entries ) => {
 					if ( entries.some( ( entry ) => entry.isIntersecting ) ) {
@@ -3704,7 +3702,7 @@
 		}
 
 		/**
-		 * R2-5 (1.7.5 deferred, round 2): disconnect a removed allowlist row's lazy-build
+		 * Disconnect a removed allowlist row's lazy-build
 		 * IntersectionObserver, if it has one and never fired - see #buildAllowlistPicker()'s
 		 * IntersectionObserver above. Call before removing $row from the DOM.
 		 *
@@ -3719,7 +3717,7 @@
 		 * Read one allowlist row's picker back into the shape the server expects: the literal
 		 * string "all", or the array of checked ability names.
 		 *
-		 * Codex admin-ui-r1 M1: checkboxes render in catalog order, so reading DOM order back
+		 * Checkboxes render in catalog order, so reading DOM order back
 		 * (Array.from(...checked)) would silently reorder a row's stored array on every save even
 		 * when nothing about its selection changed. Keep each retained name in the order
 		 * #buildAllowlistPicker() recorded as picker.originalOrder, then append any newly-checked
@@ -3734,7 +3732,7 @@
 				return 'all';
 			}
 			const picker = row.querySelector( '.aafm-allowlist-picker' );
-			// F4 (1.7.5 deferred): a narrowed row whose grid was never materialized (it never
+			// A narrowed row whose grid was never materialized (it never
 			// scrolled into view - see #buildAllowlistPicker()'s IntersectionObserver) has no
 			// checkboxes in the DOM at all. Querying them here would read back an empty
 			// selection and silently save "deny everything" for a row nobody touched; the row's
@@ -3879,10 +3877,9 @@
 				row.dataset.scopeType = isRole ? 'role' : 'oauth_client';
 				row.dataset.scopeId = scopeId;
 
-				// Codex admin-ui-r1 L3: these were hardcoded English template literals, so a newly
-				// added row showed English on a localized site until reload, when PHP rendered the
-				// same label through aafm_render_allowlist_section()'s translated strings. Route
-				// through the same aafmAdmin.i18n bag those PHP strings are localized from.
+				// PHP renders the same label through aafm_render_allowlist_section()'s translated
+				// strings, so a newly added row takes it from the same aafmAdmin.i18n bag; a
+				// hard-coded English label would show English on a localized site until reload.
 				const labelCell = document.createElement( 'td' );
 				labelCell.textContent = this.#format(
 					this.#t( isRole ? 'allowlistRoleLabel' : 'allowlistConnectionLabel', isRole ? 'Role: %s' : 'Connection: %s' ),
@@ -3928,7 +3925,7 @@
 					allowed_abilities: this.#serializeAllowlistRow( row ),
 				} ) );
 
-				// R3-4 (1.7.5 deferred, round 3): reconciliation below reads the DOM as it stands
+				// Reconciliation below reads the DOM as it stands
 				// AFTER the request resolves, so any add/remove/checkbox edit made while the
 				// request was in flight was never part of `rows` above but still looked "Saved."
 				// Disabling only the Save button left every other control (Add scope, Remove,

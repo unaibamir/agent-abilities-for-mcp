@@ -366,9 +366,25 @@ function aafm_exec_restore_revision( array $input ) {
 			__( 'Revisions are disabled for this post, so the current state cannot be saved before restoring and the restore would be irreversible. Refusing. Enable revisions for this post type to restore.', 'agent-abilities-for-mcp' )
 		);
 	}
+	$revision = aafm_exact_object( 'post', $revision_id );
+	$old      = array();
+	foreach ( array( 'post_title', 'post_content', 'post_excerpt' ) as $field ) {
+		$old[ $field ] = (string) $parent->$field;
+	}
 	$restored = wp_restore_post_revision( $revision_id );
 	if ( is_wp_error( $restored ) || (int) $restored < 1 ) {
 		return aafm_generic_error();
+	}
+	// Read the post back: a wp_insert_post_data filter can rewrite the restored fields, and core
+	// still reports success.
+	foreach ( $old as $field => $before ) {
+		$wanted = $revision instanceof WP_Post ? (string) $revision->$field : '';
+		if ( ! aafm_post_field_confirm_logged( $post_id, $field, $wanted, $before ) ) {
+			return new WP_Error(
+				'aafm_restore_unconfirmed',
+				__( 'The restore ran, but the post does not match the revision afterwards, so it could not be confirmed. Read the post to check its current state.', 'agent-abilities-for-mcp' )
+			);
+		}
 	}
 	return array(
 		'restored'    => true,

@@ -647,6 +647,8 @@ function aafm_config_option_names(): array {
 		'aafm_denied_user_meta_keys',
 		'aafm_exposed_term_meta_keys',
 		'aafm_denied_term_meta_keys',
+		// Per-tool role limits set on the Abilities tab, read by includes/allowlist.php.
+		'aafm_ability_allowlist_overrides',
 		// First-run onboarding state. Clearing these on reset returns the site to first-run, so the
 		// Quick Connect wizard opens again; the menu-pointer flag is included so uninstall cleans it too.
 		'aafm_quickconnect_finished',
@@ -781,21 +783,24 @@ function aafm_uninstall_site_data(): void {
 		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', $observer_priority );
 	}
 
-	aafm_uninstall_site();
+	$failed = aafm_uninstall_site();
 	aafm_drop_oauth_tables();
-	aafm_delete_option_cache_safe( 'aafm_oauth_schema_version' );
-	aafm_delete_option_cache_safe( 'aafm_activity_log_schema_version' );
-	// The one-time OAuth upgrade-preserve guard and the DCR default-on adoption guard (both written by
-	// the plugins_loaded migrations). Cleared here so a delete-data uninstall leaves nothing behind.
-	// They are deliberately NOT in the reset set: clearing a guard on reset would let its migration
-	// re-run and could flip a toggle back on.
-	aafm_delete_option_cache_safe( 'aafm_oauth_toggle_migrated' );
-	aafm_delete_option_cache_safe( 'aafm_oauth_dcr_default_on_migrated' );
-	// The second, independently keyed DCR migration signal - see
-	// aafm_oauth_dcr_adopt_on_by_default()'s docblock. Same non-reset, uninstall-only treatment
-	// as the guard row above.
-	aafm_delete_option_cache_safe( 'aafm_oauth_dcr_default_on_touched' );
-	aafm_delete_option_cache_safe( 'aafm_delete_data_on_uninstall' );
+	// The schema versions; the one-time OAuth upgrade-preserve guard and the DCR default-on adoption
+	// guard (both written by the plugins_loaded migrations), cleared so a delete-data uninstall leaves
+	// nothing behind but deliberately NOT in the reset set, since clearing a guard on reset would let
+	// its migration re-run and could flip a toggle back on; the second, independently keyed DCR
+	// migration signal (see aafm_oauth_dcr_adopt_on_by_default()'s docblock), treated the same way;
+	// and the uninstall flag itself, last.
+	foreach ( array( 'aafm_oauth_schema_version', 'aafm_activity_log_schema_version', 'aafm_oauth_toggle_migrated', 'aafm_oauth_dcr_default_on_migrated', 'aafm_oauth_dcr_default_on_touched', 'aafm_delete_data_on_uninstall' ) as $option ) {
+		if ( ! aafm_delete_option_cache_safe( $option ) ) {
+			$failed[] = $option;
+		}
+	}
+	if ( array() !== $failed ) {
+		// Uninstall has no screen to report to, so the server's error log is the only place a
+		// leftover option can be named. Option names only, never a value.
+		error_log( 'Agent Abilities for MCP: uninstall could not delete these options: ' . implode( ', ', $failed ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- uninstall has no other surface; option names only.
+	}
 
 	if ( false !== $observer_priority ) {
 		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', $observer_priority, 2 );
@@ -1061,11 +1066,14 @@ function aafm_render_settings_tab(): void {
 		$high_risk_checked = $high_risk_checked && $high_risk_row['ok'] && $high_risk_row['found'] && is_scalar( $high_risk_row['value'] ) && (bool) $high_risk_row['value'];
 	}
 	$high_risk_control .= '<label class="aafm-switch"><input type="checkbox" id="aafm-high-risk-unlocked" name="aafm_high_risk_abilities_unlocked" value="1" ' . checked( $high_risk_checked, true, false ) . '><span class="aafm-switch-track"></span></label> ';
-	$high_risk_control .= '<label for="aafm-high-risk-unlocked">' . esc_html__( 'Allow refunds, order changes, payment gateway settings, coupons, and tax rates to be switched on individually.', 'agent-abilities-for-mcp' ) . '</label>';
-	$high_risk_control .= '<p class="help">' . esc_html__( 'While this is off, no agent can issue a refund, change an order or a payment gateway setting, or create or change a coupon or a tax rate, no matter what you have enabled on the Integrations tab.', 'agent-abilities-for-mcp' ) . '</p>';
+	$high_risk_control .= '<label for="aafm-high-risk-unlocked">' . esc_html__( 'Allow refunds, creating and changing orders, payment gateway settings, coupons, and tax rates to be switched on individually.', 'agent-abilities-for-mcp' ) . '</label>';
+	$high_risk_control .= '<p class="help">' . esc_html__( "While this is off, no agent can issue a refund, create or change an order, change a payment gateway setting, or create or change a coupon or a tax rate through this plugin's own tools. WooCommerce's own order status and order update tools on the Other plugins tab are held too, and so are the Secure Custom Fields tools that can store a callback name. Order notes stay available.", 'agent-abilities-for-mcp' ) . '</p>';
+	if ( aafm_high_risk_forced() ) {
+		$high_risk_control .= aafm_get_notice_html( 'info', __( 'Your host or a site setting keeps this locked, whatever this switch says.', 'agent-abilities-for-mcp' ), array( 'inline' => true ) );
+	}
 
 	$high_risk_more  = '<p class="help">' . esc_html__( 'Turn it on and each of those becomes an ordinary checkbox you switch on one at a time, still badged high-risk so you can always tell them apart.', 'agent-abilities-for-mcp' ) . '</p>';
-	$high_risk_more .= '<p class="help">' . esc_html__( 'This switch covers this plugin\'s own abilities only. Abilities bridged in from other plugins are not covered by it, so check those separately.', 'agent-abilities-for-mcp' ) . '</p>';
+	$high_risk_more .= '<p class="help">' . esc_html__( "Other plugins' tools are held only if listed here or named with the aafm_high_risk_abilities filter, so check the rest yourself.", 'agent-abilities-for-mcp' ) . '</p>';
 	$high_risk_more .= '<p class="help">' . esc_html__( 'The plugin logs every flip of this switch, and those entries are kept for the same number of days as everything else in the activity log. Raise the retention setting below if you want a longer record of when the category was opened.', 'agent-abilities-for-mcp' ) . '</p>';
 
 	$high_risk_control .= aafm_get_set_more_html(
@@ -1170,7 +1178,7 @@ function aafm_render_settings_tab(): void {
 			'label'   => __( 'Force draft on create', 'agent-abilities-for-mcp' ),
 			'control' => '<label class="aafm-switch"><input type="checkbox" id="aafm-force-draft" name="aafm_force_draft" value="1" ' . checked( aafm_force_draft(), true, false ) . '><span class="aafm-switch-track"></span></label> '
 				. '<label for="aafm-force-draft">' . esc_html__( 'Save the content an agent creates as a draft, no matter what status the request asked for.', 'agent-abilities-for-mcp' ) . '</label>',
-			'help'    => __( 'Turn this on if you want to look over agent-created content before it goes live. Covers posts, pages, custom content items, reusable blocks, and WooCommerce products. Things without a draft state (media, menus, terms, comments, users, coupons, orders) and product variations are not affected.', 'agent-abilities-for-mcp' ),
+			'help'    => __( 'Turn this on if you want to look over agent-created content before it goes live. Covers posts, pages, custom content items, reusable blocks, and WooCommerce products. Product variations save as disabled instead, because a draft variation disappears from WooCommerce\'s editor. Things without a draft state (media, menus, terms, comments, users, coupons, orders) are not affected.', 'agent-abilities-for-mcp' ),
 		)
 	);
 

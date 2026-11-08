@@ -218,6 +218,115 @@ final class TecEventsTest extends TestCase {
 		$this->assertSame( 'aafm_invalid_block_content', $out->get_error_code() );
 	}
 
+	public function test_update_event_refuses_an_end_before_the_start_and_leaves_the_dates(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$id = $this->create_event();
+		update_post_meta( $id, '_EventStartDate', '2027-01-01 09:00:00' );
+		update_post_meta( $id, '_EventEndDate', '2027-01-01 12:00:00' );
+
+		$both       = aafm_exec_tec_update_event(
+			array(
+				'event_id'   => $id,
+				'start_date' => '2027-01-02 13:00:00',
+				'end_date'   => '2027-01-02 09:00:00',
+			)
+		);
+		$only_end   = aafm_exec_tec_update_event(
+			array(
+				'event_id' => $id,
+				'end_date' => '2026-12-31 09:00:00',
+			)
+		);
+		$only_start = aafm_exec_tec_update_event(
+			array(
+				'event_id'   => $id,
+				'start_date' => '2027-01-01 15:00:00',
+			)
+		);
+
+		foreach ( array( $both, $only_end, $only_start ) as $res ) {
+			$this->assertInstanceOf( \WP_Error::class, $res );
+			$this->assertSame( 'aafm_invalid_event_dates', $res->get_error_code() );
+		}
+		$this->assertSame( '2027-01-01 09:00:00', get_post_meta( $id, '_EventStartDate', true ) );
+		$this->assertSame( '2027-01-01 12:00:00', get_post_meta( $id, '_EventEndDate', true ) );
+	}
+
+	public function test_update_event_still_accepts_a_valid_date_change(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$id = $this->create_event();
+		update_post_meta( $id, '_EventStartDate', '2027-01-01 09:00:00' );
+		update_post_meta( $id, '_EventEndDate', '2027-01-01 12:00:00' );
+
+		$res = aafm_exec_tec_update_event(
+			array(
+				'event_id' => $id,
+				'end_date' => '2027-01-01 18:00:00',
+			)
+		);
+
+		$this->assertNotInstanceOf( \WP_Error::class, $res );
+	}
+
+	public function test_create_event_names_the_end_before_start_problem(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$res = aafm_exec_tec_create_event(
+			array(
+				'title'      => 'Backwards',
+				'start_date' => '2027-01-01 12:00:00',
+				'end_date'   => '2027-01-01 09:00:00',
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $res );
+		$this->assertSame( 'aafm_invalid_event_dates', $res->get_error_code() );
+	}
+
+	public function test_the_get_event_description_mentions_the_description_field(): void {
+		$this->assertStringContainsString( 'description', aafm_get_abilities_registry_full()['aafm/tec-get-event']['description'] );
+	}
+
+	public function test_get_event_returns_the_stored_description(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$id = $this->create_event( array( 'post_content' => '<p>Bring a coat.</p>' ) );
+
+		$out = aafm_exec_tec_get_event( array( 'event_id' => $id ) );
+
+		$this->assertSame( '<p>Bring a coat.</p>', $out['event']['description'] );
+	}
+
+	public function test_get_event_withholds_the_description_of_a_password_protected_event(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$id = $this->create_event(
+			array(
+				'post_content'  => 'Secret body.',
+				'post_password' => 'pw',
+			)
+		);
+
+		$out = aafm_exec_tec_get_event( array( 'event_id' => $id ) );
+
+		$this->assertSame( '', $out['event']['description'] );
+	}
+
+	public function test_the_event_list_stays_lean_without_descriptions(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$this->create_event( array( 'post_title' => 'Listed event' ) );
+
+		$out = aafm_exec_tec_get_events( array() );
+
+		$this->assertNotEmpty( $out['events'] );
+		$this->assertArrayNotHasKey( 'description', $out['events'][0] );
+	}
+
+	public function test_update_event_status_text_describes_update_not_create(): void {
+		$status = aafm_args_tec_update_event()['input_schema']['properties']['status']['description'];
+
+		$this->assertStringNotContainsString( 'Defaults to draft', $status );
+		$this->assertStringContainsString( 'current status', $status );
+	}
+
 	public function test_get_event_returns_null_error_for_a_non_event_post(): void {
 		$post = self::factory()->post->create(); // ordinary post, not an event.
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );

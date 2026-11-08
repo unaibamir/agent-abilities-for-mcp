@@ -914,7 +914,11 @@ register_deactivation_hook( AAFM_PLUGIN_FILE, 'aafm_notify_unschedule' );
  * @return string|null
  */
 function aafm_notify_ability_risk( string $name ): ?string {
-	if ( aafm_ability_is_high_risk( $name ) ) {
+	// A wrapper is high risk when the foreign slug behind it is held.
+	$source = 0 === strpos( $name, 'aafm-bridge/' ) && function_exists( 'aafm_remember_bridge_source' )
+		? aafm_remember_bridge_source( $name )
+		: null;
+	if ( aafm_ability_is_high_risk( null !== $source ? $source : $name ) ) {
 		return 'high_risk';
 	}
 	if ( in_array( $name, aafm_permanent_delete_abilities(), true ) ) {

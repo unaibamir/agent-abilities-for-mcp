@@ -272,8 +272,9 @@ function aafm_exec_wc_list_tax_rates( array $input ) {
 	$total = count( $rates );
 
 	// Page over the full rate list; total stays the grand total, like every sibling list.
-	$per_page = isset( $input['per_page'] ) ? min( 100, max( 1, (int) $input['per_page'] ) ) : 20;
-	$page     = isset( $input['page'] ) ? max( 1, (int) $input['page'] ) : 1;
+	$paging   = aafm_paginate_args( $input + array( 'per_page' => 20 ), AAFM_TERMS_PER_PAGE_MAX );
+	$per_page = $paging['per_page'];
+	$page     = $paging['page'];
 	$rates    = array_slice( $rates, ( $page - 1 ) * $per_page, $per_page );
 
 	return array(
@@ -828,6 +829,10 @@ function aafm_args_wc_list_tax_classes(): array {
  */
 function aafm_exec_wc_list_tax_classes( array $input ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- no input params used; signature required by abilities API.
 	if ( ! aafm_integration_active( 'woocommerce' ) ) {
+		return aafm_generic_error();
+	}
+	// Without WC_Tax the list would hold only the implicit Standard class, an empty success.
+	if ( ! class_exists( 'WC_Tax' ) ) {
 		return aafm_generic_error();
 	}
 

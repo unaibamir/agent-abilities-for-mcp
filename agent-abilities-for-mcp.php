@@ -3,7 +3,7 @@
  * Plugin Name:       Agent Abilities for MCP - Connect Claude and ChatGPT with Permission Controls and Audit Log
  * Plugin URI:        https://agentabilitieswp.com
  * Description:       WordPress MCP server for Claude and ChatGPT with limited access, a pause switch, read-only mode, drafts you approve, playbooks and an audit log.
- * Version:           1.11.0
+ * Version:           1.11.1
  * Requires at least: 6.9
  * Requires PHP:      7.4
  * Author:            Unaib Amir
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AAFM_VERSION', '1.11.0' );
+define( 'AAFM_VERSION', '1.11.1' );
 define( 'AAFM_PLUGIN_FILE', __FILE__ );
 define( 'AAFM_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AAFM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -184,6 +184,7 @@ function aafm_initialize_new_site_tables( $new_site ): void {
 	restore_current_blog();
 }
 add_action( 'wp_initialize_site', 'aafm_initialize_new_site_tables', 100 );
+add_filter( 'wpmu_drop_tables', 'aafm_filter_wpmu_drop_tables', 10, 2 );
 
 /**
  * Schedule the daily OAuth cleanup event on activation, if not already scheduled.
@@ -504,11 +505,6 @@ function aafm_bootstrap() {
 		add_action( 'wp_ajax_aafm_save_bridged_abilities', 'aafm_ajax_save_bridged_abilities' );
 		add_action( 'wp_ajax_aafm_bridge_read_only_starter', 'aafm_ajax_bridge_read_only_starter' );
 		add_action( 'wp_ajax_aafm_bridge_mark_reviewed', 'aafm_ajax_bridge_mark_reviewed' );
-		add_action( 'wp_ajax_aafm_save_post_types', 'aafm_ajax_save_post_types' );
-		add_action( 'wp_ajax_aafm_save_meta_keys', 'aafm_ajax_save_meta_keys' );
-		add_action( 'wp_ajax_aafm_save_denied_meta_keys', 'aafm_ajax_save_denied_meta_keys' );
-		add_action( 'wp_ajax_aafm_save_user_meta_keys', 'aafm_ajax_save_user_meta_keys' );
-		add_action( 'wp_ajax_aafm_save_term_meta_keys', 'aafm_ajax_save_term_meta_keys' );
 		add_action( 'wp_ajax_aafm_save_settings', 'aafm_ajax_save_settings' );
 		add_action( 'wp_ajax_aafm_clear_log', 'aafm_ajax_clear_log' );
 		add_action( 'wp_ajax_aafm_get_log_page', 'aafm_ajax_get_log_page' );

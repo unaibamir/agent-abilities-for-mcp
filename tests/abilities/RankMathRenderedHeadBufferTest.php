@@ -141,6 +141,53 @@ final class RankMathRenderedHeadBufferTest extends TestCase {
 	}
 
 	/**
+	 * Rank Math builds its Paper singleton, which decides the title and description, from the query
+	 * that is current the first time it is asked. Over REST that is a non-singular query, so the
+	 * custom title and meta description never rendered. The renderer now builds the head objects
+	 * inside the throwaway singular query and resets Paper first, so it is built against the post.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_the_head_objects_are_built_inside_the_singular_query_with_paper_reset(): void {
+		$post_id = (int) self::factory()->post->create( array( 'post_status' => 'publish' ) );
+
+		if ( ! function_exists( 'rank_math' ) ) {
+			eval( // phpcs:ignore Squiz.PHP.Eval.Discouraged -- process-isolated test stub, never shipped.
+				'namespace RankMath\\Paper { class Paper {'
+				. 'public static $bound = array();'
+				. 'public static function reset() { self::$bound[] = get_queried_object_id(); }'
+				. '} }'
+				. 'namespace { class AAFM_Test_RankMath_Late_Head { public function head() { echo "<title>" . $GLOBALS["aafm_test_built_for"] . "</title>"; } }'
+				. 'class AAFM_Test_RankMath_Frontend { public function integrations() {'
+				. '$GLOBALS["aafm_test_built_for"] = is_singular() ? get_queried_object_id() : 0;'
+				. 'rank_math()->head = new \\AAFM_Test_RankMath_Late_Head();'
+				. '} }'
+				. 'function rank_math() {'
+				. 'static $plugin;'
+				. 'if ( null === $plugin ) { $plugin = new \\stdClass(); $plugin->frontend = new \\AAFM_Test_RankMath_Frontend(); }'
+				. 'return $plugin;'
+				. '} }'
+			);
+		}
+
+		// The caller's own query points at another post, as a request's main query would.
+		$other      = (int) self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$main_query = new WP_Query( array( 'p' => $other ) );
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test setup, the state under test.
+		$GLOBALS['wp_query'] = $main_query;
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test setup, the state under test.
+		$GLOBALS['wp_the_query'] = $main_query;
+
+		$result = aafm_rankmath_rendered_head( 'fallback-head', $post_id, 'rankmath' );
+
+		$this->assertSame( '<title>' . $post_id . '</title>', $result, 'integrations() must run while the singular query for the post is current.' );
+		$bound = \RankMath\Paper\Paper::$bound;
+		$this->assertContains( $post_id, $bound, 'Paper must be rebuilt against the post for the render.' );
+		$this->assertSame( $other, end( $bound ), 'The last reset must run after the caller\'s query is back, or Paper stays bound to this post.' );
+	}
+
+	/**
 	 * Define a real-shaped rank_math() stub whose head() runs the callable in
 	 * $GLOBALS['aafm_test_render'], so each test decides what the head render does.
 	 */

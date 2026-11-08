@@ -230,7 +230,10 @@ function aafm_hard_blocked_meta_keys( array $keys, string $scope = 'post' ): arr
 		 */
 		$extra   = (array) apply_filters( 'aafm_hard_blocked_user_meta_keys', array() );
 		$subtype = 'user';
-		$pattern = '/^' . preg_quote( $wpdb->prefix, '/' ) . '\d*_?(capabilities|user_level)$/i';
+		// The MCP adapter's session store is mcp_adapter_sessions, or mcp_adapter_sessions_{blog_id}
+		// on multisite (see aafm_mcp_guard_unpersisted_session() in server.php). An agent reading it
+		// could resume another session.
+		$pattern = '/^(?:' . preg_quote( $wpdb->prefix, '/' ) . '\d*_?(capabilities|user_level)|mcp_adapter_sessions(?:_\d+)?)$/i';
 	} else {
 		$builtin = array_merge(
 			array(
@@ -255,7 +258,10 @@ function aafm_hard_blocked_meta_keys( array $keys, string $scope = 'post' ): arr
 			// their leading underscore; `et_pb_use_builder`, `fusion_builder_status` and
 			// `fusion_builder_converted` are not. The whole marker map comes in, which is harmless
 			// for term meta, and keeps any marker added through aafm_page_builder_markers covered.
-			array_keys( aafm_page_builder_markers() )
+			array_keys( aafm_page_builder_markers() ),
+			// The Bricks mode and area keys: the leading underscore is not enough, since
+			// is_protected_meta() is filterable and a site can unprotect them.
+			aafm_page_builder_bricks_keys()
 		);
 		/**
 		 * Filters EXTRA meta keys to hard-block. Built-ins are re-merged after, so this
@@ -1631,6 +1637,105 @@ function aafm_can_edit_post_object( WP_Post $post ): bool {
 }
 
 /**
+ * The tool a content type has of its own for one verb, or '' when it has none.
+ *
+ * Pages, products, events, venues, organizers and GeoDirectory listings have dedicated tools. A generic post tool must not reach them while that tool
+ * is off, or switching it off would not mean what the owner expects. A tool missing from the live
+ * registry counts as none, so a theme's own `product` type on a site without WooCommerce is not held
+ * by a tool that cannot exist there.
+ *
+ * @param string $post_type Post type.
+ * @param string $verb      One of update, trash, delete.
+ * @return string Ability name, or ''.
+ */
+function aafm_type_own_tool( string $post_type, string $verb ): string {
+	$map = array(
+		'page'            => array(
+			'update' => 'aafm/update-page',
+			'trash'  => 'aafm/trash-page',
+			'delete' => 'aafm/delete-page',
+		),
+		'post'            => array(
+			'update' => 'aafm/update-post',
+			'trash'  => 'aafm/trash-post',
+			'delete' => 'aafm/delete-post',
+		),
+		'product'         => array(
+			'update' => 'aafm/wc-update-product',
+			'trash'  => 'aafm/wc-delete-product',
+			'delete' => 'aafm/wc-delete-product',
+		),
+		// The Events Calendar's delete tool trashes, so it holds trash only; GeoDirectory and the
+		// venue and organizer types have an update tool and nothing else.
+		'tribe_events'    => array(
+			'update' => 'aafm/tec-update-event',
+			'trash'  => 'aafm/tec-delete-event',
+		),
+		'tribe_venue'     => array( 'update' => 'aafm/tec-update-venue' ),
+		'tribe_organizer' => array( 'update' => 'aafm/tec-update-organizer' ),
+		'gd_place'        => array( 'update' => 'aafm/geodirectory-update-listing' ),
+	);
+	$tool = $map[ $post_type ][ $verb ] ?? '';
+	return '' !== $tool && isset( aafm_get_abilities_registry()[ $tool ] ) ? $tool : '';
+}
+
+/**
+ * Whether a generic post tool may reach this object, given the object type's own tool.
+ *
+ * True for the tool's home type, so a post tool never depends on its own switch. Otherwise true when
+ * the type has no tool of its own, or when that tool is enabled and allowed for this principal (the
+ * same role, connection and preset narrowing the call itself passes through).
+ *
+ * @param WP_Post $post      Target object.
+ * @param string  $verb      One of update, trash, delete.
+ * @param string  $home_type The calling tool's own type ('post'), or '' to check every type.
+ * @return bool
+ */
+function aafm_post_tool_reach_allowed( WP_Post $post, string $verb, string $home_type = 'post' ): bool {
+	if ( $post->post_type === $home_type ) {
+		return true;
+	}
+	$own = aafm_type_own_tool( $post->post_type, $verb );
+	if ( '' === $own ) {
+		return true;
+	}
+	return aafm_is_ability_enabled( $own )
+		&& aafm_ability_allowed_for_principal( $own, get_current_user_id(), aafm_oauth_current_client_id() );
+}
+
+/**
+ * Whether a denied call was refused by the reach rule rather than by a WordPress capability.
+ *
+ * Used only to label the Activity Log row; it never decides access.
+ *
+ * @param string              $name  Ability name.
+ * @param array<string,mixed> $input The call's input.
+ * @return bool
+ */
+function aafm_post_tool_reach_refused( string $name, array $input ): bool {
+	$tools = array(
+		'aafm/update-post'     => array( 'update', 'post' ),
+		'aafm/replace-in-post' => array( 'update', 'post' ),
+		'aafm/replace-block'   => array( 'update', 'post' ),
+		'aafm/trash-post'      => array( 'trash', 'post' ),
+		'aafm/delete-post'     => array( 'delete', 'post' ),
+		'aafm/update-cpt-item' => array( 'update', '' ),
+	);
+	if ( ! isset( $tools[ $name ] ) ) {
+		return false;
+	}
+	$id   = isset( $input['post_id'] ) && is_numeric( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
+	if ( ! $post instanceof WP_Post ) {
+		return false;
+	}
+	// A user the capability check also refuses is labelled for that, since turning the type's own
+	// tool on would not let the call through.
+	$capable = 'update' === $tools[ $name ][0] ? aafm_can_edit_post_object( $post ) : aafm_can_delete_post_object( $post );
+	return $capable && ! aafm_post_tool_reach_allowed( $post, $tools[ $name ][0], $tools[ $name ][1] );
+}
+
+/**
  * Whether the current user may remove a single object through the content abilities -
  * covers both trashing and permanent deletion. The delete_post meta-cap gate is the same
  * for either path, so the trash/page abilities and the permanent delete-post/delete-page
@@ -1995,6 +2100,24 @@ function aafm_validate_post_status( string $status, bool $can_read_private ) {
 }
 
 /**
+ * Whether a list of this status and type must be limited to the current user's own items.
+ *
+ * The read_private_posts capability admits draft, pending and future, but WordPress only lets a
+ * user see other people's unpublished items when they may edit them. A list therefore keeps
+ * someone else's draft, pending or scheduled item only for a user holding that type's
+ * edit_others_posts.
+ * The private status keeps its meaning: read_private_posts is exactly the capability for it.
+ *
+ * @param string       $status Validated status.
+ * @param WP_Post_Type $type   Post type object.
+ * @return bool
+ */
+function aafm_status_needs_own_posts_only( string $status, WP_Post_Type $type ): bool {
+	return in_array( $status, array( 'draft', 'pending', 'future' ), true )
+		&& ! current_user_can( (string) $type->cap->edit_others_posts );
+}
+
+/**
  * Whether a requested status requires this content type's publish capability to set.
  *
  * Mirrors core's own gate: WP_REST_Posts_Controller::handle_status_param() requires
@@ -2113,36 +2236,40 @@ function aafm_post_terms_grouped( WP_Post $post ): array {
  */
 function aafm_rich_post_output_properties(): array {
 	return array(
-		'id'             => array( 'type' => 'integer' ),
-		'title'          => array( 'type' => 'string' ),
-		'status'         => array( 'type' => 'string' ),
-		'type'           => array( 'type' => 'string' ),
-		'slug'           => array( 'type' => 'string' ),
-		'lang'           => array(
+		'id'              => array( 'type' => 'integer' ),
+		'title'           => array( 'type' => 'string' ),
+		'status'          => array( 'type' => 'string' ),
+		'type'            => array( 'type' => 'string' ),
+		'slug'            => array( 'type' => 'string' ),
+		'lang'            => array(
 			'type'        => 'string',
 			'description' => __( 'WPML language code of this item. Present only when WPML is active.', 'agent-abilities-for-mcp' ),
 		),
-		'link'           => array( 'type' => 'string' ),
-		'author_id'      => array( 'type' => 'integer' ),
-		'author'         => array(
+		'link'            => array( 'type' => 'string' ),
+		'author_id'       => array( 'type' => 'integer' ),
+		'author'          => array(
 			'type'       => array( 'object', 'null' ),
 			'properties' => array(
 				'id'           => array( 'type' => 'integer' ),
 				'display_name' => array( 'type' => 'string' ),
 			),
 		),
-		'date_gmt'       => array( 'type' => 'string' ),
-		'modified_gmt'   => array( 'type' => 'string' ),
-		'content'        => array(
+		'date_gmt'        => array( 'type' => 'string' ),
+		'modified_gmt'    => array( 'type' => 'string' ),
+		'content'         => array(
 			'type'        => 'string',
 			'description' => __( 'Present on single-post reads and when include_content=true; omitted for password-protected posts.', 'agent-abilities-for-mcp' ),
 		),
-		'content_length' => array(
+		'content_length'  => array(
 			'type'        => 'integer',
 			'description' => __( 'Byte length of the raw stored content (strlen of post_content), present even when include_content is false so a caller can preflight size before a full fetch. Reported as 0 for a password-protected post, regardless of its real length.', 'agent-abilities-for-mcp' ),
 		),
-		'excerpt'        => array( 'type' => 'string' ),
-		'terms'          => array(
+		'excerpt'         => array( 'type' => 'string' ),
+		'excerpt_is_auto' => array(
+			'type'        => 'boolean',
+			'description' => __( 'True when the excerpt was generated by WordPress from the post body because the post has no excerpt of its own. False when the author wrote one, or for a password-protected post.', 'agent-abilities-for-mcp' ),
+		),
+		'terms'           => array(
 			'type'                 => 'object',
 			'additionalProperties' => array(
 				'type'  => 'array',
@@ -2156,7 +2283,7 @@ function aafm_rich_post_output_properties(): array {
 				),
 			),
 		),
-		'featured_image' => array(
+		'featured_image'  => array(
 			'type'       => array( 'object', 'null' ),
 			'properties' => array(
 				'id'  => array( 'type' => 'integer' ),
@@ -2164,7 +2291,7 @@ function aafm_rich_post_output_properties(): array {
 				'alt' => array( 'type' => 'string' ),
 			),
 		),
-		'meta'           => array(
+		'meta'            => array(
 			'type'                 => 'object',
 			'additionalProperties' => true,
 		),
@@ -2221,19 +2348,15 @@ function aafm_rich_post( WP_Post $post, array $options = array() ): array {
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core filter, applied so blocks/shortcodes render.
 	$rendered = $is_protected ? '' : (string) apply_filters( 'the_content', $post->post_content );
 
-	// A manual excerpt is always safe to surface. For a protected post we read the
-	// stored excerpt directly: get_the_excerpt() returns core's "no excerpt because
-	// this is a protected post" placeholder on a protected post, so it cannot be
-	// used here. Without a manual excerpt, fall back to '' - never derive an excerpt
-	// from the body ($rendered is already '' when $is_protected, so the auto-excerpt
-	// branch can only run for non-protected posts).
-	if ( has_excerpt( $post ) ) {
-		$shape['excerpt'] = $is_protected
-			? sanitize_text_field( (string) $post->post_excerpt )
-			: get_the_excerpt( $post );
-	} elseif ( $is_protected ) {
+	// A protected post returns no excerpt at all: a manual excerpt is often a teaser of the
+	// protected body, and the auto-excerpt would be derived from it.
+	$shape['excerpt_is_auto'] = false;
+	if ( $is_protected ) {
 		$shape['excerpt'] = '';
+	} elseif ( has_excerpt( $post ) ) {
+		$shape['excerpt'] = get_the_excerpt( $post );
 	} else {
+		$shape['excerpt_is_auto'] = true;
 		// Delegate to core's own auto-excerpt mechanism (get_the_excerpt() -> core's
 		// wp_trim_excerpt(), hooked on the get_the_excerpt filter) instead of hand-rolling it.
 		// Reaching this branch already proves the post is not protected (the branch above
@@ -2607,9 +2730,6 @@ function aafm_get_revision_payload( WP_Post $revision, array $input ): array {
 	$payload['excerpt'] = $is_protected ? '' : (string) $revision->post_excerpt;
 	$payload['diff']    = null;
 	if ( ! $is_protected && ! empty( $input['with_diff'] ) ) {
-		if ( ! function_exists( 'wp_text_diff' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/revision.php';
-		}
 		$current_content = $parent instanceof WP_Post ? (string) $parent->post_content : '';
 		// wp_text_diff returns '' when there is no difference; we surface that empty string
 		// (a string, not null) so the agent can tell "no change" from "not requested".

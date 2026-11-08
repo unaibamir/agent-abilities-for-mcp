@@ -289,4 +289,143 @@ final class PageBuilderGuardTest extends TestCase {
 
 		$this->assertFalse( aafm_post_has_foreign_builder_ownership( $id ) );
 	}
+
+	/**
+	 * A post with this content.
+	 *
+	 * @param string $content Post content.
+	 * @return int
+	 */
+	private function post_with( string $content ): int {
+		return self::factory()->post->create( array( 'post_content' => $content ) );
+	}
+
+	public function test_wpbakery_row_in_content_is_detected(): void {
+		$this->assertSame( 'wpbakery', aafm_post_has_foreign_builder_ownership( $this->post_with( '[vc_row][vc_column]Hi[/vc_column][/vc_row]' ) ) );
+	}
+
+	public function test_wpbakery_section_with_no_row_is_detected(): void {
+		$this->assertSame( 'wpbakery', aafm_post_has_foreign_builder_ownership( $this->post_with( '[vc_section el_class="x"]Hi[/vc_section]' ) ) );
+	}
+
+	public function test_a_wpb_status_of_false_with_shortcodes_is_still_owned(): void {
+		$id = $this->post_with( '[vc_row]Hi[/vc_row]' );
+		update_post_meta( $id, '_wpb_vc_js_status', 'false' );
+		$this->assertSame( 'wpbakery', aafm_post_has_foreign_builder_ownership( $id ) );
+	}
+
+	public function test_a_wpb_status_with_no_shortcodes_is_not_owned(): void {
+		$id = $this->post_with( 'Plain words.' );
+		update_post_meta( $id, '_wpb_vc_js_status', 'true' );
+		$this->assertFalse( aafm_post_has_foreign_builder_ownership( $id ) );
+	}
+
+	public function test_vc_row_inner_alone_does_not_match(): void {
+		$this->assertFalse( aafm_post_has_foreign_builder_ownership( $this->post_with( '[vc_row_inner]Hi[/vc_row_inner]' ) ) );
+	}
+
+	public function test_bricks_content_is_detected(): void {
+		$id   = self::factory()->post->create();
+		$tree = array(
+			array(
+				'id'   => 'abc',
+				'name' => 'section',
+			),
+		);
+		update_post_meta( $id, '_bricks_page_content_2', $tree );
+		update_post_meta( $id, '_bricks_editor_mode', 'bricks' );
+		$this->assertSame( 'bricks', aafm_post_has_foreign_builder_ownership( $id ) );
+	}
+
+	public function test_bricks_with_absent_mode_and_data_is_detected(): void {
+		$id = self::factory()->post->create();
+		update_post_meta( $id, '_bricks_page_header_2', array( array( 'id' => 'hdr' ) ) );
+		$this->assertSame( 'bricks', aafm_post_has_foreign_builder_ownership( $id ) );
+	}
+
+	public function test_bricks_switched_to_wordpress_is_not_owned(): void {
+		$id = self::factory()->post->create();
+		update_post_meta( $id, '_bricks_page_content_2', array( array( 'id' => 'abc' ) ) );
+		update_post_meta( $id, '_bricks_editor_mode', 'wordpress' ); // phpcs:ignore WordPress.WP.CapitalPDangit.MisspelledInText -- Bricks stores the literal mode value.
+		$this->assertFalse( aafm_post_has_foreign_builder_ownership( $id ) );
+		$this->assertFalse( aafm_post_has_foreign_builder_ownership( $id, true ) );
+	}
+
+	public function test_bricks_mode_alone_with_no_data_is_not_owned(): void {
+		$id = self::factory()->post->create();
+		update_post_meta( $id, '_bricks_editor_mode', 'bricks' );
+		$this->assertFalse( aafm_post_has_foreign_builder_ownership( $id ) );
+	}
+
+	public function test_bricks_empty_array_is_not_owned(): void {
+		$id = self::factory()->post->create();
+		update_post_meta( $id, '_bricks_page_content_2', array() );
+		$this->assertFalse( aafm_post_has_foreign_builder_ownership( $id ) );
+	}
+
+	public function test_each_oxygen_key_is_detected(): void {
+		foreach ( array( '_ct_builder_json', '_ct_builder_shortcodes', 'ct_builder_json', 'ct_builder_shortcodes', '_oxygen_data' ) as $key ) {
+			$id = self::factory()->post->create();
+			update_post_meta( $id, $key, '[ct_section]' );
+			$this->assertSame( 'oxygen', aafm_post_has_foreign_builder_ownership( $id ), $key );
+		}
+		$empty = self::factory()->post->create();
+		update_post_meta( $empty, '_ct_builder_shortcodes', '' );
+		$this->assertFalse( aafm_post_has_foreign_builder_ownership( $empty ), 'An empty string is off.' );
+	}
+
+	public function test_each_breakdance_key_is_detected(): void {
+		foreach ( array( '_breakdance_data', 'breakdance_data' ) as $key ) {
+			$id = self::factory()->post->create();
+			update_post_meta( $id, $key, '{"tree_json_string":"{}"}' );
+			$this->assertSame( 'breakdance', aafm_post_has_foreign_builder_ownership( $id ), $key );
+		}
+	}
+
+	public function test_brizy_enabled_is_detected(): void {
+		$id = self::factory()->post->create();
+		update_post_meta( $id, 'brizy_enabled', '1' );
+		$this->assertSame( 'brizy', aafm_post_has_foreign_builder_ownership( $id ) );
+	}
+
+	public function test_brizy_disabled_is_not_owned(): void {
+		$id = self::factory()->post->create();
+		update_post_meta( $id, 'brizy_enabled', 0 );
+		$this->assertFalse( aafm_post_has_foreign_builder_ownership( $id ) );
+	}
+
+	public function test_bricks_plus_wpbakery_refuses_as_unknown(): void {
+		$id = $this->post_with( '[vc_row]Hi[/vc_row]' );
+		update_post_meta( $id, '_bricks_page_content_2', array( array( 'id' => 'abc' ) ) );
+		$this->assertSame( 'unknown', aafm_post_has_foreign_builder_ownership( $id ) );
+	}
+
+	public function test_pure_read_mode_sees_the_new_builders(): void {
+		$wpb = $this->post_with( '[vc_row]Hi[/vc_row]' );
+		$this->assertSame( 'wpbakery', aafm_post_has_foreign_builder_ownership( $wpb, true ) );
+		$bricks = self::factory()->post->create();
+		update_post_meta( $bricks, '_bricks_page_footer_2', array( array( 'id' => 'ftr' ) ) );
+		$this->assertSame( 'bricks', aafm_post_has_foreign_builder_ownership( $bricks, true ) );
+		$brizy = self::factory()->post->create();
+		update_post_meta( $brizy, 'brizy_enabled', '1' );
+		$this->assertSame( 'brizy', aafm_post_has_foreign_builder_ownership( $brizy, true ) );
+	}
+
+	public function test_owned_error_names_wpbakery_and_makes_no_claim_about_where_it_stores_data(): void {
+		$this->assertSame(
+			'This content belongs to WPBakery. Writing to it through this ability could have no visible effect or damage WPBakery\'s layout, because the builder controls how this content is stored and shown. Edit it in WPBakery directly.',
+			aafm_page_builder_owned_error( 'wpbakery' )->get_error_message()
+		);
+		$this->assertSame(
+			'This content belongs to Elementor. Writing to it through this ability could have no visible effect or damage Elementor\'s layout, because the builder controls how this content is stored and shown. Edit it in Elementor directly.',
+			aafm_page_builder_owned_error( 'elementor' )->get_error_message()
+		);
+	}
+
+	public function test_the_new_builders_are_named_in_descriptions(): void {
+		$names = aafm_page_builder_names();
+		foreach ( array( 'WPBakery', 'Bricks', 'Oxygen', 'Breakdance', 'Brizy' ) as $label ) {
+			$this->assertStringContainsString( $label, $names );
+		}
+	}
 }

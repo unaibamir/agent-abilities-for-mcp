@@ -16,11 +16,12 @@
  *   (a) the key is structurally unreachable - hard-blocked for an administrator exactly as for a
  *       subscriber, whatever the site holds. Explaining it discloses nothing, because the answer
  *       does not depend on who asked.
- *   (b) the caller lacks a capability, or the operator has not allowlisted the key. Those DO depend
- *       on the caller and on site configuration, and must stay exactly as opaque as they were.
+ *   (b) the caller lacks a capability. That depends on the caller and must stay exactly as opaque
+ *       as it was. A key the site has not exposed (or has denied, or protects) is explained since
+ *       1.11.1, in the same bytes for every role: see aafm_meta_key_refusal_error().
  *
- * (b) is pinned as byte equality against the literal the adapter sends today, across roles, rather
- * than as a claim. Assertions are on the wire body the client actually receives - the adapter's
+ * The capability case is pinned as byte equality against the literal the adapter sends today,
+ * across roles, rather than as a claim. Assertions are on the wire body the client actually receives - the adapter's
  * CallToolResult - not on the PHP return value, because the PHP value is not what leaked.
  *
  * @package AgentAbilitiesForMCP
@@ -422,13 +423,16 @@ final class ReservedMetaKeyRouteTest extends TestCase {
 	}
 
 	/**
-	 * Case (b), direction two: a key the operator simply has not allowlisted keeps the bare refusal
-	 * too, and reads identically to the capability refusal above.
+	 * Case (b), direction two: a key the operator has not exposed says so, and says it the same way
+	 * to everyone.
 	 *
-	 * Which keys an operator exposed is site configuration. If a not-allowlisted key answered
-	 * differently from a capability failure, the difference itself would enumerate the allowlist.
+	 * Agents used to get a bare "Permission denied" here and could not tell an unexposed key from a
+	 * missing capability, so they could not tell the operator what to change. The sentence comes from
+	 * the closed reason code, so it is the same bytes for an administrator and a subscriber, and it
+	 * never echoes the key, the post id or a value. What it does disclose is whether the key is
+	 * exposed, a deliberate trade recorded on aafm_meta_key_refusal_error().
 	 */
-	public function test_a_not_allowlisted_key_is_indistinguishable_from_a_capability_refusal(): void {
+	public function test_a_not_allowlisted_key_explains_itself_identically_for_every_role(): void {
 		$this->register_meta_abilities();
 		update_option( 'aafm_allowed_meta_keys', array() );
 		$post_id = self::factory()->post->create();
@@ -442,51 +446,118 @@ final class ReservedMetaKeyRouteTest extends TestCase {
 					array(
 						'post_id'  => $post_id,
 						'meta_key' => 'not_on_the_list',
-						'value'    => 'x',
+						'value'    => 'secret-value',
 					)
 				)
 			);
 		}
 
-		$this->assertSame(
-			array(
-				'administrator' => self::BARE_REFUSAL,
-				'subscriber'    => self::BARE_REFUSAL,
-			),
-			$texts,
-			'Allowlist state must not be readable out of the refusal, by anyone.'
-		);
+		$this->assertSame( $texts['administrator'], $texts['subscriber'], 'The reason is the same bytes for every caller.' );
+		$this->assertNotSame( self::BARE_REFUSAL, $texts['subscriber'] );
+		$this->assertStringContainsString( 'not exposed', $texts['subscriber'] );
+		$this->assertStringContainsString( 'Exposed meta keys', $texts['subscriber'], 'It says where an administrator turns the key on.' );
+		foreach ( array( 'not_on_the_list', 'secret-value', (string) $post_id ) as $private ) {
+			$this->assertStringNotContainsString( $private, $texts['subscriber'], 'Nothing the caller sent is echoed.' );
+		}
 	}
 
 	/**
-	 * Case (b), direction three: the fix did NOT widen into a general hard-block oracle.
-	 *
-	 * The map is two literals that stock WordPress protects on every install. Every other
-	 * hard-blocked key - including ones a site or a filter added - keeps the bare refusal, so the
-	 * message cannot be used to probe which keys this particular site blocks.
+	 * The same sentence for term and user meta, each naming its own place in the admin.
 	 */
-	public function test_a_hard_blocked_key_outside_the_map_still_gets_the_bare_refusal(): void {
+	public function test_term_and_user_meta_name_their_own_exposure_setting(): void {
+		$this->register_enabled( array( 'aafm/get-term-meta', 'aafm/update-user-meta' ) );
+		update_option( 'aafm_exposed_term_meta_keys', array() );
+		update_option( 'aafm_exposed_user_meta_keys', array() );
+		$term_id = self::factory()->term->create();
+		$user_id = self::factory()->user->create();
+		$this->acting_as( 'administrator' );
+
+		$term = $this->wire_text(
+			$this->wire_body(
+				'aafm/get-term-meta',
+				array(
+					'term_id'  => $term_id,
+					'meta_key' => 'seo_title',
+				)
+			)
+		);
+		$user = $this->wire_text(
+			$this->wire_body(
+				'aafm/update-user-meta',
+				array(
+					'user_id' => $user_id,
+					'key'     => 'description',
+					'value'   => 'x',
+				)
+			)
+		);
+
+		$this->assertStringContainsString( 'Exposed term meta keys', $term );
+		$this->assertStringContainsString( 'Taxonomies & Terms', $term );
+		$this->assertStringContainsString( 'Exposed user meta keys', $user );
+		$this->assertStringContainsString( 'Users', $user );
+	}
+
+	/**
+	 * A key on the deny list says so, and a key the engine never exposes says it is protected.
+	 */
+	public function test_a_denied_key_and_a_protected_key_each_get_their_own_sentence(): void {
 		$this->acting_as( 'administrator' );
 		$this->register_meta_abilities();
 		update_option( 'aafm_allowed_meta_keys', array( '*' ) );
+		update_option( 'aafm_denied_meta_keys', array( 'private_note' ) );
 		$post_id = self::factory()->post->create();
+
+		$denied = $this->wire_text(
+			$this->wire_body(
+				'aafm/get-post-meta',
+				array(
+					'post_id'  => $post_id,
+					'meta_key' => 'private_note',
+				)
+			)
+		);
+		$this->assertStringContainsString( 'deny list', $denied );
 
 		foreach ( array( '_edit_lock', 'wp_capabilities', '_wp_page_template' ) as $key ) {
 			$this->assertTrue( aafm_hard_blocked_meta_key( $key ), $key . ' is hard-blocked, which is the premise.' );
-			$this->assertSame(
-				self::BARE_REFUSAL,
-				$this->wire_text(
-					$this->wire_body(
-						'aafm/get-post-meta',
-						array(
-							'post_id'  => $post_id,
-							'meta_key' => $key,
-						)
+			$text = $this->wire_text(
+				$this->wire_body(
+					'aafm/get-post-meta',
+					array(
+						'post_id'  => $post_id,
+						'meta_key' => $key,
 					)
-				),
-				$key . ' must keep the opaque refusal: only the two published core keys are explained.'
+				)
 			);
+			$this->assertStringContainsString( 'protected or reserved', $text, $key );
+			$this->assertStringNotContainsString( $key, $text, 'The key is never echoed.' );
 		}
+	}
+
+	/**
+	 * An allowed key that the caller cannot edit still gets the bare refusal, so a capability failure
+	 * is not described. Direction one above pins the same for a subscriber; this pins that the
+	 * reason sentences do not fire for an exposed key.
+	 */
+	public function test_an_exposed_key_on_an_object_the_caller_cannot_edit_stays_bare(): void {
+		$this->register_meta_abilities();
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
+		$post_id = self::factory()->post->create();
+		$this->acting_as( 'subscriber' );
+
+		$text = $this->wire_text(
+			$this->wire_body(
+				'aafm/update-post-meta',
+				array(
+					'post_id'  => $post_id,
+					'meta_key' => 'subtitle',
+					'value'    => 'x',
+				)
+			)
+		);
+
+		$this->assertSame( self::BARE_REFUSAL, $text );
 	}
 
 	/**

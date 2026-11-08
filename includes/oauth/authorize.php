@@ -601,6 +601,19 @@ function aafm_oauth_issue_code_and_redirect( array $valid, int $user_id ): void 
 }
 
 /**
+ * Whether the user is an administrator: a super admin, or able to manage options.
+ *
+ * Narrower than aafm_oauth_user_is_high_privilege(), which also fires on unfiltered_html, a
+ * capability core Editors hold on a single site. This decides only the wording of the warning.
+ *
+ * @param WP_User $user The user.
+ * @return bool
+ */
+function aafm_oauth_user_is_administrator( WP_User $user ): bool {
+	return is_super_admin( $user->ID ) || user_can( $user, 'manage_options' );
+}
+
+/**
  * Whether the approving user holds site-administration or privilege-escalation capabilities.
  *
  * A token is minted with the approving user's own capabilities, so approving a self-registered app
@@ -696,17 +709,18 @@ function aafm_oauth_show_consent( array $valid, ?array $renewing = null ): void 
 	}
 
 	$view = array(
-		'client_name'    => '' !== $valid['client_name'] ? $valid['client_name'] : $valid['client_id'],
-		'user_login'     => $user->user_login,
-		'site_name'      => get_bloginfo( 'name' ),
-		'redirect_host'  => $redirect_host,
-		'high_privilege' => aafm_oauth_user_is_high_privilege( $user ),
-		'action_url'     => add_query_arg( 'aafm_oauth', 'authorize', home_url( '/' ) ),
-		'nonce_field'    => wp_nonce_field( 'aafm_oauth_consent|' . $valid['client_id'], '_wpnonce', true, false ),
-		'hidden_inputs'  => $hidden_inputs,
-		'presets'        => array(),
-		'renewing'       => null !== $renewing,
-		'current_label'  => '',
+		'client_name'      => '' !== $valid['client_name'] ? $valid['client_name'] : $valid['client_id'],
+		'user_login'       => $user->user_login,
+		'site_name'        => get_bloginfo( 'name' ),
+		'redirect_host'    => $redirect_host,
+		'high_privilege'   => aafm_oauth_user_is_high_privilege( $user ),
+		'is_administrator' => aafm_oauth_user_is_administrator( $user ),
+		'action_url'       => add_query_arg( 'aafm_oauth', 'authorize', home_url( '/' ) ),
+		'nonce_field'      => wp_nonce_field( 'aafm_oauth_consent|' . $valid['client_id'], '_wpnonce', true, false ),
+		'hidden_inputs'    => $hidden_inputs,
+		'presets'          => array(),
+		'renewing'         => null !== $renewing,
+		'current_label'    => '',
 	);
 	if ( null !== $renewing ) {
 		$view['current_label'] = aafm_access_presets()[ '' === $renewing['preset'] ? 'custom' : (string) $renewing['preset'] ]['label'] ?? '';

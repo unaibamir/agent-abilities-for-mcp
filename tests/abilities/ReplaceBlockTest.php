@@ -210,6 +210,13 @@ final class ReplaceBlockTest extends TestCase {
 		$this->assertSame( '<p>Classic content only.</p>', $this->stored( $id ) );
 	}
 
+	public function test_the_descriptions_say_expect_block_compares_the_name_only(): void {
+		$builder = aafm_args_replace_block();
+
+		$this->assertStringContainsString( 'name only', aafm_get_abilities_registry_full()['aafm/replace-block']['description'] );
+		$this->assertStringContainsString( 'Only the name is compared', $builder['input_schema']['properties']['expect_block']['description'] );
+	}
+
 	public function test_an_expect_block_mismatch_is_refused_and_names_the_block_found(): void {
 		$this->admin();
 		$id = $this->post_with( self::PAGE );

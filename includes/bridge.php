@@ -244,7 +244,133 @@ function aafm_prepare_bridge_schema_for_client( array $schema ): array {
  */
 function aafm_bridge_input_schema( $ability ): array {
 	$schema = method_exists( $ability, 'get_input_schema' ) ? $ability->get_input_schema() : array();
-	return aafm_prepare_bridge_schema_for_client( aafm_normalize_json_schema( $schema ) );
+	return aafm_prepare_bridge_schema_for_client( aafm_flatten_schema_combinators( aafm_normalize_json_schema( $schema ) ) );
+}
+
+/**
+ * Merge two definitions of the same property from different branches of a flattened union.
+ *
+ * Definitions that differ only in their enum (and default) become one definition with the enum
+ * values combined. Any other difference means the branches disagree about the value, such as a
+ * string in one and an integer in another, so the merged definition keeps only the types the
+ * branches use (and the first description) and leaves the real check to the foreign ability, which still validates the original schema on execute. Keeping the first branch's
+ * constraints instead would reject a call the foreign ability accepts.
+ *
+ * @param array<string,mixed> $first  The definition kept so far.
+ * @param array<string,mixed> $second The definition from a later branch.
+ * @return array<string,mixed>
+ */
+function aafm_merge_branch_property( array $first, array $second ): array {
+	$strip = static function ( array $def ): array {
+		unset( $def['enum'], $def['default'] );
+		return $def;
+	};
+	if ( isset( $first['enum'], $second['enum'] ) && is_array( $first['enum'] ) && is_array( $second['enum'] ) && $strip( $first ) === $strip( $second ) ) {
+		// Strict uniqueness: SORT_REGULAR compares loosely before PHP 8, which would drop 'auto' next to 0.
+		$combined = array();
+		foreach ( array_merge( $first['enum'], $second['enum'] ) as $value ) {
+			if ( ! in_array( $value, $combined, true ) ) {
+				$combined[] = $value;
+			}
+		}
+		$first['enum'] = $combined;
+		return $first;
+	}
+
+	// Core's REST validator needs a type on every property, so the disagreement is expressed as the
+	// union of the types the branches use (a single type when they agree).
+	$types  = array_values( array_unique( array_merge( (array) ( $first['type'] ?? array() ), (array) ( $second['type'] ?? array() ) ) ) );
+	$merged = array();
+	if ( array() !== $types ) {
+		$merged['type'] = 1 === count( $types ) ? $types[0] : $types;
+	}
+	if ( isset( $first['description'] ) ) {
+		$merged['description'] = $first['description'];
+	}
+	return $merged;
+}
+
+/**
+ * Flatten a top-level oneOf/anyOf/allOf/not on a bridged input schema into one plain object schema.
+ *
+ * ChatGPT silently rejects a whole tools/list refresh when any tool's inputSchema carries one of
+ * these at the root (WooCommerce's product-create and product-update do), and keeps showing the
+ * stale list with no error. The advertised schema is only a hint: the foreign ability still
+ * validates the real input against its own original schema on execute, so nothing is loosened.
+ *
+ * Branch properties are merged (enum values are unioned; a property the branches define differently keeps
+ * only the type they agree on, so every branch's value still validates), `required` keeps only keys every branch requires (allOf: all of them),
+ * and the alternatives are spelled out in the description. `not` is dropped.
+ *
+ * @param array<string,mixed> $schema A normalized JSON schema.
+ * @return array<string,mixed> The schema with no top-level combinator.
+ */
+function aafm_flatten_schema_combinators( array $schema ): array {
+	$branches = array();
+	$required = null;
+	$notes    = array();
+	foreach ( array( 'oneOf', 'anyOf', 'allOf' ) as $keyword ) {
+		if ( ! isset( $schema[ $keyword ] ) ) {
+			continue;
+		}
+		$list = is_array( $schema[ $keyword ] ) ? array_values( array_filter( $schema[ $keyword ], 'is_array' ) ) : array();
+		unset( $schema[ $keyword ] );
+		foreach ( $list as $branch ) {
+			$branch_required = isset( $branch['required'] ) && is_array( $branch['required'] ) ? array_values( array_map( 'strval', $branch['required'] ) ) : array();
+			if ( 'allOf' === $keyword ) {
+				$schema['required'] = array_values( array_unique( array_merge( isset( $schema['required'] ) ? (array) $schema['required'] : array(), $branch_required ) ) );
+			} else {
+				$required = null === $required ? $branch_required : array_values( array_intersect( $required, $branch_required ) );
+				$notes[]  = $branch_required;
+			}
+			$branches[] = $branch;
+		}
+	}
+	unset( $schema['not'] );
+
+	if ( array() === $branches ) {
+		return $schema;
+	}
+
+	$properties = isset( $schema['properties'] ) && is_array( $schema['properties'] ) ? $schema['properties'] : array();
+	foreach ( $branches as $branch ) {
+		$branch_props = isset( $branch['properties'] ) && is_array( $branch['properties'] ) ? $branch['properties'] : array();
+		foreach ( $branch_props as $name => $prop ) {
+			if ( ! isset( $properties[ $name ] ) ) {
+				$properties[ $name ] = $prop;
+			} elseif ( $properties[ $name ] !== $prop ) {
+				$properties[ $name ] = aafm_merge_branch_property( (array) $properties[ $name ], (array) $prop );
+			}
+		}
+	}
+	if ( array() !== $properties ) {
+		$schema['properties'] = $properties;
+	}
+
+	if ( null !== $required ) {
+		$schema['required'] = array_values( array_unique( array_merge( isset( $schema['required'] ) ? (array) $schema['required'] : array(), $required ) ) );
+	}
+	if ( array() === ( $schema['required'] ?? null ) ) {
+		unset( $schema['required'] );
+	}
+
+	$notes = array_unique(
+		array_map(
+			static function ( array $keys ): string {
+				return implode( ', ', $keys );
+			},
+			array_filter( $notes )
+		)
+	);
+	if ( count( $notes ) > 1 ) {
+		$note = sprintf(
+			/* translators: %s: semicolon-separated groups of required field names, one group per accepted input shape. */
+			__( 'Accepted input shapes require: %s.', 'agent-abilities-for-mcp' ),
+			implode( '; ', $notes )
+		);
+		$schema['description'] = isset( $schema['description'] ) && '' !== $schema['description'] ? $schema['description'] . ' ' . $note : $note;
+	}
+	return $schema;
 }
 
 /**
@@ -650,13 +776,19 @@ function aafm_get_stored_bridged_abilities_raw(): array {
  * read, and neither is one that declares nothing, since aafm_bridge_risk() already treats an
  * unannotated ability as destructive.
  *
- * The stored option is never rewritten by this, so turning the mode off restores exactly what was
- * enabled before.
+ * The high-risk lock applies too: a held slug (aafm_ability_is_high_risk()) is left out while the
+ * category is locked, in both modes.
+ *
+ * The stored option is never rewritten by this, so turning the mode off or unlocking restores
+ * exactly what was enabled before.
  *
  * @return array<int,string>
  */
 function aafm_get_enabled_bridged_abilities(): array {
 	$clean = aafm_get_stored_bridged_abilities_raw();
+	if ( ! aafm_high_risk_unlocked() ) {
+		$clean = array_values( array_filter( $clean, static fn( string $slug ): bool => ! aafm_ability_is_high_risk( $slug ) ) );
+	}
 
 	if ( ! aafm_read_only_mode() ) {
 		return $clean;

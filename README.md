@@ -9,20 +9,29 @@ WordPress MCP server for Claude and ChatGPT with limited access, a pause switch,
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.1 |
 | **Requires PHP** | 7.4 |
-| **Stable tag** | 1.11.0 |
+| **Stable tag** | 1.11.1 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
-This is the GitHub home of a free WordPress plugin that adds an MCP endpoint to a site, so Claude, ChatGPT, Cursor and other MCP clients can work on it as a WordPress user you choose. It ships 184 abilities (90 core, 94 for plugins such as WooCommerce, ACF and Yoast SEO) and every one starts switched off.
+Agent Abilities for MCP is a free WordPress MCP server plugin. It adds an MCP endpoint to a site and exposes WordPress abilities to AI agents, so Claude, ChatGPT, Cursor and other MCP clients can work on it as a WordPress user you choose, with that user's role and no more. It ships 184 abilities (90 core, 94 for plugins such as WooCommerce, ACF and Yoast SEO) and every one starts switched off.
 
-The listing for site owners lives on [WordPress.org](https://wordpress.org/plugins/agent-abilities-for-mcp/). This page is for anyone who wants to read the code, wire the plugin into their own stack or send a patch.
+This is the GitHub home of the plugin. The listing for site owners lives on [WordPress.org](https://wordpress.org/plugins/agent-abilities-for-mcp/), and this page is for anyone who wants to read the code, wire the plugin into their own stack or send a patch.
 
 ## What the plugin does
+
+Typical setups:
+
+* Connect Claude (custom connector) or ChatGPT (custom MCP server) to WordPress over OAuth, or connect Cursor, VS Code and other clients with OAuth or an Application Password.
+* Give an AI agent read-only access: read-only mode unloads every write tool this plugin serves.
+* Let Claude or ChatGPT draft posts without publishing: Force draft on create saves the posts, pages and products an agent creates as drafts, and the Needs review card on the Dashboard lists them.
+* Pause one OAuth connection, give it an end date or a lower rate limit, or refuse every MCP request at once with Pause all access.
 
 Abilities are registered on the WordPress 6.9 Abilities API and served through the official MCP Adapter, which is bundled, so if the standalone Adapter plugin is active too the plugin simply uses whichever copy loads first. Every call to its tools runs as the WordPress user the connection belongs to, over OAuth or an Application Password, and is checked against that user's capabilities.
 
 The admin screen has a switch for each ability, plus read-only mode, per-role and per-connection allowlists, a rate limit, an IP allowlist and Pause all access, and each OAuth connection gets its own pause, end date, rate limit and access preset. An Activity Log table in the site's own database records the acting user, the tool, the argument keys and an identifier-only note, and it never stores free-text content.
 
-Playbooks are step-by-step instructions the owner writes, and agents read the Active ones through two read tools, `aafm/list-playbooks` and `aafm/get-playbook`. Writes through the general content tools to pages owned by Elementor, Divi, Beaver Builder, Avada or Visual Composer are refused. Avada's two dedicated tools are the exception, and they refuse changes to its shortcodes.
+Playbooks are step-by-step instructions the owner writes, and agents read the Active ones through two read tools, `aafm/list-playbooks` and `aafm/get-playbook`. Writes through the general content tools to pages owned by Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks or WPBakery are refused. An edit that only sets the excerpt goes through and leaves the stored content as it was, unless the plugin can't tell which builder owns the post. Avada's two dedicated tools are a second exception: they can change text and refuse changes to its shortcodes.
+
+Minimum versions: WooCommerce 9.1, All in One SEO 4.9.8, The Events Calendar 6.17.3.1 and Event Tickets 5.29.3.1. Below these, their tools stay hidden and the Integrations tab says why. A plugin that doesn't declare its reads as read-only has them treated as writes, so read-only mode unloads them. A tool whose own permission check needs an item id is listed for anyone who can edit posts, and the plugin's own check refuses the call if their role can't run it.
 
 One scope note: the Adapter has a default server that other plugins can publish tools to, and those tools are outside this plugin's controls. A Settings choice (Automatic, Always on, Always off) decides whether that server runs, and this plugin's own tools are never on it.
 
@@ -94,7 +103,10 @@ These are the main extension points. Every name starts with `aafm_`.
 | `aafm_ability_called` | action | Fires with the normalized record after an Activity Log row is written. |
 | `aafm_write_completed` | action | Fires with a copy of the result and the target once a write's outcome is decided, for every status. |
 | `aafm_force_read_only_mode` | filter | Return `true` to force read-only mode on. It can only turn the mode on, never off. |
-| `aafm_high_risk_abilities` | filter | Add `aafm/*` ability names to the high-risk set. The built-ins are merged back in, so it can only add. Bridged abilities are not affected. |
+| `aafm_high_risk_abilities` | filter | Add ability names or other plugins' slugs to the high-risk set. The built-ins are merged back in, so it can only add. |
+| `aafm_force_block_high_risk_abilities` | filter | Return `true` to keep the high-risk lock on whatever Settings says. It can only lock, never unlock. |
+| `aafm_serve_openid_configuration` | filter | Return `false` on a subfolder install that runs its own OpenID Connect provider, so `/.well-known/openid-configuration` is left to it. Default `true`. |
+| `aafm_bridge_discovery_capability` | filter | The capability a user needs to see a bridged tool whose own permission check needs an object id. Default `edit_posts`. Receives the wrapper tool name. |
 | `aafm_rate_limit_per_min`, `aafm_ip_allowlist`, `aafm_max_title_len` | filters | Adjust the stored value. A filter cannot switch off a limit the site owner set in Settings. |
 | `aafm_page_builder_markers` | filter | Map of post meta key to builder name used by the page builder guard. |
 | `aafm_allowed_post_types` | filter | Custom post types exposed to the content tools. Types that fail the eligibility check stay refused. |
@@ -141,12 +153,20 @@ The plugin calls no AI provider and sends no telemetry. It makes two kinds of re
 The Model Context Protocol is an open specification that Anthropic originally developed. Claude, ChatGPT, Cursor, VS Code, Gemini and other product names belong to their owners, and Agent Abilities for MCP is a third-party plugin that isn't affiliated with, endorsed by or sponsored by any of them.
 
 ## Changelog
+### 1.11.1
+
+* **Fix:** The high-risk lock now holds wc-create-order, WooCommerce's own order status and order update tools, and the Secure Custom Fields tools that can store a callback name, and its filter accepts other plugins' slugs. Shop manager connections no longer reach wc-create-order, and post tools no longer reach a type whose own tool is off.
+* **Fix:** Agent writes to WPBakery, Bricks, Oxygen, Breakdance and Brizy pages are refused, but a page builder's post or page now accepts an edit that only sets the excerpt and keeps its stored content as it was, unless the plugin can't tell which builder owns it. A role with only read_private_posts no longer lists other people's drafts, the user meta tools can't reach the MCP session store, Test connection no longer sends your login cookies to another host, and a bridged tool's crash text no longer reaches the agent under WP_DEBUG.
+* **Fix:** Bridged WooCommerce product create and update tools no longer leave ChatGPT stuck on an old tool list. Rank Math's get-head shows a post's own title and description, the Activity Log records which object each built-in write tool changed (a count for the site-wide replace), and invalid URLs, an event end before its start, a sale price above the regular price and similar bad input are refused with an error instead of being saved or ignored.
+* **Fix:** A batch of smaller fixes across Quick Connect and Reset, subsite deletion, Force draft on product variations, meta tools that now say why a key was refused, the product types wc-create-product offers, protected excerpts, term backslashes, empty meta, SEO head and search answers, OAuth discovery on subfolder installs, and LiteSpeed and WP Fastest Cache purging after agent meta writes.
+* **Chore:** Five old admin save actions are gone (a script calling them directly should use aafm_save_abilities_page), readme wording is corrected, and integration minimum versions are listed.
+
 ### 1.11.0
 
 * **Feature:** The Other plugins tab says which plugin provides each group of tools (or its namespace, when the plugin cannot be identified), labels each tool Read, Write or Destructive from the plugin's own annotations (an unlabelled tool is treated as destructive and says so), and marks tools that may return personal data such as form entries, orders, learner or member records. That mark is a hint from the plugin and tool name, not a full check.
 * **Feature:** When a plugin update or a newly activated plugin adds tools, a "New tools since your last review" card lists them. They stay off until you switch them on, and Settings can send a notification for them.
 * **Feature:** Each plugin on the Other plugins tab has an "Allow only read tools" button, and the Activity Log can filter to one plugin's tools.
-* **Fix:** A bridged tool's error names the plugin as WordPress shows it, for example "WPForms Lite" instead of "wpforms", or names the tool namespace and says so when the plugin cannot be identified. The Quick Connect note no longer promises deletes go to Trash, the upload tools name the upload-files capability, and Content editor and Shop manager say they can read playbooks.
+* **Fix:** A bridged tool's error names the plugin, using the name from its header once cleaned up, for example "WPForms Lite" instead of "wpforms", or names the tool namespace and says so when the plugin cannot be identified. The Quick Connect note no longer promises deletes go to Trash, the upload tools name the upload-files capability, and Content editor and Shop manager say they can read playbooks.
 * **Chore:** The TEC events list says whose draft events it returns, the Avada descriptions lost a dash, and leftover internal notes came out of the plugin's PHP comments.
 
 ### 1.10.2
@@ -233,6 +253,6 @@ The Model Context Protocol is an open specification that Anthropic originally de
 * **Fix:** A zero-match abilities search left the Save button stranded on an empty card; the savebar now hides and returns with the results.
 * **Fix:** The client picker's hover and selected states looked identical; hover is now a border outline only.
 * **Fix:** Ability order now survives a re-save, a stale search clears on keyboard navigation, a large allowlist no longer renders every checkbox at load, and new controls have accessible names and translations.
-* **Fix:** Post, block and template writes now confirm what landed, a stuck OAuth migration can no longer re-enable a switch you disabled, comment counts no longer hint at hidden comments, and a failed token revoke no longer reports success.
+* **Fix:** Post, block and template writes now confirm what landed, a stuck OAuth migration can no longer re-enable a switch you disabled, comment counts no longer include hidden comments, and a failed token revoke no longer reports success.
 
 Full release history: [agentabilitieswp.com/changelog](https://agentabilitieswp.com/changelog/?utm_source=github&utm_medium=readme&utm_campaign=plugin-repo)

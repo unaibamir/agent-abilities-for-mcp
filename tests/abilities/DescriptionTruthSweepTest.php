@@ -62,7 +62,7 @@ final class DescriptionTruthSweepTest extends TestCase {
 		foreach ( self::INTEGRATIONS as $slug ) {
 			add_filter( 'aafm_integration_active_' . $slug, '__return_true' );
 		}
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		// Discovery of a read asks whether the ability is switched on, so switch the whole catalog on.
 		update_option( 'aafm_high_risk_abilities_unlocked', true );
 		update_option( 'aafm_enabled_abilities', array_keys( aafm_get_abilities_registry_full() ) );
@@ -74,7 +74,7 @@ final class DescriptionTruthSweepTest extends TestCase {
 		foreach ( self::INTEGRATIONS as $slug ) {
 			remove_filter( 'aafm_integration_active_' . $slug, '__return_true' );
 		}
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		parent::tear_down();
 	}
 
@@ -85,8 +85,8 @@ final class DescriptionTruthSweepTest extends TestCase {
 	 */
 	private function builder_labels(): array {
 		$labels = array();
-		foreach ( array_unique( array_values( aafm_page_builder_default_markers() ) ) as $slug ) {
-			$labels[] = aafm_page_builder_label( (string) $slug );
+		foreach ( aafm_page_builder_slugs() as $slug ) {
+			$labels[] = aafm_page_builder_label( $slug );
 		}
 		return $labels;
 	}
@@ -175,15 +175,15 @@ final class DescriptionTruthSweepTest extends TestCase {
 
 	public function test_every_builder_marker_has_a_display_name(): void {
 		$readme = (string) file_get_contents( AAFM_PLUGIN_DIR . 'readme.txt' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading plugin source.
-		$this->assertSame( array( 'Elementor', 'Divi', 'Beaver Builder', 'Avada', 'Visual Composer' ), $this->builder_labels(), 'Update the readme FAQ and the descriptions with a new builder.' );
+		$this->assertSame( array( 'Elementor', 'Divi', 'Beaver Builder', 'Avada', 'Visual Composer', 'Oxygen', 'Breakdance', 'Brizy', 'Bricks', 'WPBakery' ), $this->builder_labels(), 'Update the readme FAQ and the descriptions with a new builder.' );
 		foreach ( $this->builder_labels() as $label ) {
 			$this->assertStringContainsString( $label, $readme, $label . ' is named in the readme.' );
 		}
-		$this->assertStringContainsString( 'Elementor, Divi, Beaver Builder, Avada and Visual Composer are covered', $readme );
+		$this->assertStringContainsString( 'Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks and WPBakery are covered', $readme );
 	}
 
-	public function test_the_helper_builds_the_list_from_the_default_markers(): void {
-		$this->assertSame( 'Elementor, Divi, Beaver Builder, Avada, and Visual Composer', aafm_page_builder_names() );
+	public function test_the_helper_builds_the_list_from_the_default_builders(): void {
+		$this->assertSame( 'Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks, and WPBakery', aafm_page_builder_names() );
 		add_filter(
 			'aafm_page_builder_markers',
 			static function ( array $markers ): array {
@@ -191,7 +191,7 @@ final class DescriptionTruthSweepTest extends TestCase {
 				return $markers;
 			}
 		);
-		$this->assertSame( 'Elementor, Divi, Beaver Builder, Avada, and Visual Composer', aafm_page_builder_names(), 'A site filter does not change registry text.' );
+		$this->assertSame( 'Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks, and WPBakery', aafm_page_builder_names(), 'A site filter does not change registry text.' );
 		remove_all_filters( 'aafm_page_builder_markers' );
 	}
 
@@ -347,5 +347,13 @@ final class DescriptionTruthSweepTest extends TestCase {
 			}
 		}
 		$this->assertGreaterThan( 0, $checked );
+	}
+
+	public function test_replace_sitewide_says_to_rerun_and_warns_when_the_new_text_contains_the_old(): void {
+		$description = (string) aafm_get_abilities_registry()['aafm/replace-sitewide']['description'];
+		$this->assertStringContainsString( 'run the call again', $description );
+		$this->assertStringContainsString( 'Skipped posts keep matching', $description );
+		$this->assertStringContainsString( 'posts whose new text contains the search text', $description );
+		$this->assertStringContainsString( 'stop when a call changes nothing', $description );
 	}
 }

@@ -28,7 +28,7 @@ function aafm_register_structure_definitions( array $registry ): array {
 	);
 	$registry['aafm/get-post-types'] = array(
 		'label'        => __( 'Get post types', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'List public post types registered on the site. Each type includes two flags: writable (agents may create items of that type) and updatable (agents may also update or delete existing items; false for types that opt out of WordPress capability mapping, which are create-only through these abilities).', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'List public post types registered on the site. Each type includes two flags: writable (the site owner exposed this type to agents; the connected user\'s own capabilities still decide each write) and updatable (existing items can also be updated or deleted through these abilities, subject to the same capabilities; false for types that opt out of WordPress capability mapping, which are create-only through these abilities).', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
@@ -182,7 +182,8 @@ function aafm_exec_get_post_types(): array {
 			'hierarchical' => (bool) $type->hierarchical,
 			'public'       => (bool) $type->public,
 			// Agent-actionable: `writable` is true only when the operator has exposed this type
-			// to the CPT write abilities - the agent may CREATE items of it. A public-but-not-
+			// to the CPT write abilities. It says nothing about the caller: the connected user's
+			// own capabilities still decide each create. A public-but-not-
 			// writable type would pass schema validation on a create/update CPT call and then be
 			// rejected at execute, so the agent needs this flag to pick a valid post_type up front.
 			'writable'     => $exposed,

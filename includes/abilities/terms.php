@@ -60,7 +60,7 @@ function aafm_register_terms_definitions( array $registry ): array {
 	);
 	$registry['aafm/get-term-meta']    = array(
 		'label'        => __( 'Get term meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Read a single allowlisted scalar meta value from a term in a public taxonomy.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Read a single allowlisted scalar meta value from a term in a public taxonomy. Keys are opt-in: an administrator exposes each one under Exposed term meta keys in the Taxonomies & Terms sub-tab of the Abilities tab.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'taxonomies',
@@ -68,7 +68,7 @@ function aafm_register_terms_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-term-meta'] = array(
 		'label'        => __( 'Update term meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Write a single allowlisted scalar meta value to a term you can edit. The response returns the old value when it is plain text or a number.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Write a single allowlisted scalar meta value to a term you can edit. The response returns the old value when it is plain text or a number. Keys are opt-in: an administrator exposes each one under Exposed term meta keys in the Taxonomies & Terms sub-tab of the Abilities tab.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'taxonomies',
@@ -76,7 +76,7 @@ function aafm_register_terms_definitions( array $registry ): array {
 	);
 	$registry['aafm/delete-term-meta'] = array(
 		'label'        => __( 'Delete term meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Delete an allowlisted meta key from a term you can edit. Removes all values of that key. The response returns the old value when it is plain text or a number.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Delete an allowlisted meta key from a term you can edit. Removes all values of that key. The response returns the old value when it is plain text or a number. Keys are opt-in: an administrator exposes each one under Exposed term meta keys in the Taxonomies & Terms sub-tab of the Abilities tab.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'taxonomies',
@@ -879,11 +879,12 @@ function aafm_exec_create_term( array $input ) {
 		return $parent;
 	}
 
+	// Core unslashes name and description, so slash them first or a backslash is lost.
 	$result = wp_insert_term(
-		aafm_sanitize_plain_text( (string) $input['name'] ),
+		wp_slash( aafm_sanitize_plain_text( (string) $input['name'] ) ),
 		$taxonomy,
 		array(
-			'description' => isset( $input['description'] ) ? wp_kses_post( (string) $input['description'] ) : '',
+			'description' => isset( $input['description'] ) ? wp_slash( wp_kses_post( (string) $input['description'] ) ) : '',
 			'parent'      => $parent,
 		)
 	);
@@ -981,11 +982,12 @@ function aafm_exec_update_term( array $input ) {
 	}
 
 	$args = array();
+	// Core unslashes name and description, so slash them first or a backslash is lost.
 	if ( isset( $input['name'] ) ) {
-		$args['name'] = aafm_sanitize_plain_text( (string) $input['name'] );
+		$args['name'] = wp_slash( aafm_sanitize_plain_text( (string) $input['name'] ) );
 	}
 	if ( isset( $input['description'] ) ) {
-		$args['description'] = wp_kses_post( (string) $input['description'] );
+		$args['description'] = wp_slash( wp_kses_post( (string) $input['description'] ) );
 	}
 	if ( isset( $input['parent'] ) ) {
 		$parent = aafm_validate_term_parent( absint( $input['parent'] ), $taxonomy );

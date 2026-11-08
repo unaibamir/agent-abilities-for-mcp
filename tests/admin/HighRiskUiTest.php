@@ -99,7 +99,7 @@ final class HighRiskUiTest extends TestCase {
 	public function test_a_locked_row_points_at_the_setting(): void {
 		$this->make_high_risk( 'aafm/create-page' );
 		$this->assertStringContainsString(
-			'High-risk abilities',
+			'Unlock the category under Safety controls',
 			$this->render_row( 'aafm/create-page' )
 		);
 	}
@@ -181,7 +181,7 @@ final class HighRiskUiTest extends TestCase {
 	public function test_an_integrations_tab_locked_row_shows_the_high_risk_badge_and_note(): void {
 		$html = $this->render_integration_row( 'aafm/wc-create-order-refund' );
 		$this->assertStringContainsString( 'aafm-badge-high-risk', $html );
-		$this->assertStringContainsString( 'High-risk abilities', $html );
+		$this->assertStringContainsString( 'Unlock the category', $html );
 	}
 
 	public function test_an_integrations_tab_unlocked_high_risk_row_still_renders_a_checkbox(): void {
@@ -348,5 +348,20 @@ final class HighRiskUiTest extends TestCase {
 		aafm_policy_reset_request_state();
 
 		$this->assertSame( $checked, str_contains( $this->high_risk_input(), 'checked' ) );
+	}
+
+	public function test_settings_says_when_a_host_forces_the_lock(): void {
+		ob_start();
+		aafm_render_settings_tab();
+		$open = (string) ob_get_clean();
+		$this->assertStringNotContainsString( 'Your host or a site setting keeps this locked', $open );
+
+		add_filter( 'aafm_force_block_high_risk_abilities', '__return_true' );
+		ob_start();
+		aafm_render_settings_tab();
+		$forced = (string) ob_get_clean();
+		remove_filter( 'aafm_force_block_high_risk_abilities', '__return_true' );
+
+		$this->assertStringContainsString( 'Your host or a site setting keeps this locked, whatever this switch says.', $forced );
 	}
 }

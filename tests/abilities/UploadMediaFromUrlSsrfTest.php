@@ -224,10 +224,28 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 		);
 
 		aafm_ssrf_validate_fetch_target( 'https://example.test/image.jpg' );
-
-		remove_all_filters( 'aafm_resolve_hostname_to_ip' );
-
 		$this->assertSame( 1, $calls, 'The hostname must be resolved exactly once during validation.' );
+
+		// Across the whole owned fetch, up to the point the cURL handle is configured, the
+		// count stays at one: nothing in the transport may look the host up again.
+		$calls = 0;
+		add_filter(
+			'aafm_media_fetch_curl_options',
+			static function () {
+				throw new \RuntimeException( 'aafm-test-abort-before-curl-exec' );
+			}
+		);
+		try {
+			aafm_ssrf_safe_fetch_url( 'https://example.test/image.jpg' );
+			$this->fail( 'Expected the test seam to abort the fetch before curl_exec() ran.' );
+		} catch ( \RuntimeException $e ) {
+			$this->assertSame( 'aafm-test-abort-before-curl-exec', $e->getMessage() );
+		} finally {
+			remove_all_filters( 'aafm_media_fetch_curl_options' );
+			remove_all_filters( 'aafm_resolve_hostname_to_ip' );
+		}
+
+		$this->assertSame( 1, $calls, 'The full owned fetch must resolve the hostname exactly once.' );
 	}
 
 	/**
@@ -370,6 +388,29 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 	 * CURLOPT_FOLLOWLOCATION is off and nothing downstream needs one).
 	 */
 	public function test_does_not_follow_a_redirect(): void {
+		// The transport itself is told not to follow: capture the options the owned fetch hands
+		// to cURL, aborting before any connection. A 302 answer alone can't show this, because a
+		// transport that followed the redirect would never return the 302.
+		$captured = null;
+		add_filter( 'aafm_resolve_hostname_to_ip', static fn() => '203.0.113.10' );
+		add_filter(
+			'aafm_media_fetch_curl_options',
+			static function ( array $options ) use ( &$captured ) {
+				$captured = $options;
+				throw new \RuntimeException( 'aafm-test-abort-before-curl-exec' );
+			}
+		);
+		try {
+			aafm_ssrf_safe_fetch_url( 'https://example.test/redirecting.png' );
+		} catch ( \RuntimeException $e ) {
+			$this->assertSame( 'aafm-test-abort-before-curl-exec', $e->getMessage() );
+		} finally {
+			remove_all_filters( 'aafm_media_fetch_curl_options' );
+			remove_all_filters( 'aafm_resolve_hostname_to_ip' );
+		}
+		$this->assertIsArray( $captured );
+		$this->assertFalse( $captured[ CURLOPT_FOLLOWLOCATION ] );
+
 		$out = aafm_ssrf_process_fetch_response(
 			array(
 				'headers'  => array(),

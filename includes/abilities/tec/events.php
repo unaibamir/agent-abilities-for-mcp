@@ -72,7 +72,7 @@ function aafm_tec_events_registry_definitions(): array {
 		),
 		'aafm/tec-get-event'    => array(
 			'label'        => __( 'Get event', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Read a single event by ID, including its start/end dates, venue, and organizers.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Read a single event by ID, including its start/end dates, venue, organizers, and description (the stored body, blank for a password-protected event).', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'tec',
@@ -112,10 +112,11 @@ function aafm_tec_events_registry_definitions(): array {
 /**
  * The wire shape for one event.
  *
- * @param int $id Event (post) id.
+ * @param int  $id               Event (post) id.
+ * @param bool $with_description Whether to include the event body. Lists leave it out to stay lean.
  * @return array<string,mixed>
  */
-function aafm_tec_event_shape( int $id ): array {
+function aafm_tec_event_shape( int $id, bool $with_description = true ): array {
 	$post = aafm_exact_object( 'post', $id );
 	if ( ! $post instanceof WP_Post ) {
 		// The values The Events Calendar's readers return for a missing event, without calling them.
@@ -129,9 +130,9 @@ function aafm_tec_event_shape( int $id ): array {
 			'all_day'       => false,
 			'venue_id'      => 0,
 			'organizer_ids' => array(),
-		);
+		) + ( $with_description ? array( 'description' => '' ) : array() );
 	}
-	return array(
+	$shape = array(
 		'id'            => $id,
 		'title'         => get_the_title( $post ),
 		'status'        => (string) $post->post_status,
@@ -142,6 +143,12 @@ function aafm_tec_event_shape( int $id ): array {
 		'venue_id'      => (int) tribe_get_venue_id( $id ),
 		'organizer_ids' => array_map( 'intval', (array) tribe_get_organizer_ids( $id ) ),
 	);
+	if ( $with_description ) {
+		// The stored body, as get-post returns it (it was filtered when it was written). A
+		// password-protected event never exposes its body.
+		$shape['description'] = '' !== (string) $post->post_password ? '' : (string) $post->post_content;
+	}
+	return $shape;
 }
 
 /**
@@ -244,7 +251,10 @@ function aafm_exec_tec_get_events( array $input ) {
 	}
 	$ids = $repo->get_ids();
 	return array(
-		'events' => array_map( 'aafm_tec_event_shape', array_map( 'intval', $ids ) ),
+		'events' => array_map(
+			static fn( $event_id ): array => aafm_tec_event_shape( (int) $event_id, false ),
+			$ids
+		),
 		'total'  => (int) $repo->found(),
 	);
 }
@@ -476,6 +486,43 @@ function aafm_args_tec_create_event(): array {
 }
 
 /**
+ * Refuse an event whose end falls before its start, or whose dates cannot be read.
+ *
+ * On create both dates are required. On update either may be omitted, so the omitted one is read
+ * from the stored event. Without this an update with end before start returned ok while the dates
+ * stayed as they were, because The Events Calendar's repository drops the write.
+ *
+ * @param array<string,mixed> $input    Validated input.
+ * @param int                 $event_id The event being updated, or 0 on create.
+ * @return WP_Error|null Null when the dates are fine or not part of the request.
+ */
+function aafm_tec_validate_event_dates( array $input, int $event_id = 0 ): ?WP_Error {
+	$has_start = isset( $input['start_date'] );
+	$has_end   = isset( $input['end_date'] );
+	if ( ! $has_start && ! $has_end ) {
+		return null;
+	}
+
+	$start = $has_start ? (string) $input['start_date'] : ( $event_id > 0 ? (string) tribe_get_start_date( $event_id, false, 'Y-m-d H:i:s' ) : '' );
+	$end   = $has_end ? (string) $input['end_date'] : ( $event_id > 0 ? (string) tribe_get_end_date( $event_id, false, 'Y-m-d H:i:s' ) : '' );
+
+	$start_time = '' === trim( $start ) ? false : strtotime( $start );
+	$end_time   = '' === trim( $end ) ? false : strtotime( $end );
+
+	$unreadable = ( $has_start && false === $start_time ) || ( $has_end && false === $end_time );
+	if ( $unreadable || ( false !== $start_time && false !== $end_time && $end_time < $start_time ) ) {
+		return new WP_Error(
+			'aafm_invalid_event_dates',
+			$unreadable
+				? __( 'The event start or end date could not be read, so nothing was changed. Use a format like 2027-01-01 09:00:00.', 'agent-abilities-for-mcp' )
+				: __( 'The event end cannot be before its start, so nothing was changed.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
+	}
+	return null;
+}
+
+/**
  * Execute aafm/tec-create-event.
  *
  * @param array<string,mixed> $input Validated input.
@@ -485,6 +532,11 @@ function aafm_exec_tec_create_event( array $input ) {
 	$status = aafm_resolve_create_status( $input, 'draft', aafm_tec_event_publish_cap() );
 	if ( is_wp_error( $status ) ) {
 		return $status;
+	}
+
+	$invalid_dates = aafm_tec_validate_event_dates( $input );
+	if ( $invalid_dates instanceof WP_Error ) {
+		return $invalid_dates;
 	}
 
 	$invalid_relationship = aafm_tec_validate_venue_organizer_ids( $input );
@@ -536,6 +588,7 @@ function aafm_args_tec_update_event(): array {
 		'minimum'     => 1,
 		'description' => __( 'ID of the event to update.', 'agent-abilities-for-mcp' ),
 	);
+	$properties['status']['description']  = __( 'Post status, e.g. draft or publish. Leave it out to keep the event\'s current status.', 'agent-abilities-for-mcp' );
 	$schema['input_schema']['properties'] = $properties;
 	$schema['input_schema']['required']   = array( 'event_id' );
 
@@ -577,10 +630,20 @@ function aafm_exec_tec_update_event( array $input ) {
 	if ( $id < 1 ) {
 		return aafm_generic_error();
 	}
+	// The event's own read comes first, as in every other guarded write, so a failed load is this
+	// ability's error rather than a builder refusal.
+	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
 
 	$owning_builder = aafm_post_has_foreign_builder_ownership( $id );
 	if ( false !== $owning_builder ) {
 		return aafm_page_builder_owned_error( $owning_builder );
+	}
+
+	$invalid_dates = aafm_tec_validate_event_dates( $input, $id );
+	if ( $invalid_dates instanceof WP_Error ) {
+		return $invalid_dates;
 	}
 
 	$invalid_relationship = aafm_tec_validate_venue_organizer_ids( $input );

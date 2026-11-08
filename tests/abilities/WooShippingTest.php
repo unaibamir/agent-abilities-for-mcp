@@ -32,7 +32,7 @@ final class WooShippingTest extends TestCase {
 		$this->stub_woocommerce();
 		$this->stub_wc_shipping();
 		$this->seed_wc_shipping();
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_wc_shipping();
 	}
 
@@ -164,7 +164,7 @@ final class WooShippingTest extends TestCase {
 		remove_all_filters( 'aafm_integration_active_woocommerce' );
 		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 		$this->assertFalse( aafm_integration_active( 'woocommerce' ) );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 
 		$registry = aafm_get_abilities_registry();
 		$this->assertArrayNotHasKey( 'aafm/wc-list-shipping-zones', $registry );
@@ -251,6 +251,27 @@ final class WooShippingTest extends TestCase {
 		$this->assertGreaterThan( 0, $res['id'] );
 		$this->assertSame( 'Asia', $res['zone_name'] );
 		$this->assertSame( 3, $res['zone_order'] );
+	}
+
+	public function test_shipping_zone_create_and_update_refuse_an_empty_name(): void {
+		$this->acting_as( 'administrator' );
+
+		foreach ( array( '', '   ' ) as $name ) {
+			$create = wp_get_ability( 'aafm/wc-create-shipping-zone' )->execute( array( 'zone_name' => $name ) );
+			$this->assertInstanceOf( WP_Error::class, $create, 'create with "' . $name . '"' );
+			$this->assertSame( 'aafm_wc_invalid_zone_name', $create->get_error_code() );
+
+			$update = wp_get_ability( 'aafm/wc-update-shipping-zone' )->execute(
+				array(
+					'zone_id'   => 1,
+					'zone_name' => $name,
+				)
+			);
+			$this->assertInstanceOf( WP_Error::class, $update, 'update with "' . $name . '"' );
+			$this->assertSame( 'aafm_wc_invalid_zone_name', $update->get_error_code() );
+		}
+		$still = wp_get_ability( 'aafm/wc-get-shipping-zone' )->execute( array( 'zone_id' => 1 ) );
+		$this->assertNotSame( '', $still['zone_name'], 'A refused update leaves the zone name alone.' );
 	}
 
 	/**

@@ -514,8 +514,9 @@ final class CommentsReadTest extends TestCase {
 		$private_post = self::factory()->post->create( array( 'post_status' => 'private' ) );
 
 		// The 3-wide scan window: A, B, C (newest three).
+		$window = array();
 		foreach ( array( '2020-04-10', '2020-04-09', '2020-04-08' ) as $date ) {
-			self::factory()->comment->create(
+			$window[] = self::factory()->comment->create(
 				array(
 					'comment_post_ID'  => $public_post,
 					'comment_approved' => '1',
@@ -563,9 +564,22 @@ final class CommentsReadTest extends TestCase {
 			)
 		);
 
+		// Record what each probe excluded: without the exclusion the probe re-reads the visible
+		// window and still answers true, so the answer alone can't show the identity probe ran.
+		$excluded = array();
+		$spy      = static function ( \WP_Comment_Query $query ) use ( &$excluded ): void {
+			if ( ! empty( $query->query_vars['comment__not_in'] ) ) {
+				$excluded[] = array_map( 'intval', (array) $query->query_vars['comment__not_in'] );
+			}
+		};
+		add_action( 'pre_get_comments', $spy );
 		$after = wp_get_ability( 'aafm/get-comments' )->execute( $args );
+		remove_action( 'pre_get_comments', $spy );
 
 		remove_all_filters( 'aafm_comments_sitewide_scan_cap' );
+
+		$this->assertNotEmpty( $excluded, 'The probe must exclude the comments already scanned.' );
+		$this->assertSame( array(), array_diff( $window, $excluded[0] ), 'The first probe excludes every comment in the scanned window.' );
 
 		$this->assertSame( $before['comments'], $after['comments'], 'The caller\'s own visible results must be unaffected by the insertion.' );
 		$this->assertTrue( $after['truncated'], 'D is still readable and still beyond the window - truncated must stay true, not flip false because of where a hidden comment landed.' );

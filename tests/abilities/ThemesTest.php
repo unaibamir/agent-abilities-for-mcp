@@ -148,11 +148,28 @@ final class ThemesTest extends TestCase {
 		$after  = wp_count_posts( 'wp_template' );
 
 		$this->assertInstanceOf( WP_Error::class, $res, 'A theme-file template must be refused.' );
+		$this->assertSame( 'aafm_template_not_customized', $res->get_error_code() );
+		$this->assertStringContainsString( 'Site Editor', $res->get_error_message(), 'The refusal must say why and what to do.' );
 		$this->assertSame(
 			array_sum( (array) $before ),
 			array_sum( (array) $after ),
 			'Refusing a theme-file template must not create a wp_template post.'
 		);
+	}
+
+	public function test_update_template_keeps_the_generic_error_for_an_unknown_template(): void {
+		$this->register_themes();
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/update-template' )->execute(
+			array(
+				'template_id' => get_stylesheet() . '//no-such-template',
+				'content'     => '<!-- wp:paragraph --><p>nope</p><!-- /wp:paragraph -->',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertNotSame( 'aafm_template_not_customized', $res->get_error_code(), 'An unknown id must not confirm what exists.' );
 	}
 
 	public function test_update_template_denies_an_editor(): void {

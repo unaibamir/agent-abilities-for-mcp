@@ -157,7 +157,7 @@ final class IntegrationsTabTest extends TestCase {
 		// Flush so the live registry rebuilds WITH the WooCommerce rows: aafm_get_enabled_abilities()
 		// only honors enabled names that still exist in the live registry, so the WC abilities must be
 		// registered for the enabled subset to count.
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 
 		// Enable a known subset of WooCommerce's abilities, derived from the manifest so the test is
 		// robust to the catalog growing. Three is enough to prove a NON-ZERO count distinct from total.
@@ -171,7 +171,7 @@ final class IntegrationsTabTest extends TestCase {
 		aafm_render_integrations_tab();
 		$html = (string) ob_get_clean();
 		remove_filter( 'aafm_integration_active_woocommerce', '__return_true' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 
 		// Slice the WooCommerce card's own <summary> so the assertion can't match another card's count.
 		$wc_open = strpos( $html, 'aafm-integration-woocommerce' );
@@ -353,12 +353,12 @@ final class IntegrationsTabTest extends TestCase {
 	public function test_each_card_is_a_collapsed_details_accordion(): void {
 		$this->acting_as( 'administrator' );
 		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		ob_start();
 		aafm_render_integrations_tab();
 		$html = (string) ob_get_clean();
 		remove_filter( 'aafm_integration_active_woocommerce', '__return_true' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 
 		// Each integration card is a native <details> accordion that keeps the card classes, and
 		// every accordion starts collapsed (no open attribute on the integration <details>).
@@ -484,12 +484,31 @@ final class IntegrationsTabTest extends TestCase {
 		}
 	}
 
+	public function test_an_aioseo_below_its_floor_shows_the_floor_reason(): void {
+		$this->acting_as( 'administrator' );
+		if ( ! function_exists( 'aioseo' ) ) {
+			eval( 'function aioseo() { return new \stdClass(); }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a function-only marker stub for tests; never shipped.
+		}
+		add_filter( 'aafm_aioseo_version', static fn() => '4.9.0' );
+
+		try {
+			$this->assertSame( 'below_floor', aafm_integration_status( 'aioseo' ) );
+
+			$note = aafm_integration_status_note( 'aioseo', 'below_floor' );
+
+			$this->assertStringContainsString( AAFM_AIOSEO_MIN_VERSION, $note );
+			$this->assertStringContainsString( '4.9.0', $note );
+		} finally {
+			remove_all_filters( 'aafm_aioseo_version' );
+		}
+	}
+
 	public function test_tab_has_exactly_one_form_and_no_nested_form(): void {
 		// The Wave-0 lesson: never nest a <form>. The tab renders one outer form for the
 		// per-ability toggles; any secondary control is a <div> + type="button".
 		$this->acting_as( 'administrator' );
 		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		ob_start();
 		aafm_render_integrations_tab();
 		$html = (string) ob_get_clean();

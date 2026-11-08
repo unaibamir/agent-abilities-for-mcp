@@ -851,9 +851,10 @@ PHP;
 		$_POST['nonce']           = $nonce;
 		$_REQUEST['nonce']        = $nonce;
 		$_POST['aafm_post_types'] = array( 'aafm_book' );
+		$_POST['aafm_sections']   = array( 'post_types' );
 
 		$this->intercept_die();
-		$json = $this->run_handler( 'aafm_ajax_save_post_types' );
+		$json = $this->run_handler( 'aafm_ajax_save_abilities_page' );
 
 		$this->assertTrue( $json['success'] ?? false, 'The save must report success once the stale cache is repaired.' );
 

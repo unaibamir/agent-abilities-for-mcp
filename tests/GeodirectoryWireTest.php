@@ -15,12 +15,12 @@ final class GeodirectoryWireTest extends TestCase {
 		parent::set_up();
 		aafm_geodir_stub_activate();
 		add_filter( 'aafm_integration_active_geodirectory', '__return_true' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 	}
 
 	public function tear_down(): void {
 		remove_filter( 'aafm_integration_active_geodirectory', '__return_true' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		parent::tear_down();
 	}
 

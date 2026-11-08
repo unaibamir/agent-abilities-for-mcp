@@ -366,4 +366,75 @@ final class UninstallTest extends TestCase {
 		}
 		$this->assertFalse( get_transient( 'aafm_detected_meta_keys' ) );
 	}
+
+	/**
+	 * A delete-data uninstall must not leave the per-tool role limits behind.
+	 */
+	public function test_delete_data_removes_the_allowlist_overrides(): void {
+		aafm_install_activity_log();
+		aafm_install_oauth_tables();
+		update_option( 'aafm_ability_allowlist_overrides', array( 'aafm/get-posts' => array( 'editor' ) ) );
+		update_option( 'aafm_delete_data_on_uninstall', true );
+
+		aafm_uninstall_site_data();
+
+		$this->assertFalse( get_option( 'aafm_ability_allowlist_overrides', false ), 'Uninstall with delete data must remove the per-tool role limits.' );
+	}
+
+	/**
+	 * Run aafm_uninstall_site_data() with the PHP error log pointed at a temp file, and return what it
+	 * wrote.
+	 *
+	 * @param callable $run Runs the uninstall, with any fault armed.
+	 * @return string
+	 */
+	private function capture_uninstall_log( callable $run ): string {
+		$file     = (string) wp_tempnam( 'aafm-uninstall-log' );
+		$previous = (string) ini_get( 'error_log' );
+		ini_set( 'error_log', $file ); // phpcs:ignore WordPress.PHP.IniSet.Risky -- test capture of the PHP log.
+		try {
+			$run();
+		} finally {
+			ini_set( 'error_log', $previous ); // phpcs:ignore WordPress.PHP.IniSet.Risky -- restore.
+		}
+		$logged = (string) file_get_contents( $file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local temp file.
+		wp_delete_file( $file );
+		return $logged;
+	}
+
+	public function test_a_failed_delete_is_named_in_the_error_log_and_the_rest_still_run(): void {
+		global $wpdb;
+		aafm_install_activity_log();
+		aafm_install_oauth_tables();
+		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts' ) );
+		update_option( 'aafm_force_draft', true );
+		update_option( 'aafm_oauth_schema_version', '4' );
+		update_option( 'aafm_delete_data_on_uninstall', true );
+
+		$logged = $this->capture_uninstall_log(
+			static function () use ( $wpdb ): void {
+				QueryFaultInjector::fail_query( array( 'DELETE FROM', $wpdb->options, "'aafm_force_draft'" ), 'aafm_uninstall_site_data' );
+			}
+		);
+
+		// The WP_DEBUG write-outcome trace logs each delete too; only the uninstall's own line counts.
+		$lines = preg_grep( '/Agent Abilities for MCP/', explode( "\n", $logged ) );
+		$this->assertCount( 1, $lines, 'One line for the whole teardown.' );
+		$line = (string) reset( $lines );
+		$this->assertStringContainsString( 'uninstall could not delete these options: aafm_force_draft', $line );
+		$this->assertStringNotContainsString( 'aafm_enabled_abilities', $line, 'Deletes that succeeded are not named.' );
+		$this->assertFalse( get_option( 'aafm_enabled_abilities', false ), 'The deletes after the failed one still ran.' );
+		$this->assertFalse( get_option( 'aafm_oauth_schema_version', false ) );
+		$this->assertFalse( get_option( 'aafm_delete_data_on_uninstall', false ) );
+		$this->assertFalse( $this->activity_log_table_exists(), 'The activity log table is still dropped.' );
+	}
+
+	public function test_a_clean_delete_data_uninstall_logs_nothing(): void {
+		aafm_install_activity_log();
+		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts' ) );
+		update_option( 'aafm_delete_data_on_uninstall', true );
+
+		// The WP_DEBUG write-outcome trace may log each delete; the uninstall's own line must not appear.
+		$this->assertStringNotContainsString( 'Agent Abilities for MCP', $this->capture_uninstall_log( 'aafm_uninstall_site_data' ) );
+	}
 }

@@ -412,8 +412,9 @@ function aafm_exec_wc_list_products( array $input ) {
 		return $out;
 	}
 
-	$per_page = isset( $input['per_page'] ) ? min( 100, max( 1, (int) $input['per_page'] ) ) : 20;
-	$page     = isset( $input['page'] ) ? max( 1, (int) $input['page'] ) : 1;
+	$paging   = aafm_paginate_args( $input + array( 'per_page' => 20 ), AAFM_TERMS_PER_PAGE_MAX );
+	$per_page = $paging['per_page'];
+	$page     = $paging['page'];
 	$status   = isset( $input['status'] ) ? sanitize_key( (string) $input['status'] ) : 'any';
 
 	$build_page = static function () use ( $per_page, $page, $status ) {
@@ -722,6 +723,21 @@ function aafm_wc_apply_product_input( \WC_Product $product, array $input ): ?\WP
 	}
 	if ( array_key_exists( 'sale_price', $input ) ) {
 		$product->set_sale_price( aafm_wc_sanitize_price( $input['sale_price'] ) );
+	}
+	// WooCommerce admin refuses a sale price above the regular price, and the store otherwise drops it
+	// while the call reads as a success. Checked on the RESULTING pair, so a request that sends only
+	// the sale price is held against the stored regular price. Only when a price was sent, so an
+	// unrelated edit to a product another plugin left in this state still goes through.
+	if ( array_key_exists( 'regular_price', $input ) || array_key_exists( 'sale_price', $input ) ) {
+		$regular = (string) $product->get_regular_price();
+		$sale    = (string) $product->get_sale_price();
+		if ( '' !== $regular && '' !== $sale && (float) $sale > (float) $regular ) {
+			return new \WP_Error(
+				'aafm_wc_sale_above_regular',
+				__( 'The sale price cannot be higher than the regular price, so nothing was saved. Lower the sale price or raise the regular price.', 'agent-abilities-for-mcp' ),
+				array( 'status' => 400 )
+			);
+		}
 	}
 	// stock_status is derived by WooCommerce from stock_quantity whenever stock is managed, so
 	// validate_props() overwrites a caller-supplied stock_status on save. Refuse the contradictory
@@ -1096,7 +1112,8 @@ function aafm_args_wc_create_product(): array {
 	// request is rejected rather than silently downgraded, so the create-only restriction is
 	// documented here rather than on the shared write-properties description, which is also the
 	// base for the update ability's own type description (aafm_args_wc_update_product()).
-	$properties['type']['description'] = __( "The product's type. This ability only creates simple products; requesting grouped, external, or variable fails.", 'agent-abilities-for-mcp' );
+	$properties['type']['enum']        = array( 'simple' );
+	$properties['type']['description'] = __( "The product's type. This ability only creates simple products. For a variable product, create the parent in WooCommerce and add its variations with wc-create-product-variation.", 'agent-abilities-for-mcp' );
 
 	return array(
 		'label'               => aafm_ability_label( 'aafm/wc-create-product' ),
@@ -1144,7 +1161,11 @@ function aafm_exec_wc_create_product( array $input ) {
 	// success. The schema enumerates the other types, but they are not honored here.
 	$requested_type = isset( $input['type'] ) ? (string) $input['type'] : 'simple';
 	if ( 'simple' !== $requested_type ) {
-		return aafm_generic_error();
+		return new \WP_Error(
+			'aafm_wc_unsupported_product_type',
+			__( 'This tool only creates simple products. For a variable product, create the parent in WooCommerce and add its variations with wc-create-product-variation.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
 	}
 
 	// WooCommerce's own create path

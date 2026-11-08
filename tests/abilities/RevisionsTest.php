@@ -716,4 +716,62 @@ final class RevisionsTest extends TestCase {
 			$this->assertArrayNotHasKey( 'diff', $row );
 		}
 	}
+
+	/**
+	 * Seed a post at v3 with an earlier v2 revision, as the author.
+	 *
+	 * @return array{0:int,1:\WP_Post}
+	 */
+	private function seed_restorable_post(): array {
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$pid = self::factory()->post->create(
+			array(
+				'post_author'  => $author,
+				'post_content' => 'v1',
+			)
+		);
+		foreach ( array( 'v2', 'v3' ) as $v ) {
+			wp_update_post(
+				array(
+					'ID'           => $pid,
+					'post_content' => $v,
+				)
+			);
+		}
+		$revs = wp_get_post_revisions( $pid );
+		return array( $pid, end( $revs ) );
+	}
+
+	public function test_restore_reports_unconfirmed_when_a_filter_changes_the_content(): void {
+		list( $pid, $oldest ) = $this->seed_restorable_post();
+		$rewrite              = static function ( array $data ): array {
+			$data['post_content'] = 'rewritten by a filter';
+			return $data;
+		};
+		add_filter( 'wp_insert_post_data', $rewrite );
+		$out = aafm_exec_restore_revision(
+			array(
+				'post_id'     => $pid,
+				'revision_id' => $oldest->ID,
+			)
+		);
+		remove_filter( 'wp_insert_post_data', $rewrite );
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_restore_unconfirmed', $out->get_error_code() );
+	}
+
+	public function test_a_clean_restore_still_reports_restored(): void {
+		list( $pid, $oldest ) = $this->seed_restorable_post();
+		$out                  = aafm_exec_restore_revision(
+			array(
+				'post_id'     => $pid,
+				'revision_id' => $oldest->ID,
+			)
+		);
+		$this->assertIsArray( $out );
+		$this->assertTrue( $out['restored'] );
+		$this->assertSame( $oldest->post_content, get_post( $pid )->post_content );
+	}
 }

@@ -360,38 +360,108 @@ final class MenusTest extends TestCase {
 		$this->assertSame( 'publish', $still->post_status, 'the page status is unchanged.' );
 	}
 
-	public function test_create_menu_item_neutralizes_dangerous_url_scheme(): void {
-		// Regression pin: create-menu-item routes the url through esc_url_raw, which strips
-		// unsafe schemes. On this WP 7.0, esc_url_raw() returns an empty string for both
-		// javascript: and data: (verified in-container), so the stored url is empty rather than
-		// a javascript:/data: link. Either way it must not begin with the dangerous scheme.
+	public function test_create_menu_item_refuses_a_dangerous_or_invalid_url(): void {
 		$this->register_menus();
 		$this->acting_as( 'administrator' );
-		$menu_id = $this->make_menu( 'Danger' );
+		$menu_id = $this->make_menu( 'Refuse' );
 
-		$item    = wp_get_ability( 'aafm/create-menu-item' )->execute(
+		foreach ( array( 'javascript:alert(1)', 'data:text/html,<script>alert(1)</script>', 'not a url at all' ) as $bad ) {
+			$res = wp_get_ability( 'aafm/create-menu-item' )->execute(
+				array(
+					'menu_id' => $menu_id,
+					'title'   => 'Bad',
+					'url'     => $bad,
+				)
+			);
+			$this->assertInstanceOf( WP_Error::class, $res, $bad );
+			$this->assertSame( 'aafm_invalid_url', $res->get_error_code() );
+		}
+		$this->assertSame( array(), wp_get_nav_menu_items( $menu_id ) ?: array(), 'A refused call creates no item.' );
+	}
+
+	public function test_update_menu_item_with_a_bad_url_keeps_the_good_one(): void {
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_id = $this->make_menu( 'Keep' );
+		$created = wp_get_ability( 'aafm/create-menu-item' )->execute(
 			array(
 				'menu_id' => $menu_id,
-				'title'   => 'XSS',
+				'title'   => 'Home',
+				'url'     => 'https://example.com/home',
+			)
+		);
+		$item_id = (int) $created['id'];
+
+		$res = wp_get_ability( 'aafm/update-menu-item' )->execute(
+			array(
+				'menu_id' => $menu_id,
+				'item_id' => $item_id,
 				'url'     => 'javascript:alert(1)',
 			)
 		);
-		$item_id = (int) $item['id'];
 
-		$stored = get_post_meta( $item_id, '_menu_item_url', true );
-		$this->assertSame( '', $stored, 'esc_url_raw neutralizes the javascript: scheme to an empty url.' );
-		$this->assertStringStartsNotWith( 'javascript:', (string) $stored, 'no javascript: scheme is stored.' );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_invalid_url', $res->get_error_code() );
+		$this->assertSame( 'https://example.com/home', get_post_meta( $item_id, '_menu_item_url', true ), 'A refused update must not blank the stored URL.' );
+	}
 
-		// data: is likewise neutralized to empty by esc_url_raw on this WP.
-		$item2   = wp_get_ability( 'aafm/create-menu-item' )->execute(
+	public function test_create_menu_item_refuses_a_parent_that_is_missing_or_in_another_menu(): void {
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_id  = $this->make_menu( 'Parents' );
+		$other_id = $this->make_menu( 'Other' );
+		$foreign  = (int) wp_get_ability( 'aafm/create-menu-item' )->execute(
+			array(
+				'menu_id' => $other_id,
+				'title'   => 'Elsewhere',
+				'url'     => 'https://example.com/x',
+			)
+		)['id'];
+		$post_id  = (int) self::factory()->post->create();
+
+		foreach ( array( 999999, $foreign, $post_id ) as $parent ) {
+			$res = wp_get_ability( 'aafm/create-menu-item' )->execute(
+				array(
+					'menu_id' => $menu_id,
+					'title'   => 'Child',
+					'url'     => 'https://example.com/child',
+					'parent'  => $parent,
+				)
+			);
+			$this->assertInstanceOf( WP_Error::class, $res, "parent $parent" );
+			$this->assertSame( 'aafm_invalid_menu_item_parent', $res->get_error_code() );
+		}
+		$this->assertSame( array(), wp_get_nav_menu_items( $menu_id ) ?: array(), 'A refused call creates no item.' );
+
+		$good_parent = (int) wp_get_ability( 'aafm/create-menu-item' )->execute(
 			array(
 				'menu_id' => $menu_id,
-				'title'   => 'XSS2',
-				'url'     => 'data:text/html,<script>alert(1)</script>',
+				'title'   => 'Parent',
+				'url'     => 'https://example.com/p',
+			)
+		)['id'];
+		$child       = wp_get_ability( 'aafm/create-menu-item' )->execute(
+			array(
+				'menu_id' => $menu_id,
+				'title'   => 'Child',
+				'url'     => 'https://example.com/c',
+				'parent'  => $good_parent,
 			)
 		);
-		$stored2 = get_post_meta( (int) $item2['id'], '_menu_item_url', true );
-		$this->assertSame( '', $stored2, 'esc_url_raw neutralizes the data: scheme to an empty url.' );
+		$this->assertNotInstanceOf( WP_Error::class, $child, 'A real parent in the same menu is accepted.' );
+		$this->assertSame( $good_parent, (int) $child['parent'] );
+	}
+
+	public function test_list_menu_items_on_a_missing_menu_errors_like_get_menu(): void {
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+
+		$list = wp_get_ability( 'aafm/list-menu-items' )->execute( array( 'menu_id' => 999999 ) );
+		$get  = wp_get_ability( 'aafm/get-menu' )->execute( array( 'menu_id' => 999999 ) );
+
+		$this->assertInstanceOf( WP_Error::class, $list );
+		$this->assertInstanceOf( WP_Error::class, $get );
+		$this->assertSame( $get->get_error_code(), $list->get_error_code() );
 	}
 
 	public function test_create_menu_item_returns_the_created_item(): void {

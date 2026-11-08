@@ -29,7 +29,7 @@ final class AioseoTest extends TestCase {
 		parent::set_up();
 		$this->force_integration( 'aioseo' );
 		$this->stub_aioseo();
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_aioseo();
 	}
 
@@ -248,18 +248,22 @@ final class AioseoTest extends TestCase {
 		$this->assertCount( 0, \AAFM\Tests\AioseoStubStore::$save_post_calls, 'A refused call must never reach savePost().' );
 	}
 
-	public function test_aioseo_url_fields_are_url_sanitized(): void {
+	public function test_aioseo_refuses_an_invalid_url(): void {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
-		$res = wp_get_ability( 'aafm/aioseo-update-post' )->execute(
-			array(
-				'post_id'  => $post_id,
-				'og_image' => 'javascript:alert(1)',
-			)
-		);
-		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$this->assertSame( '', $res['og_image'], 'A javascript: og_image must be stripped to empty.' );
+		foreach ( array( 'canonical', 'og_image', 'twitter_image' ) as $field ) {
+			foreach ( array( 'javascript:alert(1)', 'not a url at all' ) as $bad ) {
+				$res = wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+					array(
+						'post_id' => $post_id,
+						$field    => $bad,
+					)
+				);
+				$this->assertInstanceOf( WP_Error::class, $res, "$field: $bad" );
+				$this->assertSame( 'aafm_invalid_url', $res->get_error_code() );
+			}
+		}
 	}
 
 	/**
@@ -613,7 +617,7 @@ final class AioseoTest extends TestCase {
 		remove_all_filters( 'aafm_integration_active_aioseo' );
 		add_filter( 'aafm_aioseo_active', '__return_false', 99 );
 		$this->assertFalse( aafm_integration_active( 'aioseo' ) );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$registry = aafm_get_abilities_registry();
 		$this->assertArrayNotHasKey( 'aafm/aioseo-get-post', $registry );
 	}
@@ -733,5 +737,66 @@ final class AioseoTest extends TestCase {
 		$this->assertSame( array( 'kind', 'entity', 'object_id', 'key', 'status', 'rows', 'modified_by_site', 'key_omitted' ), array_keys( $details[0] ) );
 		$this->assertSame( 'refused', $details[0]['status'] );
 		$this->assertNull( $details[0]['key'] );
+	}
+
+	public function test_get_head_reports_empty_with_a_note(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+		remove_all_filters( 'aafm_seo_rendered_head' );
+
+		$res = wp_get_ability( 'aafm/aioseo-get-head' )->execute( array( 'post_id' => $post_id ) );
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( '', $res['head'] );
+		$this->assertSame( 'empty', $res['head_status'] );
+		$this->assertStringContainsString( "doesn't mean the page has no SEO tags", $res['note'] );
+		$props = aafm_args_aioseo_get_head()['output_schema']['properties'];
+		$this->assertArrayHasKey( 'head_status', $props );
+		$this->assertArrayHasKey( 'note', $props );
+	}
+
+	public function test_get_head_reports_ok_when_a_head_exists(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$res = wp_get_ability( 'aafm/aioseo-get-head' )->execute( array( 'post_id' => $post_id ) );
+
+		$this->assertSame( 'ok', $res['head_status'] );
+		$this->assertArrayNotHasKey( 'note', $res );
+	}
+
+	/**
+	 * AIOSEO writes through its own model, not post meta, so the meta-write refresh never heard
+	 * it. A confirmed save must clear the published post's cache like any other meta write.
+	 */
+	public function test_an_aioseo_save_refreshes_a_published_post(): void {
+		$admin_id  = $this->acting_as( 'administrator' );
+		$post_id   = (int) self::factory()->post->create(
+			array(
+				'post_author' => $admin_id,
+				'post_status' => 'publish',
+			)
+		);
+		$refreshed = 0;
+		add_action(
+			'aafm_agent_meta_written',
+			static function ( $kind, $id ) use ( $post_id, &$refreshed ): void {
+				if ( 'post' === $kind && $post_id === (int) $id ) {
+					++$refreshed;
+				}
+			},
+			10,
+			2
+		);
+
+		$res = wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+			array(
+				'post_id' => $post_id,
+				'title'   => 'Refreshed title',
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 1, $refreshed );
 	}
 }

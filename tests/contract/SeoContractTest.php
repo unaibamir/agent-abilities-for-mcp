@@ -246,4 +246,45 @@ final class SeoContractTest extends TestCase {
 		);
 		$this->assertStringContainsString( '<', $rendered, 'The rendered head must contain markup.' );
 	}
+
+	/**
+	 * The head must carry the post's own Rank Math title and meta description, not the generated ones.
+	 * Rank Math's Paper singleton picks them from the current query, which over REST is not the post,
+	 * so before the renderer reset it the custom values were missing from get-head.
+	 */
+	public function test_rankmath_rendered_head_carries_the_custom_title_and_description(): void {
+		if ( ! function_exists( 'rank_math' ) || ! function_exists( 'aafm_rankmath_rendered_head' ) ) {
+			$this->markTestSkipped( 'Rank Math or the renderer not provisioned: run tests/bin/install-vendors.sh.' );
+		}
+		$plugin = rank_math();
+		if ( isset( $plugin->registration ) ) {
+			$plugin->registration->invalid = false;
+		}
+		if ( method_exists( $plugin, 'init_frontend' ) ) {
+			$plugin->init_frontend();
+		}
+		// The suite restores WordPress hooks after every test, but rank_math()->head built by an
+		// earlier test survives, so the renderer would find a head with no hooks behind it. Build the
+		// head objects here so their hooks belong to this test.
+		if ( isset( $plugin->frontend ) && is_object( $plugin->frontend ) ) {
+			$plugin->frontend->integrations();
+		}
+
+		$post_id = self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_title'   => 'Plain generated title',
+				'post_content' => 'Body copy that must not become the description.',
+			)
+		);
+		update_post_meta( $post_id, 'rank_math_title', 'Custom Contract Title' );
+		update_post_meta( $post_id, 'rank_math_description', 'Custom contract description.' );
+
+		$rendered = aafm_rankmath_rendered_head( '', (int) $post_id, 'rankmath' );
+
+		$this->assertStringContainsString( '<meta name="description" content="Custom contract description."', $rendered );
+		if ( current_theme_supports( 'title-tag' ) ) {
+			$this->assertStringContainsString( '<title>Custom Contract Title</title>', $rendered );
+		}
+	}
 }

@@ -43,7 +43,7 @@ final class AcfTest extends TestCase {
 				'values' => array( 'field_1' => 'Hello' ),
 			)
 		);
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_acf();
 	}
 
@@ -98,7 +98,7 @@ final class AcfTest extends TestCase {
 		remove_all_filters( 'aafm_integration_active_acf' );
 		add_filter( 'aafm_acf_active', '__return_false', 99 );
 		$this->assertFalse( aafm_integration_active( 'acf' ) );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->assertArrayNotHasKey( 'aafm/acf-list-field-groups', aafm_get_abilities_registry() );
 		remove_filter( 'aafm_acf_active', '__return_false', 99 );
 	}
@@ -444,7 +444,7 @@ final class AcfTest extends TestCase {
 				'values' => array( 'field_email' => $email ),
 			)
 		);
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_acf();
 	}
 
@@ -592,7 +592,7 @@ final class AcfTest extends TestCase {
 				'values' => array(),
 			)
 		);
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_acf();
 	}
 
@@ -678,7 +678,7 @@ final class AcfTest extends TestCase {
 				'values' => $vals,
 			)
 		);
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_acf();
 	}
 
@@ -832,7 +832,7 @@ final class AcfTest extends TestCase {
 				),
 			)
 		);
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_acf();
 	}
 
@@ -1074,7 +1074,7 @@ final class AcfTest extends TestCase {
 				),
 			)
 		);
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_acf();
 
 		$admin_id = $this->acting_as( 'administrator' );
@@ -1145,7 +1145,7 @@ final class AcfTest extends TestCase {
 		);
 		// Model the real ACF Pro container re-keying the verbatim stub otherwise hides.
 		\AAFM\Tests\AcfStubStore::$model_container_rekeying = true;
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_acf();
 
 		$admin_id = $this->acting_as( 'administrator' );
@@ -1229,7 +1229,7 @@ final class AcfTest extends TestCase {
 				),
 			)
 		);
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_acf();
 	}
 
@@ -1389,7 +1389,7 @@ final class AcfTest extends TestCase {
 		);
 		// Model the real ACF Pro container re-keying (now depth-recursive) the verbatim stub hides.
 		\AAFM\Tests\AcfStubStore::$model_container_rekeying = true;
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_acf();
 
 		$admin_id = $this->acting_as( 'administrator' );
@@ -1442,7 +1442,7 @@ final class AcfTest extends TestCase {
 		$this->force_integration( 'acf' );
 		$this->stub_acf_group_inside_flex();
 		\AAFM\Tests\AcfStubStore::$model_container_rekeying = true;
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_acf();
 
 		$admin_id = $this->acting_as( 'administrator' );
@@ -1495,7 +1495,7 @@ final class AcfTest extends TestCase {
 		$this->stub_acf_group_inside_flex();
 		\AAFM\Tests\AcfStubStore::$model_container_rekeying = true;
 		\AAFM\Tests\AcfStubStore::$fail_keys                = array( 'field_flex3' );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_acf();
 
 		$admin_id = $this->acting_as( 'administrator' );
@@ -2003,5 +2003,28 @@ final class AcfTest extends TestCase {
 		$this->assertCount( 2, $details );
 		$this->assertSame( array( 'option', null ), array( $details[0]['entity'], $details[0]['object_id'] ) );
 		$this->assertSame( array( 'post', '12' ), array( $details[1]['entity'], (string) $details[1]['object_id'] ) );
+	}
+
+	/**
+	 * The missing-function state cannot be provoked once the stubs load, so this pins the source:
+	 * the lister errors instead of returning an empty success.
+	 */
+	public function test_list_field_groups_errors_when_its_function_is_missing(): void {
+		$source = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/abilities/acf-integration.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading local plugin source, not a remote URL.
+		$this->assertMatchesRegularExpression(
+			"/if \\( ! function_exists\\( 'acf_get_field_groups' \\) \\) \\{\\s*return aafm_generic_error\\(\\);/",
+			$source
+		);
+	}
+
+	/**
+	 * A theme or plugin can define its own get_field() helper. That alone must not switch on the
+	 * ACF tools, which need ACF's own class.
+	 */
+	public function test_a_theme_defining_get_field_does_not_activate_acf(): void {
+		$this->stub_acf( array() ); // Defines get_field() and friends, as a theme helper would.
+		$this->assertTrue( function_exists( 'get_field' ), 'precondition: a get_field function exists.' );
+		$this->assertFalse( class_exists( 'ACF' ), 'precondition: ACF itself is not loaded.' );
+		$this->assertFalse( aafm_acf_active() );
 	}
 }

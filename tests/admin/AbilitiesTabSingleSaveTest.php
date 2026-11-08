@@ -137,6 +137,34 @@ final class AbilitiesTabSingleSaveTest extends TestCase {
 		}
 	}
 
+	public function test_every_admin_request_goes_through_one_fetch_in_the_body_helper(): void {
+		$js = $this->js();
+		$this->assertSame( 1, substr_count( $js, 'fetch(' ), 'admin.js has exactly one fetch( call.' );
+		$this->assertStringContainsString( 'fetch(', $this->region( 'async #postBody( body ) {', 'async #post( action, data = {} ) {' ) );
+		$this->assertStringContainsString( 'await this.#postBody( body )', $this->page_save_region(), 'The Abilities tab save uses the body helper.' );
+	}
+
+	public function test_post_still_returns_the_request_failed_message_when_the_body_helper_fails(): void {
+		$post = $this->region( 'async #post( action, data = {} ) {', '#bindCopy() {' );
+		$this->assertStringContainsString( 'await this.#postBody( body )', $post );
+		$this->assertMatchesRegularExpression( '/#postBody\( body \) \)\s*\?\?\s*\{\s*success: false,\s*data: \{ message: this\.#t\( \'requestFailed\'/', $post, '#post() maps an undefined body-helper result to its localized requestFailed object.' );
+
+		$helper = $this->region( 'async #postBody( body ) {', 'async #post( action, data = {} ) {' );
+		$this->assertMatchesRegularExpression( '/catch\s*\{\s*return undefined;/', $helper, 'The body helper answers undefined on a transport or parse failure.' );
+	}
+
+	public function test_the_five_old_save_actions_are_not_registered(): void {
+		$main = (string) file_get_contents( AAFM_PLUGIN_DIR . 'agent-abilities-for-mcp.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- this plugin's own local source.
+		$this->assertStringContainsString( "'wp_ajax_aafm_save_abilities_page'", $main );
+		$this->assertStringContainsString( "'wp_ajax_aafm_save_abilities'", $main, 'The Integrations tab still posts aafm_save_abilities.' );
+
+		foreach ( array( 'post_types', 'meta_keys', 'denied_meta_keys', 'user_meta_keys', 'term_meta_keys' ) as $old ) {
+			$this->assertStringNotContainsString( "'wp_ajax_aafm_save_{$old}'", $main, "aafm_save_{$old} must not be registered." );
+			$this->assertFalse( function_exists( "aafm_ajax_save_{$old}" ), "aafm_ajax_save_{$old}() must be gone." );
+			$this->assertFalse( has_action( "wp_ajax_aafm_save_{$old}" ) );
+		}
+	}
+
 	public function test_the_page_script_posts_no_old_section_action(): void {
 		$js = $this->js();
 

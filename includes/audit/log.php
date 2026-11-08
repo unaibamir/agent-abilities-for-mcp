@@ -82,6 +82,37 @@ function aafm_activity_log_table(): string {
 }
 
 /**
+ * The plugin's own table names for one site, built from that site's prefix.
+ *
+ * @param int $blog_id Site id.
+ * @return list<string>
+ */
+function aafm_site_table_names( int $blog_id ): array {
+	global $wpdb;
+	$prefix = $wpdb->get_blog_prefix( $blog_id );
+	$tables = array( $prefix . 'aafm_activity_log' );
+	foreach ( aafm_oauth_table_suffixes() as $suffix ) {
+		$tables[] = $prefix . $suffix;
+	}
+	return $tables;
+}
+
+/**
+ * Add this plugin's tables to the list core drops when a site is deleted.
+ *
+ * Hooked to wpmu_drop_tables, so it runs only where the plugin is loaded: network active, active
+ * on the site running the delete, or a subsite deleting itself. A site that had the plugin active
+ * only on itself and is deleted from a main site without it keeps its tables; core has no other hook.
+ *
+ * @param array<int,string> $tables  Tables core is about to drop.
+ * @param int               $blog_id The site being deleted.
+ * @return array<int,string>
+ */
+function aafm_filter_wpmu_drop_tables( array $tables, int $blog_id ): array {
+	return array_values( array_unique( array_merge( $tables, aafm_site_table_names( $blog_id ) ) ) );
+}
+
+/**
  * Create (or upgrade) the activity log table, then record the schema version.
  *
  * Idempotent: dbDelta() only applies the diff. Mirrors aafm_install_oauth_tables().
@@ -1105,19 +1136,22 @@ function aafm_clear_activity_log(): bool {
  * hardcoded option, so a newly added option is cleaned up automatically and none leaks on
  * uninstall. uninstall.php requires includes/admin/settings.php so that list is defined here.
  * Only this plugin's own options, transient, and table are touched - never another plugin's data.
+ * A delete that fails does not stop the rest; its option name is returned so the caller can
+ * report it.
  *
- * @return void
+ * @return string[] The option names whose delete could not be confirmed.
  */
-function aafm_uninstall_site(): void {
+function aafm_uninstall_site(): array {
 	global $wpdb;
-	$forget = function_exists( 'aafm_delete_option_cache_safe' ) ? 'aafm_delete_option_cache_safe' : 'delete_option';
-	if ( function_exists( 'aafm_config_option_names' ) ) {
-		foreach ( aafm_config_option_names() as $option ) {
-			$forget( $option );
+	$forget  = function_exists( 'aafm_delete_option_cache_safe' ) ? 'aafm_delete_option_cache_safe' : 'delete_option';
+	$options = function_exists( 'aafm_config_option_names' ) ? aafm_config_option_names() : array( 'aafm_enabled_abilities' );
+	$failed  = array();
+	foreach ( $options as $option ) {
+		// Only the cache-safe delete certifies the row is gone; delete_option() also answers false
+		// for a row that was never there, so the fallback reports nothing.
+		if ( ! $forget( $option ) && 'delete_option' !== $forget ) {
+			$failed[] = $option;
 		}
-	} else {
-		// Defensive fallback if settings.php was not loaded - never leave the core option behind.
-		$forget( 'aafm_enabled_abilities' );
 	}
 	// Cosmetic detected-keys cache (option-list sibling of the same data class).
 	delete_transient( 'aafm_detected_meta_keys' );
@@ -1130,4 +1164,6 @@ function aafm_uninstall_site(): void {
 	$table = aafm_activity_log_table();
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
 	$wpdb->query( $wpdb->prepare( 'DROP TABLE IF EXISTS %i', $table ) );
+
+	return $failed;
 }

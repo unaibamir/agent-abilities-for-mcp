@@ -214,4 +214,28 @@ final class QuickConnectAbilitiesTest extends TestCase {
 		$this->assertContains( 'aafm/get-users', $enabled, 'An ability enabled outside the wizard must survive.' );
 		$this->assertContains( 'aafm/get-posts', $enabled, 'The read bundle stays on.' );
 	}
+
+	/**
+	 * A tool whose host plugin is inactive is absent from the gated registry, but it is still the
+	 * operator's saved choice. Finishing the wizard must not drop it from the option.
+	 */
+	public function test_finishing_the_wizard_keeps_saved_tools_of_an_inactive_plugin(): void {
+		add_filter(
+			'aafm_abilities_registry_integrations',
+			static function ( array $registry ): array {
+				$registry['aafm/fake-inactive-host'] = array( 'subject' => 'woocommerce' );
+				return $registry;
+			}
+		);
+		aafm_flush_registry_cache();
+		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts', 'aafm/fake-inactive-host' ) );
+
+		aafm_quickconnect_apply_abilities( false );
+		$stored = aafm_get_stored_enabled_abilities_raw();
+
+		remove_all_filters( 'aafm_abilities_registry_integrations' );
+		aafm_flush_registry_cache();
+
+		$this->assertContains( 'aafm/fake-inactive-host', $stored, 'A saved tool of an inactive plugin must survive the wizard.' );
+	}
 }

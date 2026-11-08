@@ -149,11 +149,10 @@ function aafm_ability_is_read( string $name ): bool {
  * to the switch that is actually holding the ability down: turning off the high-risk category while
  * read-only mode is on would change nothing.
  *
- * Safe for a NATIVE or a BRIDGED/foreign name. aafm_ability_is_high_risk() (which this falls
- * through to) is namespace-aware: it returns false outright for anything not starting with
- * "aafm/", so a foreign slug named in the public aafm_high_risk_abilities filter can never make
- * this report 'high_risk' for it. See includes/admin/bridge-directory.php for the caller this
- * unblocked.
+ * Safe for a NATIVE name or a FOREIGN slug. A foreign slug reports 'high_risk' only when the
+ * high-risk list holds it, and aafm_get_enabled_bridged_abilities() applies the same list, so the
+ * Other plugins tab never shows a lock the floor does not enforce. An aafm-bridge/* wrapper name
+ * is never high risk here. See includes/admin/bridge-directory.php for the caller.
  *
  * @param string $name Ability name, native or bridged.
  * @return string|null 'read_only', 'high_risk', or null when the ability is freely toggleable.
@@ -182,7 +181,7 @@ function aafm_ability_lock_note( string $reason ): string {
 		return __( 'Locked while read-only mode is on. Turn off Read-only mode under Settings to make this available.', 'agent-abilities-for-mcp' );
 	}
 	if ( 'high_risk' === $reason ) {
-		return __( 'Locked. Turn on High-risk abilities under Settings to make this available.', 'agent-abilities-for-mcp' );
+		return __( 'Locked. Turn on Unlock the category under Safety controls in Settings to make this available.', 'agent-abilities-for-mcp' );
 	}
 	return '';
 }

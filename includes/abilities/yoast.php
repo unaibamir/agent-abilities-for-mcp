@@ -121,7 +121,7 @@ function aafm_yoast_registry_definitions(): array {
 		),
 		'aafm/yoast-get-head'    => array(
 			'label'        => __( 'Get post SEO head (Yoast)', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads the rendered SEO head markup for a post from Yoast, best-effort: the returned head string is empty when Yoast exposes no head API for that post. Requires the edit-posts capability and edit access to that post.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Reads the rendered SEO head markup for a post from Yoast, best-effort: the returned head string is empty when Yoast exposes no head API for that post, with head_status set to empty and a note; an empty head does not mean the page has no SEO tags. Requires the edit-posts capability and edit access to that post.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'yoast',
@@ -331,6 +331,47 @@ function aafm_seo_write_error( string $code, string $status, int $id, ?string $k
 		);
 	}
 	return new WP_Error( $code, $base->get_error_message(), $data );
+}
+
+/**
+ * The response of a get-head read: the head plus head_status, and a note when the head is empty,
+ * so an empty head is never read as "this page has no SEO tags".
+ *
+ * @param int    $id     Post id.
+ * @param string $plugin Integration slug.
+ * @param string $head   The rendered head.
+ * @return array<string,mixed>
+ */
+function aafm_seo_head_response( int $id, string $plugin, string $head ): array {
+	$empty = '' === trim( $head );
+	$out   = array(
+		'post_id'     => $id,
+		'plugin'      => $plugin,
+		'head'        => $head,
+		'head_status' => $empty ? 'empty' : 'ok',
+	);
+	if ( $empty ) {
+		$out['note'] = __( "The SEO plugin returned no head for this post. It may not have indexed the post yet or may have failed to render. This doesn't mean the page has no SEO tags.", 'agent-abilities-for-mcp' );
+	}
+	return $out;
+}
+
+/**
+ * The output schema properties every get-head read shares.
+ *
+ * @return array<string,array<string,mixed>>
+ */
+function aafm_seo_head_output_properties(): array {
+	return array(
+		'post_id'     => array( 'type' => 'integer' ),
+		'plugin'      => array( 'type' => 'string' ),
+		'head'        => array( 'type' => 'string' ),
+		'head_status' => array(
+			'type' => 'string',
+			'enum' => array( 'ok', 'empty' ),
+		),
+		'note'        => array( 'type' => 'string' ),
+	);
 }
 
 /**
@@ -566,7 +607,7 @@ function aafm_args_yoast_update_post(): array {
 /**
  * Execute aafm/yoast-update-post.
  *
- * Writes the text/URL fields (esc_url_raw for URLs, aafm_sanitize_plain_text otherwise -- a Yoast
+ * Writes the text/URL fields (aafm_checked_url for URLs, which refuses a value it would have to rewrite, aafm_sanitize_plain_text otherwise -- a Yoast
  * title or description is rendered into the page head and into feeds, so it gets the same
  * invisible-character strip as a post title) and the three
  * robots keys (noindex/nofollow validated against their enums, adv filtered against the directive
@@ -588,8 +629,16 @@ function aafm_exec_yoast_update_post( array $input ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
 		}
-		$raw              = (string) $input[ $field ];
-		$intended[ $key ] = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : aafm_sanitize_plain_text( $raw );
+		$raw = (string) $input[ $field ];
+		if ( in_array( $field, $url_fields, true ) ) {
+			$url = aafm_checked_url( $raw, $field );
+			if ( is_wp_error( $url ) ) {
+				return $url; // Refused before anything is written, so a stored URL is never blanked.
+			}
+			$intended[ $key ] = $url;
+			continue;
+		}
+		$intended[ $key ] = aafm_sanitize_plain_text( $raw );
 	}
 
 	foreach ( aafm_yoast_robots_keys() as $field => $spec ) {
@@ -647,11 +696,7 @@ function aafm_args_yoast_get_head(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array(
-				'post_id' => array( 'type' => 'integer' ),
-				'plugin'  => array( 'type' => 'string' ),
-				'head'    => array( 'type' => 'string' ),
-			),
+			'properties' => aafm_seo_head_output_properties(),
 		),
 		'execute_callback'    => 'aafm_exec_yoast_get_head',
 		'permission_callback' => 'aafm_perm_seo_get_head_floor',
@@ -687,9 +732,5 @@ function aafm_exec_yoast_get_head( array $input ) {
 	/** This filter is documented in includes/abilities/yoast.php (the rendered-head seam). */
 	$head = (string) apply_filters( 'aafm_seo_rendered_head', '', $id, 'yoast' );
 
-	return array(
-		'post_id' => $id,
-		'plugin'  => 'yoast',
-		'head'    => $head,
-	);
+	return aafm_seo_head_response( $id, 'yoast', $head );
 }

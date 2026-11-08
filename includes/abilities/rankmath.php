@@ -50,8 +50,9 @@ add_filter( 'aafm_seo_rendered_head', 'aafm_rankmath_rendered_head', 10, 3 );
  * parse_request() and exits before 'wp' runs), which is how every ability call reaches this code. So
  * ->head would otherwise never exist here even on a fully-registered site. When rank_math()->frontend
  * exists (set by Rank Math's own plugins_loaded handler once registration is valid or skipped) but
- * ->head does not yet, this triggers frontend->integrations() once - the exact real-vendor call a
- * normal front-end pageview would have made - before checking for ->head again.
+ * ->head does not yet, this triggers frontend->integrations() - the exact real-vendor call a
+ * normal front-end pageview would have made - inside the throwaway singular query, after resetting
+ * Rank Math's Paper singleton, so the custom title and meta description are built for the post.
  *
  * @param string $head    Head markup accumulated so far (passthrough default).
  * @param int    $post_id Post id.
@@ -68,26 +69,38 @@ function aafm_rankmath_rendered_head( string $head, int $post_id, string $source
 		return $head;
 	}
 
-	if ( ! isset( $plugin->head ) && isset( $plugin->frontend ) && is_object( $plugin->frontend ) && method_exists( $plugin->frontend, 'integrations' ) ) {
-		try {
-			$plugin->frontend->integrations();
-		} catch ( \Throwable $e ) {
-			return $head; // The real API shape changed or threw: stay best-effort, never fatal.
-		}
-	}
-
-	if ( ! isset( $plugin->head ) || ! is_object( $plugin->head ) || ! method_exists( $plugin->head, 'head' ) ) {
-		return $head; // Rank Math present but no head renderer (e.g. unregistered, or a differently-shaped build): best-effort.
-	}
-
-	$rendered = trim(
-		aafm_with_seo_render_scope(
-			$post_id,
-			static function () use ( $plugin ): void {
-				$plugin->head->head();
+	$paper = '\\RankMath\\Paper\\Paper';
+	$reset = static function () use ( $paper ): void {
+		if ( class_exists( $paper ) && is_callable( array( $paper, 'reset' ) ) ) {
+			try {
+				call_user_func( array( $paper, 'reset' ) );
+			} catch ( \Throwable $e ) {
+				unset( $e ); // Best effort: a Rank Math build whose reset throws still renders.
 			}
-		)
-	);
+		}
+	};
+
+	$render = static function () use ( $plugin, $reset ): void {
+		// Paper is a singleton that picks the title, description and robots from whichever query is
+		// current the first time it is asked. Over REST that is a non-singular query, which left the
+		// custom title and meta description out of the head. reset() rebuilds it on the spot, so doing it
+		// here, inside the post's query, binds it to the post for this render.
+		$reset();
+		if ( ! isset( $plugin->head ) && isset( $plugin->frontend ) && is_object( $plugin->frontend ) && method_exists( $plugin->frontend, 'integrations' ) ) {
+			$plugin->frontend->integrations();
+		}
+		if ( isset( $plugin->head ) && is_object( $plugin->head ) && method_exists( $plugin->head, 'head' ) ) {
+			$plugin->head->head();
+		}
+	};
+
+	// Rank Math present but no head renderer (unregistered, a differently-shaped build, or a throw)
+	// renders nothing, so the best-effort head passed in comes back.
+	$rendered = trim( aafm_with_seo_render_scope( $post_id, $render ) );
+
+	// reset() rebuilds the singleton too, so it has to run AFTER the scope has put the caller's query
+	// back: run inside the scope it would leave Paper bound to this post for whatever renders next.
+	$reset();
 	return '' !== $rendered ? $rendered : $head;
 }
 
@@ -476,7 +489,10 @@ function aafm_exec_rankmath_update_post( array $input ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
 		}
-		$url = esc_url_raw( trim( (string) $input[ $field ] ) );
+		$url = aafm_checked_url( (string) $input[ $field ], $field );
+		if ( is_wp_error( $url ) ) {
+			return $url; // A bad image URL must not read as a request to clear the image.
+		}
 		if ( '' === $url ) {
 			$resolved_ids[ $field ] = 0; // Cleared: blank the URL and the id companion below.
 			continue;
@@ -504,8 +520,16 @@ function aafm_exec_rankmath_update_post( array $input ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
 		}
-		$raw              = (string) $input[ $field ];
-		$intended[ $key ] = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : aafm_sanitize_plain_text( $raw );
+		$raw = (string) $input[ $field ];
+		if ( in_array( $field, $url_fields, true ) ) {
+			$checked = aafm_checked_url( $raw, $field );
+			if ( is_wp_error( $checked ) ) {
+				return $checked; // Refused before anything is written, so a stored URL is never blanked.
+			}
+			$intended[ $key ] = $checked;
+			continue;
+		}
+		$intended[ $key ] = aafm_sanitize_plain_text( $raw );
 	}
 
 	// Rank Math's frontend renders a social image from the attachment-id companion, not the URL. A
@@ -762,11 +786,7 @@ function aafm_args_rankmath_get_head(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array(
-				'post_id' => array( 'type' => 'integer' ),
-				'plugin'  => array( 'type' => 'string' ),
-				'head'    => array( 'type' => 'string' ),
-			),
+			'properties' => aafm_seo_head_output_properties(),
 		),
 		'execute_callback'    => 'aafm_exec_rankmath_get_head',
 		'permission_callback' => 'aafm_perm_seo_get_head_floor',
@@ -815,9 +835,5 @@ function aafm_exec_rankmath_get_head( array $input ) {
 		);
 	}
 
-	return array(
-		'post_id' => $id,
-		'plugin'  => 'rankmath',
-		'head'    => $head,
-	);
+	return aafm_seo_head_response( $id, 'rankmath', $head );
 }

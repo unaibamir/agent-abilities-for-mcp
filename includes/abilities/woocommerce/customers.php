@@ -494,8 +494,9 @@ function aafm_exec_wc_list_customers( array $input ): array {
 		);
 	}
 
-	$page     = isset( $input['page'] ) ? max( 1, (int) $input['page'] ) : 1;
-	$per_page = isset( $input['per_page'] ) ? min( 100, max( 1, (int) $input['per_page'] ) ) : 10;
+	$paging   = aafm_paginate_args( $input + array( 'per_page' => 10 ), AAFM_TERMS_PER_PAGE_MAX );
+	$per_page = $paging['per_page'];
+	$page     = $paging['page'];
 	$role     = isset( $input['role'] ) ? sanitize_key( (string) $input['role'] ) : 'customer';
 
 	$query_args = array(

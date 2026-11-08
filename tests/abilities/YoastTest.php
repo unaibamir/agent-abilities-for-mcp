@@ -26,7 +26,7 @@ final class YoastTest extends TestCase {
 		parent::set_up();
 		$this->force_integration( 'yoast' );
 		$this->stub_yoast();
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_yoast();
 	}
 
@@ -193,19 +193,24 @@ final class YoastTest extends TestCase {
 		}
 	}
 
-	public function test_yoast_update_post_url_fields_are_url_sanitized(): void {
+	public function test_yoast_update_post_refuses_an_invalid_url_and_keeps_the_stored_one(): void {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+		update_post_meta( $post_id, '_yoast_wpseo_canonical', 'https://example.com/good' );
 
-		wp_get_ability( 'aafm/yoast-update-post' )->execute(
-			array(
-				'post_id'       => $post_id,
-				'canonical'     => 'javascript:alert(1)',
-				'og_image'      => 'javascript:alert(2)',
-				'twitter_image' => 'javascript:alert(3)',
-			)
-		);
-		$this->assertSame( '', get_post_meta( $post_id, '_yoast_wpseo_canonical', true ) );
+		foreach ( array( 'canonical', 'og_image', 'twitter_image' ) as $field ) {
+			foreach ( array( 'javascript:alert(1)', 'not a url at all' ) as $bad ) {
+				$res = wp_get_ability( 'aafm/yoast-update-post' )->execute(
+					array(
+						'post_id' => $post_id,
+						$field    => $bad,
+					)
+				);
+				$this->assertInstanceOf( WP_Error::class, $res, "$field: $bad" );
+				$this->assertSame( 'aafm_invalid_url', $res->get_error_code() );
+			}
+		}
+		$this->assertSame( 'https://example.com/good', get_post_meta( $post_id, '_yoast_wpseo_canonical', true ), 'A refused write leaves the stored URL alone.' );
 		$this->assertSame( '', get_post_meta( $post_id, '_yoast_wpseo_opengraph-image', true ) );
 		$this->assertSame( '', get_post_meta( $post_id, '_yoast_wpseo_twitter-image', true ) );
 	}
@@ -414,7 +419,7 @@ final class YoastTest extends TestCase {
 		remove_all_filters( 'aafm_integration_active_yoast' );
 		add_filter( 'aafm_yoast_active', '__return_false', 99 );
 		$this->assertFalse( aafm_integration_active( 'yoast' ) );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$registry = aafm_get_abilities_registry();
 		$this->assertArrayNotHasKey(
 			'aafm/yoast-get-post',
@@ -624,5 +629,31 @@ final class YoastTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $res );
 		$this->assertSame( 'aafm_yoast_write_unconfirmed', $res->get_error_code() );
 		$this->assertSame( 'unconfirmed', $res->get_error_data()['status'] );
+	}
+
+	public function test_get_head_reports_empty_with_a_note(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+		remove_all_filters( 'aafm_seo_rendered_head' );
+
+		$res = wp_get_ability( 'aafm/yoast-get-head' )->execute( array( 'post_id' => $post_id ) );
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( '', $res['head'] );
+		$this->assertSame( 'empty', $res['head_status'] );
+		$this->assertStringContainsString( "doesn't mean the page has no SEO tags", $res['note'] );
+		$props = aafm_args_yoast_get_head()['output_schema']['properties'];
+		$this->assertArrayHasKey( 'head_status', $props );
+		$this->assertArrayHasKey( 'note', $props );
+	}
+
+	public function test_get_head_reports_ok_when_a_head_exists(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$res = wp_get_ability( 'aafm/yoast-get-head' )->execute( array( 'post_id' => $post_id ) );
+
+		$this->assertSame( 'ok', $res['head_status'] );
+		$this->assertArrayNotHasKey( 'note', $res );
 	}
 }

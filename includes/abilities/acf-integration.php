@@ -191,17 +191,18 @@ function aafm_args_acf_list_field_groups(): array {
  *
  * Walks every field group and its fields, returning only the discovery shape (key, label, type) -
  * never a stored value. Guards each ACF call with function_exists so the ability never fatals if
- * the host API shape changes.
+ * the host API shape changes, and errors when the group lister itself is missing rather than
+ * reporting no groups.
  *
  * @param array<string,mixed> $input Validated input.
- * @return array<string,mixed>
+ * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_acf_list_field_groups( array $input ) {
 	unset( $input );
 	$out = array( 'field_groups' => array() );
 
 	if ( ! function_exists( 'acf_get_field_groups' ) ) {
-		return $out;
+		return aafm_generic_error();
 	}
 
 	$groups = (array) acf_get_field_groups();

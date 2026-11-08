@@ -255,4 +255,151 @@ final class SearchTest extends TestCase {
 		$this->assertArrayHasKey( 'aafm/search-content', $reg );
 		$this->assertSame( 'reads', $reg['aafm/search-content']['group'] );
 	}
+
+	public function test_a_type_outside_the_allowlist_is_named_as_skipped(): void {
+		update_option( 'aafm_allowed_post_types', array() ); // Resolves to post + page.
+		$out = aafm_exec_search_content(
+			array(
+				'search'     => 'YETI',
+				'post_types' => array( 'page', 'Not Allowed' ),
+			)
+		);
+		$this->assertSame( array( 'notallowed' ), $out['skipped_post_types'] );
+		$this->assertArrayHasKey( 'skipped_post_types', aafm_args_search_content()['output_schema']['properties'] );
+
+		$none = aafm_exec_search_content(
+			array(
+				'search'     => 'YETI',
+				'post_types' => array( 'notallowed' ),
+			)
+		);
+		$this->assertSame( array( 'notallowed' ), $none['skipped_post_types'], 'The early empty return names the skip too.' );
+	}
+
+	public function test_a_type_dropped_by_the_private_read_filter_is_named_as_skipped(): void {
+		register_post_type(
+			'aafm_book',
+			array(
+				'public'          => true,
+				'label'           => 'Books',
+				'capability_type' => array( 'book', 'books' ),
+				'map_meta_cap'    => true,
+			)
+		);
+		update_option( 'aafm_allowed_post_types', array( 'post', 'aafm_book' ) );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+
+		$out = aafm_exec_search_content(
+			array(
+				'search' => 'QUOKKA',
+				'status' => 'private',
+			)
+		);
+		$this->assertSame( array( 'aafm_book' ), $out['skipped_post_types'] );
+	}
+
+	public function test_no_skipped_key_when_nothing_was_dropped(): void {
+		update_option( 'aafm_allowed_post_types', array() );
+		$out = aafm_exec_search_content(
+			array(
+				'search'     => 'YETI',
+				'post_types' => array( 'page' ),
+			)
+		);
+		$this->assertArrayNotHasKey( 'skipped_post_types', $out );
+	}
+
+	/**
+	 * A subscriber given extra capabilities, set as the current user.
+	 *
+	 * @param string[] $caps Capabilities.
+	 * @return int User id.
+	 */
+	private function user_with( array $caps ): int {
+		$id   = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$user = get_user_by( 'id', $id );
+		foreach ( $caps as $cap ) {
+			$user->add_cap( $cap );
+		}
+		wp_set_current_user( $id );
+		return $id;
+	}
+
+	/**
+	 * Create a post of a status, dated ahead for future.
+	 *
+	 * @param string $type   Post type.
+	 * @param string $status Status.
+	 * @param int    $author Author id.
+	 * @param string $title  Title.
+	 */
+	private function item( string $type, string $status, int $author, string $title ): void {
+		$args = array(
+			'post_type'   => $type,
+			'post_status' => $status,
+			'post_author' => $author,
+			'post_title'  => $title,
+		);
+		if ( 'future' === $status ) {
+			$args['post_date'] = gmdate( 'Y-m-d H:i:s', time() + DAY_IN_SECONDS );
+		}
+		self::factory()->post->create( $args );
+	}
+
+	public function test_read_private_posts_alone_does_not_find_others_drafts(): void {
+		$other = self::factory()->user->create( array( 'role' => 'editor' ) );
+		$this->item( 'post', 'draft', $other, 'WOMBAT others' );
+		$me = $this->user_with( array( 'read_private_posts', 'read_private_pages' ) );
+		$this->item( 'post', 'draft', $me, 'WOMBAT mine' );
+
+		$out = aafm_exec_search_content(
+			array(
+				'search' => 'WOMBAT',
+				'status' => 'draft',
+			)
+		);
+
+		$this->assertSame( array( 'WOMBAT mine' ), array_column( $out['results'], 'title' ) );
+		$this->assertSame( 1, $out['total'] );
+	}
+
+	/**
+	 * Statuses an own-posts-only reader is limited on.
+	 *
+	 * @return array<string,array{0:string}>
+	 */
+	public function provide_unpublished_statuses(): array {
+		return array(
+			'draft'   => array( 'draft' ),
+			'pending' => array( 'pending' ),
+			'future'  => array( 'future' ),
+		);
+	}
+
+	/**
+	 * Others' draft pages hidden, others' draft posts kept, in one query with a matching total.
+	 *
+	 * @dataProvider provide_unpublished_statuses
+	 *
+	 * @param string $status Status.
+	 */
+	public function test_mixed_capabilities_hide_others_draft_pages_but_keep_others_draft_posts( string $status ): void {
+		$other = self::factory()->user->create( array( 'role' => 'editor' ) );
+		$this->item( 'post', $status, $other, 'NUMBAT others post' );
+		$this->item( 'page', $status, $other, 'NUMBAT others page' );
+		$me = $this->user_with( array( 'read_private_posts', 'read_private_pages', 'edit_others_posts' ) );
+		$this->item( 'page', $status, $me, 'NUMBAT my page' );
+
+		$out    = aafm_exec_search_content(
+			array(
+				'search' => 'NUMBAT',
+				'status' => $status,
+			)
+		);
+		$titles = array_column( $out['results'], 'title' );
+		sort( $titles );
+
+		$this->assertSame( array( 'NUMBAT my page', 'NUMBAT others post' ), $titles );
+		$this->assertSame( 2, $out['total'] );
+	}
 }

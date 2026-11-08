@@ -17,7 +17,7 @@ use AAFM\Tests\TestCase;
 final class DenialReasonTest extends TestCase {
 
 	public function test_every_code_has_a_label_without_a_hash_digit_sequence(): void {
-		foreach ( array( 'not_allowlisted', 'key_denied', 'key_protected', 'reserved_key', 'object_not_editable', 'scope_list', 'rate_limit', 'missing_argument', 'capability', 'source_plugin', 'connection_paused', 'access_paused' ) as $code ) {
+		foreach ( array( 'not_allowlisted', 'key_denied', 'key_protected', 'reserved_key', 'object_not_editable', 'scope_list', 'rate_limit', 'missing_argument', 'capability', 'source_plugin', 'connection_paused', 'access_paused', 'type_tool_off' ) as $code ) {
 			$label = aafm_denial_reason_label( $code );
 			$this->assertIsString( $label, $code );
 			$this->assertSame( 0, preg_match( '/#\d/', $label ), 'A label must not look like an object id to the detail linker.' );
@@ -191,6 +191,36 @@ final class DenialReasonTest extends TestCase {
 		);
 
 		$this->assertStringContainsString( 'Refused: scope_list', $this->denied_detail( 'aafm/update-post-meta' ) );
+	}
+
+	public function test_a_reach_refusal_logs_type_tool_off(): void {
+		$this->acting_as( 'administrator' );
+		$this->register_enabled( array( 'aafm/update-post' ) );
+		$page_id = self::factory()->post->create( array( 'post_type' => 'page' ) );
+
+		wp_get_ability( 'aafm/update-post' )->execute(
+			array(
+				'post_id' => $page_id,
+				'title'   => 'x',
+			)
+		);
+
+		$this->assertStringContainsString( 'Refused: type_tool_off', $this->denied_detail( 'aafm/update-post' ) );
+	}
+
+	public function test_a_user_who_cannot_edit_the_page_is_refused_for_capability_not_the_reach_rule(): void {
+		$this->acting_as( 'author' );
+		$this->register_enabled( array( 'aafm/update-post' ) );
+		$page_id = self::factory()->post->create( array( 'post_type' => 'page' ) );
+
+		wp_get_ability( 'aafm/update-post' )->execute(
+			array(
+				'post_id' => $page_id,
+				'title'   => 'x',
+			)
+		);
+
+		$this->assertStringContainsString( 'Refused: capability', $this->denied_detail( 'aafm/update-post' ) );
 	}
 
 	public function test_an_ability_outside_the_meta_family_reports_a_capability_reason(): void {

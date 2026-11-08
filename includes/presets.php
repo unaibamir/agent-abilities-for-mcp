@@ -28,7 +28,7 @@ function aafm_access_presets(): array {
 		),
 		'shop_manager'   => array(
 			'label'   => __( 'Shop manager', 'agent-abilities-for-mcp' ),
-			'summary' => __( 'Everything in Content editor, playbooks included, plus WooCommerce, except deletes and the nine money and authority tools.', 'agent-abilities-for-mcp' ),
+			'summary' => __( 'Everything in Content editor, playbooks included, plus WooCommerce, except deletes and the ten money and authority tools.', 'agent-abilities-for-mcp' ),
 		),
 		'custom'         => array(
 			'label'   => __( 'Custom', 'agent-abilities-for-mcp' ),
@@ -102,7 +102,7 @@ function aafm_preset_permits( string $preset, string $ability_name ): bool {
 	if ( null === $def || ! in_array( $preset, array( 'content_editor', 'shop_manager' ), true ) ) {
 		return false; // Bridged names, unknown names and unknown slugs: only Custom reaches them.
 	}
-	// Permanent deletes and the nine money and authority tools are only ever reached through Custom.
+	// Permanent deletes and the ten money and authority tools are only ever reached through Custom.
 	if ( 'destructive' === (string) ( $def['risk'] ?? '' ) || aafm_ability_is_high_risk( $ability_name ) ) {
 		return false;
 	}

@@ -56,7 +56,7 @@ final class StatusAuthorityMatrixTest extends TestCase {
 	public function set_up(): void {
 		parent::set_up();
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
-		$this->register_enabled( array( 'aafm/create-draft', 'aafm/create-post', 'aafm/create-page', 'aafm/create-cpt-item', 'aafm/update-cpt-item' ) );
+		$this->register_enabled( array( 'aafm/create-draft', 'aafm/create-post', 'aafm/create-page', 'aafm/create-cpt-item', 'aafm/update-cpt-item', 'aafm/update-post' ) );
 	}
 
 	public function tear_down(): void {

@@ -373,8 +373,9 @@ function aafm_exec_wc_list_orders( array $input ): array {
 		return $out;
 	}
 
-	$per_page = isset( $input['per_page'] ) ? min( 100, max( 1, (int) $input['per_page'] ) ) : 20;
-	$page     = isset( $input['page'] ) ? max( 1, (int) $input['page'] ) : 1;
+	$paging   = aafm_paginate_args( $input + array( 'per_page' => 20 ), AAFM_TERMS_PER_PAGE_MAX );
+	$per_page = $paging['per_page'];
+	$page     = $paging['page'];
 	$status   = isset( $input['status'] ) ? sanitize_key( (string) $input['status'] ) : 'any';
 
 	// 'any' passed through to wc_get_orders() is backend-dependent - HPOS resolves it to a
@@ -605,6 +606,16 @@ function aafm_wc_order_status_valid( string $status ): bool {
  *                                  mid-loop (already-written items rolled back; see the note below).
  */
 function aafm_wc_apply_order_input( \WC_Order $order, array $input, array &$added_item_ids = array() ) {
+	// Checked first so a refused request has changed nothing on the order. A customer id that is not
+	// a user used to be stored, leaving an order tied to nobody; 0 stays the guest order.
+	$customer_id = array_key_exists( 'customer_id', $input ) ? absint( $input['customer_id'] ) : 0;
+	if ( $customer_id > 0 && ! aafm_exact_object( 'user', $customer_id ) instanceof WP_User ) {
+		return new \WP_Error(
+			'aafm_wc_unknown_customer',
+			__( 'No user exists with that customer_id, so the order was not saved. Use a real customer id, or 0 for a guest order.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
+	}
 	if ( array_key_exists( 'status', $input ) ) {
 		// Normalise to short form before handing to set_status() -- strip any 'wc-' prefix so
 		// both 'processing' and 'wc-processing' produce the same stored/returned value (matching
@@ -614,7 +625,7 @@ function aafm_wc_apply_order_input( \WC_Order $order, array $input, array &$adde
 		$order->set_status( $short_status );
 	}
 	if ( array_key_exists( 'customer_id', $input ) ) {
-		$order->set_customer_id( absint( $input['customer_id'] ) );
+		$order->set_customer_id( $customer_id );
 	}
 	if ( array_key_exists( 'customer_note', $input ) ) {
 		$order->set_customer_note( aafm_sanitize_multiline_text( (string) $input['customer_note'] ) );
@@ -2495,6 +2506,16 @@ function aafm_exec_wc_create_order_refund( array $input ) {
 	$order = aafm_wc_get_order_object( $order_id );
 	if ( null === $order ) {
 		return aafm_generic_error();
+	}
+
+	// The schema's amount pattern admits "0" and "0.00". A refund of nothing is not a refund, and
+	// WooCommerce would create an empty refund record for it.
+	if ( (float) $amount <= 0 ) {
+		return new \WP_Error(
+			'aafm_wc_invalid_refund_amount',
+			__( 'The refund amount must be greater than zero, so no refund was created.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
 	}
 
 	$refund_args = array(

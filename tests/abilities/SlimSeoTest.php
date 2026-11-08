@@ -101,6 +101,26 @@ final class SlimSeoTest extends TestCase {
 		$this->assertTrue( $out['noindex'] );
 	}
 
+	public function test_update_post_refuses_an_invalid_url_and_keeps_the_stored_one(): void {
+		$post = self::factory()->post->create_and_get();
+		update_post_meta( $post->ID, 'slim_seo', array( 'canonical' => 'https://example.com/good' ) );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+
+		foreach ( array( 'canonical', 'facebook_image', 'twitter_image' ) as $field ) {
+			foreach ( array( 'javascript:alert(1)', 'not a url at all' ) as $bad ) {
+				$out = aafm_exec_slim_seo_update_post(
+					array(
+						'post_id' => $post->ID,
+						$field    => $bad,
+					)
+				);
+				$this->assertInstanceOf( \WP_Error::class, $out, "$field: $bad" );
+				$this->assertSame( 'aafm_invalid_url', $out->get_error_code() );
+			}
+		}
+		$this->assertSame( array( 'canonical' => 'https://example.com/good' ), get_post_meta( $post->ID, 'slim_seo', true ) );
+	}
+
 	/**
 	 * A site-installed update_post_metadata filter that vetoes the write must
 	 * surface as a structured error, not a success response carrying the stale stored value.

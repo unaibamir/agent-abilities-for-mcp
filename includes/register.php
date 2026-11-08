@@ -885,6 +885,61 @@ function aafm_unreachable_user_meta_key_error( string $name, array $input ) {
 }
 
 /**
+ * Say why a meta call on one of the nine keyed meta abilities was refused for its KEY, when it was.
+ *
+ * Without this an agent got the adapter's bare "Permission denied" for a key that is simply not
+ * exposed, and could not tell that from a missing capability. The reason is the one the activity log
+ * already computes (aafm_meta_key_refusal_code()), put into a fixed, translated sentence.
+ *
+ * What the sentence can and cannot carry. It is built only from the closed reason code and the
+ * scope, never from the caller's input, so it never echoes the key, the object id or a value, and it
+ * is byte-identical for every role because the key rules are site settings, not caller properties.
+ * What it does disclose is whether the key passes the site's key policy: a caller can now tell a
+ * key that is not exposed from one that is exposed but whose object they cannot edit. That is a
+ * deliberate trade, made so the agent can tell the operator what to change; it exposes which names
+ * are on or off the list, never any value. A capability or object refusal on an allowed key keeps
+ * the bare "Permission denied".
+ *
+ * @param string              $name  Ability name.
+ * @param array<string,mixed> $input Call arguments.
+ * @return array{error:\WP_Error,code:string}|null The refusal and its reason code, or null to leave the call alone.
+ */
+function aafm_meta_key_refusal_error( string $name, array $input ): ?array {
+	if ( 1 !== preg_match( '#^aafm/(?:get|update|delete)-(post|term|user)-meta\z#', $name, $m ) ) {
+		return null;
+	}
+	$scope = $m[1];
+	$param = 'user' === $scope ? 'key' : 'meta_key'; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- reading a call argument, not a meta query.
+	$raw   = $input[ $param ] ?? null;
+	$key   = is_scalar( $raw ) ? (string) $raw : '';
+	if ( '' === trim( $key ) ) {
+		return null; // A missing key is the missing-argument refusal's to answer.
+	}
+	$code = aafm_meta_key_refusal_code( $scope, $key );
+	if ( null === $code ) {
+		return null;
+	}
+
+	if ( 'not_allowlisted' === $code ) {
+		$where   = array(
+			'post' => __( 'That meta key is not exposed to agents. Meta keys are opt-in: a site administrator adds it under "Exposed meta keys" in the Content sub-tab of the Abilities tab.', 'agent-abilities-for-mcp' ),
+			'term' => __( 'That meta key is not exposed to agents. Meta keys are opt-in: a site administrator adds it under "Exposed term meta keys" in the Taxonomies & Terms sub-tab of the Abilities tab.', 'agent-abilities-for-mcp' ),
+			'user' => __( 'That meta key is not exposed to agents. Meta keys are opt-in: a site administrator adds it under "Exposed user meta keys" in the Users sub-tab of the Abilities tab.', 'agent-abilities-for-mcp' ),
+		);
+		$message = $where[ $scope ];
+	} elseif ( 'key_denied' === $code ) {
+		$message = __( 'That meta key is on this site\'s deny list, so it cannot be reached through this tool.', 'agent-abilities-for-mcp' );
+	} else {
+		$message = __( 'That meta key is protected or reserved, so no user can reach it through this tool.', 'agent-abilities-for-mcp' );
+	}
+
+	return array(
+		'error' => new WP_Error( 'aafm_meta_key_refused', $message ),
+		'code'  => $code,
+	);
+}
+
+/**
  * Register one ability through the audited, guarded, rate-limited choke point.
  *
  * @param string              $name Ability name.
@@ -1076,6 +1131,11 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		// includes/audit/denial-reason.php; it lands in the admin-only detail and never on the wire.
 		$reason = null;
 
+		// A meta call whose KEY the site's policy refuses is answered with that reason on the wire as
+		// well (see aafm_meta_key_refusal_error()). Only for a well-formed call that the reserved-key
+		// routes above did not already answer.
+		$key_refusal = array() === $missing && null === $unreachable ? aafm_meta_key_refusal_error( $name, $call_args ) : null;
+
 		if ( $paused ) {
 			// A paused connection lists tools but may not call one. The refusal is a tool error, not a
 			// transport 403, so the client shows the reason. Core's re-check inside execute() gets a bare
@@ -1093,6 +1153,12 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			// Same bookkeeping route as the branch above, and for the same reason.
 			$allowed = $unreachable;
 			$reason  = 'reserved_key';
+		} elseif ( null !== $key_refusal ) {
+			// Same route again: audited, announced and rate-released like every other refusal. Core's
+			// re-check inside execute() gets a bare false, because a WP_Error there trips
+			// _doing_it_wrong(); the MCP permission check, which runs outside execute(), gets the reason.
+			$allowed = null === aafm_executing_ability() ? $key_refusal['error'] : false;
+			$reason  = $key_refusal['code'];
 		} else {
 			try {
 				$allowed = $original_permission( $input );
@@ -1109,7 +1175,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 				// this throw resolves (core's own invoke_callback() converts it to a WP_Error before
 				// it ever reaches that finally, but the finally runs on that normal return too).
 				/** This filter is documented in includes/register.php, at the execute-side catch. */
-				if ( apply_filters( 'aafm_rethrow_ability_exceptions', defined( 'WP_DEBUG' ) && WP_DEBUG, $e ) ) {
+				if ( apply_filters( 'aafm_rethrow_ability_exceptions', defined( 'WP_DEBUG' ) && WP_DEBUG && 0 !== strpos( $name, 'aafm-bridge/' ), $e ) ) {
 					// The consume above may have memoized an allow before the callback crashed, and this
 					// throw skips the non-true reset below - release the memo here or the dead call's
 					// allow pays for the next same-ability fire (the batch rate-limit leak, on its crash path).
@@ -1257,23 +1323,24 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			 * Whether a Throwable escaping an ability should be re-thrown instead of converted to
 			 * a WP_Error.
 			 *
-			 * Defaults to WP_DEBUG, so a development site keeps programming errors loud while a
-			 * production site converts them to an audited error. Since 1.6.1 this governs an
-			 * ability's PERMISSION callback as well as its EXECUTE callback, so one switch covers
-			 * both phases.
+			 * Defaults to WP_DEBUG for this plugin's own abilities, so a development site keeps
+			 * programming errors loud while a production site converts them to an audited error.
+			 * Since 1.6.1 this governs an ability's PERMISSION callback as well as its EXECUTE
+			 * callback, so one switch covers both phases.
 			 *
-			 * When it re-throws, the source's exception text can reach the client on WordPress 6.9,
-			 * which is why the default is WP_DEBUG only.
+			 * A bridged (aafm-bridge/) ability defaults to false even under WP_DEBUG: on WordPress
+			 * 6.9 a source plugin's throw escapes core, and re-throwing it would hand the source's
+			 * exception text to the client and leave the row unresolved. A filter can still force it.
 			 *
 			 * Re-throwing deliberately leaves no resolved audit row: on the execute path the row
 			 * stays at 'started', on the permission path no row is written at all. That absence is
 			 * the forensic signal, and it is intentional - do not "fix" it.
 			 *
 			 * @since 1.6.0
-			 * @param bool       $rethrow Whether to re-throw. Default WP_DEBUG.
+			 * @param bool       $rethrow Whether to re-throw. Default WP_DEBUG, false for a bridged ability.
 			 * @param \Throwable $e       The caught throwable. @since 1.6.1
 			 */
-			$rethrow = apply_filters( 'aafm_rethrow_ability_exceptions', defined( 'WP_DEBUG' ) && WP_DEBUG, $e );
+			$rethrow = apply_filters( 'aafm_rethrow_ability_exceptions', defined( 'WP_DEBUG' ) && WP_DEBUG && 0 !== strpos( $name, 'aafm-bridge/' ), $e );
 			if ( $rethrow ) {
 				// Deliberately skips both the WP_Error below AND aafm_log_ability_exception(): the
 				// row is left stuck at 'started', same as before this catch existed. That stuck row

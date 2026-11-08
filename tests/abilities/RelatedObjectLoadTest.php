@@ -2014,6 +2014,7 @@ final class RelatedObjectLoadTest extends TestCase {
 	 */
 	public function test_replace_sitewide_loads_each_post_again_before_its_write(): void {
 		$this->acting_as( 'administrator' );
+		update_option( 'aafm_enabled_abilities', array( 'aafm/replace-sitewide', 'aafm/update-page' ) );
 		$token   = 'aafmpairtoken';
 		$page_a  = $this->post(
 			array(

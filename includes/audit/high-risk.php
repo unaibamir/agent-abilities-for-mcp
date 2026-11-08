@@ -27,6 +27,7 @@ defined( 'ABSPATH' ) || exit;
  */
 function aafm_high_risk_abilities_builtin(): array {
 	return array(
+		'aafm/wc-create-order',
 		'aafm/wc-create-order-refund',
 		'aafm/wc-update-order-status',
 		'aafm/wc-update-order',
@@ -40,7 +41,29 @@ function aafm_high_risk_abilities_builtin(): array {
 }
 
 /**
- * The full high-risk set: the built-ins, plus anything a filter adds.
+ * Other plugins' abilities held by the high-risk lock, by their foreign slug.
+ *
+ * WooCommerce's own order status and order update tools change an order the way the native
+ * locked tools do. The Secure Custom Fields post type and taxonomy tools accept a callback name
+ * (register_meta_box_cb, meta_box_cb) that reaches call_user_func() on that type's edit screen.
+ *
+ * @return list<string>
+ */
+function aafm_high_risk_bridged_builtin(): array {
+	return array(
+		'woocommerce/order-update-status',
+		'woocommerce/orders-update',
+		'scf/create-post-type',
+		'scf/update-post-type',
+		'scf/import-post-type',
+		'scf/create-taxonomy',
+		'scf/update-taxonomy',
+		'scf/import-taxonomy',
+	);
+}
+
+/**
+ * The full high-risk set: the native and bridged built-ins, plus anything a filter adds.
  *
  * The built-ins are re-merged AFTER the filter runs, so a filter can only ever add an ability to
  * the locked category, never remove one. Same asymmetry as aafm_hard_blocked_meta_key(), and for
@@ -50,22 +73,20 @@ function aafm_high_risk_abilities_builtin(): array {
  * @return list<string>
  */
 function aafm_high_risk_abilities(): array {
-	$builtin = aafm_high_risk_abilities_builtin();
+	$builtin = array_merge( aafm_high_risk_abilities_builtin(), aafm_high_risk_bridged_builtin() );
 
 	/**
 	 * Filters EXTRA ability names to treat as high-risk. Built-ins are re-merged after, so
 	 * this can only ADD abilities to the locked set, never remove one.
 	 *
-	 * Covers native aafm/* abilities ONLY. Naming a bridged ability (aafm-bridge/*) here has
-	 * no effect: the bridge keeps its own enabled option and its own registration walk, and
-	 * aafm_all_server_ability_names() merges bridged names in after the floor has already run
-	 * over the native set. Locking a neighbouring plugin's ability is not something this
-	 * filter can do yet, and there is no warning if you try.
+	 * Takes native aafm/* names and other plugins' slugs as they register them, such as
+	 * woocommerce/order-update-status. A held foreign slug is kept out of the Other plugins tab
+	 * while the lock is on. A wrapper name (aafm-bridge/*) has no effect: name the plugin's own slug.
 	 *
 	 * @param list<string> $extra Extra ability names.
 	 */
 	$extra = apply_filters( 'aafm_high_risk_abilities', array() );
-	$extra = is_array( $extra ) ? array_map( 'strval', $extra ) : array();
+	$extra = is_array( $extra ) ? array_map( 'strval', array_filter( $extra, 'is_scalar' ) ) : array();
 
 	return array_values( array_unique( array_merge( $extra, $builtin ) ) );
 }
@@ -104,12 +125,7 @@ function aafm_high_risk_unlocked(): bool {
 		$unlocked = $unlocked && $row['ok'] && $row['found'] && is_scalar( $row['value'] ) && (bool) $row['value'];
 	}
 
-	/**
-	 * Force the high-risk floor shut regardless of the settings-screen value.
-	 *
-	 * @param bool $forced Whether to force the floor shut.
-	 */
-	if ( (bool) apply_filters( 'aafm_force_block_high_risk_abilities', false ) ) {
+	if ( aafm_high_risk_forced() ) {
 		return false;
 	}
 
@@ -117,23 +133,32 @@ function aafm_high_risk_unlocked(): bool {
 }
 
 /**
+ * Whether a host or site filter forces the high-risk floor shut, whatever the switch says.
+ *
+ * @return bool
+ */
+function aafm_high_risk_forced(): bool {
+	/**
+	 * Force the high-risk floor shut regardless of the settings-screen value.
+	 *
+	 * @param bool $forced Whether to force the floor shut.
+	 */
+	return (bool) apply_filters( 'aafm_force_block_high_risk_abilities', false );
+}
+
+/**
  * Whether an ability belongs to the high-risk category. Independent of the lock state: a
  * high-risk ability stays high-risk (and stays badged) once unlocked and enabled.
+ *
+ * Takes a native aafm/* name or a foreign slug. An aafm-bridge/* wrapper name is always false.
  *
  * @param string $name Ability name.
  * @return bool
  */
 function aafm_ability_is_high_risk( string $name ): bool {
-	// Namespace-aware: the high-risk set only ever governs NATIVE aafm/* abilities. A bridged
-	// wrapper (aafm-bridge/*) or a foreign slug must never match here, even when a site names one
-	// in the aafm_high_risk_abilities filter - that filter's own docblock already says naming a
-	// bridged ability there has no effect, because the high-risk floor only subtracts inside
-	// aafm_get_enabled_abilities(), which walks the native registry and never touches the bridge.
-	// Without this guard, aafm_ability_is_locked() (and therefore aafm_ability_lock_reason())
-	// would still report a lock the floor does not enforce - the exact class of defect 1.5.0
-	// shipped. This is what makes it safe for aafm_ability_lock_reason() to accept a bridged slug;
-	// see that function's docblock in includes/audit/read-only.php.
-	if ( ! str_starts_with( $name, 'aafm/' ) ) {
+	// A wrapper name is never on the list: the lock holds the foreign slug, and the bridge maps a
+	// wrapper back to its slug before asking.
+	if ( str_starts_with( $name, 'aafm-bridge/' ) ) {
 		return false;
 	}
 	return in_array( $name, aafm_high_risk_abilities(), true );

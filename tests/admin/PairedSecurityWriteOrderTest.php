@@ -93,6 +93,33 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 	}
 
 	/**
+	 * Post the current $_POST to aafm_save_abilities_page() as the one named section, filling an
+	 * unset field of the pair with an empty textarea, and answer in the single-section shape:
+	 * success, plus the section's message and data.
+	 *
+	 * @param string $section Section key: meta_keys, user_meta_keys or term_meta_keys.
+	 * @return array<string,mixed>
+	 */
+	private function run_section( string $section ): array {
+		$fields = array(
+			'meta_keys'      => array( 'aafm_meta_keys', 'aafm_deny_meta_keys' ),
+			'user_meta_keys' => array( 'aafm_exposed_user_meta_keys', 'aafm_denied_user_meta_keys' ),
+			'term_meta_keys' => array( 'aafm_exposed_term_meta_keys', 'aafm_denied_term_meta_keys' ),
+		);
+		foreach ( $fields[ $section ] as $field ) {
+			$_POST[ $field ] = $_POST[ $field ] ?? ''; // phpcs:ignore WordPress.Security -- test fixture input.
+		}
+		$_POST['aafm_sections'] = array( $section );
+
+		$json   = $this->run_handler( 'aafm_ajax_save_abilities_page' );
+		$result = $json['data']['sections'][ $section ] ?? array();
+		return array(
+			'success' => $json['success'] ?? null,
+			'data'    => array( 'message' => $result['message'] ?? '' ) + (array) ( $result['data'] ?? array() ),
+		);
+	}
+
+	/**
 	 * Run an AJAX handler and return its captured JSON payload. Mirrors
 	 * PersistentObjectCacheSwitchTest::run_handler(), plus hiding wpdb's own error output for the
 	 * duration: fail_option_read() below deliberately breaks a query to simulate a read failure,
@@ -141,7 +168,7 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 		$_POST['aafm_deny_meta_keys'] = 'secret';
 
 		$this->intercept_die();
-		$json = $this->run_handler( 'aafm_ajax_save_meta_keys' );
+		$json = $this->run_section( 'meta_keys' );
 
 		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'The save must report an error: the deny write did not persist.' );
 		$this->assertSame( array(), get_option( 'aafm_denied_meta_keys' ), 'Precondition check: the deny write genuinely could not persist.' );
@@ -168,7 +195,7 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 		$_POST['aafm_denied_user_meta_keys']  = 'secret';
 
 		$this->intercept_die();
-		$json = $this->run_handler( 'aafm_ajax_save_user_meta_keys' );
+		$json = $this->run_section( 'user_meta_keys' );
 
 		$this->assertFalse( (bool) ( $json['success'] ?? true ) );
 		$this->assertSame( array(), get_option( 'aafm_denied_user_meta_keys' ) );
@@ -195,7 +222,7 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 		$_POST['aafm_denied_term_meta_keys']  = 'secret';
 
 		$this->intercept_die();
-		$json = $this->run_handler( 'aafm_ajax_save_term_meta_keys' );
+		$json = $this->run_section( 'term_meta_keys' );
 
 		$this->assertFalse( (bool) ( $json['success'] ?? true ) );
 		$this->assertSame( array(), get_option( 'aafm_denied_term_meta_keys' ) );
@@ -225,7 +252,7 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 		$_POST['aafm_deny_meta_keys'] = 'secret';
 
 		$this->intercept_die();
-		$json = $this->run_handler( 'aafm_ajax_save_meta_keys' );
+		$json = $this->run_section( 'meta_keys' );
 
 		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'The save must report an error: the exposed write did not persist.' );
 		$this->assertSame( array( 'secret' ), get_option( 'aafm_denied_meta_keys' ), 'The new, more restrictive deny list must have landed even though the paired exposed write failed.' );
@@ -256,7 +283,7 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 		unset( $_POST['aafm_meta_keys'], $_POST['aafm_deny_meta_keys'] );
 
 		$this->intercept_die();
-		$json = $this->run_handler( 'aafm_ajax_save_meta_keys' );
+		$json = $this->run_section( 'meta_keys' );
 
 		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'The save must report an error: the exposed write did not persist.' );
 		$this->assertSame(
@@ -290,7 +317,7 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 		unset( $_POST['aafm_meta_keys'], $_POST['aafm_deny_meta_keys'] );
 
 		$this->intercept_die();
-		$json = $this->run_handler( 'aafm_ajax_save_meta_keys' );
+		$json = $this->run_section( 'meta_keys' );
 
 		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'The save must report an error: narrowing deny to the final requested list did not persist.' );
 		$this->assertSame( array(), get_option( 'aafm_allowed_meta_keys' ), 'The exposed write succeeded and must hold the newly requested (empty) value.' );
@@ -340,7 +367,7 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 		unset( $_POST['aafm_meta_keys'], $_POST['aafm_deny_meta_keys'] );
 
 		$this->intercept_die();
-		$json = $this->run_handler( 'aafm_ajax_save_meta_keys' );
+		$json = $this->run_section( 'meta_keys' );
 
 		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'The save must report an error: the exposed write did not persist.' );
 		$this->assertContains(
@@ -376,7 +403,7 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 		unset( $_POST['aafm_deny_meta_keys'] );
 
 		$this->intercept_die();
-		$json = $this->run_handler( 'aafm_ajax_save_meta_keys' );
+		$json = $this->run_section( 'meta_keys' );
 
 		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'The save must report an error: the exposed write did not persist.' );
 		$this->assertSame(
@@ -408,7 +435,7 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 		unset( $_POST['aafm_deny_meta_keys'] ); // Request no longer denies 'secret'.
 
 		$this->intercept_die();
-		$json = $this->run_handler( 'aafm_ajax_save_meta_keys' );
+		$json = $this->run_section( 'meta_keys' );
 
 		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'The save must report an error: the old deny row could not be certified.' );
 		$this->assertSame(

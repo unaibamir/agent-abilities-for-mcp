@@ -215,7 +215,9 @@ function aafm_user_can_call_ability( string $ability_name, array $input = array(
  */
 function aafm_deny_crashed_permission_check( string $ability_name, \Throwable $e ): bool {
 	/** This filter is documented in includes/register.php, at the execute-side catch. */
-	if ( apply_filters( 'aafm_rethrow_ability_exceptions', defined( 'WP_DEBUG' ) && WP_DEBUG, $e ) ) {
+	// A bridged tool's crash stays quiet by default, as on the execute side, so its text never
+	// reaches the client.
+	if ( apply_filters( 'aafm_rethrow_ability_exceptions', defined( 'WP_DEBUG' ) && WP_DEBUG && 0 !== strpos( $ability_name, 'aafm-bridge/' ), $e ) ) {
 		// Worth knowing before turning this on: the callers below are reached from
 		// aafm_build_server_tools() as well as from tools/list, and the adapter builds its server
 		// inside mcp_adapter_init, which on a web request is hooked on rest_api_init priority 15

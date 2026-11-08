@@ -315,10 +315,16 @@ function aafm_args_list_menu_items(): array {
  * still removes it by id, and wp-admin still shows it. The contiguous 1..N `order` is numbered over
  * the returned set, so skipped items leave no gap.
  *
+ * A menu id that is not a menu returns the same generic error as get-menu, instead of an empty
+ * list that reads as "this menu has no items".
+ *
  * @param array<string,mixed> $input Validated input.
- * @return array<string,mixed>
+ * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_list_menu_items( array $input ): array {
+function aafm_exec_list_menu_items( array $input ) {
+	if ( ! aafm_exact_object( 'term', (int) $input['menu_id'], 'nav_menu' ) instanceof WP_Term ) {
+		return aafm_generic_error();
+	}
 	$object_ids = get_objects_in_term( (int) $input['menu_id'], 'nav_menu' );
 	if ( is_wp_error( $object_ids ) || ! is_array( $object_ids ) ) {
 		$object_ids = array();
@@ -598,7 +604,7 @@ function aafm_exec_delete_menu( array $input ) {
  *
  * Closed schema: a menu id and a title (both required), plus optional url/parent/object_id/type
  * for a link or an object reference. The title is sanitized as plain text and the url through
- * esc_url_raw at execute; nothing else is writable, so no extra menu-item field can be smuggled.
+ * aafm_checked_url at execute (an invalid one is refused); nothing else is writable, so no extra menu-item field can be smuggled.
  *
  * @return array<string,mixed>
  */
@@ -620,7 +626,7 @@ function aafm_args_create_menu_item(): array {
 				),
 				'url'       => array(
 					'type'        => 'string',
-					'description' => __( 'Destination URL for a custom link item. Sanitized with esc_url_raw. Omit when object_id and type point at an existing post, page, or term instead.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'Destination URL for a custom link item. An invalid or unsafe URL is refused. Omit when object_id and type point at an existing post, page, or term instead.', 'agent-abilities-for-mcp' ),
 				),
 				'parent'    => array(
 					'type'        => 'integer',
@@ -662,7 +668,7 @@ function aafm_args_create_menu_item(): array {
  *
  * Resolves the target menu first (unknown id → generic error), then adds a published item to it
  * via the core nav-menu API (item id 0 means "create"). The title is sanitized as plain text and
- * the url through esc_url_raw; the created item is returned in the redacted item shape.
+ * the url through aafm_checked_url; the created item is returned in the redacted item shape.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
@@ -682,10 +688,24 @@ function aafm_exec_create_menu_item( array $input ) {
 		'menu-item-status' => 'publish',
 	);
 	if ( isset( $input['url'] ) ) {
-		$args['menu-item-url'] = esc_url_raw( (string) $input['url'] );
+		$url = aafm_checked_url( (string) $input['url'], 'url' );
+		if ( is_wp_error( $url ) ) {
+			return $url;
+		}
+		$args['menu-item-url'] = $url;
 	}
 	if ( isset( $input['parent'] ) ) {
-		$args['menu-item-parent-id'] = (int) $input['parent'];
+		$parent = (int) $input['parent'];
+		// A parent must be an item of this same menu. An id that is missing, belongs to another menu
+		// or is not a menu item at all would save an orphan the menu never renders.
+		if ( $parent > 0 && ! aafm_menu_item_post( $menu_id, $parent ) instanceof WP_Post ) {
+			return new WP_Error(
+				'aafm_invalid_menu_item_parent',
+				__( 'The parent must be an existing menu item in this same menu, so nothing was created.', 'agent-abilities-for-mcp' ),
+				array( 'status' => 400 )
+			);
+		}
+		$args['menu-item-parent-id'] = $parent;
 	}
 	$object_id = isset( $input['object_id'] ) ? (int) $input['object_id'] : 0;
 	if ( isset( $input['object_id'] ) ) {
@@ -916,7 +936,7 @@ function aafm_args_update_menu_item(): array {
 				),
 				'url'     => array(
 					'type'        => 'string',
-					'description' => __( 'New destination URL for the item. Sanitized with esc_url_raw. Omit to leave the current URL unchanged.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'New destination URL for the item. An invalid or unsafe URL is refused and the current URL stays. Omit to leave the current URL unchanged.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'menu_id', 'item_id' ),
@@ -943,7 +963,7 @@ function aafm_args_update_menu_item(): array {
  * Resolves both the menu and the item by id (an unknown menu, or an item that is not in that
  * menu, returns a generic error), then applies the title/url edit through the core API. The
  * updated item is returned in the redacted shape. The title is sanitized as plain text and the
- * url through esc_url_raw.
+ * url through aafm_checked_url.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
@@ -1007,7 +1027,11 @@ function aafm_exec_update_menu_item( array $input ) {
 		$args['menu-item-title'] = wp_slash( aafm_sanitize_plain_text( (string) $input['title'] ) );
 	}
 	if ( isset( $input['url'] ) ) {
-		$args['menu-item-url'] = esc_url_raw( (string) $input['url'] );
+		$url = aafm_checked_url( (string) $input['url'], 'url' );
+		if ( is_wp_error( $url ) ) {
+			return $url; // Refused before the write, so the stored URL stays.
+		}
+		$args['menu-item-url'] = $url;
 	}
 	if ( ! aafm_menu_item_target_checked( $args['menu-item-type'], $args['menu-item-object'], $args['menu-item-object-id'] ) ) {
 		return aafm_generic_error();

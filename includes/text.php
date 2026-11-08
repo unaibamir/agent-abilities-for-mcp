@@ -81,6 +81,71 @@ function aafm_sanitize_plain_text( string $value ): string {
 }
 
 /**
+ * Accept a URL as written, or refuse it. Never quietly rewrite it.
+ *
+ * Core's esc_url_raw() alone turns a javascript: link into "" and "not a url at all" into
+ * http://not20a20url20at20all, and a writer that stored the result answered ok (and wiped the
+ * value it was replacing). This keeps esc_url_raw() for the cleaning and refuses what it would
+ * have had to rewrite: an empty result, a changed scheme, or a scheme-less value that is neither
+ * a relative path, an anchor, nor a host name. An empty or blank input is a deliberate clear and
+ * comes back as ''.
+ *
+ * @param string $url   The value from the caller.
+ * @param string $field The input field name, used in the error.
+ * @return string|WP_Error The cleaned URL, '' to clear, or aafm_invalid_url.
+ */
+function aafm_checked_url( string $url, string $field ) {
+	$url = aafm_trim_unicode( $url );
+	if ( '' === $url ) {
+		return '';
+	}
+
+	// A scheme is a letter-led token with no dot before the colon, so example.com:8080 is a host and
+	// port, not a scheme named example.com.
+	$has_scheme = 1 === preg_match( '/^[a-z][a-z0-9+\-]*:/i', $url );
+	$is_path    = in_array( $url[0], array( '/', '#', '?' ), true );
+	$host_like  = ! $has_scheme && ! $is_path
+		&& 1 === preg_match( '~^(?:[^\s/?#:@.<>"\'\\\\]+\.)+[^\s/?#:@.<>"\'\\\\]{2,}(?::\d+)?(?:[/?#]\S*)?$~u', $url );
+
+	// A scheme-less host gets its http:// from us, because core skips it when a colon appears later
+	// in the value (example.com/a?t=10:30) and then empties the URL.
+	$candidate = $host_like ? 'http://' . $url : $url;
+	$clean     = esc_url_raw( $candidate );
+
+	// What esc_url_raw() is allowed to hand back: the input with spaces written as %20, square
+	// brackets as %5B and %5D outside the host, and a bare host with http:// in front. Anything else it
+	// did (dropping characters, a different scheme, an empty result) is a rewrite, and a rewrite is a
+	// refusal.
+	$authority = '';
+	if ( 1 === preg_match( '~^(?:[a-z][a-z0-9+.\-]*://)?[^/?#]*~i', $candidate, $found ) ) {
+		$authority = $found[0];
+	}
+	$rest     = substr( $candidate, strlen( $authority ) );
+	$expected = str_replace( ' ', '%20', $authority ) . str_replace( array( ' ', '[', ']' ), array( '%20', '%5B', '%5D' ), $rest );
+
+	$valid = '' !== $clean && ( $has_scheme || $is_path || $host_like );
+	if ( $valid && $has_scheme ) {
+		// Needs something after the scheme: a host for scheme://, an address for mailto: and tel:.
+		$after = substr( $url, strpos( $url, ':' ) + 1 );
+		$valid = '' !== ltrim( $after, '/' ) && 1 !== preg_match( '~^[a-z][a-z0-9+.\-]*://[^/?#]*\s~i', $url )
+			&& ( 0 !== strpos( $after, '//' ) || '' !== (string) wp_parse_url( $url, PHP_URL_HOST ) );
+	}
+	$valid = $valid && $clean === $expected;
+	if ( ! $valid ) {
+		return new WP_Error(
+			'aafm_invalid_url',
+			sprintf(
+				/* translators: %s: the name of the input field that held the URL. */
+				__( 'The %s value is not a valid URL, so nothing was changed. Use an https:// or http:// address, a mailto: or tel: link, a path starting with /, or an anchor starting with #.', 'agent-abilities-for-mcp' ),
+				$field
+			),
+			array( 'status' => 400 )
+		);
+	}
+	return $clean;
+}
+
+/**
  * The multi-line counterpart, for a field that legitimately keeps its newlines: an order note, a
  * refund reason, a media caption.
  *

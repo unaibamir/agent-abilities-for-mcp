@@ -210,7 +210,9 @@ function aafm_clean_playbook_abilities( $raw ) {
 	if ( ! is_array( $raw ) ) {
 		return array();
 	}
-	$known = array_merge( array_keys( aafm_get_abilities_registry_full() ), aafm_get_enabled_bridged_abilities() );
+	// The stored bridged list, not the floored reader: a save while a held tool is locked must not
+	// drop it from the playbook for good.
+	$known = array_merge( array_keys( aafm_get_abilities_registry_full() ), aafm_get_stored_bridged_abilities_raw() );
 	$out   = array();
 	foreach ( $raw as $name ) {
 		if ( is_string( $name ) && in_array( $name, $known, true ) && ! in_array( $name, $out, true ) ) {

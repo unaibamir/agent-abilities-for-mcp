@@ -382,4 +382,55 @@ class DiscoveryTest extends TestCase {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( aafm_oauth_protected_resource_metadata(), $response->get_data() );
 	}
+
+	/**
+	 * Run the home path as a subfolder install.
+	 *
+	 * @param string $home Home URL.
+	 */
+	private function at_home( string $home ): void {
+		update_option( 'home', $home );
+		update_option( 'siteurl', $home );
+	}
+
+	public function test_a_subfolder_install_serves_protected_resource_metadata(): void {
+		$this->at_home( 'https://example.com/blog' );
+		$this->assertSame( 'protected-resource', aafm_oauth_match_well_known( '/blog/.well-known/oauth-protected-resource' ) );
+	}
+
+	public function test_a_subfolder_install_serves_authorization_server_metadata_at_both_forms(): void {
+		$this->at_home( 'https://example.com/blog' );
+		$this->assertSame( 'authorization-server', aafm_oauth_match_well_known( '/blog/.well-known/oauth-authorization-server' ) );
+		$this->assertSame( 'authorization-server', aafm_oauth_match_well_known( '/blog/.well-known/openid-configuration' ) );
+	}
+
+	public function test_a_site_with_its_own_openid_provider_can_turn_off_the_openid_configuration_alias(): void {
+		$this->at_home( 'https://example.com/blog' );
+		add_filter( 'aafm_serve_openid_configuration', '__return_false' );
+		try {
+			$this->assertSame( '', aafm_oauth_match_well_known( '/blog/.well-known/openid-configuration' ) );
+			$this->assertSame( 'authorization-server', aafm_oauth_match_well_known( '/blog/.well-known/oauth-authorization-server' ) );
+		} finally {
+			remove_filter( 'aafm_serve_openid_configuration', '__return_false' );
+		}
+	}
+
+	public function test_a_root_install_does_not_serve_openid_configuration(): void {
+		$this->at_home( 'https://example.com' );
+		$this->assertSame( '', aafm_oauth_match_well_known( '/.well-known/openid-configuration' ) );
+	}
+
+	public function test_a_path_that_only_starts_like_the_home_path_does_not_match(): void {
+		$this->at_home( 'https://example.com/blog' );
+		$this->assertSame( '', aafm_oauth_match_well_known( '/blogger/.well-known/oauth-protected-resource' ) );
+		$this->assertSame( '', aafm_oauth_match_well_known( '/blogger/.well-known/openid-configuration' ) );
+		$this->assertSame( '', aafm_oauth_match_well_known( '/blog.well-known/oauth-protected-resource' ) );
+	}
+
+	public function test_a_root_install_matches_as_before(): void {
+		$this->at_home( 'https://example.com' );
+		$this->assertSame( 'protected-resource', aafm_oauth_match_well_known( '/.well-known/oauth-protected-resource' ) );
+		$this->assertSame( 'authorization-server', aafm_oauth_match_well_known( '/.well-known/oauth-authorization-server' ) );
+		$this->assertSame( '', aafm_oauth_match_well_known( '/foo/.well-known/oauth-authorization-server' ) );
+	}
 }

@@ -417,7 +417,7 @@ final class AbilitiesPageSaveTest extends TestCase {
 				return $registry;
 			}
 		);
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts', 'aafm/fake-wc' ) );
 
 		$json = $this->save(
@@ -1044,7 +1044,7 @@ final class AbilitiesPageSaveTest extends TestCase {
 	}
 
 	/**
-	 * Each old action: handler, planted options, fields, the option held unpersistable and its
+	 * The aafm_save_abilities cases: handler, planted options, fields, the option held unpersistable and its
 	 * stuck list, and the exact raw body. Responses must not move by a byte (key order included).
 	 *
 	 * @return array<string,array{0:string,1:array<string,array<int,string>>,2:array<string,mixed>,3:string,4:array<int,string>,5:string}>
@@ -1052,7 +1052,7 @@ final class AbilitiesPageSaveTest extends TestCase {
 	public function wrapper_provider(): array {
 		$msg_a = static fn( string $label ): string => '{"success":false,"data":{"message":"' . $label . self::MSG_A_SUFFIX . '"}}';
 		return array(
-			'abilities ok'      => array(
+			'abilities ok'    => array(
 				'aafm_ajax_save_abilities',
 				array(),
 				array(
@@ -1063,7 +1063,7 @@ final class AbilitiesPageSaveTest extends TestCase {
 				array(),
 				'{"success":true,"data":{"enabled":["aafm\/get-pages"],"ability_enabled_total":1}}',
 			),
-			'abilities cache'   => array(
+			'abilities cache' => array(
 				'aafm_ajax_save_abilities',
 				array(),
 				array(
@@ -1074,93 +1074,11 @@ final class AbilitiesPageSaveTest extends TestCase {
 				array( 'aafm/get-posts' ),
 				$msg_a( 'Enabled abilities' ),
 			),
-			'post types ok'     => array(
-				'aafm_ajax_save_post_types',
-				array(),
-				array( 'aafm_post_types' => array( 'aafm_book' ) ),
-				'',
-				array(),
-				'{"success":true,"data":{"post_types":["aafm_book"]}}',
-			),
-			'post types cache'  => array(
-				'aafm_ajax_save_post_types',
-				array(),
-				array( 'aafm_post_types' => array( 'aafm_book' ) ),
-				'aafm_allowed_post_types',
-				array( 'aafm_film' ),
-				$msg_a( 'Exposed content types' ),
-			),
-			'post meta ok'      => array(
-				'aafm_ajax_save_meta_keys',
-				array(),
-				array(
-					'aafm_meta_keys'      => "a\nb",
-					'aafm_deny_meta_keys' => 'c',
-				),
-				'',
-				array(),
-				'{"success":true,"data":{"meta_keys":["a","b"],"deny_meta_keys":["c"]}}',
-			),
-			'post meta stage 1' => array(
-				'aafm_ajax_save_meta_keys',
-				array(),
-				array(
-					'aafm_meta_keys'      => "a\nb",
-					'aafm_deny_meta_keys' => 'c',
-				),
-				'aafm_denied_meta_keys',
-				array( 'old-deny' ),
-				$msg_a( 'Denied post meta keys' ),
-			),
-			'user meta ok'      => array(
-				'aafm_ajax_save_user_meta_keys',
-				array(),
-				array(
-					'aafm_exposed_user_meta_keys' => 'a',
-					'aafm_denied_user_meta_keys'  => 'c',
-				),
-				'',
-				array(),
-				'{"success":true,"data":{"exposed_user_meta_keys":["a"],"denied_user_meta_keys":["c"]}}',
-			),
-			'user meta stage 2' => array(
-				'aafm_ajax_save_user_meta_keys',
-				array(),
-				array(
-					'aafm_exposed_user_meta_keys' => 'a',
-					'aafm_denied_user_meta_keys'  => 'c',
-				),
-				'aafm_exposed_user_meta_keys',
-				array( 'old-u-exp' ),
-				'{"success":false,"data":{"message":"Denied user meta keys was saved, but Exposed user meta keys could not be changed: the site\'s persistent object cache is still returning the old value. The site is now stricter than requested. Flush the object cache (Redis, Memcached, or your host\'s cache) and save again."}}',
-			),
-			'term meta ok'      => array(
-				'aafm_ajax_save_term_meta_keys',
-				array(),
-				array(
-					'aafm_exposed_term_meta_keys' => 'a',
-					'aafm_denied_term_meta_keys'  => 'c',
-				),
-				'',
-				array(),
-				'{"success":true,"data":{"exposed_term_meta_keys":["a"],"denied_term_meta_keys":["c"]}}',
-			),
-			'term meta stage 3' => array(
-				'aafm_ajax_save_term_meta_keys',
-				array(),
-				array(
-					'aafm_exposed_term_meta_keys' => 'a',
-					'aafm_denied_term_meta_keys'  => '',
-				),
-				'aafm_denied_term_meta_keys',
-				array( 'old-t-deny' ),
-				'{"success":false,"data":{"message":"Exposed term meta keys was saved, but Denied term meta keys could not be changed: the site\'s persistent object cache is still returning the old value. The site is now stricter than requested. Flush the object cache (Redis, Memcached, or your host\'s cache) and save again."}}',
-			),
 		);
 	}
 
 	/**
-	 * Each old action answers with the exact body it always did.
+	 * The aafm_save_abilities action answers with the exact body it always did.
 	 *
 	 * @dataProvider wrapper_provider
 	 * @param string                          $handler       Handler function name.
@@ -1183,19 +1101,133 @@ final class AbilitiesPageSaveTest extends TestCase {
 		$this->assertSame( $expected_body, $this->run_raw( $handler ) );
 	}
 
-	public function test_the_meta_wrapper_still_clears_deny_when_the_field_is_absent(): void {
-		$nonce             = wp_create_nonce( 'aafm_admin' );
-		$_POST             = array(
-			'nonce'          => $nonce,
-			'aafm_meta_keys' => 'a',
+	/**
+	 * Each section the five removed actions used to save, posted alone to the page save, with the
+	 * answer those actions gave.
+	 *
+	 * @return array<string,array{0:string,1:array<string,array<int,string>>,2:array<string,mixed>,3:string,4:array<int,string>,5:string}>
+	 */
+	public function old_action_provider(): array {
+		$msg_a = static fn( string $label ): string => '{"success":false,"data":{"message":"' . $label . self::MSG_A_SUFFIX . '"}}';
+		return array(
+			'post types ok'     => array(
+				'post_types',
+				array(),
+				array( 'aafm_post_types' => array( 'aafm_book' ) ),
+				'',
+				array(),
+				'{"success":true,"data":{"post_types":["aafm_book"]}}',
+			),
+			'post types cache'  => array(
+				'post_types',
+				array(),
+				array( 'aafm_post_types' => array( 'aafm_book' ) ),
+				'aafm_allowed_post_types',
+				array( 'aafm_film' ),
+				$msg_a( 'Exposed content types' ),
+			),
+			'post meta ok'      => array(
+				'meta_keys',
+				array(),
+				array(
+					'aafm_meta_keys'      => "a\nb",
+					'aafm_deny_meta_keys' => 'c',
+				),
+				'',
+				array(),
+				'{"success":true,"data":{"meta_keys":["a","b"],"deny_meta_keys":["c"]}}',
+			),
+			'post meta stage 1' => array(
+				'meta_keys',
+				array(),
+				array(
+					'aafm_meta_keys'      => "a\nb",
+					'aafm_deny_meta_keys' => 'c',
+				),
+				'aafm_denied_meta_keys',
+				array( 'old-deny' ),
+				$msg_a( 'Denied post meta keys' ),
+			),
+			'user meta ok'      => array(
+				'user_meta_keys',
+				array(),
+				array(
+					'aafm_exposed_user_meta_keys' => 'a',
+					'aafm_denied_user_meta_keys'  => 'c',
+				),
+				'',
+				array(),
+				'{"success":true,"data":{"exposed_user_meta_keys":["a"],"denied_user_meta_keys":["c"]}}',
+			),
+			'user meta stage 2' => array(
+				'user_meta_keys',
+				array(),
+				array(
+					'aafm_exposed_user_meta_keys' => 'a',
+					'aafm_denied_user_meta_keys'  => 'c',
+				),
+				'aafm_exposed_user_meta_keys',
+				array( 'old-u-exp' ),
+				'{"success":false,"data":{"message":"Denied user meta keys was saved, but Exposed user meta keys could not be changed: the site\'s persistent object cache is still returning the old value. The site is now stricter than requested. Flush the object cache (Redis, Memcached, or your host\'s cache) and save again."}}',
+			),
+			'term meta ok'      => array(
+				'term_meta_keys',
+				array(),
+				array(
+					'aafm_exposed_term_meta_keys' => 'a',
+					'aafm_denied_term_meta_keys'  => 'c',
+				),
+				'',
+				array(),
+				'{"success":true,"data":{"exposed_term_meta_keys":["a"],"denied_term_meta_keys":["c"]}}',
+			),
+			'term meta stage 3' => array(
+				'term_meta_keys',
+				array(),
+				array(
+					'aafm_exposed_term_meta_keys' => 'a',
+					'aafm_denied_term_meta_keys'  => '',
+				),
+				'aafm_denied_term_meta_keys',
+				array( 'old-t-deny' ),
+				'{"success":false,"data":{"message":"Exposed term meta keys was saved, but Denied term meta keys could not be changed: the site\'s persistent object cache is still returning the old value. The site is now stricter than requested. Flush the object cache (Redis, Memcached, or your host\'s cache) and save again."}}',
+			),
 		);
+	}
+
+	/**
+	 * A section saved alone through aafm_save_abilities_page answers with the same message and data
+	 * the removed single-section action did.
+	 *
+	 * @dataProvider old_action_provider
+	 * @param string                          $section       Section key.
+	 * @param array<string,array<int,string>> $planted       Extra planted options.
+	 * @param array<string,mixed>             $fields        Posted fields.
+	 * @param string                          $stuck_option  Option held unpersistable ('' for none).
+	 * @param array<int,string>               $stuck_value   Its stuck list.
+	 * @param string                          $old_body      The removed action's exact body.
+	 */
+	public function test_each_section_alone_answers_as_its_old_action_did( string $section, array $planted, array $fields, string $stuck_option, array $stuck_value, string $old_body ): void {
+		$this->plant( $planted );
+		if ( '' !== $stuck_option ) {
+			$this->stuck_at( $stuck_option, $stuck_value );
+		}
+		$nonce             = wp_create_nonce( 'aafm_admin' );
+		$_POST             = array_merge( array( 'nonce' => $nonce ), $fields, array( 'aafm_sections' => array( $section ) ) );
 		$_REQUEST['nonce'] = $nonce;
 		$this->intercept_die();
 
-		$this->run_raw( 'aafm_ajax_save_meta_keys' );
+		$old    = json_decode( $old_body, true );
+		$json   = json_decode( $this->run_raw( 'aafm_ajax_save_abilities_page' ), true );
+		$result = $json['data']['sections'][ $section ];
 
-		$this->assertSame( array(), $this->stored( 'aafm_denied_meta_keys' ), 'The legacy action reads a missing deny field as empty, as it always did.' );
-		$this->assertSame( array( 'a' ), $this->stored( 'aafm_allowed_meta_keys' ) );
+		$this->assertSame( $old['success'], $json['success'] );
+		$this->assertSame( $old['success'], $result['ok'] );
+		if ( $old['success'] ) {
+			$this->assertSame( $old['data'], $result['data'] );
+		} else {
+			$this->assertSame( $old['data']['message'], $result['message'] );
+		}
 	}
 
 	public function test_wrappers_are_never_held(): void {

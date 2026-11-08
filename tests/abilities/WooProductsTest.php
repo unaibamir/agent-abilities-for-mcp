@@ -26,7 +26,7 @@ final class WooProductsTest extends TestCase {
 		parent::set_up();
 		$this->force_integration( 'woocommerce' );
 		$this->stub_woocommerce();
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->register_wc_products();
 	}
 
@@ -308,7 +308,7 @@ final class WooProductsTest extends TestCase {
 		remove_all_filters( 'aafm_integration_active_woocommerce' );
 		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 		$this->assertFalse( aafm_integration_active( 'woocommerce' ) );
-		aafm_registry_cache_should_flush( true );
+		aafm_flush_registry_cache();
 		$this->assertArrayNotHasKey( 'aafm/wc-list-products', aafm_get_abilities_registry() );
 		remove_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 	}
@@ -469,6 +469,28 @@ final class WooProductsTest extends TestCase {
 	 * report success. The schema enumerates variable/grouped/external but this generic create
 	 * only builds simple products, so a non-simple request is rejected with an error.
 	 */
+	public function test_create_product_schema_offers_only_simple_and_the_executor_says_why(): void {
+		$this->acting_as( 'administrator' );
+
+		$type = aafm_args_wc_create_product()['input_schema']['properties']['type'];
+		$this->assertSame( array( 'simple' ), $type['enum'], 'The schema only offers what the create can build.' );
+		$this->assertStringContainsString( 'wc-create-product-variation', $type['description'], 'And points at the route for variable products.' );
+
+		foreach ( array( 'variable', 'grouped', 'external' ) as $requested ) {
+			$res = aafm_exec_wc_create_product(
+				array(
+					'name' => 'Typed Product',
+					'type' => $requested,
+				)
+			);
+			$this->assertInstanceOf( WP_Error::class, $res, $requested );
+			$this->assertSame( 'aafm_wc_unsupported_product_type', $res->get_error_code() );
+		}
+
+		$update = aafm_args_wc_update_product()['input_schema']['properties']['type'];
+		$this->assertContains( 'variable', $update['enum'], 'An update may still send the product\'s current type.' );
+	}
+
 	public function test_create_product_rejects_non_simple_type(): void {
 		$this->acting_as( 'administrator' );
 
@@ -668,6 +690,41 @@ final class WooProductsTest extends TestCase {
 		$read = wp_get_ability( 'aafm/wc-get-product' )->execute( array( 'product_id' => (int) $created['id'] ) );
 		$this->assertSame( '', $read['regular_price'], 'The cleared price round-trips on a following read.' );
 		$this->assertSame( '', $read['sale_price'], 'The cleared sale price round-trips on a following read.' );
+	}
+
+	public function test_a_sale_price_above_the_regular_price_is_refused_on_create_and_update(): void {
+		$this->acting_as( 'administrator' );
+
+		$create = wp_get_ability( 'aafm/wc-create-product' )->execute(
+			array(
+				'name'          => 'Backwards Sale',
+				'regular_price' => '10.00',
+				'sale_price'    => '12.00',
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $create );
+		$this->assertSame( 'aafm_wc_sale_above_regular', $create->get_error_code() );
+
+		$ok = wp_get_ability( 'aafm/wc-create-product' )->execute(
+			array(
+				'name'          => 'Fair Sale',
+				'regular_price' => '10.00',
+				'sale_price'    => '8.00',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $ok );
+		$this->assertSame( '8.00', $ok['sale_price'] );
+
+		$update = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id' => (int) $ok['id'],
+				'sale_price' => '11.00',
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $update, 'The check reads the stored regular price when only the sale price is sent.' );
+		$this->assertSame( 'aafm_wc_sale_above_regular', $update->get_error_code() );
+		$read = wp_get_ability( 'aafm/wc-get-product' )->execute( array( 'product_id' => (int) $ok['id'] ) );
+		$this->assertSame( '8.00', $read['sale_price'], 'A refused update leaves the sale price alone.' );
 	}
 
 	public function test_create_product_denies_an_editor(): void {

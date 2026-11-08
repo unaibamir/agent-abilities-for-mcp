@@ -156,4 +156,33 @@ final class GetAllPostMetaTest extends TestCase {
 
 		$this->assertSame( array( 'aafm_with_default' => 'from-default' ), (array) $out['meta'] );
 	}
+
+	public function test_an_empty_result_carries_a_note_and_no_count(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$id = self::factory()->post->create( array( 'post_author' => $author ) );
+		update_post_meta( $id, 'not_listed', 'secret' );
+
+		$out = aafm_exec_get_all_post_meta( array( 'post_id' => $id ) );
+
+		$this->assertSame( array(), (array) $out['meta'] );
+		$this->assertArrayHasKey( 'note', $out );
+		$this->assertStringContainsString( "doesn't mean the post has no meta", $out['note'] );
+		$this->assertSame( array( 'meta', 'note' ), array_keys( $out ), 'No count is reported.' );
+		$schema = aafm_args_get_all_post_meta()['output_schema']['properties'];
+		$this->assertSame( array( 'type' => 'string' ), $schema['note'] );
+	}
+
+	public function test_a_non_empty_result_has_no_note(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$id = self::factory()->post->create( array( 'post_author' => $author ) );
+		update_post_meta( $id, 'subtitle', 'A scalar' );
+
+		$out = aafm_exec_get_all_post_meta( array( 'post_id' => $id ) );
+
+		$this->assertArrayNotHasKey( 'note', $out );
+	}
 }

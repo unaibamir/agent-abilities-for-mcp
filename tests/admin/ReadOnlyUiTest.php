@@ -174,7 +174,7 @@ final class ReadOnlyUiTest extends TestCase {
 		$html = $this->render_row( 'aafm/create-post' );
 
 		$this->assertStringContainsString( 'Read-only mode', $html );
-		$this->assertStringNotContainsString( 'Turn on High-risk abilities', $html );
+		$this->assertStringNotContainsString( 'Turn on Unlock the category under Safety controls', $html );
 	}
 
 	public function test_a_read_row_still_renders_its_checkbox(): void {
@@ -217,7 +217,7 @@ final class ReadOnlyUiTest extends TestCase {
 
 		$this->assertStringNotContainsString( 'type="checkbox"', $html );
 		$this->assertStringContainsString( 'Read-only mode', $html );
-		$this->assertStringNotContainsString( 'Turn on High-risk abilities', $html );
+		$this->assertStringNotContainsString( 'Turn on Unlock the category under Safety controls', $html );
 	}
 
 	// ---------------------------------------------------------------------------------------
@@ -419,7 +419,7 @@ final class ReadOnlyUiTest extends TestCase {
 		foreach (
 			array(
 				'A bridged ability counts as a read only when the plugin that wrote it says so',
-				'Abilities bridged in from other plugins are not covered by it',
+				'held only if listed here or named with the aafm_high_risk_abilities filter',
 				'ordinary WordPress account credentials the plugin does not own',
 			) as $tail
 		) {
@@ -689,27 +689,14 @@ final class ReadOnlyUiTest extends TestCase {
 	}
 
 	/**
-	 * The aafm_ability_is_high_risk() predicate is now namespace-aware: it returns false outright for any name
-	 * not starting with "aafm/", so a site naming a foreign slug in the public
-	 * aafm_high_risk_abilities filter can never make the shared aafm_ability_lock_reason()
-	 * predicate report it locked. The high-risk floor only ever subtracts from
-	 * aafm_get_enabled_abilities(), which walks the NATIVE registry and never touches the bridge,
-	 * so a lock the floor does not enforce would be the exact defect class 1.5.0 shipped. This is
-	 * what makes it safe for the bridge row renderer to call the shared predicate directly instead
-	 * of hand-rolling its own read-only-only check.
-	 *
-	 * So: a filter-added foreign slug must still render a live checkbox here.
+	 * A foreign slug held by the high-risk lock renders the lock and no switch, exactly like a
+	 * locked native row, so "Enable all" cannot sweep it in.
 	 */
-	public function test_a_bridge_row_never_renders_a_high_risk_lock(): void {
+	public function test_a_held_bridge_row_renders_the_lock_and_no_switch(): void {
 		add_filter(
 			'aafm_high_risk_abilities',
 			static fn( array $e ): array => array_merge( $e, array( 'demo/writer' ) )
 		);
-		$this->assertFalse(
-			aafm_ability_is_locked( 'demo/writer' ),
-			'Fixture check: the shared predicate must be namespace-aware, so naming a foreign slug in the aafm_high_risk_abilities filter must never lock it - the floor this filter feeds never reaches the bridge.'
-		);
-
 		$html = $this->render_bridge_group(
 			array(
 				array(
@@ -720,13 +707,48 @@ final class ReadOnlyUiTest extends TestCase {
 			)
 		);
 
-		$this->assertStringContainsString(
-			'name="bridged_abilities[]" value="demo/writer"',
-			$html,
-			'The high-risk floor does not reach bridged abilities, so this row must stay toggleable.'
+		$this->assertStringNotContainsString( 'name="bridged_abilities[]" value="demo/writer"', $html );
+		$this->assertStringContainsString( 'aafm-ability-locked', $html );
+		$this->assertStringContainsString( 'Turn on Unlock the category under Safety controls', $html );
+		$this->assertStringContainsString( 'data-high-risk="1"', $html );
+	}
+
+	public function test_an_unlocked_held_row_keeps_its_high_risk_badge(): void {
+		add_filter(
+			'aafm_high_risk_abilities',
+			static fn( array $e ): array => array_merge( $e, array( 'demo/writer' ) )
 		);
+		update_option( 'aafm_high_risk_abilities_unlocked', true );
+		$html = $this->render_bridge_group(
+			array(
+				array(
+					'slug'  => 'demo/writer',
+					'label' => 'Writer',
+					'risk'  => 'write',
+				),
+			)
+		);
+		delete_option( 'aafm_high_risk_abilities_unlocked' );
+
+		$this->assertStringContainsString( 'name="bridged_abilities[]" value="demo/writer"', $html );
+		$this->assertStringContainsString( 'aafm-badge-high-risk', $html );
+		$this->assertStringContainsString( 'data-high-risk="1"', $html );
+	}
+
+	public function test_an_unheld_bridge_row_keeps_its_switch(): void {
+		$html = $this->render_bridge_group(
+			array(
+				array(
+					'slug'  => 'demo/writer',
+					'label' => 'Writer',
+					'risk'  => 'write',
+				),
+			)
+		);
+
+		$this->assertStringContainsString( 'name="bridged_abilities[]" value="demo/writer"', $html );
 		$this->assertStringNotContainsString( 'aafm-ability-locked', $html );
-		$this->assertStringNotContainsString( 'Turn on High-risk abilities', $html );
+		$this->assertStringNotContainsString( 'data-high-risk', $html );
 	}
 
 	/**

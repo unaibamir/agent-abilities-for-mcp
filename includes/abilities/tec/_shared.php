@@ -304,6 +304,26 @@ function aafm_tec_perm_create_organizer(): bool {
 }
 
 /**
+ * Check a venue or organizer `website` input, returning the input with the cleaned URL or an error.
+ *
+ * Runs before anything is built or written, so a refused URL cannot blank the stored website.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error The input, with `website` cleaned when present.
+ */
+function aafm_tec_checked_website( array $input ) {
+	if ( ! isset( $input['website'] ) ) {
+		return $input;
+	}
+	$url = aafm_checked_url( (string) $input['website'], 'website' );
+	if ( is_wp_error( $url ) ) {
+		return $url;
+	}
+	$input['website'] = $url;
+	return $input;
+}
+
+/**
  * Enforce the operator's max-title-length and strict-block-validation settings against a TEC
  * ORM args array before it is persisted.
  *

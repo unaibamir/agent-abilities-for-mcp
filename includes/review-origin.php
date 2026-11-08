@@ -163,6 +163,41 @@ add_action(
 );
 
 /**
+ * Ask page cache plugins that do not listen to clean_post_cache to purge one post.
+ *
+ * LiteSpeed Cache and WP Fastest Cache purge on their own actions, not on the cache-clear hook WP
+ * Super Cache and W3 Total Cache hear. Each action is a no-op when its plugin is not installed.
+ *
+ * @param int $post_id Post id.
+ * @return void
+ */
+function aafm_purge_page_caches_for_post( int $post_id ): void {
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- LiteSpeed Cache's own public purge action.
+	do_action( 'litespeed_purge_post', $post_id );
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WP Fastest Cache's own public purge action.
+	do_action( 'wpfc_clear_post_cache_by_id', false, $post_id );
+}
+
+/**
+ * Ask page cache plugins that do not listen to clean_term_cache to purge one term archive.
+ *
+ * WP Fastest Cache purges term archives only on edit_terms, which a meta-only write never fires,
+ * so it gets the archive URL through its public URL purge action.
+ *
+ * @param WP_Term $term Term.
+ * @return void
+ */
+function aafm_purge_page_caches_for_term( WP_Term $term ): void {
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- LiteSpeed Cache's own public purge action.
+	do_action( 'litespeed_purge', 'T.' . $term->term_id );
+	$url = get_term_link( $term );
+	if ( ! is_wp_error( $url ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WP Fastest Cache's own public purge action.
+		do_action( 'wpfc_clear_cache_by_url', $url );
+	}
+}
+
+/**
  * After the outermost ability finishes: clear the cache entry of each published, viewable post or
  * term whose meta changed after its last save, and fire aafm_agent_meta_written for each.
  *
@@ -195,6 +230,7 @@ function aafm_refresh_after_meta_writes(): void {
 					wp_update_post( array( 'ID' => $post_id ) );
 				} else {
 					clean_post_cache( $post_id );
+					aafm_purge_page_caches_for_post( $post_id );
 				}
 			}
 			/**
@@ -213,6 +249,7 @@ function aafm_refresh_after_meta_writes(): void {
 					wp_update_term( $term_id, $term->taxonomy );
 				} else {
 					clean_term_cache( $term_id, $term->taxonomy );
+					aafm_purge_page_caches_for_term( $term );
 				}
 			}
 			/** This action is documented above. */

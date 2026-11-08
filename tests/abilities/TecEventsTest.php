@@ -283,6 +283,10 @@ final class TecEventsTest extends TestCase {
 		$this->assertSame( 'aafm_invalid_event_dates', $res->get_error_code() );
 	}
 
+	public function test_the_get_event_description_mentions_the_description_field(): void {
+		$this->assertStringContainsString( 'description', aafm_get_abilities_registry_full()['aafm/tec-get-event']['description'] );
+	}
+
 	public function test_get_event_returns_the_stored_description(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		$id = $this->create_event( array( 'post_content' => '<p>Bring a coat.</p>' ) );

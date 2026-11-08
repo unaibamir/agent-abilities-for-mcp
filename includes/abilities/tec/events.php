@@ -72,7 +72,7 @@ function aafm_tec_events_registry_definitions(): array {
 		),
 		'aafm/tec-get-event'    => array(
 			'label'        => __( 'Get event', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Read a single event by ID, including its start/end dates, venue, and organizers.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Read a single event by ID, including its start/end dates, venue, organizers, and description (the stored body, blank for a password-protected event).', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'tec',

@@ -50,6 +50,10 @@ final class CheckedUrlTest extends TestCase {
 			'punycode path'   => array( 'example.xn--p1ai/page', 'http://example.xn--p1ai/page' ),
 			'space in path'   => array( 'https://example.com/a b', 'https://example.com/a%20b' ),
 			'port'            => array( 'https://example.com:8443/x', 'https://example.com:8443/x' ),
+			'brackets'        => array( 'https://example.com/?tags[0]=a', 'https://example.com/?tags%5B0%5D=a' ),
+			'bracket path'    => array( '/shop/?filter[]=x', '/shop/?filter%5B%5D=x' ),
+			'later colon'     => array( 'example.com/a?t=10:30', 'http://example.com/a?t=10:30' ),
+			'host with port'  => array( 'example.com:8080/x', 'http://example.com:8080/x' ),
 		);
 	}
 

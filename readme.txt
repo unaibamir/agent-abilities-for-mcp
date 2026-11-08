@@ -55,7 +55,7 @@ The catch is that on a new install only Administrators can approve a connection.
 
 = What people use it for =
 
-The use I'd start with is Force draft on create in Settings. Whatever the AI creates or tries to publish is saved as a draft, and the Needs review card on the Dashboard lists those drafts with Preview, Open in editor, Publish and Discard buttons. Discard moves the post to the Trash. If you'd rather it only look, read-only mode keeps every write tool unloaded while search and read keep working.
+The use I'd start with is Force draft on create in Settings. Whatever the AI creates or tries to publish is saved as a draft (a product variation is saved as disabled instead), and the Needs review card on the Dashboard lists those drafts with Preview, Open in editor, Publish and Discard buttons. Discard moves the post to the Trash. If you'd rather it only look, read-only mode keeps every write tool unloaded while search and read keep working.
 
 Site Brief on the Settings tab takes a few lines, such as your spelling rules or pages to leave alone, and every agent gets them when its session starts. For structured content the AI can update ACF fields, reading a post's fields and writing new values that are each sanitized for the field's type. It can also edit a single block: it lists your block types, reads a block's settings (an ACF block adds its field names), and Replace block swaps one block without resending the page.
 

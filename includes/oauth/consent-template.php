@@ -217,10 +217,10 @@ function aafm_oauth_render_consent_page( array $view ): void {
 	);
 
 	// "Acting as" note. The bold phrase and the username chip are pre-escaped HTML
-	// substituted into an escaped translation string - same safe-by-construction pattern.
+	// substituted into an escaped translation string, the same safe-by-construction pattern.
 	$acting = sprintf(
 		/* translators: 1: bolded phrase "as your WordPress account", 2: the username chip. */
-		esc_html__( 'The agent acts %1$s %2$s - it can do what your account is permitted to do, nothing more.', 'agent-abilities-for-mcp' ),
+		esc_html__( 'The agent acts %1$s %2$s. It can do what your account is permitted to do, nothing more.', 'agent-abilities-for-mcp' ),
 		'<strong>' . esc_html__( 'as your WordPress account', 'agent-abilities-for-mcp' ) . '</strong>',
 		'<span class="who">' . esc_html( $user_login ) . '</span>'
 	);

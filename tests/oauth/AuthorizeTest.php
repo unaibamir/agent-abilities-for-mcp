@@ -774,6 +774,7 @@ class AuthorizeTest extends TestCase {
 		// account. The redesign reframes the old red scare line as this calm note, but
 		// the truthful "acts as your account" message must remain.
 		$this->assertStringContainsString( 'as your WordPress account', $html );
+		$this->assertStringContainsString( 'It can do what your account is permitted to do, nothing more.', $html );
 
 		// The governance guarantees (the plugin's differentiator) are surfaced as trust
 		// signals, so the consent screen argues the safety case rather than only warning.

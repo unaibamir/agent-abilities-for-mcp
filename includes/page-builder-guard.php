@@ -210,3 +210,79 @@ function aafm_page_builder_owned_error( string $builder ): WP_Error {
 		array( 'status' => 409 )
 	);
 }
+
+/**
+ * Whether an aafm/update-post (or update-page / update-cpt-item) input only touches independent
+ * excerpt and enrichment fields that never overwrite or desync a known page builder's layout data.
+ *
+ * All five supported page builders (Elementor, Divi, Beaver Builder, Avada/Fusion Builder, and
+ * Visual Composer) own the rendered body (`post_content` and their own marker/layout post meta),
+ * while `post_excerpt` remains the standard WordPress excerpt field (for example, Beaver Builder's
+ * FLBuilderLayoutPostSettings reads and writes `$post->post_excerpt` directly). A call that sets
+ * `excerpt` (optionally alongside `slug`, `featured_media`, `terms`, or allowlisted `meta`, which
+ * is already gated by aafm_hard_blocked_meta_key()) without `content`, `title`, or `status` is
+ * safe to apply on a post with a known owning builder, provided `post_content` is locked against
+ * core's `sanitize_post()` re-filtering during `wp_update_post()`. Unknown ownership
+ * (`AAFM_BUILDER_OWNERSHIP_UNKNOWN`) is never allowed through.
+ *
+ * @param array<string,mixed> $input          Ability input.
+ * @param string|false        $owning_builder Result of aafm_post_has_foreign_builder_ownership().
+ * @return bool
+ */
+function aafm_update_post_allows_builder_safe_fields( array $input, $owning_builder ): bool {
+	if ( false === $owning_builder ) {
+		return true;
+	}
+	if ( AAFM_BUILDER_OWNERSHIP_UNKNOWN === $owning_builder ) {
+		return false;
+	}
+	if ( ! array_key_exists( 'excerpt', $input ) ) {
+		return false;
+	}
+	$allowed_keys = array(
+		'post_id'        => true,
+		'page_id'        => true,
+		'excerpt'        => true,
+		'slug'           => true,
+		'featured_media' => true,
+		'terms'          => true,
+		'meta'           => true,
+	);
+	foreach ( array_keys( $input ) as $key ) {
+		if ( ! isset( $allowed_keys[ (string) $key ] ) ) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/**
+ * Run a `wp_update_post()` callback while pinning the target post's `post_content` byte-for-byte
+ * in `wp_insert_post_data`.
+ *
+ * WordPress core's `wp_update_post()` loads the existing post as an array, merges `$postarr`, and
+ * runs `sanitize_post()` over every field, including the existing `post_content` (firing
+ * `content_save_pre` / `wp_filter_post_kses` for callers without `unfiltered_html`). When an
+ * update intentionally omits `content` (such as an excerpt-only update on a Beaver Builder or
+ * Avada post), restoring the pre-existing `post_content` at the end of `wp_insert_post_data`
+ * guarantees `wp_update_post()` never mutates the body as a side effect.
+ *
+ * @param int      $post_id          Target post ID.
+ * @param string   $raw_post_content Pre-update `$post->post_content` in raw context.
+ * @param callable $callback         Callback invoking `wp_update_post()`.
+ * @return mixed Callback return value.
+ */
+function aafm_with_locked_post_content( int $post_id, string $raw_post_content, callable $callback ) {
+	$lock_filter = static function ( array $data, array $postarr ) use ( $post_id, $raw_post_content ): array {
+		if ( isset( $postarr['ID'] ) && (int) $postarr['ID'] === $post_id ) {
+			$data['post_content'] = wp_slash( $raw_post_content );
+		}
+		return $data;
+	};
+	add_filter( 'wp_insert_post_data', $lock_filter, PHP_INT_MAX, 2 );
+	try {
+		return $callback();
+	} finally {
+		remove_filter( 'wp_insert_post_data', $lock_filter, PHP_INT_MAX );
+	}
+}

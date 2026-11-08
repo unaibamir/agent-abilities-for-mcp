@@ -269,4 +269,52 @@ final class PageBuilderGuardWireTest extends TestCase {
 		$this->assertStringContainsString( 'Avada', $result->getContent()[0]->getText() );
 		$this->assertSame( $original_content, get_post( $listing_id )->post_content, 'The listing must be left byte-identical.' );
 	}
+
+	public function test_a_real_tools_call_allows_an_excerpt_only_write_on_a_beaver_builder_post_and_refuses_content(): void {
+		$this->register_enabled( array( 'aafm/update-post' ) );
+		$post_id = self::factory()->post->create(
+			array(
+				'post_title'   => 'Stewart #1939',
+				'post_content' => '<div class="fl-builder-content">Layout fallback</div>',
+				'post_excerpt' => '',
+				'post_status'  => 'publish',
+			)
+		);
+		update_post_meta( $post_id, '_fl_builder_data', array( 'node1' => array( 'type' => 'row' ) ) );
+		$this->acting_as( 'administrator' );
+
+		$adapter = \WP\MCP\Core\McpAdapter::instance();
+		$server  = $this->build_single_ability_server( $adapter );
+		$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
+
+		$ok = $handler->call_tool(
+			array(
+				'name'      => aafm_mcp_tool_name( 'aafm/update-post' ),
+				'arguments' => array(
+					'post_id' => $post_id,
+					'excerpt' => 'Updated excerpt via MCP wire.',
+				),
+			),
+			'req-page-builder-wire-excerpt-ok'
+		);
+		$this->assertFalse( $ok->getIsError(), 'An excerpt-only write on a Beaver Builder post must succeed over a real tools/call.' );
+		$this->assertSame( 'Updated excerpt via MCP wire.', get_post( $post_id )->post_excerpt );
+		$this->assertSame( '<div class="fl-builder-content">Layout fallback</div>', get_post( $post_id )->post_content );
+
+		$refused = $handler->call_tool(
+			array(
+				'name'      => aafm_mcp_tool_name( 'aafm/update-post' ),
+				'arguments' => array(
+					'post_id' => $post_id,
+					'excerpt' => 'Should not land',
+					'content' => '<p>Replaced body</p>',
+				),
+			),
+			'req-page-builder-wire-excerpt-refused'
+		);
+		$this->assertTrue( $refused->getIsError(), 'Combining content with excerpt on a Beaver Builder post must be refused.' );
+		$this->assertStringContainsString( 'Beaver Builder', $refused->getContent()[0]->getText() );
+		$this->assertSame( 'Updated excerpt via MCP wire.', get_post( $post_id )->post_excerpt );
+		$this->assertSame( '<div class="fl-builder-content">Layout fallback</div>', get_post( $post_id )->post_content );
+	}
 }

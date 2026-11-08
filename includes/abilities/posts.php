@@ -1285,7 +1285,7 @@ function aafm_exec_update_post( array $input ) {
 	}
 
 	$owning_builder = aafm_post_has_foreign_builder_ownership( $id );
-	if ( false !== $owning_builder ) {
+	if ( false !== $owning_builder && ! aafm_update_post_allows_builder_safe_fields( $input, $owning_builder ) ) {
 		return aafm_page_builder_owned_error( $owning_builder );
 	}
 
@@ -1355,7 +1355,17 @@ function aafm_exec_update_post( array $input ) {
 		$postarr['post_status'] = $status;
 	}
 
-	$result = wp_update_post( wp_slash( $postarr ), true );
+	if ( isset( $postarr['post_content'] ) ) {
+		$result = wp_update_post( wp_slash( $postarr ), true );
+	} else {
+		$result = aafm_with_locked_post_content(
+			$id,
+			(string) $post->post_content,
+			static function () use ( $postarr ) {
+				return wp_update_post( wp_slash( $postarr ), true );
+			}
+		);
+	}
 	if ( is_wp_error( $result ) ) {
 		return aafm_generic_error();
 	}
@@ -1368,6 +1378,9 @@ function aafm_exec_update_post( array $input ) {
 	// guard it so the typed aafm_redact_post() degrades to a generic error, never a fatal.
 	$updated = aafm_exact_object( 'post', (int) $result );
 	if ( ! $updated instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	if ( ! isset( $postarr['post_content'] ) && (string) $updated->post_content !== (string) $post->post_content ) {
 		return aafm_generic_error();
 	}
 

@@ -289,4 +289,108 @@ final class PageBuilderGuardTest extends TestCase {
 
 		$this->assertFalse( aafm_post_has_foreign_builder_ownership( $id ) );
 	}
+
+	public function test_update_post_allows_an_excerpt_only_write_on_a_beaver_builder_post_and_keeps_post_content_and_builder_data_intact(): void {
+		$original_content = '<div class="fl-builder-content" data-special="1">Rendered fallback<script>keep()</script></div>';
+		$builder_data     = array(
+			'node1' => (object) array(
+				'node'     => 'node1',
+				'type'     => 'module',
+				'settings' => (object) array( 'text' => 'Stewart platform layout' ),
+			),
+		);
+		$id               = self::factory()->post->create(
+			array(
+				'post_title'   => 'Stewart #1939',
+				'post_content' => $original_content,
+				'post_excerpt' => '',
+				'post_status'  => 'publish',
+			)
+		);
+		update_post_meta( $id, '_fl_builder_data', $builder_data );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		// Force unfiltered_html off via map_meta_cap so core's wp_filter_post_kses would strip <script> if post_content were re-sanitized.
+		$revoke_unfiltered = static function ( array $caps, string $cap ): array {
+			if ( 'unfiltered_html' === $cap ) {
+				return array( 'do_not_allow' );
+			}
+			return $caps;
+		};
+		add_filter( 'map_meta_cap', $revoke_unfiltered, 10, 2 );
+
+		try {
+			$result = aafm_exec_update_post(
+				array(
+					'post_id' => $id,
+					'excerpt' => 'Learn how six-degree-of-freedom Stewart platforms work.',
+				)
+			);
+		} finally {
+			remove_filter( 'map_meta_cap', $revoke_unfiltered, 10 );
+		}
+
+		$this->assertIsArray( $result );
+		$updated = get_post( $id );
+		$this->assertSame(
+			'Learn how six-degree-of-freedom Stewart platforms work.',
+			$updated->post_excerpt
+		);
+		$this->assertSame(
+			$original_content,
+			$updated->post_content,
+			'Excerpt-only update on a Beaver Builder post must leave post_content byte-for-byte untouched even without unfiltered_html.'
+		);
+		$this->assertEquals(
+			$builder_data,
+			get_post_meta( $id, '_fl_builder_data', true ),
+			'Beaver Builder stored layout data must remain untouched.'
+		);
+	}
+
+	public function test_update_post_refuses_when_content_accompanies_excerpt_on_a_beaver_builder_post(): void {
+		$id = self::factory()->post->create(
+			array(
+				'post_content' => '<p>Original Beaver Builder fallback</p>',
+				'post_excerpt' => 'Original excerpt',
+			)
+		);
+		update_post_meta( $id, '_fl_builder_data', array( 'node1' => array( 'type' => 'row' ) ) );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$result = aafm_exec_update_post(
+			array(
+				'post_id' => $id,
+				'excerpt' => 'New excerpt',
+				'content' => '<p>Replaced body</p>',
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'aafm_page_builder_owned', $result->get_error_code() );
+		$this->assertSame( 'Original excerpt', get_post( $id )->post_excerpt );
+		$this->assertSame( '<p>Original Beaver Builder fallback</p>', get_post( $id )->post_content );
+	}
+
+	public function test_update_post_refuses_an_excerpt_only_write_when_builder_ownership_is_unknown(): void {
+		$id = self::factory()->post->create(
+			array(
+				'post_excerpt' => 'Original excerpt',
+			)
+		);
+		update_post_meta( $id, '_fl_builder_data', array( 'node1' => array( 'type' => 'row' ) ) );
+		update_post_meta( $id, '_elementor_data', '[{"id":"el1"}]' );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$result = aafm_exec_update_post(
+			array(
+				'post_id' => $id,
+				'excerpt' => 'Should be refused when ownership is unknown',
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'aafm_page_builder_owned', $result->get_error_code() );
+		$this->assertSame( self::UNKNOWN_OWNER_MESSAGE, $result->get_error_message() );
+		$this->assertSame( 'Original excerpt', get_post( $id )->post_excerpt );
+	}
 }

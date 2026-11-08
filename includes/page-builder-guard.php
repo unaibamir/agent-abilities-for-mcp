@@ -256,7 +256,11 @@ function aafm_update_post_allows_builder_safe_fields( array $input, $owning_buil
  */
 function aafm_with_locked_post_content( int $post_id, string $raw_post_content, callable $callback ) {
 	$lock_filter = static function ( array $data, array $postarr ) use ( $post_id, $raw_post_content ): array {
-		if ( isset( $postarr['ID'] ) && (int) $postarr['ID'] === $post_id ) {
+		$is_target_post     = isset( $postarr['ID'] ) && (int) $postarr['ID'] === $post_id;
+		$is_target_revision = isset( $data['post_type'], $data['post_parent'] )
+			&& 'revision' === (string) $data['post_type']
+			&& (int) $data['post_parent'] === $post_id;
+		if ( $is_target_post || $is_target_revision ) {
 			$data['post_content'] = wp_slash( $raw_post_content );
 		}
 		return $data;

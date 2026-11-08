@@ -69,33 +69,38 @@ function aafm_rankmath_rendered_head( string $head, int $post_id, string $source
 		return $head;
 	}
 
-	$render = static function () use ( $plugin ): void {
+	$paper = '\\RankMath\\Paper\\Paper';
+	$reset = static function () use ( $paper ): void {
+		if ( class_exists( $paper ) && is_callable( array( $paper, 'reset' ) ) ) {
+			try {
+				call_user_func( array( $paper, 'reset' ) );
+			} catch ( \Throwable $e ) {
+				unset( $e ); // Best effort: a Rank Math build whose reset throws still renders.
+			}
+		}
+	};
+
+	$render = static function () use ( $plugin, $reset ): void {
 		// Paper is a singleton that picks the title, description and robots from whichever query is
 		// current the first time it is asked. Over REST that is a non-singular query, which left the
-		// custom title and meta description out of the head, so reset it and let it rebuild here,
-		// against the post, and put it back afterwards for whatever renders next.
-		$paper = '\\RankMath\\Paper\\Paper';
-		$reset = class_exists( $paper ) && is_callable( array( $paper, 'reset' ) );
-		if ( $reset ) {
-			call_user_func( array( $paper, 'reset' ) );
+		// custom title and meta description out of the head. reset() rebuilds it on the spot, so doing it
+		// here, inside the post's query, binds it to the post for this render.
+		$reset();
+		if ( ! isset( $plugin->head ) && isset( $plugin->frontend ) && is_object( $plugin->frontend ) && method_exists( $plugin->frontend, 'integrations' ) ) {
+			$plugin->frontend->integrations();
 		}
-		try {
-			if ( ! isset( $plugin->head ) && isset( $plugin->frontend ) && is_object( $plugin->frontend ) && method_exists( $plugin->frontend, 'integrations' ) ) {
-				$plugin->frontend->integrations();
-			}
-			if ( isset( $plugin->head ) && is_object( $plugin->head ) && method_exists( $plugin->head, 'head' ) ) {
-				$plugin->head->head();
-			}
-		} finally {
-			if ( $reset ) {
-				call_user_func( array( $paper, 'reset' ) );
-			}
+		if ( isset( $plugin->head ) && is_object( $plugin->head ) && method_exists( $plugin->head, 'head' ) ) {
+			$plugin->head->head();
 		}
 	};
 
 	// Rank Math present but no head renderer (unregistered, a differently-shaped build, or a throw)
 	// renders nothing, so the best-effort head passed in comes back.
 	$rendered = trim( aafm_with_seo_render_scope( $post_id, $render ) );
+
+	// reset() rebuilds the singleton too, so it has to run AFTER the scope has put the caller's query
+	// back: run inside the scope it would leave Paper bound to this post for whatever renders next.
+	$reset();
 	return '' !== $rendered ? $rendered : $head;
 }
 

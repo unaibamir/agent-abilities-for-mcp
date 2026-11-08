@@ -81,6 +81,7 @@ final class RichPostTest extends TestCase {
 		$shape   = aafm_rich_post( get_post( $post_id ) );
 
 		$this->assertSame( 'A hand-written excerpt.', $shape['excerpt'] );
+		$this->assertFalse( $shape['excerpt_is_auto'], 'A hand-written excerpt is not auto-generated.' );
 	}
 
 	public function test_rich_post_auto_excerpt_when_none(): void {
@@ -97,6 +98,7 @@ final class RichPostTest extends TestCase {
 		$this->assertNotSame( '', $shape['excerpt'] );
 		// Trimmed to 55 words + the trailing hellip from wp_trim_words.
 		$this->assertLessThan( strlen( $body ), strlen( $shape['excerpt'] ) );
+		$this->assertTrue( $shape['excerpt_is_auto'], 'An excerpt WordPress built from the body is flagged, so an agent can tell the post has none of its own.' );
 	}
 
 	/**

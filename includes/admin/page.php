@@ -211,7 +211,7 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'resumeAll'                => __( 'Resume all access', 'agent-abilities-for-mcp' ),
 				'pauseAllConfirm'          => __( 'Pause all MCP access through this site? Every connected agent is refused until you resume.', 'agent-abilities-for-mcp' ),
 				'dcrOffConfirm'            => __( 'Turn off dynamic client registration? ChatGPT and Claude can no longer register themselves, so new connections from them will fail until you turn it back on.', 'agent-abilities-for-mcp' ),
-				'settingsNotSaved'         => __( 'Could not save - your previous settings are still in effect.', 'agent-abilities-for-mcp' ),
+				'settingsNotSaved'         => __( 'Could not save. Your previous settings are still in effect.', 'agent-abilities-for-mcp' ),
 				'allowlistEmptied'         => __( 'Saved, but every line was dropped as invalid. The allowlist is now empty, so connections from anywhere are allowed.', 'agent-abilities-for-mcp' ),
 				/* translators: %d: number of allowlist lines that were dropped as invalid. */
 				'allowlistDropped'         => __( 'Saved. Dropped %d line(s) that were not a valid IP or range - check the allowlist.', 'agent-abilities-for-mcp' ),

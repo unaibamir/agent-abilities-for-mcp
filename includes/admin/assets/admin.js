@@ -1209,9 +1209,16 @@
 					this.#markClean( form, sent );
 				}
 				if ( status ) {
-					status.textContent = json?.success
-						? this.#t( 'saved', 'Saved' )
-						: this.#t( 'errorSaving', 'Error saving' );
+					// Say what failed when the server gives a reason; -1 and 0 are an expired page.
+					let text = this.#t( 'errorSaving', 'Error saving' );
+					if ( json?.success ) {
+						text = this.#t( 'saved', 'Saved' );
+					} else if ( -1 === json || 0 === json ) {
+						text = this.#t( 'saveExpired', 'Could not save because this page has expired. Copy any unsaved changes, reload the page, and save again.' );
+					} else if ( 'string' === typeof json?.data?.message ) {
+						text = json.data.message;
+					}
+					status.textContent = text;
 				}
 			} );
 		}
@@ -1974,7 +1981,7 @@
 							json?.data?.message ??
 							this.#t(
 								'settingsNotSaved',
-								'Could not save - your previous settings are still in effect.'
+								'Could not save. Your previous settings are still in effect.'
 							);
 					} else {
 						const serverState = form.querySelector( '#aafm-default-server-state' );

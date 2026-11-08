@@ -1244,6 +1244,21 @@ final class BridgeWrapperTest extends TestCase {
 		$this->assertInstanceOf( \WP_Error::class, $wrapper->execute( array( 'ref' => 'ab' ) ), 'The foreign validator still refuses what no branch accepts.' );
 	}
 
+	public function test_a_combined_enum_keeps_values_that_loosely_compare_equal(): void {
+		$merged = aafm_merge_branch_property(
+			array(
+				'type' => array( 'integer', 'string' ),
+				'enum' => array( 0, 1 ),
+			),
+			array(
+				'type' => array( 'integer', 'string' ),
+				'enum' => array( 'auto', '1', 1 ),
+			)
+		);
+
+		$this->assertSame( array( 0, 1, 'auto', '1' ), $merged['enum'], 'Uniqueness is strict: 0 and "auto" both stay, and so do 1 and "1".' );
+	}
+
 	/**
 	 * Flattening only changes what is advertised. The foreign ability's own validation still runs on
 	 * execute, against its original oneOf schema.

@@ -266,7 +266,14 @@ function aafm_merge_branch_property( array $first, array $second ): array {
 		return $def;
 	};
 	if ( isset( $first['enum'], $second['enum'] ) && is_array( $first['enum'] ) && is_array( $second['enum'] ) && $strip( $first ) === $strip( $second ) ) {
-		$first['enum'] = array_values( array_unique( array_merge( $first['enum'], $second['enum'] ), SORT_REGULAR ) );
+		// Strict uniqueness: SORT_REGULAR compares loosely before PHP 8, which would drop 'auto' next to 0.
+		$combined = array();
+		foreach ( array_merge( $first['enum'], $second['enum'] ) as $value ) {
+			if ( ! in_array( $value, $combined, true ) ) {
+				$combined[] = $value;
+			}
+		}
+		$first['enum'] = $combined;
 		return $first;
 	}
 

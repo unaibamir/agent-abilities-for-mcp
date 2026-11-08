@@ -50,8 +50,9 @@ add_filter( 'aafm_seo_rendered_head', 'aafm_rankmath_rendered_head', 10, 3 );
  * parse_request() and exits before 'wp' runs), which is how every ability call reaches this code. So
  * ->head would otherwise never exist here even on a fully-registered site. When rank_math()->frontend
  * exists (set by Rank Math's own plugins_loaded handler once registration is valid or skipped) but
- * ->head does not yet, this triggers frontend->integrations() once - the exact real-vendor call a
- * normal front-end pageview would have made - before checking for ->head again.
+ * ->head does not yet, this triggers frontend->integrations() - the exact real-vendor call a
+ * normal front-end pageview would have made - inside the throwaway singular query, after resetting
+ * Rank Math's Paper singleton, so the custom title and meta description are built for the post.
  *
  * @param string $head    Head markup accumulated so far (passthrough default).
  * @param int    $post_id Post id.
@@ -68,26 +69,33 @@ function aafm_rankmath_rendered_head( string $head, int $post_id, string $source
 		return $head;
 	}
 
-	if ( ! isset( $plugin->head ) && isset( $plugin->frontend ) && is_object( $plugin->frontend ) && method_exists( $plugin->frontend, 'integrations' ) ) {
-		try {
-			$plugin->frontend->integrations();
-		} catch ( \Throwable $e ) {
-			return $head; // The real API shape changed or threw: stay best-effort, never fatal.
+	$render = static function () use ( $plugin ): void {
+		// Paper is a singleton that picks the title, description and robots from whichever query is
+		// current the first time it is asked. Over REST that is a non-singular query, which left the
+		// custom title and meta description out of the head, so reset it and let it rebuild here,
+		// against the post, and put it back afterwards for whatever renders next.
+		$paper = '\\RankMath\\Paper\\Paper';
+		$reset = class_exists( $paper ) && is_callable( array( $paper, 'reset' ) );
+		if ( $reset ) {
+			call_user_func( array( $paper, 'reset' ) );
 		}
-	}
-
-	if ( ! isset( $plugin->head ) || ! is_object( $plugin->head ) || ! method_exists( $plugin->head, 'head' ) ) {
-		return $head; // Rank Math present but no head renderer (e.g. unregistered, or a differently-shaped build): best-effort.
-	}
-
-	$rendered = trim(
-		aafm_with_seo_render_scope(
-			$post_id,
-			static function () use ( $plugin ): void {
+		try {
+			if ( ! isset( $plugin->head ) && isset( $plugin->frontend ) && is_object( $plugin->frontend ) && method_exists( $plugin->frontend, 'integrations' ) ) {
+				$plugin->frontend->integrations();
+			}
+			if ( isset( $plugin->head ) && is_object( $plugin->head ) && method_exists( $plugin->head, 'head' ) ) {
 				$plugin->head->head();
 			}
-		)
-	);
+		} finally {
+			if ( $reset ) {
+				call_user_func( array( $paper, 'reset' ) );
+			}
+		}
+	};
+
+	// Rank Math present but no head renderer (unregistered, a differently-shaped build, or a throw)
+	// renders nothing, so the best-effort head passed in comes back.
+	$rendered = trim( aafm_with_seo_render_scope( $post_id, $render ) );
 	return '' !== $rendered ? $rendered : $head;
 }
 

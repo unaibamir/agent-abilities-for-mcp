@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-08T04:30:15+05:00\n"
+"POT-Creation-Date: 2026-11-08T14:04:59+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -1303,7 +1303,7 @@ msgstr ""
 #. translators: %s: page builder names, for example Elementor and Divi.
 #: includes/abilities/posts.php:85
 #, php-format
-msgid "Update an existing post by ID (publishing is a separate gate). Reaches a page or product only while that type's own tool is on. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup."
+msgid "Update an existing post by ID (publishing is a separate gate). Reaches a page, product, event, venue, organizer or listing only while that type's own tool is on. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup."
 msgstr ""
 
 #: includes/abilities/posts.php:94
@@ -1313,7 +1313,7 @@ msgstr ""
 #. translators: %s: page builder names, for example Elementor and Divi.
 #: includes/abilities/posts.php:97
 #, php-format
-msgid "Literal find-and-replace inside a post's content. Sanitizes the replacement text and edits only the replaced spans of the body; untouched content is left byte-for-byte as it was, and status is never touched. Reaches a page or product only while that type's own tool is on. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup."
+msgid "Literal find-and-replace inside a post's content. Sanitizes the replacement text and edits only the replaced spans of the body; untouched content is left byte-for-byte as it was, and status is never touched. Reaches a page, product, event, venue, organizer or listing only while that type's own tool is on. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup."
 msgstr ""
 
 #: includes/abilities/posts.php:106
@@ -1323,7 +1323,7 @@ msgstr ""
 #. translators: %s: page builder names, for example Elementor and Divi.
 #: includes/abilities/posts.php:109
 #, php-format
-msgid "Replace one whole block in a post or page with new block markup, without resending the rest of the content. The block is addressed by path: its index among the top-level blocks, then among that block's inner blocks, counting only real blocks (the blank lines between blocks are not counted), so [2, 0] is the first block inside the third top-level block. Reaches a page or product only while that type's own tool is on. Read the post with content_format raw to count them; classic HTML between blocks is not counted. Pass expect_block (for example core/group) to refuse the write if the block at that path is a different one. The plugin leaves other blocks' parsed attributes and HTML unchanged; WordPress may sanitize the whole page on save for users who cannot post unfiltered HTML. Content warnings and strict-mode refusals cover the whole resulting page, not only the new block. Refuses when the post's existing block markup does not survive being re-serialized (for example a block with invalid attribute JSON); use aafm-update-post for those. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup."
+msgid "Replace one whole block in a post or page with new block markup, without resending the rest of the content. The block is addressed by path: its index among the top-level blocks, then among that block's inner blocks, counting only real blocks (the blank lines between blocks are not counted), so [2, 0] is the first block inside the third top-level block. Reaches a page, product, event, venue, organizer or listing only while that type's own tool is on. Read the post with content_format raw to count them; classic HTML between blocks is not counted. Pass expect_block (for example core/group) to refuse the write if the block at that path is a different one. The plugin leaves other blocks' parsed attributes and HTML unchanged; WordPress may sanitize the whole page on save for users who cannot post unfiltered HTML. Content warnings and strict-mode refusals cover the whole resulting page, not only the new block. Refuses when the post's existing block markup does not survive being re-serialized (for example a block with invalid attribute JSON); use aafm-update-post for those. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup."
 msgstr ""
 
 #: includes/abilities/posts.php:118
@@ -1331,7 +1331,7 @@ msgid "Replace sitewide"
 msgstr ""
 
 #: includes/abilities/posts.php:119
-msgid "Literal find-and-replace across multiple posts, scoped by post type and status. Skips pages and products while that type's own update tool is off. Dry-run by default (previews the match count and which posts would change, writes nothing); pass dry_run:false to apply. Each candidate post is guarded by the same structure-preserving check as replace-in-post, so a match landing inside markup is skipped and reported, not applied. A candidate owned by a foreign page builder is likewise skipped and counted in skipped_builder_owned, not applied. One call changes at most 50 posts. If the response says truncated:true, run the call again, since changed posts stop matching. If the new text contains the search text, those posts keep matching, so check total_matches rather than repeating blindly."
+msgid "Literal find-and-replace across multiple posts, scoped by post type and status. Skips pages, products, events, venues, organizers and listings while that type's own update tool is off. Dry-run by default (previews the match count and which posts would change, writes nothing); pass dry_run:false to apply. Each candidate post is guarded by the same structure-preserving check as replace-in-post, so a match landing inside markup is skipped and reported, not applied. A candidate owned by a foreign page builder is likewise skipped and counted in skipped_builder_owned, not applied. One call changes at most 50 posts. If the response says truncated:true, run the call again, since changed posts stop matching. Skipped posts keep matching, and so do posts whose new text contains the search text, so stop when a call changes nothing rather than repeating blindly."
 msgstr ""
 
 #: includes/abilities/posts.php:126
@@ -1339,7 +1339,7 @@ msgid "Trash post"
 msgstr ""
 
 #: includes/abilities/posts.php:127
-msgid "Move a post to trash (recoverable, never permanently deleted). Reaches a page or product only while that type's own tool is on."
+msgid "Move a post to trash (recoverable, never permanently deleted). Reaches a page, product or event only while that type's own tool is on."
 msgstr ""
 
 #: includes/abilities/posts.php:134
@@ -1357,7 +1357,7 @@ msgstr ""
 #. translators: %s: page builder names, for example Elementor and Divi.
 #: includes/abilities/posts.php:145
 #, php-format
-msgid "Update an item by ID: an allowlisted custom content type, or a post, page or product while that type's own update tool is on (publishing requires that type's publish capability). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the item is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup."
+msgid "Update an item by ID: an allowlisted custom content type, or a post, page, product, event, venue, organizer or listing while that type's own update tool is on (publishing requires that type's publish capability). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the item is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup."
 msgstr ""
 
 #: includes/abilities/posts.php:154
@@ -1431,7 +1431,7 @@ msgstr ""
 #: includes/abilities/posts.php:857
 #: includes/abilities/tec/events.php:226
 #: includes/abilities/tec/_shared.php:247
-#: includes/helpers.php:2084
+#: includes/helpers.php:2099
 msgid "Unsupported or unauthorized post status."
 msgstr ""
 
@@ -1523,15 +1523,15 @@ msgstr ""
 msgid "Posts that cleared the structure guard but whose wp_update_post() call itself failed. Counted separately from skipped_structure_guard so a real write failure is never indistinguishable from a guard refusal."
 msgstr ""
 
-#: includes/abilities/posts.php:2401
+#: includes/abilities/posts.php:2407
 msgid "ID of the content item to update."
 msgstr ""
 
-#: includes/abilities/posts.php:2489
+#: includes/abilities/posts.php:2495
 msgid "ID of the post to move to trash."
 msgstr ""
 
-#: includes/abilities/posts.php:2559
+#: includes/abilities/posts.php:2565
 msgid "ID of the post to permanently delete. This bypasses the Trash; there is no undo."
 msgstr ""
 
@@ -1967,11 +1967,11 @@ msgstr ""
 msgid "ID of the event to update."
 msgstr ""
 
-#: includes/abilities/tec/events.php:627
+#: includes/abilities/tec/events.php:632
 msgid "The event was updated, but its all-day flag could not be confirmed as cleared."
 msgstr ""
 
-#: includes/abilities/tec/events.php:666
+#: includes/abilities/tec/events.php:671
 msgid "ID of the event to trash."
 msgstr ""
 
@@ -4105,9 +4105,9 @@ msgid "No abilities selected - this scope can reach nothing."
 msgstr ""
 
 #: includes/admin/allowlist.php:180
-#: includes/admin/bridge-directory.php:899
-#: includes/admin/bridge-directory.php:993
-#: includes/admin/bridge-directory.php:1015
+#: includes/admin/bridge-directory.php:904
+#: includes/admin/bridge-directory.php:998
+#: includes/admin/bridge-directory.php:1020
 #: includes/admin/connection-cards.php:564
 #: includes/admin/connection-cards.php:648
 #: includes/admin/connection-cards.php:851
@@ -4244,7 +4244,7 @@ msgstr ""
 #: includes/admin/allowlist.php:372
 #: includes/admin/page.php:343
 #: includes/audit/log-query.php:499
-#: includes/server.php:1650
+#: includes/server.php:1652
 #, php-format
 msgid "%1$s (%2$s)"
 msgstr ""
@@ -4269,180 +4269,192 @@ msgstr ""
 msgid "No abilities from other plugins yet. Activate a plugin that registers WordPress Abilities and they will show up here."
 msgstr ""
 
-#: includes/admin/bridge-directory.php:80
-msgid "These abilities are written by other plugins, so what they read and change is up to them. Unlike this plugin's own abilities, a bridged ability's output is not filtered or redacted here: whatever the third-party ability returns is what the agent sees. It can still only touch what the connected account's WordPress role allows, and every call is recorded in the activity log. Turn on only what you trust the connected agent to run. The same plugin also wrote each tool's read label, its permission check and the description the agent reads, and none of that has been reviewed here. A plugin that doesn't mark its reads as read-only loses them in read-only mode and under Allow only read tools. People on lower roles can see the names of tools they can't run, and the plugin's own check refuses the call."
+#: includes/admin/bridge-directory.php:78
+msgid "The same plugin also wrote each tool's read label, its permission check and the description the agent reads, and none of that has been reviewed here."
 msgstr ""
 
-#: includes/admin/bridge-directory.php:104
+#: includes/admin/bridge-directory.php:79
+msgid "A plugin that doesn't mark its reads as read-only loses them in read-only mode and under Allow only read tools. People on lower roles can see the names of tools they can't run, and the plugin's own check refuses the call."
+msgstr ""
+
+#: includes/admin/bridge-directory.php:83
+msgid "These abilities are written by other plugins, so what they read and change is up to them, and their output is not filtered or redacted here. They can only touch what the connected account's WordPress role allows, and every call is recorded in the activity log. Turn on only what you trust the connected agent to run."
+msgstr ""
+
+#: includes/admin/bridge-directory.php:84
+msgid "See more about tools from other plugins"
+msgstr ""
+
+#: includes/admin/bridge-directory.php:109
 #: includes/admin/integrations.php:401
 #: includes/admin/page.php:2172
 msgid "Save changes"
 msgstr ""
 
-#: includes/admin/bridge-directory.php:126
+#: includes/admin/bridge-directory.php:131
 msgid "Mark all as reviewed"
 msgstr ""
 
 #. translators: %d: how many new tools this plugin added.
-#: includes/admin/bridge-directory.php:146
+#: includes/admin/bridge-directory.php:151
 #, php-format
 msgid "%d new tool"
 msgid_plural "%d new tools"
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/admin/bridge-directory.php:160
+#: includes/admin/bridge-directory.php:165
 #: includes/admin/page.php:333
 #: includes/admin/quickconnect.php:712
 msgid "On"
 msgstr ""
 
-#: includes/admin/bridge-directory.php:162
+#: includes/admin/bridge-directory.php:167
 msgid "Saved, the high-risk lock blocks it"
 msgstr ""
 
-#: includes/admin/bridge-directory.php:164
+#: includes/admin/bridge-directory.php:169
 msgid "Saved, read-only mode blocks it"
 msgstr ""
 
-#: includes/admin/bridge-directory.php:179
-#: includes/admin/bridge-directory.php:599
+#: includes/admin/bridge-directory.php:184
+#: includes/admin/bridge-directory.php:604
 msgid "Allow only read tools"
 msgstr ""
 
-#: includes/admin/bridge-directory.php:180
+#: includes/admin/bridge-directory.php:185
 msgid "Mark as reviewed"
 msgstr ""
 
-#: includes/admin/bridge-directory.php:187
+#: includes/admin/bridge-directory.php:192
 msgid "New tools since your last review"
 msgstr ""
 
-#: includes/admin/bridge-directory.php:189
+#: includes/admin/bridge-directory.php:194
 msgid "An update or a newly activated plugin added these tools. Tools not marked On stay off until you switch them on, which needs a Save. Allow only read tools applies as soon as you confirm."
 msgstr ""
 
 #. translators: 1: skipped ability slug, 2: winning ability slug, 3: shared MCP tool name.
-#: includes/admin/bridge-directory.php:214
+#: includes/admin/bridge-directory.php:219
 #, php-format
 msgid "\"%1$s\" was skipped because it maps to the same tool name as \"%2$s\" (%3$s)."
 msgstr ""
 
-#: includes/admin/bridge-directory.php:221
+#: includes/admin/bridge-directory.php:226
 msgid "Some enabled abilities share a normalized tool name and could not all be bridged:"
 msgstr ""
 
-#: includes/admin/bridge-directory.php:271
-#: includes/admin/bridge-directory.php:275
+#: includes/admin/bridge-directory.php:276
+#: includes/admin/bridge-directory.php:280
 #: includes/admin/integrations.php:34
 msgid "Yoast SEO"
 msgstr ""
 
-#: includes/admin/bridge-directory.php:279
+#: includes/admin/bridge-directory.php:284
 #: includes/admin/integrations.php:39
 msgid "Rank Math"
 msgstr ""
 
-#: includes/admin/bridge-directory.php:283
-#: includes/admin/bridge-directory.php:287
-#: includes/admin/bridge-directory.php:291
-#: includes/admin/bridge-directory.php:295
-#: includes/admin/bridge-directory.php:299
-#: includes/admin/bridge-directory.php:303
+#: includes/admin/bridge-directory.php:288
+#: includes/admin/bridge-directory.php:292
+#: includes/admin/bridge-directory.php:296
+#: includes/admin/bridge-directory.php:300
+#: includes/admin/bridge-directory.php:304
+#: includes/admin/bridge-directory.php:308
 #: includes/admin/integrations.php:44
 msgid "All in One SEO"
 msgstr ""
 
-#: includes/admin/bridge-directory.php:307
-#: includes/admin/bridge-directory.php:311
+#: includes/admin/bridge-directory.php:312
+#: includes/admin/bridge-directory.php:316
 #: includes/admin/integrations.php:49
 msgid "ACF"
 msgstr ""
 
-#: includes/admin/bridge-directory.php:315
-#: includes/admin/bridge-directory.php:319
+#: includes/admin/bridge-directory.php:320
+#: includes/admin/bridge-directory.php:324
 msgid "WP Mail SMTP"
 msgstr ""
 
 #. translators: 1: total abilities, 2: read/write/destructive breakdown, e.g. "27 read, 23 write, 2 destructive".
-#: includes/admin/bridge-directory.php:562
+#: includes/admin/bridge-directory.php:567
 #, php-format
 msgid "%1$d ability · %2$s"
 msgid_plural "%1$d abilities · %2$s"
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/admin/bridge-directory.php:588
+#: includes/admin/bridge-directory.php:593
 msgid "Enable all"
 msgstr ""
 
-#: includes/admin/bridge-directory.php:589
+#: includes/admin/bridge-directory.php:594
 msgid "Disable all"
 msgstr ""
 
-#: includes/admin/bridge-directory.php:593
+#: includes/admin/bridge-directory.php:598
 #: includes/admin/integrations.php:532
 #: includes/admin/page.php:2206
 msgid "Enable all reads"
 msgstr ""
 
-#: includes/admin/bridge-directory.php:603
+#: includes/admin/bridge-directory.php:608
 msgid "This plugin labels none of its tools as read-only, so Allow only read tools turns all of them off."
 msgstr ""
 
-#: includes/admin/bridge-directory.php:648
+#: includes/admin/bridge-directory.php:653
 msgid "Unavailable - the plugin that provides this ability is not active."
 msgstr ""
 
-#: includes/admin/bridge-directory.php:658
+#: includes/admin/bridge-directory.php:663
 msgid "Unavailable (plugin inactive)"
 msgstr ""
 
-#: includes/admin/bridge-directory.php:747
+#: includes/admin/bridge-directory.php:752
 msgid "Permission check:"
 msgstr ""
 
 #. translators: %s: source plugin display name.
-#: includes/admin/bridge-directory.php:760
+#: includes/admin/bridge-directory.php:765
 #, php-format
 msgid "Permission determined by %s"
 msgstr ""
 
-#: includes/admin/bridge-directory.php:811
+#: includes/admin/bridge-directory.php:816
 #: includes/admin/components.php:169
 msgid "Locked"
 msgstr ""
 
-#: includes/admin/bridge-directory.php:835
+#: includes/admin/bridge-directory.php:840
 #: includes/admin/integrations.php:604
 #: includes/admin/page.php:2308
 msgid "high-risk"
 msgstr ""
 
-#: includes/admin/bridge-directory.php:872
+#: includes/admin/bridge-directory.php:877
 msgid "This ability can change or delete data. Enable it only if you trust the connected agent to run it."
 msgstr ""
 
-#: includes/admin/bridge-directory.php:878
+#: includes/admin/bridge-directory.php:883
 msgid "Enable anyway"
 msgstr ""
 
-#: includes/admin/bridge-directory.php:879
+#: includes/admin/bridge-directory.php:884
 msgid "Cancel"
 msgstr ""
 
-#: includes/admin/bridge-directory.php:972
-#: includes/admin/bridge-directory.php:973
+#: includes/admin/bridge-directory.php:977
+#: includes/admin/bridge-directory.php:978
 #: includes/bridge-review.php:249
 msgid "The bridged abilities selection"
 msgstr ""
 
-#: includes/admin/bridge-directory.php:1026
+#: includes/admin/bridge-directory.php:1031
 #: includes/bridge-review.php:245
 msgid "That plugin has no tools registered right now."
 msgstr ""
 
-#: includes/admin/bridge-directory.php:1031
+#: includes/admin/bridge-directory.php:1036
 #: includes/bridge-review.php:170
 msgid "The reviewed tools list"
 msgstr ""
@@ -5717,15 +5729,15 @@ msgid "Creates and publishes a post. Requires the publish capability, and respec
 msgstr ""
 
 #: includes/admin/disclosures.php:112
-msgid "Updates an existing post's fields by id. Publishing is gated separately. Reaches a page or product only while that type's own tool is on."
+msgid "Updates an existing post's fields by id. Publishing is gated separately. Reaches a page, product, event, venue, organizer or listing only while that type's own tool is on."
 msgstr ""
 
 #: includes/admin/disclosures.php:113
-msgid "Finds and replaces literal text in a post's body, sanitizing the inserted text. It edits only the replaced spans, leaves the rest of the content untouched, never changes the status, and the change can be restored from revision history when WordPress revisions are enabled. Reaches a page or product only while that type's own tool is on."
+msgid "Finds and replaces literal text in a post's body, sanitizing the inserted text. It edits only the replaced spans, leaves the rest of the content untouched, never changes the status, and the change can be restored from revision history when WordPress revisions are enabled. Reaches a page, product, event, venue, organizer or listing only while that type's own tool is on."
 msgstr ""
 
 #: includes/admin/disclosures.php:114
-msgid "Replaces one whole block in a post or page, picked by its position, with new block markup. The plugin leaves other blocks' parsed attributes and HTML unchanged; WordPress may sanitize the whole page on save for users who cannot post unfiltered HTML. The replacement is sanitized like any content write, and the change can be restored from revision history when WordPress revisions are enabled. Requires edit access to that post. Reaches a page or product only while that type's own tool is on."
+msgid "Replaces one whole block in a post or page, picked by its position, with new block markup. The plugin leaves other blocks' parsed attributes and HTML unchanged; WordPress may sanitize the whole page on save for users who cannot post unfiltered HTML. The replacement is sanitized like any content write, and the change can be restored from revision history when WordPress revisions are enabled. Requires edit access to that post. Reaches a page, product, event, venue, organizer or listing only while that type's own tool is on."
 msgstr ""
 
 #: includes/admin/disclosures.php:115
@@ -5745,7 +5757,7 @@ msgid "Creates an item of a custom content type you have allowlisted. It stays a
 msgstr ""
 
 #: includes/admin/disclosures.php:119
-msgid "Updates an item by id: an allowlisted custom content type, or a post, page or product while that type's own update tool is on. Publishing needs that type's own publish capability."
+msgid "Updates an item by id: an allowlisted custom content type, or a post, page, product, event, venue, organizer or listing while that type's own update tool is on. Publishing needs that type's own publish capability."
 msgstr ""
 
 #: includes/admin/disclosures.php:120
@@ -5877,7 +5889,7 @@ msgid "Creates a refund on a WooCommerce order by order id. Accepts an amount, o
 msgstr ""
 
 #: includes/admin/disclosures.php:159
-msgid "Moves a post the agent can edit to the Trash, where you can restore it. Never a permanent delete. Reaches a page or product only while that type's own tool is on."
+msgid "Moves a post the agent can edit to the Trash, where you can restore it. Never a permanent delete. Reaches a page, product or event only while that type's own tool is on."
 msgstr ""
 
 #: includes/admin/disclosures.php:160
@@ -6604,7 +6616,7 @@ msgstr ""
 #: includes/admin/quickconnect.php:441
 #: includes/catalog.php:105
 #: includes/oauth/consent-template.php:237
-#: includes/server.php:1785
+#: includes/server.php:1787
 msgid "Agent Abilities for MCP"
 msgstr ""
 
@@ -6643,7 +6655,7 @@ msgstr ""
 
 #. translators: %s: the name of the setting, for example "Read-only mode".
 #: includes/admin/onboarding-pointer.php:102
-#: includes/helpers.php:3258
+#: includes/helpers.php:3273
 #, php-format
 msgid "%s could not be changed: the site's persistent object cache is still returning the old value. Flush the object cache (Redis, Memcached, or your host's cache) and save again."
 msgstr ""
@@ -6834,7 +6846,7 @@ msgid "Turn off dynamic client registration? ChatGPT and Claude can no longer re
 msgstr ""
 
 #: includes/admin/page.php:214
-msgid "Could not save - your previous settings are still in effect."
+msgid "Could not save. Your previous settings are still in effect."
 msgstr ""
 
 #: includes/admin/page.php:215
@@ -8957,7 +8969,7 @@ msgid "Save the content an agent creates as a draft, no matter what status the r
 msgstr ""
 
 #: includes/admin/settings.php:1181
-msgid "Turn this on if you want to look over agent-created content before it goes live. Covers posts, pages, custom content items, reusable blocks, and WooCommerce products. Things without a draft state (media, menus, terms, comments, users, coupons, orders) and product variations are not affected."
+msgid "Turn this on if you want to look over agent-created content before it goes live. Covers posts, pages, custom content items, reusable blocks, and WooCommerce products. Product variations save as disabled instead, because a draft variation disappears from WooCommerce's editor. Things without a draft state (media, menus, terms, comments, users, coupons, orders) are not affected."
 msgstr ""
 
 #: includes/admin/settings.php:1191
@@ -9652,7 +9664,7 @@ msgid "Locked while read-only mode is on. Turn off Read-only mode under Settings
 msgstr ""
 
 #: includes/audit/read-only.php:184
-msgid "Locked. Turn on High-risk abilities under Settings to make this available."
+msgid "Locked. Turn on Unlock the category under Safety controls in Settings to make this available."
 msgstr ""
 
 #: includes/audit/read-only.php:203
@@ -9940,38 +9952,38 @@ msgstr ""
 msgid "Only text, number, or boolean user meta values are supported."
 msgstr ""
 
-#: includes/helpers.php:1838
+#: includes/helpers.php:1853
 msgid "Unsupported taxonomy."
 msgstr ""
 
-#: includes/helpers.php:2231
+#: includes/helpers.php:2246
 msgid "WPML language code of this item. Present only when WPML is active."
 msgstr ""
 
-#: includes/helpers.php:2246
+#: includes/helpers.php:2261
 msgid "Present on single-post reads and when include_content=true; omitted for password-protected posts."
 msgstr ""
 
-#: includes/helpers.php:2250
+#: includes/helpers.php:2265
 msgid "Byte length of the raw stored content (strlen of post_content), present even when include_content is false so a caller can preflight size before a full fetch. Reported as 0 for a password-protected post, regardless of its real length."
 msgstr ""
 
-#: includes/helpers.php:2843
+#: includes/helpers.php:2858
 msgid "The request could not be completed."
 msgstr ""
 
-#: includes/helpers.php:3028
+#: includes/helpers.php:3043
 msgid "Trash is disabled on this site, so this content cannot be moved to the Trash. Refusing to permanently delete it."
 msgstr ""
 
 #. translators: 1: name of the value that saved, 2: name of the value that could not be.
-#: includes/helpers.php:3275
+#: includes/helpers.php:3290
 #, php-format
 msgid "%1$s was saved, but %2$s could not be changed: the site's persistent object cache is still returning the old value. The site is now stricter than requested. Flush the object cache (Redis, Memcached, or your host's cache) and save again."
 msgstr ""
 
 #. translators: 1: name of the value that saved, 2: name of the value that could not be.
-#: includes/helpers.php:3296
+#: includes/helpers.php:3311
 #, php-format
 msgid "%1$s was saved, but %2$s could not be changed: the site's persistent object cache is still returning the old value. Some of your changes did not take - re-check your settings rather than assuming this save either fully applied or fully failed. Flush the object cache (Redis, Memcached, or your host's cache) and save again."
 msgstr ""
@@ -10362,12 +10374,12 @@ msgstr ""
 msgid "This site does not accept MCP requests from that web page."
 msgstr ""
 
-#: includes/page-builder-guard.php:309
+#: includes/page-builder-guard.php:310
 msgid "This content may belong to a page builder, and the plugin could not tell which one, so it refused the write. Edit the content in the page builder directly, or try again."
 msgstr ""
 
 #. translators: 1: detected page builder name, e.g. Elementor. 2: same name, repeated for readability. 3: same name, repeated for readability.
-#: includes/page-builder-guard.php:319
+#: includes/page-builder-guard.php:320
 #, php-format
 msgid "This content belongs to %1$s. Writing to it through this ability could have no visible effect or damage %2$s's layout, because the builder controls how this content is stored and shown. Edit it in %3$s directly."
 msgstr ""
@@ -10749,57 +10761,57 @@ msgstr[1] ""
 msgid "The site could not check its rate limit, so the call was refused. Try again shortly."
 msgstr ""
 
-#: includes/server.php:1052
+#: includes/server.php:1054
 msgid "This connection is paused by the site owner. It keeps its sign-in and works again as soon as they resume it."
 msgstr ""
 
-#: includes/server.php:1175
+#: includes/server.php:1177
 msgid "The MCP request body must be a JSON object."
 msgstr ""
 
-#: includes/server.php:1658
+#: includes/server.php:1660
 msgid "Agent Abilities for MCP left one ability out of the agent tool list because it exceeded a safety limit:"
 msgid_plural "Agent Abilities for MCP left some abilities out of the agent tool list because they exceeded a safety limit:"
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/server.php:1679
+#: includes/server.php:1681
 msgid "its schema is nested too deeply"
 msgstr ""
 
-#: includes/server.php:1681
+#: includes/server.php:1683
 msgid "its schema has too many fields"
 msgstr ""
 
-#: includes/server.php:1683
+#: includes/server.php:1685
 msgid "its schema contains a value that is not valid JSON"
 msgstr ""
 
-#: includes/server.php:1685
+#: includes/server.php:1687
 msgid "its schema is too large"
 msgstr ""
 
-#: includes/server.php:1687
+#: includes/server.php:1689
 msgid "its schema could not be serialized"
 msgstr ""
 
-#: includes/server.php:1689
+#: includes/server.php:1691
 msgid "the enabled tool limit was reached"
 msgstr ""
 
-#: includes/server.php:1691
+#: includes/server.php:1693
 msgid "another plugin has already registered a tool under this name"
 msgstr ""
 
-#: includes/server.php:1693
+#: includes/server.php:1695
 msgid "it exceeded a safety limit"
 msgstr ""
 
-#: includes/server.php:1914
+#: includes/server.php:1916
 msgid "Your network address is not allowed to use this endpoint."
 msgstr ""
 
-#: includes/server.php:2161
+#: includes/server.php:2163
 msgid "Session could not be persisted; please retry."
 msgstr ""
 

@@ -248,6 +248,42 @@ function aafm_bridge_input_schema( $ability ): array {
 }
 
 /**
+ * Merge two definitions of the same property from different branches of a flattened union.
+ *
+ * Definitions that differ only in their enum (and default) become one definition with the enum
+ * values combined. Any other difference means the branches disagree about the value, such as a
+ * string in one and an integer in another, so the merged definition keeps only the types the
+ * branches use (and the first description) and leaves the real check to the foreign ability, which still validates the original schema on execute. Keeping the first branch's
+ * constraints instead would reject a call the foreign ability accepts.
+ *
+ * @param array<string,mixed> $first  The definition kept so far.
+ * @param array<string,mixed> $second The definition from a later branch.
+ * @return array<string,mixed>
+ */
+function aafm_merge_branch_property( array $first, array $second ): array {
+	$strip = static function ( array $def ): array {
+		unset( $def['enum'], $def['default'] );
+		return $def;
+	};
+	if ( isset( $first['enum'], $second['enum'] ) && is_array( $first['enum'] ) && is_array( $second['enum'] ) && $strip( $first ) === $strip( $second ) ) {
+		$first['enum'] = array_values( array_unique( array_merge( $first['enum'], $second['enum'] ), SORT_REGULAR ) );
+		return $first;
+	}
+
+	// Core's REST validator needs a type on every property, so the disagreement is expressed as the
+	// union of the types the branches use (a single type when they agree).
+	$types  = array_values( array_unique( array_merge( (array) ( $first['type'] ?? array() ), (array) ( $second['type'] ?? array() ) ) ) );
+	$merged = array();
+	if ( array() !== $types ) {
+		$merged['type'] = 1 === count( $types ) ? $types[0] : $types;
+	}
+	if ( isset( $first['description'] ) ) {
+		$merged['description'] = $first['description'];
+	}
+	return $merged;
+}
+
+/**
  * Flatten a top-level oneOf/anyOf/allOf/not on a bridged input schema into one plain object schema.
  *
  * ChatGPT silently rejects a whole tools/list refresh when any tool's inputSchema carries one of
@@ -255,8 +291,8 @@ function aafm_bridge_input_schema( $ability ): array {
  * stale list with no error. The advertised schema is only a hint: the foreign ability still
  * validates the real input against its own original schema on execute, so nothing is loosened.
  *
- * Branch properties are merged (first definition wins, but enum values are unioned so each branch's
- * value still validates), `required` keeps only keys every branch requires (allOf: all of them),
+ * Branch properties are merged (enum values are unioned; a property the branches define differently keeps
+ * only the type they agree on, so every branch's value still validates), `required` keeps only keys every branch requires (allOf: all of them),
  * and the alternatives are spelled out in the description. `not` is dropped.
  *
  * @param array<string,mixed> $schema A normalized JSON schema.
@@ -295,8 +331,8 @@ function aafm_flatten_schema_combinators( array $schema ): array {
 		foreach ( $branch_props as $name => $prop ) {
 			if ( ! isset( $properties[ $name ] ) ) {
 				$properties[ $name ] = $prop;
-			} elseif ( isset( $properties[ $name ]['enum'], $prop['enum'] ) && is_array( $properties[ $name ]['enum'] ) && is_array( $prop['enum'] ) ) {
-				$properties[ $name ]['enum'] = array_values( array_unique( array_merge( $properties[ $name ]['enum'], $prop['enum'] ), SORT_REGULAR ) );
+			} elseif ( $properties[ $name ] !== $prop ) {
+				$properties[ $name ] = aafm_merge_branch_property( (array) $properties[ $name ], (array) $prop );
 			}
 		}
 	}

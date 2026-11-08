@@ -1198,6 +1198,53 @@ final class BridgeWrapperTest extends TestCase {
 	}
 
 	/**
+	 * Branches that define the same property differently (a string in one, an integer in the other)
+	 * must not leave the wrapper rejecting a call the foreign ability accepts.
+	 */
+	public function test_flattening_does_not_reject_a_value_one_branch_accepts(): void {
+		$this->acting_as( 'administrator' );
+		$schema = array(
+			'type'  => 'object',
+			'oneOf' => array(
+				array(
+					'type'       => 'object',
+					'required'   => array( 'ref' ),
+					'properties' => array(
+						'ref' => array(
+							'type'        => 'string',
+							'minLength'   => 3,
+							'description' => 'A reference.',
+						),
+					),
+				),
+				array(
+					'type'       => 'object',
+					'required'   => array( 'ref' ),
+					'properties' => array(
+						'ref' => array(
+							'type'    => 'integer',
+							'minimum' => 1,
+						),
+					),
+				),
+			),
+		);
+		$this->register_foreign_with_schema( 'demo/mixed', array( 'type' => 'object' ), static fn() => array( 'ok' => true ), $schema );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'demo/mixed' ) );
+		$this->register_wrappers();
+		$wrapper = wp_get_ability( 'aafm-bridge/demo-mixed' );
+
+		$ref = $wrapper->get_input_schema()['properties']['ref'];
+		$this->assertEqualsCanonicalizing( array( 'string', 'integer' ), $ref['type'], 'Branches disagree on the type, so the wrapper allows both.' );
+		$this->assertArrayNotHasKey( 'minLength', $ref );
+		$this->assertArrayNotHasKey( 'minimum', $ref );
+
+		$this->assertSame( array( 'ok' => true ), $wrapper->execute( array( 'ref' => 7 ) ), 'The integer branch passes the wrapper and the foreign validator.' );
+		$this->assertSame( array( 'ok' => true ), $wrapper->execute( array( 'ref' => 'abc' ) ), 'The string branch passes too.' );
+		$this->assertInstanceOf( \WP_Error::class, $wrapper->execute( array( 'ref' => 'ab' ) ), 'The foreign validator still refuses what no branch accepts.' );
+	}
+
+	/**
 	 * Flattening only changes what is advertised. The foreign ability's own validation still runs on
 	 * execute, against its original oneOf schema.
 	 */

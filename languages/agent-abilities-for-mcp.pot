@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-08T19:17:52+05:00\n"
+"POT-Creation-Date: 2026-11-08T19:51:25+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -624,31 +624,41 @@ msgstr ""
 msgid "Update an existing listing's title, content, or address/coordinates. Fields omitted from the call are left untouched. Default-off integration. Refuses when the listing is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup."
 msgstr ""
 
+#: includes/abilities/geodirectory.php:765
+#: includes/abilities/geodirectory.php:943
+msgid "Latitude in degrees, from -90 to 90. A value outside that range is refused."
+msgstr ""
+
+#: includes/abilities/geodirectory.php:771
+#: includes/abilities/geodirectory.php:949
+msgid "Longitude in degrees, from -180 to 180. A value outside that range is refused."
+msgstr ""
+
 #. translators: %s: fragment describing what could not be confirmed, e.g. "its address or location fields did not save".
-#: includes/abilities/geodirectory.php:809
+#: includes/abilities/geodirectory.php:819
 #, php-format
 msgid "The listing could not be created: %s. Nothing was created."
 msgstr ""
 
 #. translators: %s: fragment describing what could not be confirmed, e.g. "its address or location fields did not save".
-#: includes/abilities/geodirectory.php:814
+#: includes/abilities/geodirectory.php:824
 #, php-format
 msgid "The listing could not be created: %s, and the incomplete listing could not be removed automatically. Delete it manually."
 msgstr ""
 
-#: includes/abilities/geodirectory.php:891
+#: includes/abilities/geodirectory.php:901
 msgid "its title or content could not be confirmed as saved"
 msgstr ""
 
-#: includes/abilities/geodirectory.php:898
+#: includes/abilities/geodirectory.php:908
 msgid "its address or location fields did not save"
 msgstr ""
 
-#: includes/abilities/geodirectory.php:1024
+#: includes/abilities/geodirectory.php:1044
 msgid "The listing was updated, but its title or content could not be confirmed as saved."
 msgstr ""
 
-#: includes/abilities/geodirectory.php:1032
+#: includes/abilities/geodirectory.php:1052
 msgid "The listing was updated, but its address or location fields did not save."
 msgstr ""
 
@@ -1967,19 +1977,27 @@ msgstr ""
 msgid "Post status, e.g. draft or publish. Defaults to draft."
 msgstr ""
 
-#: includes/abilities/tec/events.php:547
+#: includes/abilities/tec/events.php:517
+msgid "The event start or end date could not be read, so nothing was changed. Use a format like 2027-01-01 09:00:00."
+msgstr ""
+
+#: includes/abilities/tec/events.php:518
+msgid "The event end cannot be before its start, so nothing was changed."
+msgstr ""
+
+#: includes/abilities/tec/events.php:589
 msgid "ID of the event to update."
 msgstr ""
 
-#: includes/abilities/tec/events.php:549
+#: includes/abilities/tec/events.php:591
 msgid "Post status, e.g. draft or publish. Leave it out to keep the event's current status."
 msgstr ""
 
-#: includes/abilities/tec/events.php:643
+#: includes/abilities/tec/events.php:690
 msgid "The event was updated, but its all-day flag could not be confirmed as cleared."
 msgstr ""
 
-#: includes/abilities/tec/events.php:682
+#: includes/abilities/tec/events.php:729
 msgid "ID of the event to trash."
 msgstr ""
 
@@ -2718,67 +2736,77 @@ msgstr ""
 msgid "Email addresses allowed to use this coupon. Leave empty for no restriction."
 msgstr ""
 
+#: includes/abilities/woocommerce/coupons.php:297
+msgid "A coupon needs a code, so nothing was saved."
+msgstr ""
+
 #. translators: %s: the conflicting coupon code.
-#: includes/abilities/woocommerce/coupons.php:300
+#: includes/abilities/woocommerce/coupons.php:307
 #, php-format
 msgid "The coupon code \"%s\" is already in use by another coupon."
 msgstr ""
 
 #. translators: %s: the rejected amount value.
-#: includes/abilities/woocommerce/coupons.php:344
+#: includes/abilities/woocommerce/coupons.php:351
 #, php-format
 msgid "The discount amount \"%s\" is not numeric. Send a decimal string like \"10\" or \"12.50\"."
 msgstr ""
 
 #. translators: %s: the rejected amount value.
-#: includes/abilities/woocommerce/coupons.php:364
+#: includes/abilities/woocommerce/coupons.php:371
 #, php-format
 msgid "The discount amount \"%s\" is not valid. It must not be negative, and a percentage coupon cannot exceed 100."
 msgstr ""
 
 #. translators: %s: the rejected expiry value.
-#: includes/abilities/woocommerce/coupons.php:386
+#: includes/abilities/woocommerce/coupons.php:393
 #, php-format
 msgid "The expiry date \"%s\" could not be parsed. Send a YYYY-MM-DD date, or null/empty for no expiry."
 msgstr ""
 
 #. translators: 1: the rejected maximum amount, 2: the coupon's current minimum amount.
-#: includes/abilities/woocommerce/coupons.php:423
+#: includes/abilities/woocommerce/coupons.php:430
 #, php-format
 msgid "The maximum spend \"%1$s\" is not valid: it cannot be less than the coupon's minimum amount of \"%2$s\"."
 msgstr ""
 
+#. translators: 1: the input field name, 2: the product id that does not exist.
+#: includes/abilities/woocommerce/coupons.php:456
+#, php-format
+msgid "%1$s names product %2$d, which does not exist, so nothing was saved."
+msgstr ""
+
 #. translators: %s: the resulting discount amount.
-#: includes/abilities/woocommerce/coupons.php:477
+#: includes/abilities/woocommerce/coupons.php:505
 #, php-format
 msgid "A percentage coupon cannot discount more than 100 percent, and this change would leave it at \"%s\". Lower the amount to 100 or below, or use the fixed_cart or fixed_product discount type."
 msgstr ""
 
 #. translators: 1: the resulting minimum amount, 2: the resulting maximum amount.
-#: includes/abilities/woocommerce/coupons.php:495
+#: includes/abilities/woocommerce/coupons.php:523
 #, php-format
 msgid "A coupon's minimum spend cannot exceed its maximum spend, and this change would leave it at %1$s minimum against %2$s maximum."
 msgstr ""
 
 #. translators: %s: the conflicting coupon code.
-#: includes/abilities/woocommerce/coupons.php:529
+#: includes/abilities/woocommerce/coupons.php:557
 #, php-format
 msgid "The coupon code \"%s\" was just claimed by another request. Try a different code."
 msgstr ""
 
-#: includes/abilities/woocommerce/coupons.php:554
+#: includes/abilities/woocommerce/coupons.php:582
 msgid "Number of coupons per page, 1 to 100. Defaults to 10."
 msgstr ""
 
-#: includes/abilities/woocommerce/coupons.php:555
+#: includes/abilities/woocommerce/coupons.php:583
 msgid "Page number of coupons to return, 1-indexed. Defaults to 1."
 msgstr ""
 
-#: includes/abilities/woocommerce/coupons.php:658
+#: includes/abilities/woocommerce/coupons.php:686
 msgid "The WooCommerce coupon's post id."
 msgstr ""
 
-#: includes/abilities/woocommerce/coupons.php:782
+#: includes/abilities/woocommerce/coupons.php:810
 msgid "The coupon to update. An empty request body besides this id is a no-op success."
 msgstr ""
 
@@ -3040,154 +3068,162 @@ msgstr ""
 msgid "Quantity of the product to add. Minimum 1."
 msgstr ""
 
+#: includes/abilities/woocommerce/orders.php:615
+msgid "No user exists with that customer_id, so the order was not saved. Use a real customer id, or 0 for a guest order."
+msgstr ""
+
 #. translators: %s: comma-separated list of order item ids that could not be removed.
-#: includes/abilities/woocommerce/orders.php:823
+#: includes/abilities/woocommerce/orders.php:833
 #, php-format
 msgid "Adding the line items failed partway, and the items already written could not all be removed. Order item ids still persisted: %s. Read the order to see its current line items."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:831
+#: includes/abilities/woocommerce/orders.php:841
 msgid "Adding the line items failed. No line items from this request were kept and the order is unchanged."
 msgstr ""
 
 #. translators: %s: comma-separated list of order item ids that could not be removed.
-#: includes/abilities/woocommerce/orders.php:1323
+#: includes/abilities/woocommerce/orders.php:1333
 #, php-format
 msgid "Recalculating the order failed, and the items already written could not all be removed. Order item ids still persisted: %s. The order's totals and taxes may also have been changed. Read the order before acting on it."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:1332
+#: includes/abilities/woocommerce/orders.php:1342
 msgid "Recalculating the order failed after WooCommerce had already saved new tax figures, and those figures could not be confirmed as restored. The line items from this request were removed, but the order's totals and taxes may no longer match its line items. Read the order before acting on it."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:1338
+#: includes/abilities/woocommerce/orders.php:1348
 msgid "Recalculating the order failed. The line items from this request were removed and the order's totals and taxes were put back to the values they had before the request."
 msgstr ""
 
 #. translators: %d: the id of the order that was created and could not be removed.
-#: includes/abilities/woocommerce/orders.php:1442
+#: includes/abilities/woocommerce/orders.php:1452
 #, php-format
 msgid "Creating the order failed while its totals were being calculated, and the part-built order could not be removed. Order %d exists and its totals may be wrong. Read or delete it before trying again; do not simply retry, or you will end up with two."
 msgstr ""
 
 #. translators: %s: comma-separated list of order item ids that could not be removed.
-#: includes/abilities/woocommerce/orders.php:1453
+#: includes/abilities/woocommerce/orders.php:1463
 #, php-format
 msgid "Creating the order failed while its totals were being calculated. No order was kept, but these order item ids could not be removed: %s. They belong to no order."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:1461
+#: includes/abilities/woocommerce/orders.php:1471
 msgid "Creating the order failed while its totals were being calculated. No order was created and nothing from this request was kept, so it is safe to try again."
 msgstr ""
 
 #. translators: %s: comma-separated list of product IDs that could not be found.
-#: includes/abilities/woocommerce/orders.php:1480
+#: includes/abilities/woocommerce/orders.php:1490
 #, php-format
 msgid "One or more line item products could not be found: %s"
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:1508
+#: includes/abilities/woocommerce/orders.php:1518
 msgid "The order's own line item id - the value wc-create-order-refund's line_items[].line_item_id expects. Not a product id."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:1648
+#: includes/abilities/woocommerce/orders.php:1658
 msgid "The order's post ID to update. Must reference an existing order or the request fails."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:1657
+#: includes/abilities/woocommerce/orders.php:1667
 msgid "Products to add as NEW line items on the existing order, each given as a product_id and quantity pair. Items are always ADDED; this ability has no way to modify, replace, or remove an existing line item. If any product_id cannot be resolved to a real product, the whole request fails with no partial write. Sending the deprecated line_items field at the same time combines both lists -- every item in either is added."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:1664
+#: includes/abilities/woocommerce/orders.php:1674
 msgid "Deprecated alias for add_line_items: items sent here are ADDED as new line items on the existing order, exactly like add_line_items, never replacing or editing what is already there. Kept for backward compatibility with existing callers; prefer add_line_items in new integrations. If both line_items and add_line_items are sent, every item in both lists is added."
 msgstr ""
 
 #. translators: %s: the order's current status, e.g. "completed".
-#: includes/abilities/woocommerce/orders.php:1748
+#: includes/abilities/woocommerce/orders.php:1758
 #, php-format
 msgid "Line items cannot be added to this order because WooCommerce no longer treats an order with status \"%s\" as editable. Adding goods to it would either record them with no tax, understating what the customer is charged, or rewrite the tax already recorded against the existing items. Add the goods to a new order instead, or move this one back to an editable status first."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:1856
+#: includes/abilities/woocommerce/orders.php:1866
 msgid "The order's post ID whose status to change."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:1860
+#: includes/abilities/woocommerce/orders.php:1870
 msgid "New order status. Accepts either the short slug (e.g. \"completed\") or the wc- prefixed form (e.g. \"wc-completed\"); must match a status registered with wc_get_order_statuses(). No transition is blocked based on the order's current status."
 msgstr ""
 
 #. translators: %s: the requested order status.
-#: includes/abilities/woocommerce/orders.php:1923
+#: includes/abilities/woocommerce/orders.php:1933
 #, php-format
 msgid "The order status could not be changed to \"%s\". The order keeps its previous status."
 msgstr ""
 
 #. translators: 1: the requested order status, 2: the status the order actually holds.
-#: includes/abilities/woocommerce/orders.php:1947
+#: includes/abilities/woocommerce/orders.php:1957
 #, php-format
 msgid "The order status did not persist as \"%1$s\"; it currently reads \"%2$s\"."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2080
+#: includes/abilities/woocommerce/orders.php:2090
 msgid "The order's post ID whose notes to list."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2150
+#: includes/abilities/woocommerce/orders.php:2160
 msgid "The order's post ID to attach the note to."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2155
+#: includes/abilities/woocommerce/orders.php:2165
 msgid "The note text to add to the order."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2159
+#: includes/abilities/woocommerce/orders.php:2169
 msgid "When true, the note is customer-facing and appears in the customer's My Account order view and order emails. When false (the default), it is a private, admin-only note."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2296
+#: includes/abilities/woocommerce/orders.php:2306
 msgid "The order's post ID whose refunds to list."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2368
+#: includes/abilities/woocommerce/orders.php:2378
 msgid "The refund's own post ID (not the order id). Get it from wc-list-order-refunds or the id returned by wc-create-order-refund."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2426
+#: includes/abilities/woocommerce/orders.php:2436
 msgid "The order's post ID to refund."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2431
+#: includes/abilities/woocommerce/orders.php:2441
 msgid "Total refund amount as a decimal string, e.g. \"12.50\" (no currency symbol or thousands separator). Required even when line_items is also sent."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2435
+#: includes/abilities/woocommerce/orders.php:2445
 msgid "Optional free-text reason recorded on the refund and returned verbatim under the Integrations security disclaimer."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2439
+#: includes/abilities/woocommerce/orders.php:2449
 msgid "Optional per-line-item refund breakdown, each with line_item_id (the order's own line item id), refund_total, and refund_tax as decimal strings. When omitted, the refund is recorded against the order as a whole with no per-line allocation. A non-numeric or negative refund_total or refund_tax on any line, or a line_item_id that does not exist on the order, fails the entire request."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2445
+#: includes/abilities/woocommerce/orders.php:2455
 msgid "The order's own line item id, from the id field of the line_items returned by wc-get-order. This is not a product id. An id that does not exist on the order fails the entire request."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2449
+#: includes/abilities/woocommerce/orders.php:2459
 msgid "Amount to refund against this line, as a decimal string, e.g. \"12.50\" (no currency symbol or thousands separator). Unlike the top-level amount this is not constrained by the schema, so it is checked when the refund runs: a non-numeric or negative value fails the whole request before any refund is created."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2453
+#: includes/abilities/woocommerce/orders.php:2463
 msgid "Tax portion to refund against this line, as a decimal string. Same validation as refund_total: non-numeric or negative fails the whole request before any refund is created."
 msgstr ""
 
+#: includes/abilities/woocommerce/orders.php:2516
+msgid "The refund amount must be greater than zero, so no refund was created."
+msgstr ""
+
 #. translators: %d: the line item id that does not exist on the order.
-#: includes/abilities/woocommerce/orders.php:2526
+#: includes/abilities/woocommerce/orders.php:2546
 #, php-format
 msgid "Line item %d does not exist on this order. Use an id from the line_items returned by reading the order."
 msgstr ""
 
 #. translators: 1: the line item id, 2: its actual item type, e.g. "coupon" or "tax".
-#: includes/abilities/woocommerce/orders.php:2545
+#: includes/abilities/woocommerce/orders.php:2565
 #, php-format
 msgid "Line item %1$d is a %2$s, which WooCommerce cannot refund a per-line amount against. Refund a coupon or tax adjustment through the top-level amount instead."
 msgstr ""
@@ -3307,49 +3343,53 @@ msgstr ""
 msgid "The SKU \"%s\" is already in use by another product."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:736
+#: includes/abilities/woocommerce/products.php:737
+msgid "The sale price cannot be higher than the regular price, so nothing was saved. Lower the sale price or raise the regular price."
+msgstr ""
+
+#: includes/abilities/woocommerce/products.php:751
 msgid "stock_status cannot be set while manage_stock is true: WooCommerce derives it from stock_quantity. Set stock_quantity instead, or set manage_stock to false."
 msgstr ""
 
 #. translators: %s: comma-separated list of global attribute slugs whose displayed options differ from the stored ones.
-#: includes/abilities/woocommerce/products.php:932
+#: includes/abilities/woocommerce/products.php:947
 #, php-format
 msgid "Something on this site is filtering what these global attributes show, so the options you were given for them are not the ones stored: %s. Sending those options back could mean \"leave this alone\" or it could mean \"remove the terms I was not shown\", and nothing in the request says which, so it is refused instead of guessed at. To change other fields, leave the attributes field out. Changing a global attribute's own options is not available through this plugin; that has to be done in the WooCommerce admin."
 msgstr ""
 
 #. translators: %s: comma-separated list of global attribute slugs the request tried to change.
-#: includes/abilities/woocommerce/products.php:946
+#: includes/abilities/woocommerce/products.php:961
 #, php-format
 msgid "These are global attributes, shared with every other product that uses them, so their options cannot be changed through this product: %s. This field only describes a product's own custom attributes, and it has no way to express a global attribute's terms. Changing a global attribute's options is not available through this plugin's abilities; add or remove the option in the WooCommerce admin under Products > Attributes, then use wc-create-product-variation or wc-update-product-variation here to build variations with it. Send its current options back unchanged to leave it alone."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:1094
+#: includes/abilities/woocommerce/products.php:1109
 msgid "The product's title. Required; the product is not created without one."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:1100
+#: includes/abilities/woocommerce/products.php:1115
 msgid "The product's type. This ability only creates simple products; requesting grouped, external, or variable fails."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:1195
+#: includes/abilities/woocommerce/products.php:1210
 msgid "The WooCommerce product id to update."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:1200
+#: includes/abilities/woocommerce/products.php:1215
 msgid "The product's title. Omit to leave the existing title unchanged."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:1209
+#: includes/abilities/woocommerce/products.php:1224
 msgid "The product's current type. A value matching the product's existing type is accepted as a no-op; a different value is rejected with an error, since converting a product between simple, grouped, external, and variable is not supported. Omit this field to leave the type unchanged."
 msgstr ""
 
 #. translators: 1: the product's actual current type. 2: the type the caller requested.
-#: includes/abilities/woocommerce/products.php:1310
+#: includes/abilities/woocommerce/products.php:1325
 #, php-format
 msgid "This product is a %1$s product and cannot be changed to %2$s -- converting a product between types is not supported. Omit type, or send its current value, to leave it unchanged."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:1333
+#: includes/abilities/woocommerce/products.php:1348
 msgid "The WooCommerce product id to permanently delete."
 msgstr ""
 
@@ -3477,54 +3517,58 @@ msgstr ""
 msgid "Sort position among shipping zones, lowest first. Zones are matched against a customer's address in this order, so an earlier zone whose locations also match a later zone's address wins. New zones default to 0 when omitted; on update, an omitted value leaves the zone's existing order unchanged."
 msgstr ""
 
-#: includes/abilities/woocommerce/shipping.php:389
+#: includes/abilities/woocommerce/shipping.php:280
+msgid "A shipping zone needs a name, so nothing was saved."
+msgstr ""
+
+#: includes/abilities/woocommerce/shipping.php:398
 msgid "The shipping zone's id. Use 0 for the \"Rest of the World\" zone, which always exists."
 msgstr ""
 
-#: includes/abilities/woocommerce/shipping.php:510
+#: includes/abilities/woocommerce/shipping.php:522
 msgid "The shipping zone's id to update. Must reference an existing editable zone (1 or higher); zone 0 is the Rest of the World zone and cannot be edited."
 msgstr ""
 
-#: includes/abilities/woocommerce/shipping.php:555
+#: includes/abilities/woocommerce/shipping.php:567
 msgid "The Rest of the World zone (zone 0) cannot be renamed or reordered. Pass the id of a zone you created (1 or higher)."
 msgstr ""
 
-#: includes/abilities/woocommerce/shipping.php:709
+#: includes/abilities/woocommerce/shipping.php:724
 msgid "The shipping zone's id whose methods to list. Use 0 for the \"Rest of the World\" zone."
 msgstr ""
 
-#: includes/abilities/woocommerce/shipping.php:788
-#: includes/abilities/woocommerce/shipping.php:931
+#: includes/abilities/woocommerce/shipping.php:803
+#: includes/abilities/woocommerce/shipping.php:946
 msgid "The shipping zone's id the method instance belongs to. Use 0 for the \"Rest of the World\" zone."
 msgstr ""
 
-#: includes/abilities/woocommerce/shipping.php:824
-#: includes/abilities/woocommerce/shipping.php:903
-#: includes/abilities/woocommerce/shipping.php:981
+#: includes/abilities/woocommerce/shipping.php:839
+#: includes/abilities/woocommerce/shipping.php:918
+#: includes/abilities/woocommerce/shipping.php:996
 msgid "Shipping method not found in this zone."
 msgstr ""
 
-#: includes/abilities/woocommerce/shipping.php:851
+#: includes/abilities/woocommerce/shipping.php:866
 msgid "The shipping zone's id to add the method to. Use 0 for the \"Rest of the World\" zone."
 msgstr ""
 
-#: includes/abilities/woocommerce/shipping.php:940
+#: includes/abilities/woocommerce/shipping.php:955
 msgid "Display name shown for this method instance at checkout, overriding the shipping method type's generic label (e.g. \"Flat rate\"). Falls back to the method type's own title when never set."
 msgstr ""
 
-#: includes/abilities/woocommerce/shipping.php:1012
+#: includes/abilities/woocommerce/shipping.php:1027
 msgid "The enabled state could not be saved. Nothing on the shipping method was changed."
 msgstr ""
 
-#: includes/abilities/woocommerce/shipping.php:1087
+#: includes/abilities/woocommerce/shipping.php:1102
 msgid "The method title could not be saved, but the enabled state was already updated. Read the shipping method to see its current state."
 msgstr ""
 
-#: includes/abilities/woocommerce/shipping.php:1088
+#: includes/abilities/woocommerce/shipping.php:1103
 msgid "The method title could not be saved. Nothing on the shipping method was changed."
 msgstr ""
 
-#: includes/abilities/woocommerce/shipping.php:1100
+#: includes/abilities/woocommerce/shipping.php:1115
 msgid "The requested changes were saved, but the shipping method could not be re-read to confirm them. Call wc-get-shipping-method to verify its current state."
 msgstr ""
 

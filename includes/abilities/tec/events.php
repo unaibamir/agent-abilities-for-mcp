@@ -112,10 +112,11 @@ function aafm_tec_events_registry_definitions(): array {
 /**
  * The wire shape for one event.
  *
- * @param int $id Event (post) id.
+ * @param int  $id               Event (post) id.
+ * @param bool $with_description Whether to include the event body. Lists leave it out to stay lean.
  * @return array<string,mixed>
  */
-function aafm_tec_event_shape( int $id ): array {
+function aafm_tec_event_shape( int $id, bool $with_description = true ): array {
 	$post = aafm_exact_object( 'post', $id );
 	if ( ! $post instanceof WP_Post ) {
 		// The values The Events Calendar's readers return for a missing event, without calling them.
@@ -129,9 +130,9 @@ function aafm_tec_event_shape( int $id ): array {
 			'all_day'       => false,
 			'venue_id'      => 0,
 			'organizer_ids' => array(),
-		);
+		) + ( $with_description ? array( 'description' => '' ) : array() );
 	}
-	return array(
+	$shape = array(
 		'id'            => $id,
 		'title'         => get_the_title( $post ),
 		'status'        => (string) $post->post_status,
@@ -142,6 +143,12 @@ function aafm_tec_event_shape( int $id ): array {
 		'venue_id'      => (int) tribe_get_venue_id( $id ),
 		'organizer_ids' => array_map( 'intval', (array) tribe_get_organizer_ids( $id ) ),
 	);
+	if ( $with_description ) {
+		// The stored body, as get-post returns it (it was filtered when it was written). A
+		// password-protected event never exposes its body.
+		$shape['description'] = '' !== (string) $post->post_password ? '' : (string) $post->post_content;
+	}
+	return $shape;
 }
 
 /**
@@ -244,7 +251,10 @@ function aafm_exec_tec_get_events( array $input ) {
 	}
 	$ids = $repo->get_ids();
 	return array(
-		'events' => array_map( 'aafm_tec_event_shape', array_map( 'intval', $ids ) ),
+		'events' => array_map(
+			static fn( $event_id ): array => aafm_tec_event_shape( (int) $event_id, false ),
+			$ids
+		),
 		'total'  => (int) $repo->found(),
 	);
 }

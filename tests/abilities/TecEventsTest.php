@@ -218,6 +218,39 @@ final class TecEventsTest extends TestCase {
 		$this->assertSame( 'aafm_invalid_block_content', $out->get_error_code() );
 	}
 
+	public function test_get_event_returns_the_stored_description(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$id = $this->create_event( array( 'post_content' => '<p>Bring a coat.</p>' ) );
+
+		$out = aafm_exec_tec_get_event( array( 'event_id' => $id ) );
+
+		$this->assertSame( '<p>Bring a coat.</p>', $out['event']['description'] );
+	}
+
+	public function test_get_event_withholds_the_description_of_a_password_protected_event(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$id = $this->create_event(
+			array(
+				'post_content'  => 'Secret body.',
+				'post_password' => 'pw',
+			)
+		);
+
+		$out = aafm_exec_tec_get_event( array( 'event_id' => $id ) );
+
+		$this->assertSame( '', $out['event']['description'] );
+	}
+
+	public function test_the_event_list_stays_lean_without_descriptions(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$this->create_event( array( 'post_title' => 'Listed event' ) );
+
+		$out = aafm_exec_tec_get_events( array() );
+
+		$this->assertNotEmpty( $out['events'] );
+		$this->assertArrayNotHasKey( 'description', $out['events'][0] );
+	}
+
 	public function test_update_event_status_text_describes_update_not_create(): void {
 		$status = aafm_args_tec_update_event()['input_schema']['properties']['status']['description'];
 

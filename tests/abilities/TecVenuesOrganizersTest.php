@@ -95,6 +95,49 @@ final class TecVenuesOrganizersTest extends TestCase {
 		$this->assertStringContainsString( 'current status', $status['description'] );
 	}
 
+	public function test_venue_and_organizer_refuse_an_invalid_website_and_keep_the_stored_one(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$venue_id     = self::factory()->post->create( array( 'post_type' => \Tribe__Events__Venue::POSTTYPE ) );
+		$organizer_id = self::factory()->post->create( array( 'post_type' => \Tribe__Events__Organizer::POSTTYPE ) );
+		update_post_meta( $venue_id, '_VenueURL', 'https://example.com/venue' );
+		update_post_meta( $organizer_id, '_OrganizerWebsite', 'https://example.com/org' );
+
+		foreach ( array( 'javascript:alert(1)', 'not a url at all' ) as $bad ) {
+			$results = array(
+				aafm_exec_tec_create_venue(
+					array(
+						'title'   => 'V',
+						'website' => $bad,
+					)
+				),
+				aafm_exec_tec_update_venue(
+					array(
+						'venue_id' => $venue_id,
+						'website'  => $bad,
+					)
+				),
+				aafm_exec_tec_create_organizer(
+					array(
+						'title'   => 'O',
+						'website' => $bad,
+					)
+				),
+				aafm_exec_tec_update_organizer(
+					array(
+						'organizer_id' => $organizer_id,
+						'website'      => $bad,
+					)
+				),
+			);
+			foreach ( $results as $i => $res ) {
+				$this->assertInstanceOf( \WP_Error::class, $res, "case $i: $bad" );
+				$this->assertSame( 'aafm_invalid_url', $res->get_error_code() );
+			}
+		}
+		$this->assertSame( 'https://example.com/venue', get_post_meta( $venue_id, '_VenueURL', true ) );
+		$this->assertSame( 'https://example.com/org', get_post_meta( $organizer_id, '_OrganizerWebsite', true ) );
+	}
+
 	public function test_update_venue_changes_only_the_fields_given(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		$venue_id = self::factory()->post->create(

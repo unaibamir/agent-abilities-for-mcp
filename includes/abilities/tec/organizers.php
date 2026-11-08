@@ -324,7 +324,11 @@ function aafm_exec_tec_create_organizer( array $input ) {
 	if ( is_wp_error( $status ) ) {
 		return $status;
 	}
-	$args                = aafm_tec_organizer_orm_args( $input );
+	$checked = aafm_tec_checked_website( $input );
+	if ( is_wp_error( $checked ) ) {
+		return $checked;
+	}
+	$args                = aafm_tec_organizer_orm_args( $checked );
 	$args['post_status'] = $status;
 
 	$safety = aafm_tec_enforce_content_safety( $args, 'organizer' );
@@ -417,7 +421,11 @@ function aafm_exec_tec_update_organizer( array $input ) {
 	if ( $id < 1 ) {
 		return aafm_generic_error();
 	}
-	$args = aafm_tec_organizer_orm_args( $input );
+	$checked = aafm_tec_checked_website( $input );
+	if ( is_wp_error( $checked ) ) {
+		return $checked;
+	}
+	$args = aafm_tec_organizer_orm_args( $checked );
 	if ( isset( $input['status'] ) ) {
 		$status = aafm_authorize_post_status( (string) $input['status'], aafm_tec_organizer_publish_cap(), null, aafm_current_post_status( $id ) );
 		if ( is_wp_error( $status ) ) {

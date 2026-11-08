@@ -315,10 +315,16 @@ function aafm_args_list_menu_items(): array {
  * still removes it by id, and wp-admin still shows it. The contiguous 1..N `order` is numbered over
  * the returned set, so skipped items leave no gap.
  *
+ * A menu id that is not a menu returns the same generic error as get-menu, instead of an empty
+ * list that reads as "this menu has no items".
+ *
  * @param array<string,mixed> $input Validated input.
- * @return array<string,mixed>
+ * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_list_menu_items( array $input ): array {
+function aafm_exec_list_menu_items( array $input ) {
+	if ( ! aafm_exact_object( 'term', (int) $input['menu_id'], 'nav_menu' ) instanceof WP_Term ) {
+		return aafm_generic_error();
+	}
 	$object_ids = get_objects_in_term( (int) $input['menu_id'], 'nav_menu' );
 	if ( is_wp_error( $object_ids ) || ! is_array( $object_ids ) ) {
 		$object_ids = array();

@@ -452,6 +452,18 @@ final class MenusTest extends TestCase {
 		$this->assertSame( $good_parent, (int) $child['parent'] );
 	}
 
+	public function test_list_menu_items_on_a_missing_menu_errors_like_get_menu(): void {
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+
+		$list = wp_get_ability( 'aafm/list-menu-items' )->execute( array( 'menu_id' => 999999 ) );
+		$get  = wp_get_ability( 'aafm/get-menu' )->execute( array( 'menu_id' => 999999 ) );
+
+		$this->assertInstanceOf( WP_Error::class, $list );
+		$this->assertInstanceOf( WP_Error::class, $get );
+		$this->assertSame( $get->get_error_code(), $list->get_error_code() );
+	}
+
 	public function test_create_menu_item_returns_the_created_item(): void {
 		// The re-read after the write must resolve the just-created item by id. On a WPML site
 		// wp_get_nav_menu_items() is language-filtered and would hide the fresh item, so the helper

@@ -15,8 +15,8 @@ set -euo pipefail
 WP_CORE_DIR="${WP_CORE_DIR:-/tmp/wordpress}"
 PLUGINS_DIR="${WP_CORE_DIR%/}/wp-content/plugins"
 FORCE="${FORCE:-0}"
-# The contract matrix runs two WooCommerce legs: the declared 9.1.0 floor and the clone's 11.1.2.
-WOOCOMMERCE_VERSION="${WOOCOMMERCE_VERSION:-11.1.2}"
+# The contract matrix runs two WooCommerce legs: the declared 9.1.0 floor and 11.2.2.
+WOOCOMMERCE_VERSION="${WOOCOMMERCE_VERSION:-11.2.2}"
 
 # Guard: never install into the avia bench. The bench lives under the repo root at wp/; the test
 # core must be an out-of-tree throwaway. Abort if the target resolves inside the repo.

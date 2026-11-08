@@ -82,7 +82,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'label'        => __( 'Update post', 'agent-abilities-for-mcp' ),
 		'description'  => sprintf(
 			/* translators: %s: page builder names, for example Elementor and Divi. */
-			__( 'Update an existing post by ID (publishing is a separate gate). Reaches a page or product only while that type\'s own tool is on. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
+			__( 'Update an existing post by ID (publishing is a separate gate). Reaches a page, product, event, venue, organizer or listing only while that type\'s own tool is on. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
 			aafm_page_builder_names()
 		),
 		'group'        => 'writes',
@@ -94,7 +94,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'label'        => __( 'Replace in post', 'agent-abilities-for-mcp' ),
 		'description'  => sprintf(
 			/* translators: %s: page builder names, for example Elementor and Divi. */
-			__( 'Literal find-and-replace inside a post\'s content. Sanitizes the replacement text and edits only the replaced spans of the body; untouched content is left byte-for-byte as it was, and status is never touched. Reaches a page or product only while that type\'s own tool is on. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
+			__( 'Literal find-and-replace inside a post\'s content. Sanitizes the replacement text and edits only the replaced spans of the body; untouched content is left byte-for-byte as it was, and status is never touched. Reaches a page, product, event, venue, organizer or listing only while that type\'s own tool is on. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
 			aafm_page_builder_names()
 		),
 		'group'        => 'writes',
@@ -106,7 +106,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'label'        => __( 'Replace block', 'agent-abilities-for-mcp' ),
 		'description'  => sprintf(
 			/* translators: %s: page builder names, for example Elementor and Divi. */
-			__( 'Replace one whole block in a post or page with new block markup, without resending the rest of the content. The block is addressed by path: its index among the top-level blocks, then among that block\'s inner blocks, counting only real blocks (the blank lines between blocks are not counted), so [2, 0] is the first block inside the third top-level block. Reaches a page or product only while that type\'s own tool is on. Read the post with content_format raw to count them; classic HTML between blocks is not counted. Pass expect_block (for example core/group) to refuse the write if the block at that path is a different one. The plugin leaves other blocks\' parsed attributes and HTML unchanged; WordPress may sanitize the whole page on save for users who cannot post unfiltered HTML. Content warnings and strict-mode refusals cover the whole resulting page, not only the new block. Refuses when the post\'s existing block markup does not survive being re-serialized (for example a block with invalid attribute JSON); use aafm-update-post for those. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
+			__( 'Replace one whole block in a post or page with new block markup, without resending the rest of the content. The block is addressed by path: its index among the top-level blocks, then among that block\'s inner blocks, counting only real blocks (the blank lines between blocks are not counted), so [2, 0] is the first block inside the third top-level block. Reaches a page, product, event, venue, organizer or listing only while that type\'s own tool is on. Read the post with content_format raw to count them; classic HTML between blocks is not counted. Pass expect_block (for example core/group) to refuse the write if the block at that path is a different one. The plugin leaves other blocks\' parsed attributes and HTML unchanged; WordPress may sanitize the whole page on save for users who cannot post unfiltered HTML. Content warnings and strict-mode refusals cover the whole resulting page, not only the new block. Refuses when the post\'s existing block markup does not survive being re-serialized (for example a block with invalid attribute JSON); use aafm-update-post for those. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
 			aafm_page_builder_names()
 		),
 		'group'        => 'writes',
@@ -116,7 +116,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/replace-sitewide'] = array(
 		'label'        => __( 'Replace sitewide', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Literal find-and-replace across multiple posts, scoped by post type and status. Skips pages and products while that type\'s own update tool is off. Dry-run by default (previews the match count and which posts would change, writes nothing); pass dry_run:false to apply. Each candidate post is guarded by the same structure-preserving check as replace-in-post, so a match landing inside markup is skipped and reported, not applied. A candidate owned by a foreign page builder is likewise skipped and counted in skipped_builder_owned, not applied. One call changes at most 50 posts. If the response says truncated:true, run the call again, since changed posts stop matching. If the new text contains the search text, those posts keep matching, so check total_matches rather than repeating blindly.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Literal find-and-replace across multiple posts, scoped by post type and status. Skips pages, products, events, venues, organizers and listings while that type\'s own update tool is off. Dry-run by default (previews the match count and which posts would change, writes nothing); pass dry_run:false to apply. Each candidate post is guarded by the same structure-preserving check as replace-in-post, so a match landing inside markup is skipped and reported, not applied. A candidate owned by a foreign page builder is likewise skipped and counted in skipped_builder_owned, not applied. One call changes at most 50 posts. If the response says truncated:true, run the call again, since changed posts stop matching. If the new text contains the search text, those posts keep matching, so check total_matches rather than repeating blindly.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -124,7 +124,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/trash-post']       = array(
 		'label'        => __( 'Trash post', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Move a post to trash (recoverable, never permanently deleted). Reaches a page or product only while that type\'s own tool is on.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Move a post to trash (recoverable, never permanently deleted). Reaches a page, product or event only while that type\'s own tool is on.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'content',
@@ -142,7 +142,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'label'        => __( 'Update content item', 'agent-abilities-for-mcp' ),
 		'description'  => sprintf(
 			/* translators: %s: page builder names, for example Elementor and Divi. */
-			__( 'Update an item by ID: an allowlisted custom content type, or a post, page or product while that type\'s own update tool is on (publishing requires that type\'s publish capability). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the item is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
+			__( 'Update an item by ID: an allowlisted custom content type, or a post, page, product, event, venue, organizer or listing while that type\'s own update tool is on (publishing requires that type\'s publish capability). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the item is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
 			aafm_page_builder_names()
 		),
 		'group'        => 'writes',
@@ -2306,7 +2306,7 @@ function aafm_exec_replace_sitewide( array $input ) {
 			continue;
 		}
 		if ( ! $can_edit || ! aafm_post_tool_reach_allowed( $post, 'update' ) ) {
-			// A page or product whose own update tool is off is skipped like one this user can't edit.
+			// A type whose own update tool is off is skipped like a post this user can't edit.
 			++$no_perm;
 			continue;
 		}

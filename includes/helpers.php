@@ -1639,7 +1639,7 @@ function aafm_can_edit_post_object( WP_Post $post ): bool {
 /**
  * The tool a content type has of its own for one verb, or '' when it has none.
  *
- * Pages and products have dedicated tools. A generic post tool must not reach them while that tool
+ * Pages, products, events, venues, organizers and GeoDirectory listings have dedicated tools. A generic post tool must not reach them while that tool
  * is off, or switching it off would not mean what the owner expects. A tool missing from the live
  * registry counts as none, so a theme's own `product` type on a site without WooCommerce is not held
  * by a tool that cannot exist there.
@@ -1649,22 +1649,31 @@ function aafm_can_edit_post_object( WP_Post $post ): bool {
  * @return string Ability name, or ''.
  */
 function aafm_type_own_tool( string $post_type, string $verb ): string {
-	$map  = array(
-		'page'    => array(
+	$map = array(
+		'page'            => array(
 			'update' => 'aafm/update-page',
 			'trash'  => 'aafm/trash-page',
 			'delete' => 'aafm/delete-page',
 		),
-		'post'    => array(
+		'post'            => array(
 			'update' => 'aafm/update-post',
 			'trash'  => 'aafm/trash-post',
 			'delete' => 'aafm/delete-post',
 		),
-		'product' => array(
+		'product'         => array(
 			'update' => 'aafm/wc-update-product',
 			'trash'  => 'aafm/wc-delete-product',
 			'delete' => 'aafm/wc-delete-product',
 		),
+		// The Events Calendar's delete tool trashes, so it holds trash only; GeoDirectory and the
+		// venue and organizer types have an update tool and nothing else.
+		'tribe_events'    => array(
+			'update' => 'aafm/tec-update-event',
+			'trash'  => 'aafm/tec-delete-event',
+		),
+		'tribe_venue'     => array( 'update' => 'aafm/tec-update-venue' ),
+		'tribe_organizer' => array( 'update' => 'aafm/tec-update-organizer' ),
+		'gd_place'        => array( 'update' => 'aafm/geodirectory-update-listing' ),
 	);
 	$tool = $map[ $post_type ][ $verb ] ?? '';
 	return '' !== $tool && isset( aafm_get_abilities_registry()[ $tool ] ) ? $tool : '';

@@ -171,6 +171,34 @@ final class TypeToolReachTest extends TestCase {
 		unregister_post_type( 'aafm_reach_book' );
 	}
 
+	public function test_event_venue_organizer_and_listing_types_are_held_by_their_own_tools(): void {
+		$this->force_integration( 'tec' );
+		$this->force_integration( 'geodirectory' );
+		aafm_flush_registry_cache();
+
+		$this->assertSame( 'aafm/tec-update-event', aafm_type_own_tool( 'tribe_events', 'update' ) );
+		$this->assertSame( 'aafm/tec-delete-event', aafm_type_own_tool( 'tribe_events', 'trash' ) );
+		$this->assertSame( '', aafm_type_own_tool( 'tribe_events', 'delete' ), 'no permanent-delete tool of its own' );
+		$this->assertSame( 'aafm/tec-update-venue', aafm_type_own_tool( 'tribe_venue', 'update' ) );
+		$this->assertSame( '', aafm_type_own_tool( 'tribe_venue', 'trash' ) );
+		$this->assertSame( 'aafm/tec-update-organizer', aafm_type_own_tool( 'tribe_organizer', 'update' ) );
+		$this->assertSame( 'aafm/geodirectory-update-listing', aafm_type_own_tool( 'gd_place', 'update' ) );
+		$this->assertSame( '', aafm_type_own_tool( 'gd_place', 'trash' ) );
+	}
+
+	public function test_event_and_listing_types_are_unheld_when_their_plugin_is_off(): void {
+		add_filter( 'aafm_integration_active_tec', '__return_false' );
+		add_filter( 'aafm_integration_active_geodirectory', '__return_false' );
+		aafm_flush_registry_cache();
+		try {
+			$this->assertSame( '', aafm_type_own_tool( 'tribe_events', 'update' ) );
+			$this->assertSame( '', aafm_type_own_tool( 'gd_place', 'update' ) );
+		} finally {
+			remove_filter( 'aafm_integration_active_tec', '__return_false' );
+			remove_filter( 'aafm_integration_active_geodirectory', '__return_false' );
+		}
+	}
+
 	public function test_a_product_type_on_a_site_without_woocommerce_is_unaffected(): void {
 		// The WooCommerce marker class another suite defines is process-permanent, so pin it inactive.
 		add_filter( 'aafm_woocommerce_active', '__return_false' );

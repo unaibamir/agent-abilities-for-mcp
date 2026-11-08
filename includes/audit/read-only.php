@@ -181,7 +181,7 @@ function aafm_ability_lock_note( string $reason ): string {
 		return __( 'Locked while read-only mode is on. Turn off Read-only mode under Settings to make this available.', 'agent-abilities-for-mcp' );
 	}
 	if ( 'high_risk' === $reason ) {
-		return __( 'Locked. Turn on High-risk abilities under Settings to make this available.', 'agent-abilities-for-mcp' );
+		return __( 'Locked. Turn on Unlock the category under Safety controls in Settings to make this available.', 'agent-abilities-for-mcp' );
 	}
 	return '';
 }

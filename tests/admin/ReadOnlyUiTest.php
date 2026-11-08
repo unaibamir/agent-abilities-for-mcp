@@ -174,7 +174,7 @@ final class ReadOnlyUiTest extends TestCase {
 		$html = $this->render_row( 'aafm/create-post' );
 
 		$this->assertStringContainsString( 'Read-only mode', $html );
-		$this->assertStringNotContainsString( 'Turn on High-risk abilities', $html );
+		$this->assertStringNotContainsString( 'Turn on Unlock the category under Safety controls', $html );
 	}
 
 	public function test_a_read_row_still_renders_its_checkbox(): void {
@@ -217,7 +217,7 @@ final class ReadOnlyUiTest extends TestCase {
 
 		$this->assertStringNotContainsString( 'type="checkbox"', $html );
 		$this->assertStringContainsString( 'Read-only mode', $html );
-		$this->assertStringNotContainsString( 'Turn on High-risk abilities', $html );
+		$this->assertStringNotContainsString( 'Turn on Unlock the category under Safety controls', $html );
 	}
 
 	// ---------------------------------------------------------------------------------------
@@ -709,7 +709,7 @@ final class ReadOnlyUiTest extends TestCase {
 
 		$this->assertStringNotContainsString( 'name="bridged_abilities[]" value="demo/writer"', $html );
 		$this->assertStringContainsString( 'aafm-ability-locked', $html );
-		$this->assertStringContainsString( 'Turn on High-risk abilities', $html );
+		$this->assertStringContainsString( 'Turn on Unlock the category under Safety controls', $html );
 		$this->assertStringContainsString( 'data-high-risk="1"', $html );
 	}
 

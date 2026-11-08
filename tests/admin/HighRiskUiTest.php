@@ -99,7 +99,7 @@ final class HighRiskUiTest extends TestCase {
 	public function test_a_locked_row_points_at_the_setting(): void {
 		$this->make_high_risk( 'aafm/create-page' );
 		$this->assertStringContainsString(
-			'High-risk abilities',
+			'Unlock the category under Safety controls',
 			$this->render_row( 'aafm/create-page' )
 		);
 	}
@@ -181,7 +181,7 @@ final class HighRiskUiTest extends TestCase {
 	public function test_an_integrations_tab_locked_row_shows_the_high_risk_badge_and_note(): void {
 		$html = $this->render_integration_row( 'aafm/wc-create-order-refund' );
 		$this->assertStringContainsString( 'aafm-badge-high-risk', $html );
-		$this->assertStringContainsString( 'High-risk abilities', $html );
+		$this->assertStringContainsString( 'Unlock the category', $html );
 	}
 
 	public function test_an_integrations_tab_unlocked_high_risk_row_still_renders_a_checkbox(): void {

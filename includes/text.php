@@ -81,6 +81,50 @@ function aafm_sanitize_plain_text( string $value ): string {
 }
 
 /**
+ * Accept a URL as written, or refuse it. Never quietly rewrite it.
+ *
+ * Core's esc_url_raw() alone turns a javascript: link into "" and "not a url at all" into
+ * http://not20a20url20at20all, and a writer that stored the result answered ok (and wiped the
+ * value it was replacing). This keeps esc_url_raw() for the cleaning and refuses what it would
+ * have had to rewrite: an empty result, a changed scheme, or a scheme-less value that is neither
+ * a relative path, an anchor, nor a host name. An empty or blank input is a deliberate clear and
+ * comes back as ''.
+ *
+ * @param string $url   The value from the caller.
+ * @param string $field The input field name, used in the error.
+ * @return string|WP_Error The cleaned URL, '' to clear, or aafm_invalid_url.
+ */
+function aafm_checked_url( string $url, string $field ) {
+	$url = aafm_trim_unicode( $url );
+	if ( '' === $url ) {
+		return '';
+	}
+
+	$clean = esc_url_raw( $url );
+	$valid = '' !== $clean;
+	if ( $valid ) {
+		$has_scheme = 1 === preg_match( '/^([a-z][a-z0-9+.\-]*):/i', $url, $found );
+		if ( $has_scheme ) {
+			$valid = strtolower( (string) $found[1] ) === strtolower( (string) wp_parse_url( $clean, PHP_URL_SCHEME ) );
+		} elseif ( ! in_array( $url[0], array( '/', '#', '?' ), true ) ) {
+			$valid = 1 === preg_match( '~^(?:[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?\.)+[a-z]{2,}(?::\d+)?(?:[/?#]\S*)?$~i', $url );
+		}
+	}
+	if ( ! $valid ) {
+		return new WP_Error(
+			'aafm_invalid_url',
+			sprintf(
+				/* translators: %s: the name of the input field that held the URL. */
+				__( 'The %s value is not a valid URL, so nothing was changed. Use an https:// or http:// address, a mailto: or tel: link, a path starting with /, or an anchor starting with #.', 'agent-abilities-for-mcp' ),
+				$field
+			),
+			array( 'status' => 400 )
+		);
+	}
+	return $clean;
+}
+
+/**
  * The multi-line counterpart, for a field that legitimately keeps its newlines: an order note, a
  * refund reason, a media caption.
  *

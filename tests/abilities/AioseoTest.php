@@ -248,18 +248,22 @@ final class AioseoTest extends TestCase {
 		$this->assertCount( 0, \AAFM\Tests\AioseoStubStore::$save_post_calls, 'A refused call must never reach savePost().' );
 	}
 
-	public function test_aioseo_url_fields_are_url_sanitized(): void {
+	public function test_aioseo_refuses_an_invalid_url(): void {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
-		$res = wp_get_ability( 'aafm/aioseo-update-post' )->execute(
-			array(
-				'post_id'  => $post_id,
-				'og_image' => 'javascript:alert(1)',
-			)
-		);
-		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$this->assertSame( '', $res['og_image'], 'A javascript: og_image must be stripped to empty.' );
+		foreach ( array( 'canonical', 'og_image', 'twitter_image' ) as $field ) {
+			foreach ( array( 'javascript:alert(1)', 'not a url at all' ) as $bad ) {
+				$res = wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+					array(
+						'post_id' => $post_id,
+						$field    => $bad,
+					)
+				);
+				$this->assertInstanceOf( WP_Error::class, $res, "$field: $bad" );
+				$this->assertSame( 'aafm_invalid_url', $res->get_error_code() );
+			}
+		}
 	}
 
 	/**

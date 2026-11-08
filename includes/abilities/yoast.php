@@ -607,7 +607,7 @@ function aafm_args_yoast_update_post(): array {
 /**
  * Execute aafm/yoast-update-post.
  *
- * Writes the text/URL fields (esc_url_raw for URLs, aafm_sanitize_plain_text otherwise -- a Yoast
+ * Writes the text/URL fields (aafm_checked_url for URLs, which refuses a value it would have to rewrite, aafm_sanitize_plain_text otherwise -- a Yoast
  * title or description is rendered into the page head and into feeds, so it gets the same
  * invisible-character strip as a post title) and the three
  * robots keys (noindex/nofollow validated against their enums, adv filtered against the directive
@@ -629,8 +629,16 @@ function aafm_exec_yoast_update_post( array $input ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
 		}
-		$raw              = (string) $input[ $field ];
-		$intended[ $key ] = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : aafm_sanitize_plain_text( $raw );
+		$raw = (string) $input[ $field ];
+		if ( in_array( $field, $url_fields, true ) ) {
+			$url = aafm_checked_url( $raw, $field );
+			if ( is_wp_error( $url ) ) {
+				return $url; // Refused before anything is written, so a stored URL is never blanked.
+			}
+			$intended[ $key ] = $url;
+			continue;
+		}
+		$intended[ $key ] = aafm_sanitize_plain_text( $raw );
 	}
 
 	foreach ( aafm_yoast_robots_keys() as $field => $spec ) {

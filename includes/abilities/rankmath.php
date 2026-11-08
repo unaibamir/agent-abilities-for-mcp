@@ -484,7 +484,10 @@ function aafm_exec_rankmath_update_post( array $input ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
 		}
-		$url = esc_url_raw( trim( (string) $input[ $field ] ) );
+		$url = aafm_checked_url( (string) $input[ $field ], $field );
+		if ( is_wp_error( $url ) ) {
+			return $url; // A bad image URL must not read as a request to clear the image.
+		}
 		if ( '' === $url ) {
 			$resolved_ids[ $field ] = 0; // Cleared: blank the URL and the id companion below.
 			continue;
@@ -512,8 +515,16 @@ function aafm_exec_rankmath_update_post( array $input ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
 		}
-		$raw              = (string) $input[ $field ];
-		$intended[ $key ] = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : aafm_sanitize_plain_text( $raw );
+		$raw = (string) $input[ $field ];
+		if ( in_array( $field, $url_fields, true ) ) {
+			$checked = aafm_checked_url( $raw, $field );
+			if ( is_wp_error( $checked ) ) {
+				return $checked; // Refused before anything is written, so a stored URL is never blanked.
+			}
+			$intended[ $key ] = $checked;
+			continue;
+		}
+		$intended[ $key ] = aafm_sanitize_plain_text( $raw );
 	}
 
 	// Rank Math's frontend renders a social image from the attachment-id companion, not the URL. A

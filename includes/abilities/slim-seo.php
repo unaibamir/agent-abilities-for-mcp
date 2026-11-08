@@ -303,8 +303,16 @@ function aafm_exec_slim_seo_update_post( array $input ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
 		}
-		$raw               = (string) $input[ $field ];
-		$changes[ $field ] = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : aafm_sanitize_plain_text( $raw );
+		$raw = (string) $input[ $field ];
+		if ( in_array( $field, $url_fields, true ) ) {
+			$url = aafm_checked_url( $raw, $field );
+			if ( is_wp_error( $url ) ) {
+				return $url; // Refused before anything is written, so a stored URL is never blanked.
+			}
+			$changes[ $field ] = $url;
+			continue;
+		}
+		$changes[ $field ] = aafm_sanitize_plain_text( $raw );
 	}
 	if ( array_key_exists( 'noindex', $input ) ) {
 		$changes['noindex'] = (bool) $input['noindex'];

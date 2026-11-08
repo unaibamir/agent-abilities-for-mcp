@@ -290,19 +290,26 @@ final class RankMathTest extends TestCase {
 		);
 	}
 
-	public function test_rankmath_update_post_url_fields_are_url_sanitized(): void {
+	public function test_rankmath_update_post_refuses_an_invalid_url_and_keeps_the_stored_one(): void {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+		update_post_meta( $post_id, 'rank_math_canonical_url', 'https://example.com/good' );
+		update_post_meta( $post_id, 'rank_math_facebook_image', 'https://example.com/og.jpg' );
 
-		wp_get_ability( 'aafm/rankmath-update-post' )->execute(
-			array(
-				'post_id'   => $post_id,
-				'canonical' => 'javascript:alert(1)',
-				'og_image'  => 'javascript:alert(2)',
-			)
-		);
-		$this->assertSame( '', get_post_meta( $post_id, 'rank_math_canonical_url', true ) );
-		$this->assertSame( '', get_post_meta( $post_id, 'rank_math_facebook_image', true ) );
+		foreach ( array( 'canonical', 'og_image' ) as $field ) {
+			foreach ( array( 'javascript:alert(1)', 'not a url at all' ) as $bad ) {
+				$res = wp_get_ability( 'aafm/rankmath-update-post' )->execute(
+					array(
+						'post_id' => $post_id,
+						$field    => $bad,
+					)
+				);
+				$this->assertInstanceOf( WP_Error::class, $res, "$field: $bad" );
+				$this->assertSame( 'aafm_invalid_url', $res->get_error_code() );
+			}
+		}
+		$this->assertSame( 'https://example.com/good', get_post_meta( $post_id, 'rank_math_canonical_url', true ) );
+		$this->assertSame( 'https://example.com/og.jpg', get_post_meta( $post_id, 'rank_math_facebook_image', true ), 'A bad image URL must not clear the stored image.' );
 	}
 
 	public function test_rankmath_update_post_denies_an_author_on_anothers_post(): void {

@@ -537,8 +537,11 @@ function aafm_exec_aioseo_update_post( array $input ) {
 		if ( ! property_exists( $model, $prop ) ) {
 			continue; // The installed model version does not expose this prop; do not invent it.
 		}
-		$raw               = (string) $input[ $field ];
-		$clean             = $spec['url'] ? esc_url_raw( $raw ) : aafm_sanitize_plain_text( $raw );
+		$raw   = (string) $input[ $field ];
+		$clean = $spec['url'] ? aafm_checked_url( $raw, $field ) : aafm_sanitize_plain_text( $raw );
+		if ( is_wp_error( $clean ) ) {
+			return $clean; // Refused before anything is written, so a stored URL is never blanked.
+		}
 		$data[ $prop ]     = $clean;
 		$desired[ $field ] = $clean;
 

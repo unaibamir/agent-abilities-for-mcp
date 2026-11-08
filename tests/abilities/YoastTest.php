@@ -193,19 +193,24 @@ final class YoastTest extends TestCase {
 		}
 	}
 
-	public function test_yoast_update_post_url_fields_are_url_sanitized(): void {
+	public function test_yoast_update_post_refuses_an_invalid_url_and_keeps_the_stored_one(): void {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+		update_post_meta( $post_id, '_yoast_wpseo_canonical', 'https://example.com/good' );
 
-		wp_get_ability( 'aafm/yoast-update-post' )->execute(
-			array(
-				'post_id'       => $post_id,
-				'canonical'     => 'javascript:alert(1)',
-				'og_image'      => 'javascript:alert(2)',
-				'twitter_image' => 'javascript:alert(3)',
-			)
-		);
-		$this->assertSame( '', get_post_meta( $post_id, '_yoast_wpseo_canonical', true ) );
+		foreach ( array( 'canonical', 'og_image', 'twitter_image' ) as $field ) {
+			foreach ( array( 'javascript:alert(1)', 'not a url at all' ) as $bad ) {
+				$res = wp_get_ability( 'aafm/yoast-update-post' )->execute(
+					array(
+						'post_id' => $post_id,
+						$field    => $bad,
+					)
+				);
+				$this->assertInstanceOf( WP_Error::class, $res, "$field: $bad" );
+				$this->assertSame( 'aafm_invalid_url', $res->get_error_code() );
+			}
+		}
+		$this->assertSame( 'https://example.com/good', get_post_meta( $post_id, '_yoast_wpseo_canonical', true ), 'A refused write leaves the stored URL alone.' );
 		$this->assertSame( '', get_post_meta( $post_id, '_yoast_wpseo_opengraph-image', true ) );
 		$this->assertSame( '', get_post_meta( $post_id, '_yoast_wpseo_twitter-image', true ) );
 	}

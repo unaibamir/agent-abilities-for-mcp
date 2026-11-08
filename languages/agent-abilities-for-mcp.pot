@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-08T20:34:02+05:00\n"
+"POT-Creation-Date: 2026-11-08T21:45:46+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -1052,7 +1052,7 @@ msgid "Get post meta"
 msgstr ""
 
 #: includes/abilities/meta.php:25
-msgid "Read a single allowlisted meta value from a post the agent can edit (scalar only)."
+msgid "Read a single allowlisted meta value from a post the agent can edit (scalar only). Keys are opt-in: an administrator exposes each one under Exposed meta keys in the Content sub-tab of the Abilities tab."
 msgstr ""
 
 #: includes/abilities/meta.php:32
@@ -1060,7 +1060,7 @@ msgid "Get all post meta"
 msgstr ""
 
 #: includes/abilities/meta.php:33
-msgid "Read every allowlisted scalar meta value from a post the agent can edit, returned as a key/value map. Protected, underscore, and non-scalar values are excluded."
+msgid "Read every allowlisted scalar meta value from a post the agent can edit, returned as a key/value map. Protected, underscore, and non-scalar values are excluded. Keys are opt-in: an administrator exposes each one under Exposed meta keys in the Content sub-tab of the Abilities tab."
 msgstr ""
 
 #: includes/abilities/meta.php:40
@@ -1068,7 +1068,7 @@ msgid "Update post meta"
 msgstr ""
 
 #: includes/abilities/meta.php:41
-msgid "Write a single allowlisted scalar meta value to a post the agent can edit. The response returns the old value when it is plain text or a number."
+msgid "Write a single allowlisted scalar meta value to a post the agent can edit. The response returns the old value when it is plain text or a number. Keys are opt-in: an administrator exposes each one under Exposed meta keys in the Content sub-tab of the Abilities tab."
 msgstr ""
 
 #: includes/abilities/meta.php:48
@@ -1076,7 +1076,7 @@ msgid "Delete post meta"
 msgstr ""
 
 #: includes/abilities/meta.php:49
-msgid "Delete an allowlisted meta key from a post the agent can edit. Removes all values of that key. The response returns the old value when it is plain text or a number."
+msgid "Delete an allowlisted meta key from a post the agent can edit. Removes all values of that key. The response returns the old value when it is plain text or a number. Keys are opt-in: an administrator exposes each one under Exposed meta keys in the Content sub-tab of the Abilities tab."
 msgstr ""
 
 #: includes/abilities/meta.php:91
@@ -1337,7 +1337,7 @@ msgstr ""
 #. translators: %s: page builder names, for example Elementor and Divi.
 #: includes/abilities/posts.php:109
 #, php-format
-msgid "Replace one whole block in a post or page with new block markup, without resending the rest of the content. The block is addressed by path: its index among the top-level blocks, then among that block's inner blocks, counting only real blocks (the blank lines between blocks are not counted), so [2, 0] is the first block inside the third top-level block. Reaches a page, product, event, venue, organizer or listing only while that type's own tool is on. Read the post with content_format raw to count them; classic HTML between blocks is not counted. Pass expect_block (for example core/group) to refuse the write if the block at that path is a different one. The plugin leaves other blocks' parsed attributes and HTML unchanged; WordPress may sanitize the whole page on save for users who cannot post unfiltered HTML. Content warnings and strict-mode refusals cover the whole resulting page, not only the new block. Refuses when the post's existing block markup does not survive being re-serialized (for example a block with invalid attribute JSON); use aafm-update-post for those. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup."
+msgid "Replace one whole block in a post or page with new block markup, without resending the rest of the content. The block is addressed by path: its index among the top-level blocks, then among that block's inner blocks, counting only real blocks (the blank lines between blocks are not counted), so [2, 0] is the first block inside the third top-level block. Reaches a page, product, event, venue, organizer or listing only while that type's own tool is on. Read the post with content_format raw to count them; classic HTML between blocks is not counted. Pass expect_block (for example core/group) to refuse the write if the block at that path has a different block name; it checks the name only, not the content, so two blocks of the same type cannot be told apart and the post should be read again just before writing if it may have changed. The plugin leaves other blocks' parsed attributes and HTML unchanged; WordPress may sanitize the whole page on save for users who cannot post unfiltered HTML. Content warnings and strict-mode refusals cover the whole resulting page, not only the new block. Refuses when the post's existing block markup does not survive being re-serialized (for example a block with invalid attribute JSON); use aafm-update-post for those. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup."
 msgstr ""
 
 #: includes/abilities/posts.php:118
@@ -1476,7 +1476,7 @@ msgid "The complete markup of exactly one replacement block, from its opening de
 msgstr ""
 
 #: includes/abilities/posts.php:1858
-msgid "Optional block name, such as core/group, that the block at path must have. The write is refused if it differs."
+msgid "Optional block name, such as core/group, that the block at path must have. The write is refused if the name differs. Only the name is compared, not the content, so it does not guard against another edit to a neighbouring block of the same type."
 msgstr ""
 
 #: includes/abilities/posts.php:1928
@@ -2241,7 +2241,7 @@ msgid "Get term meta"
 msgstr ""
 
 #: includes/abilities/terms.php:63
-msgid "Read a single allowlisted scalar meta value from a term in a public taxonomy."
+msgid "Read a single allowlisted scalar meta value from a term in a public taxonomy. Keys are opt-in: an administrator exposes each one under Exposed term meta keys in the Taxonomies & Terms sub-tab of the Abilities tab."
 msgstr ""
 
 #: includes/abilities/terms.php:70
@@ -2249,7 +2249,7 @@ msgid "Update term meta"
 msgstr ""
 
 #: includes/abilities/terms.php:71
-msgid "Write a single allowlisted scalar meta value to a term you can edit. The response returns the old value when it is plain text or a number."
+msgid "Write a single allowlisted scalar meta value to a term you can edit. The response returns the old value when it is plain text or a number. Keys are opt-in: an administrator exposes each one under Exposed term meta keys in the Taxonomies & Terms sub-tab of the Abilities tab."
 msgstr ""
 
 #: includes/abilities/terms.php:78
@@ -2257,7 +2257,7 @@ msgid "Delete term meta"
 msgstr ""
 
 #: includes/abilities/terms.php:79
-msgid "Delete an allowlisted meta key from a term you can edit. Removes all values of that key. The response returns the old value when it is plain text or a number."
+msgid "Delete an allowlisted meta key from a term you can edit. Removes all values of that key. The response returns the old value when it is plain text or a number. Keys are opt-in: an administrator exposes each one under Exposed term meta keys in the Taxonomies & Terms sub-tab of the Abilities tab."
 msgstr ""
 
 #: includes/abilities/terms.php:105
@@ -2451,7 +2451,7 @@ msgid "Get user meta"
 msgstr ""
 
 #: includes/abilities/user-meta.php:28
-msgid "Read a single allowlisted scalar meta value from a user the agent can edit. Auth, capability, and 2FA keys are never readable."
+msgid "Read a single allowlisted scalar meta value from a user the agent can edit. Auth, capability, and 2FA keys are never readable. Keys are opt-in: an administrator exposes each one under Exposed user meta keys in the Users sub-tab of the Abilities tab."
 msgstr ""
 
 #: includes/abilities/user-meta.php:35
@@ -2459,7 +2459,7 @@ msgid "Update user meta"
 msgstr ""
 
 #: includes/abilities/user-meta.php:36
-msgid "Write a single allowlisted scalar meta value to a user the agent can edit. Auth, capability, and 2FA keys are blocked outright. The response returns the old value when it is plain text or a number."
+msgid "Write a single allowlisted scalar meta value to a user the agent can edit. Auth, capability, and 2FA keys are blocked outright. The response returns the old value when it is plain text or a number. Keys are opt-in: an administrator exposes each one under Exposed user meta keys in the Users sub-tab of the Abilities tab."
 msgstr ""
 
 #: includes/abilities/user-meta.php:43
@@ -2467,7 +2467,7 @@ msgid "Delete user meta"
 msgstr ""
 
 #: includes/abilities/user-meta.php:44
-msgid "Delete an allowlisted meta key from a user the agent can edit. Removes all values of that key. Auth and capability keys can never be touched. The response returns the old value when it is plain text or a number."
+msgid "Delete an allowlisted meta key from a user the agent can edit. Removes all values of that key. Auth and capability keys can never be touched. The response returns the old value when it is plain text or a number. Keys are opt-in: an administrator exposes each one under Exposed user meta keys in the Users sub-tab of the Abilities tab."
 msgstr ""
 
 #: includes/abilities/user-meta.php:91
@@ -3368,29 +3368,33 @@ msgstr ""
 msgid "The product's title. Required; the product is not created without one."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:1115
-msgid "The product's type. This ability only creates simple products; requesting grouped, external, or variable fails."
+#: includes/abilities/woocommerce/products.php:1116
+msgid "The product's type. This ability only creates simple products. For a variable product, create the parent in WooCommerce and add its variations with wc-create-product-variation."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:1210
-msgid "The WooCommerce product id to update."
+#: includes/abilities/woocommerce/products.php:1166
+msgid "This tool only creates simple products. For a variable product, create the parent in WooCommerce and add its variations with wc-create-product-variation."
 msgstr ""
 
 #: includes/abilities/woocommerce/products.php:1215
+msgid "The WooCommerce product id to update."
+msgstr ""
+
+#: includes/abilities/woocommerce/products.php:1220
 msgid "The product's title. Omit to leave the existing title unchanged."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:1224
+#: includes/abilities/woocommerce/products.php:1229
 msgid "The product's current type. A value matching the product's existing type is accepted as a no-op; a different value is rejected with an error, since converting a product between simple, grouped, external, and variable is not supported. Omit this field to leave the type unchanged."
 msgstr ""
 
 #. translators: 1: the product's actual current type. 2: the type the caller requested.
-#: includes/abilities/woocommerce/products.php:1325
+#: includes/abilities/woocommerce/products.php:1330
 #, php-format
 msgid "This product is a %1$s product and cannot be changed to %2$s -- converting a product between types is not supported. Omit type, or send its current value, to leave it unchanged."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:1348
+#: includes/abilities/woocommerce/products.php:1353
 msgid "The WooCommerce product id to permanently delete."
 msgstr ""
 
@@ -11153,23 +11157,43 @@ msgstr ""
 msgid "The user meta key \"%s\" is protected by WordPress, so no user can reach it through this tool."
 msgstr ""
 
+#: includes/register.php:925
+msgid "That meta key is not exposed to agents. Meta keys are opt-in: a site administrator adds it under \"Exposed meta keys\" in the Content sub-tab of the Abilities tab."
+msgstr ""
+
+#: includes/register.php:926
+msgid "That meta key is not exposed to agents. Meta keys are opt-in: a site administrator adds it under \"Exposed term meta keys\" in the Taxonomies & Terms sub-tab of the Abilities tab."
+msgstr ""
+
+#: includes/register.php:927
+msgid "That meta key is not exposed to agents. Meta keys are opt-in: a site administrator adds it under \"Exposed user meta keys\" in the Users sub-tab of the Abilities tab."
+msgstr ""
+
+#: includes/register.php:931
+msgid "That meta key is on this site's deny list, so it cannot be reached through this tool."
+msgstr ""
+
+#: includes/register.php:933
+msgid "That meta key is protected or reserved, so no user can reach it through this tool."
+msgstr ""
+
 #. translators: %s: ability name
-#: includes/register.php:901
+#: includes/register.php:956
 #, php-format
 msgid "Ability \"%s\" was not registered: a permission_callback is required."
 msgstr ""
 
 #. translators: %s: ability name
-#: includes/register.php:916
+#: includes/register.php:971
 #, php-format
 msgid "Ability \"%s\" was not registered: an execute_callback is required."
 msgstr ""
 
-#: includes/register.php:1319
+#: includes/register.php:1385
 msgid "This ability returned an unexpected result. Please try again or contact the site administrator."
 msgstr ""
 
-#: includes/register.php:1399
+#: includes/register.php:1465
 msgid "This ability could not complete because of an unexpected error. The site administrator can find the details in the activity log."
 msgstr ""
 

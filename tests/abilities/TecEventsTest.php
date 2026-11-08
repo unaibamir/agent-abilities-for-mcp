@@ -218,6 +218,13 @@ final class TecEventsTest extends TestCase {
 		$this->assertSame( 'aafm_invalid_block_content', $out->get_error_code() );
 	}
 
+	public function test_update_event_status_text_describes_update_not_create(): void {
+		$status = aafm_args_tec_update_event()['input_schema']['properties']['status']['description'];
+
+		$this->assertStringNotContainsString( 'Defaults to draft', $status );
+		$this->assertStringContainsString( 'current status', $status );
+	}
+
 	public function test_get_event_returns_null_error_for_a_non_event_post(): void {
 		$post = self::factory()->post->create(); // ordinary post, not an event.
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );

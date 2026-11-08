@@ -381,12 +381,14 @@ function aafm_exec_tec_create_venue( array $input ) {
  * @return array<string,mixed>
  */
 function aafm_args_tec_update_venue(): array {
-	$properties             = aafm_tec_venue_input_properties();
-	$properties['title']    = array(
+	$properties          = aafm_tec_venue_input_properties();
+	$properties['title'] = array(
 		'type'        => 'string',
 		'description' => __( 'Venue name. Optional on update, required only on create.', 'agent-abilities-for-mcp' ),
 	);
-	$properties['venue_id'] = array(
+	unset( $properties['status']['default'] );
+	$properties['status']['description'] = __( 'Publication status. Leave it out to keep the venue\'s current status. Setting publish requires the publish_tribe_venues capability.', 'agent-abilities-for-mcp' );
+	$properties['venue_id']              = array(
 		'type'        => 'integer',
 		'minimum'     => 1,
 		'description' => __( 'ID of the venue to update.', 'agent-abilities-for-mcp' ),

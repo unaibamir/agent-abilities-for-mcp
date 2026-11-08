@@ -536,6 +536,7 @@ function aafm_args_tec_update_event(): array {
 		'minimum'     => 1,
 		'description' => __( 'ID of the event to update.', 'agent-abilities-for-mcp' ),
 	);
+	$properties['status']['description']  = __( 'Post status, e.g. draft or publish. Leave it out to keep the event\'s current status.', 'agent-abilities-for-mcp' );
 	$schema['input_schema']['properties'] = $properties;
 	$schema['input_schema']['required']   = array( 'event_id' );
 

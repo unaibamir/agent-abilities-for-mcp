@@ -87,6 +87,14 @@ final class TecVenuesOrganizersTest extends TestCase {
 		$this->assertTrue( aafm_tec_perm_edit_venue( array( 'venue_id' => $venue_id ) ) );
 	}
 
+	public function test_update_venue_status_keeps_the_current_status_instead_of_defaulting_to_draft(): void {
+		$status = aafm_args_tec_update_venue()['input_schema']['properties']['status'];
+
+		$this->assertArrayNotHasKey( 'default', $status, 'An update must not carry the create default.' );
+		$this->assertStringNotContainsString( 'Defaults to draft', $status['description'] );
+		$this->assertStringContainsString( 'current status', $status['description'] );
+	}
+
 	public function test_update_venue_changes_only_the_fields_given(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		$venue_id = self::factory()->post->create(

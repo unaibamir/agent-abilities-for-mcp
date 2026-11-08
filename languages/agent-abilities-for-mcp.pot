@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-08T21:45:46+05:00\n"
+"POT-Creation-Date: 2026-11-09T01:22:36+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -350,17 +350,17 @@ msgid "ID of the post/page to read. The current user must have edit access to it
 msgstr ""
 
 #: includes/abilities/avada.php:172
-#: includes/abilities/posts.php:1429
+#: includes/abilities/posts.php:1446
 msgid "ID of the post to edit."
 msgstr ""
 
 #: includes/abilities/avada.php:177
-#: includes/abilities/posts.php:1434
+#: includes/abilities/posts.php:1451
 msgid "Literal text to find in the post content. Matched as-is, not as a regular expression."
 msgstr ""
 
 #: includes/abilities/avada.php:181
-#: includes/abilities/posts.php:1438
+#: includes/abilities/posts.php:1455
 msgid "Literal text to substitute for every match of search. Sanitized the same way as a full content update."
 msgstr ""
 
@@ -373,7 +373,7 @@ msgid "That replacement would change the Fusion Builder shortcode structure rath
 msgstr ""
 
 #: includes/abilities/avada.php:467
-#: includes/abilities/posts.php:1809
+#: includes/abilities/posts.php:1826
 msgid "The replacement could not be confirmed as saved."
 msgstr ""
 
@@ -1171,7 +1171,7 @@ msgstr ""
 #. translators: %s: page builder names, for example Elementor and Divi.
 #: includes/abilities/pages.php:49
 #, php-format
-msgid "Update an existing page by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the page is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup."
+msgid "Update an existing page by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. When the page is owned by a foreign page builder (%s), only an excerpt-only edit (page_id and excerpt, nothing else) is accepted, and the builder's stored content is left exactly as it was; any other change is refused, since it would either have no visible effect or corrupt the builder's stored markup."
 msgstr ""
 
 #: includes/abilities/pages.php:58
@@ -1317,7 +1317,7 @@ msgstr ""
 #. translators: %s: page builder names, for example Elementor and Divi.
 #: includes/abilities/posts.php:85
 #, php-format
-msgid "Update an existing post by ID (publishing is a separate gate). Reaches a page, product, event, venue, organizer or listing only while that type's own tool is on. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup."
+msgid "Update an existing post by ID (publishing is a separate gate). Reaches a page, product, event, venue, organizer or listing only while that type's own tool is on. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. When the post is owned by a foreign page builder (%s), only an excerpt-only edit (post_id and excerpt, nothing else) is accepted, and the builder's stored content is left exactly as it was; any other change is refused, since it would either have no visible effect or corrupt the builder's stored markup."
 msgstr ""
 
 #: includes/abilities/posts.php:94
@@ -1371,7 +1371,7 @@ msgstr ""
 #. translators: %s: page builder names, for example Elementor and Divi.
 #: includes/abilities/posts.php:145
 #, php-format
-msgid "Update an item by ID: an allowlisted custom content type, or a post, page, product, event, venue, organizer or listing while that type's own update tool is on (publishing requires that type's publish capability). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the item is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup."
+msgid "Update an item by ID: an allowlisted custom content type, or a post, page, product, event, venue, organizer or listing while that type's own update tool is on (publishing requires that type's publish capability). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. When the item is owned by a foreign page builder (%s), only an excerpt-only edit (post_id and excerpt, nothing else) is accepted, and the builder's stored content is left exactly as it was; any other change is refused, since it would either have no visible effect or corrupt the builder's stored markup."
 msgstr ""
 
 #: includes/abilities/posts.php:154
@@ -1450,7 +1450,7 @@ msgid "Unsupported or unauthorized post status."
 msgstr ""
 
 #: includes/abilities/posts.php:967
-#: includes/abilities/posts.php:1316
+#: includes/abilities/posts.php:1326
 #: includes/safety.php:673
 msgid "The title exceeds the maximum allowed length."
 msgstr ""
@@ -1459,93 +1459,93 @@ msgstr ""
 msgid "ID of the post to update."
 msgstr ""
 
-#: includes/abilities/posts.php:1774
+#: includes/abilities/posts.php:1791
 msgid "That replacement would change the structure of the page rather than its text. Either the search term sits inside markup - a tag, an attribute value, an HTML comment, a script or style block, or an SVG - or the replacement introduces markup of its own. Nothing was changed. Choose a search term that appears in the visible body text and a replacement that is plain text, or edit the content directly. To change one whole block, use aafm-replace-block if it is enabled."
 msgstr ""
 
-#: includes/abilities/posts.php:1839
+#: includes/abilities/posts.php:1856
 msgid "ID of the post or page to edit."
 msgstr ""
 
-#: includes/abilities/posts.php:1849
+#: includes/abilities/posts.php:1866
 msgid "Index path to the block, from 0: its position among the top-level blocks, then among each parent's inner blocks. Only real blocks count, not the blank lines between them. [2, 0] is the first block inside the third top-level block."
 msgstr ""
 
-#: includes/abilities/posts.php:1854
+#: includes/abilities/posts.php:1871
 msgid "The complete markup of exactly one replacement block, from its opening delimiter to its closing one."
 msgstr ""
 
-#: includes/abilities/posts.php:1858
+#: includes/abilities/posts.php:1875
 msgid "Optional block name, such as core/group, that the block at path must have. The write is refused if the name differs. Only the name is compared, not the content, so it does not guard against another edit to a neighbouring block of the same type."
 msgstr ""
 
-#: includes/abilities/posts.php:1928
+#: includes/abilities/posts.php:1945
 msgid "This post's block markup does not survive being re-serialized (for example, a block has invalid attribute JSON), so one block cannot be replaced safely. Nothing was changed. Use aafm-update-post to rewrite the whole content instead."
 msgstr ""
 
-#: includes/abilities/posts.php:1942
+#: includes/abilities/posts.php:1959
 msgid "This post has no blocks to address by path. Nothing was changed. Use aafm-update-post to replace its content."
 msgstr ""
 
 #. translators: 1: level in the path, counted from 1; 2: number of blocks at that level.
-#: includes/abilities/posts.php:1951
+#: includes/abilities/posts.php:1968
 #, php-format
 msgid "No block at that path. Level %1$d of the path has %2$d blocks, counted from 0 and skipping the blank lines between blocks. Nothing was changed."
 msgstr ""
 
 #. translators: %s: block name found at the path.
-#: includes/abilities/posts.php:1970
+#: includes/abilities/posts.php:1987
 #, php-format
 msgid "The block at that path is %s, not the expected block. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/posts.php:1987
+#: includes/abilities/posts.php:2004
 msgid "The markup must be exactly one block, from its opening delimiter to its closing one, with nothing else around it. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/posts.php:2019
+#: includes/abilities/posts.php:2036
 msgid "The replaced block could not be confirmed as saved."
 msgstr ""
 
-#: includes/abilities/posts.php:2073
+#: includes/abilities/posts.php:2090
 msgid "Literal text to find. Matched as-is, not as a regular expression."
 msgstr ""
 
-#: includes/abilities/posts.php:2077
+#: includes/abilities/posts.php:2094
 msgid "Literal text to substitute for every match."
 msgstr ""
 
-#: includes/abilities/posts.php:2082
+#: includes/abilities/posts.php:2099
 msgid "Slug of an allowlisted content type to scope the replace to. Defaults to post."
 msgstr ""
 
-#: includes/abilities/posts.php:2087
+#: includes/abilities/posts.php:2104
 msgid "Post status to scope the replace to. Defaults to publish."
 msgstr ""
 
-#: includes/abilities/posts.php:2092
+#: includes/abilities/posts.php:2109
 msgid "When true (the default), previews the match without writing anything. Pass false to apply the change."
 msgstr ""
 
 #. translators: %s: page builder names, for example Elementor and Divi.
-#: includes/abilities/posts.php:2110
+#: includes/abilities/posts.php:2127
 #, php-format
 msgid "Matched posts skipped because a foreign page builder (%s) owns their content."
 msgstr ""
 
-#: includes/abilities/posts.php:2116
+#: includes/abilities/posts.php:2133
 msgid "Posts that cleared the structure guard but whose wp_update_post() call itself failed. Counted separately from skipped_structure_guard so a real write failure is never indistinguishable from a guard refusal."
 msgstr ""
 
-#: includes/abilities/posts.php:2407
+#: includes/abilities/posts.php:2424
 msgid "ID of the content item to update."
 msgstr ""
 
-#: includes/abilities/posts.php:2495
+#: includes/abilities/posts.php:2512
 msgid "ID of the post to move to trash."
 msgstr ""
 
-#: includes/abilities/posts.php:2565
+#: includes/abilities/posts.php:2582
 msgid "ID of the post to permanently delete. This bypasses the Trash; there is no undo."
 msgstr ""
 
@@ -10810,14 +10810,22 @@ msgstr ""
 msgid "This site does not accept MCP requests from that web page."
 msgstr ""
 
-#: includes/page-builder-guard.php:310
+#: includes/page-builder-guard.php:311
 msgid "This content may belong to a page builder, and the plugin could not tell which one, so it refused the write. Edit the content in the page builder directly, or try again."
 msgstr ""
 
 #. translators: 1: detected page builder name, e.g. Elementor. 2: same name, repeated for readability. 3: same name, repeated for readability.
-#: includes/page-builder-guard.php:320
+#: includes/page-builder-guard.php:321
 #, php-format
 msgid "This content belongs to %1$s. Writing to it through this ability could have no visible effect or damage %2$s's layout, because the builder controls how this content is stored and shown. Edit it in %3$s directly."
+msgstr ""
+
+#: includes/page-builder-guard.php:428
+msgid "Saving the excerpt changed this page builder's stored content, and the plugin could not put it back. Check the post in the page builder."
+msgstr ""
+
+#: includes/page-builder-guard.php:434
+msgid "Saving the excerpt would have changed this page builder's stored content, so the plugin put the post back the way it was. Nothing was changed."
 msgstr ""
 
 #. translators: %d: the longest title allowed, in characters.

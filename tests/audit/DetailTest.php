@@ -53,6 +53,7 @@ final class DetailTest extends TestCase {
 			'hyphen key'        => array( 'key', 'bacs', 'bacs' ),
 			'ability slug'      => array( 'slug', 'aafm/wc-create-refund', 'aafm/wc-create-refund' ),
 			'zero count'        => array( 'count', 0, '0' ),
+			'template id'       => array( 'template', 'twentytwentyfive//single', 'twentytwentyfive//single' ),
 		);
 	}
 
@@ -85,6 +86,9 @@ final class DetailTest extends TestCase {
 			'sentence as key'    => array( 'key', 'The quick brown fox jumped' ),
 			'slug without slash' => array( 'slug', 'wc-create-refund' ),
 			'negative count'     => array( 'count', -3 ),
+			'template no theme'  => array( 'template', 'single' ),
+			'template with text' => array( 'template', 'theme//a b' ),
+			'template path'      => array( 'template', 'theme//../x/y' ),
 			'unknown type'       => array( 'string', 'anything at all' ),
 			'array value'        => array( 'id', array( 1, 2 ) ),
 			'null value'         => array( 'id', null ),
@@ -238,28 +242,70 @@ final class DetailTest extends TestCase {
 			foreach ( $entry['args'] ?? array() as $field ) {
 				$this->assertContains(
 					$field['type'],
-					array( 'id', 'key', 'slug', 'enum', 'count', 'keys' ),
+					array( 'id', 'key', 'slug', 'template', 'enum', 'count', 'keys' ),
 					"{$ability} declares field type '{$field['type']}', which is not identifier-safe."
 				);
 			}
 		}
 	}
 
-	public function test_no_result_id_is_a_bare_top_level_key(): void {
-		// No create ability in this plugin returns its id at the top level; they all wrap the
-		// payload (post.id, user.id, revision.id). A result_id with no dot is therefore almost
-		// certainly the bug an earlier draft of this plan shipped. If a genuinely flat payload ever
-		// appears, delete this test deliberately and say why in the commit body.
+	public function test_every_result_id_path_starts_at_a_declared_output_property(): void {
+		// A create that wraps its payload (post.id, user.id) must say so in the path; a bare `id`
+		// on a wrapped payload resolves to null and the row silently logs nothing. The check reads
+		// the ability's own output schema, so a flat payload (create-block returns `id` at the top)
+		// passes and a wrapped one declared with a bare key does not.
+		$checked = 0;
 		foreach ( aafm_activity_detail_map() as $ability => $entry ) {
 			if ( ! isset( $entry['result_id'] ) ) {
 				continue;
 			}
-			$this->assertStringContainsString(
-				'.',
-				(string) $entry['result_id'],
-				"{$ability} declares a bare result_id; the real return shape wraps the payload."
-			);
+			++$checked;
+			$root = explode( '.', (string) $entry['result_id'] )[0];
+			$spec = $this->ability_output_properties( $ability );
+			if ( array() === $spec ) {
+				// The ability declares a bare `type: object` output (GeoDirectory); there is no schema to check against.
+				continue;
+			}
+			$this->assertArrayHasKey( $root, $spec, "{$ability} reads result_id `{$entry['result_id']}`, but its output has no `{$root}` property." );
 		}
+		$this->assertGreaterThanOrEqual( 25, $checked, 'Too few result_id entries were examined for this result to mean anything.' );
+	}
+
+	/**
+	 * The output-schema properties an ability really returns, read from its own args builder.
+	 *
+	 * @param string $ability Ability name.
+	 * @return array<string,mixed>
+	 */
+	private function ability_output_properties( string $ability ): array {
+		$registry = aafm_get_abilities_registry_full();
+		$this->assertArrayHasKey( $ability, $registry, $ability . ' is not in the full registry.' );
+		$builder = (string) ( $registry[ $ability ]['args_builder'] ?? '' );
+		$this->assertTrue( function_exists( $builder ), $ability . " declares args builder '{$builder}', which does not exist." );
+		$spec = call_user_func( $builder );
+		return (array) ( $spec['output_schema']['properties'] ?? array() );
+	}
+
+	/**
+	 * Every ability that changes anything must name its target in the activity log, or the row
+	 * cannot say what was touched. Derived from the registry, never restated: a new write ability
+	 * with no map entry fails here. There is deliberately no exemption list.
+	 */
+	public function test_every_write_ability_has_a_detail_map_entry(): void {
+		$map     = aafm_activity_detail_map();
+		$missing = array();
+		$checked = 0;
+		foreach ( aafm_get_abilities_registry_full() as $ability => $row ) {
+			if ( 'reads' === ( $row['group'] ?? '' ) ) {
+				continue;
+			}
+			++$checked;
+			if ( ! isset( $map[ $ability ] ) ) {
+				$missing[] = $ability;
+			}
+		}
+		$this->assertGreaterThanOrEqual( 90, $checked, 'Too few write abilities were examined for this result to mean anything.' );
+		$this->assertSame( array(), $missing, 'These write abilities log no target in the activity log. Add an entry to aafm_activity_detail_map().' );
 	}
 
 	public function test_every_template_expects_exactly_the_arguments_the_builder_passes_it(): void {
@@ -448,6 +494,49 @@ final class DetailTest extends TestCase {
 		$row = $this->latest_row();
 		$this->assertSame( 'success', $row['status'] );
 		$this->assertSame( 'Created page #' . (int) $result['post']['id'], $row['detail'] );
+	}
+
+	/**
+	 * Creates and writes that were mapped late: the row names the object, read from the real return
+	 * shape (a comment wraps its payload, a block returns a flat id).
+	 */
+	public function test_late_mapped_writes_record_their_target_end_to_end(): void {
+		$this->acting_as( 'administrator' );
+		$this->register_enabled( array( 'aafm/create-comment', 'aafm/create-block', 'aafm/add-post-terms' ) );
+		$post_id = self::factory()->post->create();
+		$term_id = self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+		aafm_clear_activity_log();
+
+		$comment = wp_get_ability( 'aafm/create-comment' )->execute(
+			array(
+				'post_id' => $post_id,
+				'content' => 'Hello',
+			)
+		);
+		$this->assertIsArray( $comment, 'create-comment returned an error; fix the input before asserting on detail.' );
+		$this->assertSame( 'Created comment #' . (int) $comment['comment']['id'], $this->latest_row()['detail'] );
+
+		$block = wp_get_ability( 'aafm/create-block' )->execute( array( 'title' => 'Reusable' ) );
+		$this->assertIsArray( $block, 'create-block returned an error; fix the input before asserting on detail.' );
+		$this->assertSame( 'Created block #' . (int) $block['id'], $this->latest_row()['detail'] );
+
+		$terms = wp_get_ability( 'aafm/add-post-terms' )->execute(
+			array(
+				'post_id'  => $post_id,
+				'taxonomy' => 'category',
+				'term_ids' => array( $term_id ),
+			)
+		);
+		$this->assertIsArray( $terms, 'add-post-terms returned an error; fix the input before asserting on detail.' );
+		$this->assertSame( 'Added terms to post #' . $post_id, $this->latest_row()['detail'] );
+	}
+
+	public function test_a_count_result_and_a_key_result_render_their_templates(): void {
+		$this->assertSame( 'Replaced text in 3 posts', aafm_build_activity_detail_from_result( 'aafm/replace-sitewide', array( 'updated_posts' => 3 ) ) );
+		$this->assertSame( 'Replaced text in 0 posts', aafm_build_activity_detail_from_result( 'aafm/replace-sitewide', array( 'updated_posts' => 0 ) ) );
+		$this->assertSame( 'Created tax class `reduced-rate`', aafm_build_activity_detail_from_result( 'aafm/wc-create-tax-class', array( 'slug' => 'reduced-rate' ) ) );
+		$this->assertNull( aafm_build_activity_detail_from_result( 'aafm/wc-create-tax-class', array( 'slug' => 'a slug with spaces' ) ) );
+		$this->assertSame( 'Updated template `twentytwentyfive//single`', aafm_build_activity_detail( 'aafm/update-template', array( 'template_id' => 'twentytwentyfive//single' ) ) );
 	}
 
 	/**
@@ -675,7 +764,7 @@ final class DetailTest extends TestCase {
 	 * Raising it as entries are added is deliberate. A new entry passing without a bump is fine
 	 * (the floor is a minimum), but a removal has to trip it, which is the whole point.
 	 */
-	private const MAPPED_ARG_ENTRY_FLOOR = 26;
+	private const MAPPED_ARG_ENTRY_FLOOR = 60;
 
 	/**
 	 * The completeness guard, and the guard whose absence let nine of thirteen permanent

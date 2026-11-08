@@ -41,7 +41,7 @@ defined( 'ABSPATH' ) || exit;
  * A rejected field is dropped silently: detail is observability, never control flow, so a value
  * that fails its check must never turn into an error an agent sees.
  *
- * @param string            $type    One of id|key|slug|enum|count|keys.
+ * @param string            $type    One of id|key|slug|template|enum|count|keys.
  * @param mixed             $value   The candidate value.
  * @param array<int,string> $allowed Allowed members, for the enum and keys types only.
  * @return string|null The rendered value, or null when it fails its check.
@@ -85,6 +85,12 @@ function aafm_activity_detail_field( string $type, $value, array $allowed = arra
 		case 'slug':
 			$slug = (string) $value;
 			return preg_match( '#^[a-z0-9\-]+/[a-z0-9\-]+\z#', $slug ) ? $slug : null;
+
+		case 'template':
+			// A block template's theme//slug identifier. Same character class as `key`, with the
+			// double slash core uses between the theme and the template slug.
+			$template = (string) $value;
+			return preg_match( '#^[A-Za-z0-9_.\-]{1,64}//[A-Za-z0-9_.\-]{1,64}\z#', $template ) ? $template : null;
 
 		case 'enum':
 			$member = (string) $value;
@@ -165,7 +171,7 @@ function aafm_activity_detail_key_list( $value, array $allowed ): ?string {
  * args_builder: the security property is that a reviewer can read every field that can ever reach
  * an audit row in one place, and spreading it across twenty ability files destroys that.
  *
- * @return array<string, array{template: string, args?: list<array{key: string, type: string, enum?: string|list<string>}>, result_id?: string, link?: string}>
+ * @return array<string, array{template: string, args?: list<array{key: string, type: string, enum?: string|list<string>}>, result_id?: string, result_type?: string, link?: string}>
  */
 function aafm_activity_detail_map(): array {
 	return array(
@@ -668,6 +674,560 @@ function aafm_activity_detail_map(): array {
 			),
 			'link'     => 'post',
 		),
+
+		// Every remaining write ability. Each names the object it touched so an activity row can say
+		// what changed. An update reads its target from the call's own arguments; a create reads the new
+		// object's id from the return value. Keys were checked against each ability's args builder and
+		// output schema by DetailTest.
+		'aafm/replace-in-post'             => array(
+			/* translators: %s: the post's numeric ID. */
+			'template' => __( 'Replaced text in post #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'post_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/replace-block'               => array(
+			/* translators: %s: the post's numeric ID. */
+			'template' => __( 'Replaced a block in post #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'post_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/replace-sitewide'            => array(
+			/* translators: %s: how many posts were changed. */
+			'template'    => __( 'Replaced text in %s posts', 'agent-abilities-for-mcp' ),
+			'result_id'   => 'updated_posts',
+			'result_type' => 'count',
+		),
+		'aafm/create-cpt-item'             => array(
+			/* translators: %s: the new item's numeric ID. */
+			'template'  => __( 'Created content item #%s', 'agent-abilities-for-mcp' ),
+			'result_id' => 'post.id',
+			'link'      => 'post',
+		),
+		'aafm/update-cpt-item'             => array(
+			/* translators: %s: the item's numeric ID. */
+			'template' => __( 'Updated content item #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'post_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/create-term'                 => array(
+			/* translators: %s: the new term's numeric ID. */
+			'template'  => __( 'Created term #%s', 'agent-abilities-for-mcp' ),
+			'result_id' => 'term.id',
+			'link'      => 'term',
+		),
+		'aafm/update-term'                 => array(
+			/* translators: %s: the term's numeric ID. */
+			'template' => __( 'Updated term #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'term_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'term',
+		),
+		'aafm/add-post-terms'              => array(
+			/* translators: %s: the post's numeric ID. */
+			'template' => __( 'Added terms to post #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'post_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/moderate-comment'            => array(
+			/* translators: 1: the comment's numeric ID. 2: the moderation action. */
+			'template' => __( 'Moderated comment #%1$s: %2$s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'comment_id',
+					'type' => 'id',
+				),
+				array(
+					'key'  => 'action',
+					'type' => 'enum',
+					'enum' => array( 'approve', 'unapprove', 'spam', 'trash' ),
+				),
+			),
+		),
+		'aafm/create-comment'              => array(
+			/* translators: %s: the new comment's numeric ID. */
+			'template'  => __( 'Created comment #%s', 'agent-abilities-for-mcp' ),
+			'result_id' => 'comment.id',
+		),
+		'aafm/update-comment'              => array(
+			/* translators: %s: the comment's numeric ID. */
+			'template' => __( 'Updated comment #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'comment_id',
+					'type' => 'id',
+				),
+			),
+		),
+		'aafm/set-featured-image'          => array(
+			/* translators: %s: the post's numeric ID. */
+			'template' => __( 'Set the featured image on post #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'post_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/upload-media'                => array(
+			/* translators: %s: the new attachment's numeric ID. */
+			'template'  => __( 'Uploaded media #%s', 'agent-abilities-for-mcp' ),
+			'result_id' => 'attachment_id',
+			'link'      => 'post',
+		),
+		'aafm/upload-media-from-url'       => array(
+			/* translators: %s: the new attachment's numeric ID. */
+			'template'  => __( 'Uploaded media #%s', 'agent-abilities-for-mcp' ),
+			'result_id' => 'attachment_id',
+			'link'      => 'post',
+		),
+		'aafm/update-media'                => array(
+			/* translators: %s: the attachment's numeric ID. */
+			'template' => __( 'Updated media #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'attachment_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/create-block'                => array(
+			/* translators: %s: the new block's numeric ID. */
+			'template'  => __( 'Created block #%s', 'agent-abilities-for-mcp' ),
+			'result_id' => 'id',
+			'link'      => 'post',
+		),
+		'aafm/update-block'                => array(
+			/* translators: %s: the block's numeric ID. */
+			'template' => __( 'Updated block #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'block_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/delete-block'                => array(
+			/* translators: %s: the block's numeric ID. */
+			'template' => __( 'Deleted block #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'block_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/create-menu'                 => array(
+			/* translators: %s: the new menu's numeric ID. */
+			'template'  => __( 'Created menu #%s', 'agent-abilities-for-mcp' ),
+			'result_id' => 'id',
+			'link'      => 'term',
+		),
+		'aafm/update-menu'                 => array(
+			/* translators: %s: the menu's numeric ID. */
+			'template' => __( 'Updated menu #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'menu_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'term',
+		),
+		'aafm/create-menu-item'            => array(
+			/* translators: %s: the new menu item's numeric ID. */
+			'template'  => __( 'Created menu item #%s', 'agent-abilities-for-mcp' ),
+			'result_id' => 'id',
+			'link'      => 'post',
+		),
+		'aafm/update-menu-item'            => array(
+			/* translators: %s: the menu item's numeric ID. */
+			'template' => __( 'Updated menu item #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'item_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/update-template'             => array(
+			/* translators: %s: the template's theme//slug identifier. */
+			'template' => __( 'Updated template `%s`', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'template_id',
+					'type' => 'template',
+				),
+			),
+		),
+		'aafm/yoast-update-post'           => array(
+			/* translators: %s: the post's numeric ID. */
+			'template' => __( 'Updated Yoast SEO fields on post #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'post_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/rankmath-update-post'        => array(
+			/* translators: %s: the post's numeric ID. */
+			'template' => __( 'Updated Rank Math fields on post #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'post_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/rankmath-update-schema'      => array(
+			/* translators: %s: the post's numeric ID. */
+			'template' => __( 'Updated Rank Math schema on post #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'post_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/aioseo-update-post'          => array(
+			/* translators: %s: the post's numeric ID. */
+			'template' => __( 'Updated All in One SEO fields on post #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'post_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/slim-seo-update-post'        => array(
+			/* translators: %s: the post's numeric ID. */
+			'template' => __( 'Updated Slim SEO fields on post #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'post_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/acf-update-post-fields'      => array(
+			/* translators: %s: the post's numeric ID. */
+			'template' => __( 'Updated custom fields on post #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'post_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/acf-update-term-fields'      => array(
+			/* translators: %s: the term's numeric ID. */
+			'template' => __( 'Updated custom fields on term #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'term_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'term',
+		),
+		'aafm/acf-update-user-fields'      => array(
+			/* translators: %s: the user's numeric ID. */
+			'template' => __( 'Updated custom fields on user #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'user_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'user',
+		),
+		'aafm/wc-create-product'           => array(
+			/* translators: %s: the new product's numeric ID. */
+			'template'  => __( 'Created product #%s', 'agent-abilities-for-mcp' ),
+			'result_id' => 'id',
+			'link'      => 'post',
+		),
+		'aafm/wc-update-product'           => array(
+			/* translators: %s: the product's numeric ID. */
+			'template' => __( 'Updated product #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'product_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/wc-create-product-variation' => array(
+			/* translators: %s: the new variation's numeric ID. */
+			'template'  => __( 'Created product variation #%s', 'agent-abilities-for-mcp' ),
+			'result_id' => 'id',
+			'link'      => 'post',
+		),
+		'aafm/wc-update-product-variation' => array(
+			/* translators: %s: the variation's numeric ID. */
+			'template' => __( 'Updated product variation #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'variation_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/wc-create-product-attribute' => array(
+			/* translators: %s: the new attribute's numeric ID. */
+			'template'  => __( 'Created product attribute #%s', 'agent-abilities-for-mcp' ),
+			'result_id' => 'id',
+		),
+		'aafm/wc-update-product-attribute' => array(
+			/* translators: %s: the attribute's numeric ID. */
+			'template' => __( 'Updated product attribute #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'attribute_id',
+					'type' => 'id',
+				),
+			),
+		),
+		'aafm/wc-create-order'             => array(
+			/* translators: %s: the new order's numeric ID. */
+			'template'  => __( 'Created order #%s', 'agent-abilities-for-mcp' ),
+			'result_id' => 'id',
+			'link'      => 'order',
+		),
+		'aafm/wc-update-order'             => array(
+			/* translators: %s: the order's numeric ID. */
+			'template' => __( 'Updated order #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'order_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'order',
+		),
+		'aafm/wc-create-order-note'        => array(
+			/* translators: %s: the order's numeric ID. */
+			'template' => __( 'Added a note to order #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'order_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'order',
+		),
+		'aafm/wc-create-customer'          => array(
+			/* translators: %s: the new customer's numeric ID. */
+			'template'  => __( 'Created customer #%s', 'agent-abilities-for-mcp' ),
+			'result_id' => 'id',
+			'link'      => 'user',
+		),
+		'aafm/wc-update-customer'          => array(
+			/* translators: %s: the customer's numeric ID. */
+			'template' => __( 'Updated customer #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'customer_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'user',
+		),
+		'aafm/wc-create-coupon'            => array(
+			/* translators: %s: the new coupon's numeric ID. */
+			'template'  => __( 'Created coupon #%s', 'agent-abilities-for-mcp' ),
+			'result_id' => 'id',
+			'link'      => 'post',
+		),
+		'aafm/wc-update-coupon'            => array(
+			/* translators: %s: the coupon's numeric ID. */
+			'template' => __( 'Updated coupon #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'coupon_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/wc-create-shipping-zone'     => array(
+			/* translators: %s: the new shipping zone's numeric ID. */
+			'template'  => __( 'Created shipping zone #%s', 'agent-abilities-for-mcp' ),
+			'result_id' => 'id',
+		),
+		'aafm/wc-update-shipping-zone'     => array(
+			/* translators: %s: the shipping zone's numeric ID. */
+			'template' => __( 'Updated shipping zone #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'zone_id',
+					'type' => 'id',
+				),
+			),
+		),
+		'aafm/wc-create-shipping-method'   => array(
+			/* translators: %s: the new shipping method instance's numeric ID. */
+			'template'  => __( 'Created shipping method #%s', 'agent-abilities-for-mcp' ),
+			'result_id' => 'instance_id',
+		),
+		'aafm/wc-update-shipping-method'   => array(
+			/* translators: %s: the shipping method instance's numeric ID. */
+			'template' => __( 'Updated shipping method #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'instance_id',
+					'type' => 'id',
+				),
+			),
+		),
+		'aafm/wc-create-tax-rate'          => array(
+			/* translators: %s: the new tax rate's numeric ID. */
+			'template'  => __( 'Created tax rate #%s', 'agent-abilities-for-mcp' ),
+			'result_id' => 'id',
+		),
+		'aafm/wc-update-tax-rate'          => array(
+			/* translators: %s: the tax rate's numeric ID. */
+			'template' => __( 'Updated tax rate #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'rate_id',
+					'type' => 'id',
+				),
+			),
+		),
+		'aafm/wc-create-tax-class'         => array(
+			/* translators: %s: the new tax class's slug. */
+			'template'    => __( 'Created tax class `%s`', 'agent-abilities-for-mcp' ),
+			'result_id'   => 'slug',
+			'result_type' => 'key',
+		),
+		'aafm/tec-create-event'            => array(
+			/* translators: %s: the new event's numeric ID. */
+			'template'  => __( 'Created event #%s', 'agent-abilities-for-mcp' ),
+			'result_id' => 'event.id',
+			'link'      => 'post',
+		),
+		'aafm/tec-update-event'            => array(
+			/* translators: %s: the event's numeric ID. */
+			'template' => __( 'Updated event #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'event_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/tec-delete-event'            => array(
+			/* translators: %s: the event's numeric ID. */
+			'template' => __( 'Trashed event #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'event_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/tec-create-venue'            => array(
+			/* translators: %s: the new venue's numeric ID. */
+			'template'  => __( 'Created venue #%s', 'agent-abilities-for-mcp' ),
+			'result_id' => 'venue.id',
+			'link'      => 'post',
+		),
+		'aafm/tec-update-venue'            => array(
+			/* translators: %s: the venue's numeric ID. */
+			'template' => __( 'Updated venue #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'venue_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/tec-create-organizer'        => array(
+			/* translators: %s: the new organizer's numeric ID. */
+			'template'  => __( 'Created organizer #%s', 'agent-abilities-for-mcp' ),
+			'result_id' => 'organizer.id',
+			'link'      => 'post',
+		),
+		'aafm/tec-update-organizer'        => array(
+			/* translators: %s: the organizer's numeric ID. */
+			'template' => __( 'Updated organizer #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'organizer_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/avada-replace-text'          => array(
+			/* translators: %s: the post's numeric ID. */
+			'template' => __( 'Replaced text in Avada page #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'post_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/geodirectory-create-listing' => array(
+			/* translators: %s: the new listing's numeric ID. */
+			'template'  => __( 'Created listing #%s', 'agent-abilities-for-mcp' ),
+			'result_id' => 'listing_id',
+			'link'      => 'post',
+		),
+		'aafm/geodirectory-update-listing' => array(
+			/* translators: %s: the listing's numeric ID. */
+			'template' => __( 'Updated listing #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'listing_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
 	);
 }
 
@@ -798,7 +1358,10 @@ function aafm_build_activity_detail_from_result( string $ability, $result ): ?st
 	if ( null === $entry || empty( $entry['result_id'] ) || ! is_array( $result ) ) {
 		return null;
 	}
-	$id = aafm_activity_detail_field( 'id', aafm_activity_detail_dig( $result, (string) $entry['result_id'] ) );
+	// result_type is `id` unless the entry says otherwise: a count (replace-sitewide) or a key
+	// (a tax class has a slug, not a number). Every type is one of the identifier-safe checks above.
+	$type = isset( $entry['result_type'] ) ? (string) $entry['result_type'] : 'id';
+	$id   = aafm_activity_detail_field( $type, aafm_activity_detail_dig( $result, (string) $entry['result_id'] ) );
 	return ( null === $id ) ? null : sprintf( (string) $entry['template'], $id );
 }
 

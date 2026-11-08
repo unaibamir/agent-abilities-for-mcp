@@ -772,6 +772,24 @@ final class GeodirectoryTest extends TestCase {
 		);
 	}
 
+	public function test_create_and_update_schemas_bound_the_coordinates(): void {
+		foreach ( array( 'aafm_args_geodirectory_create_listing', 'aafm_args_geodirectory_update_listing' ) as $builder ) {
+			$properties = $builder()['input_schema']['properties'];
+			foreach ( array(
+				'latitude'  => 90,
+				'longitude' => 180,
+			) as $field => $limit ) {
+				$schema = $properties[ $field ];
+				$this->assertTrue( rest_validate_value_from_schema( $limit, $schema, $field ), "$builder $field accepts the limit" );
+				$this->assertTrue( rest_validate_value_from_schema( -$limit, $schema, $field ), "$builder $field accepts the negative limit" );
+				$this->assertWPError( rest_validate_value_from_schema( $limit + 0.01, $schema, $field ), "$builder $field refuses above the limit" );
+				$this->assertWPError( rest_validate_value_from_schema( -$limit - 0.01, $schema, $field ), "$builder $field refuses below the limit" );
+			}
+			$this->assertWPError( rest_validate_value_from_schema( 5000, $properties['latitude'], 'latitude' ) );
+			$this->assertWPError( rest_validate_value_from_schema( -9000, $properties['longitude'], 'longitude' ) );
+		}
+	}
+
 	public function test_update_listing_leaves_omitted_fields_untouched(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 

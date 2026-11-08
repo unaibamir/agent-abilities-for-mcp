@@ -46,7 +46,7 @@ function aafm_register_pages_definitions( array $registry ): array {
 		'label'        => __( 'Update page', 'agent-abilities-for-mcp' ),
 		'description'  => sprintf(
 			/* translators: %s: page builder names, for example Elementor and Divi. */
-			__( 'Update an existing page by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the page is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
+			__( 'Update an existing page by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. When the page is owned by a foreign page builder (%s), only an excerpt-only edit (page_id and excerpt, nothing else) is accepted, and the builder\'s stored content is left exactly as it was; any other change is refused, since it would either have no visible effect or corrupt the builder\'s stored markup.', 'agent-abilities-for-mcp' ),
 			aafm_page_builder_names()
 		),
 		'group'        => 'writes',

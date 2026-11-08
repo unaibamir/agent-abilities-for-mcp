@@ -12,7 +12,8 @@
  * rendered output into post_content, so a visible change is lost the next time someone saves in the
  * builder. WPBakery keeps its layout as shortcodes in post_content itself, so a generic write can
  * break it the same way. This is a REFUSAL guard, not a builder integration: it never edits builder-owned data, it
- * only stops a write from landing where it will be ignored, corrupted or overwritten.
+ * only stops a write from landing where it will be ignored, corrupted or overwritten. The one write it lets through
+ * is an excerpt-only update, with the stored body pinned (aafm_page_builder_write_excerpt()).
  *
  * Avada/Fusion Builder's marker WAS confirmed (2026-09-05) against a real installed copy (Avada
  * 7.16.1 theme, Fusion Builder 3.16.1 plugin): `fusion_builder_status` post meta set to 'active'
@@ -324,4 +325,127 @@ function aafm_page_builder_owned_error( string $builder ): WP_Error {
 		),
 		array( 'status' => 409 )
 	);
+}
+
+/**
+ * Whether an update input asks for an excerpt and nothing else.
+ *
+ * The one write a builder-owned post accepts. The keys are an allowlist: the id keys update-post,
+ * update-cpt-item (post_id) and update-page (page_id, plus the post_id it adds) pass, and excerpt.
+ * Any other key, including one a later schema adds, keeps the builder refusal.
+ *
+ * @param array<string,mixed> $input Update input.
+ * @return bool
+ */
+function aafm_page_builder_excerpt_only_input( array $input ): bool {
+	return isset( $input['excerpt'] ) && array() === array_diff_key( $input, array_flip( array( 'post_id', 'page_id', 'excerpt' ) ) );
+}
+
+/**
+ * The post's stored body, excerpt and modified dates, read from the posts table past any cache.
+ *
+ * @param int $post_id Post id.
+ * @return array{post_content:string,post_excerpt:string,post_modified:string,post_modified_gmt:string}|null Null when the read failed or found no row.
+ */
+function aafm_page_builder_stored_row( int $post_id ): ?array {
+	global $wpdb;
+	// The stored row itself, not a cached copy, is what this proves.
+	$read = aafm_wpdb_row( $wpdb->prepare( 'SELECT post_content, post_excerpt, post_modified, post_modified_gmt FROM %i WHERE ID = %d', $wpdb->posts, $post_id ) );
+	$row  = $read['value'];
+	if ( ! $read['ok'] || ! is_array( $row ) ) {
+		return null;
+	}
+	return array(
+		'post_content'      => (string) $row['post_content'],
+		'post_excerpt'      => (string) $row['post_excerpt'],
+		'post_modified'     => (string) $row['post_modified'],
+		'post_modified_gmt' => (string) $row['post_modified_gmt'],
+	);
+}
+
+/**
+ * Write an excerpt-only update to a builder-owned post with the stored body pinned.
+ *
+ * Core's wp_update_post() re-runs sanitize_post() over the whole row, so for a user without
+ * unfiltered_html core would put the builder's body through content_save_pre and KSES and strip
+ * markup the builder relies on. A wp_insert_post_data filter at PHP_INT_MAX, scoped to this one
+ * call, puts the stored body back for the post and for the revision the save creates; the filter
+ * sees slashed data, so the body is slashed.
+ *
+ * Another plugin can still rewrite the body after the row is saved (save_post and later). So the
+ * stored row is read back, and when the body differs the excerpt, body and modified dates are put
+ * back with one direct row update (a second wp_update_post() would re-run the same filters and
+ * hooks) and the revisions this call saved are deleted. The caller is told nothing changed only
+ * when the read-back proves it.
+ *
+ * @param int                                                                                          $post_id Post id.
+ * @param array<string,mixed>                                                                          $postarr ID and post_excerpt.
+ * @param array{post_content:string,post_excerpt:string,post_modified:string,post_modified_gmt:string} $before  The stored row before the write.
+ * @return int|WP_Error The post id, or an error after which the post is as it was.
+ */
+function aafm_page_builder_write_excerpt( int $post_id, array $postarr, array $before ) {
+	global $wpdb;
+
+	if ( ! aafm_exact_object_chain( 'post', $post_id ) instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	$revisions = aafm_page_builder_revision_ids( $post_id );
+	$body      = $before['post_content'];
+	$pin       = static function ( array $data, array $raw ) use ( $post_id, $body ): array {
+		$is_post     = isset( $raw['ID'] ) && (int) $raw['ID'] === $post_id;
+		$is_revision = 'revision' === ( $data['post_type'] ?? '' ) && (int) ( $data['post_parent'] ?? 0 ) === $post_id;
+		if ( $is_post || $is_revision ) {
+			$data['post_content'] = wp_slash( $body );
+		}
+		return $data;
+	};
+
+	add_filter( 'wp_insert_post_data', $pin, PHP_INT_MAX, 2 );
+	try {
+		$result = wp_update_post( wp_slash( $postarr ), true );
+	} finally {
+		remove_filter( 'wp_insert_post_data', $pin, PHP_INT_MAX );
+	}
+	if ( is_wp_error( $result ) || (int) $result !== $post_id ) {
+		return aafm_generic_error();
+	}
+
+	$after = aafm_page_builder_stored_row( $post_id );
+	if ( null !== $after && $after['post_content'] === $body ) {
+		return $post_id;
+	}
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- restores the exact stored bytes, which a filtered save cannot.
+	$wpdb->update( $wpdb->posts, $before, array( 'ID' => $post_id ) );
+	foreach ( array_diff( aafm_page_builder_revision_ids( $post_id ), $revisions ) as $revision_id ) {
+		wp_delete_post_revision( $revision_id );
+	}
+	clean_post_cache( $post_id );
+
+	if ( aafm_page_builder_stored_row( $post_id ) !== $before ) {
+		return new WP_Error(
+			'aafm_page_builder_content_changed',
+			__( 'Saving the excerpt changed this page builder\'s stored content, and the plugin could not put it back. Check the post in the page builder.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 500 )
+		);
+	}
+	return new WP_Error(
+		'aafm_page_builder_content_changed',
+		__( 'Saving the excerpt would have changed this page builder\'s stored content, so the plugin put the post back the way it was. Nothing was changed.', 'agent-abilities-for-mcp' ),
+		array( 'status' => 409 )
+	);
+}
+
+/**
+ * The ids of a post's revisions.
+ *
+ * @param int $post_id Post id.
+ * @return int[]
+ */
+function aafm_page_builder_revision_ids( int $post_id ): array {
+	$ids = array();
+	foreach ( wp_get_post_revisions( $post_id, array( 'fields' => 'ids' ) ) as $revision ) {
+		$ids[] = $revision instanceof WP_Post ? $revision->ID : (int) $revision;
+	}
+	return $ids;
 }

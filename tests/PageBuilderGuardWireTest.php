@@ -270,6 +270,67 @@ final class PageBuilderGuardWireTest extends TestCase {
 		$this->assertSame( $original_content, get_post( $listing_id )->post_content, 'The listing must be left byte-identical.' );
 	}
 
+	public function test_a_real_tools_call_accepts_an_excerpt_only_edit_on_a_builder_post_and_page(): void {
+		$this->register_enabled( array( 'aafm/update-post', 'aafm/update-page' ) );
+		$body    = '<div class="fl-builder-content">Layout fallback</div>';
+		$post_id = self::factory()->post->create( array( 'post_content' => $body ) );
+		$page_id = self::factory()->post->create(
+			array(
+				'post_type'    => 'page',
+				'post_content' => $body,
+			)
+		);
+		update_post_meta( $post_id, '_fl_builder_data', array( 'node1' => array( 'type' => 'row' ) ) );
+		update_post_meta( $page_id, '_elementor_data', '[{"id":"el1"}]' );
+		$this->acting_as( 'editor' );
+
+		$server  = $this->build_single_ability_server( \WP\MCP\Core\McpAdapter::instance(), array( 'aafm/update-post', 'aafm/update-page' ) );
+		$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
+		$call    = static function ( string $ability, array $arguments ) use ( $handler ) {
+			return $handler->call_tool(
+				array(
+					'name'      => aafm_mcp_tool_name( $ability ),
+					'arguments' => $arguments,
+				),
+				'req-page-builder-wire-excerpt-' . wp_rand()
+			);
+		};
+
+		$ok = $call(
+			'aafm/update-post',
+			array(
+				'post_id' => $post_id,
+				'excerpt' => 'Wire excerpt',
+			)
+		);
+		$this->assertFalse( $ok->getIsError(), 'An excerpt-only edit of a builder-owned post goes through over tools/call.' );
+		$this->assertSame( 'Wire excerpt', get_post( $post_id )->post_excerpt );
+		$this->assertSame( $body, get_post( $post_id )->post_content );
+
+		$page_ok = $call(
+			'aafm/update-page',
+			array(
+				'page_id' => $page_id,
+				'excerpt' => 'Wire page excerpt',
+			)
+		);
+		$this->assertFalse( $page_ok->getIsError(), 'update-page takes the same excerpt-only edit.' );
+		$this->assertSame( 'Wire page excerpt', get_post( $page_id )->post_excerpt );
+		$this->assertSame( $body, get_post( $page_id )->post_content );
+
+		$refused = $call(
+			'aafm/update-post',
+			array(
+				'post_id' => $post_id,
+				'excerpt' => 'Should not land',
+				'title'   => 'Should not land',
+			)
+		);
+		$this->assertTrue( $refused->getIsError(), 'An excerpt beside any other field keeps the refusal.' );
+		$this->assertStringContainsString( 'Beaver Builder', $refused->getContent()[0]->getText() );
+		$this->assertSame( 'Wire excerpt', get_post( $post_id )->post_excerpt );
+	}
+
 	public function test_update_post_refuses_a_bricks_page_with_the_409_error(): void {
 		$this->register_enabled( array( 'aafm/update-post' ) );
 		$post_id        = self::factory()->post->create();

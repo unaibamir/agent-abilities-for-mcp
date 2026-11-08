@@ -98,6 +98,7 @@ These are the main extension points. Every name starts with `aafm_`.
 | `aafm_force_read_only_mode` | filter | Return `true` to force read-only mode on. It can only turn the mode on, never off. |
 | `aafm_high_risk_abilities` | filter | Add ability names or other plugins' slugs to the high-risk set. The built-ins are merged back in, so it can only add. |
 | `aafm_force_block_high_risk_abilities` | filter | Return `true` to keep the high-risk lock on whatever Settings says. It can only lock, never unlock. |
+| `aafm_serve_openid_configuration` | filter | Return `false` on a subfolder install that runs its own OpenID Connect provider, so `/.well-known/openid-configuration` is left to it. MCP clients still find the `oauth-authorization-server` document. Default `true`. |
 | `aafm_bridge_discovery_capability` | filter | The capability a user needs to see a bridged tool whose own permission check needs an object id. Default `edit_posts`. Receives the wrapper tool name. |
 | `aafm_rate_limit_per_min`, `aafm_ip_allowlist`, `aafm_max_title_len` | filters | Adjust the stored value. A filter cannot switch off a limit the site owner set in Settings. |
 | `aafm_page_builder_markers` | filter | Map of post meta key to builder name used by the page builder guard. |

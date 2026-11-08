@@ -585,7 +585,18 @@ function aafm_oauth_match_well_known( string $path ): string {
 	// With a path in the issuer, the third form MCP clients try is /blog/.well-known/openid-configuration,
 	// and it is the only one that reaches WordPress on a subfolder install. It serves the same RFC 8414
 	// document and makes no OpenID claim beyond the URL. A root install never answers it.
-	if ( '' !== $home && '.well-known/openid-configuration' === $path ) {
+	/**
+	 * Filters whether a subfolder install answers /.well-known/openid-configuration with this
+	 * plugin's authorization server document.
+	 *
+	 * Return false on a site that runs its own OpenID Connect provider, so that provider's
+	 * discovery document is served instead. MCP clients still find the oauth-authorization-server
+	 * form.
+	 *
+	 * @since 1.11.1
+	 * @param bool $serve Whether to serve it. Default true.
+	 */
+	if ( '' !== $home && '.well-known/openid-configuration' === $path && (bool) apply_filters( 'aafm_serve_openid_configuration', true ) ) {
 		return 'authorization-server';
 	}
 

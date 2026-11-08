@@ -404,6 +404,17 @@ class DiscoveryTest extends TestCase {
 		$this->assertSame( 'authorization-server', aafm_oauth_match_well_known( '/blog/.well-known/openid-configuration' ) );
 	}
 
+	public function test_a_site_with_its_own_openid_provider_can_turn_off_the_openid_configuration_alias(): void {
+		$this->at_home( 'https://example.com/blog' );
+		add_filter( 'aafm_serve_openid_configuration', '__return_false' );
+		try {
+			$this->assertSame( '', aafm_oauth_match_well_known( '/blog/.well-known/openid-configuration' ) );
+			$this->assertSame( 'authorization-server', aafm_oauth_match_well_known( '/blog/.well-known/oauth-authorization-server' ) );
+		} finally {
+			remove_filter( 'aafm_serve_openid_configuration', '__return_false' );
+		}
+	}
+
 	public function test_a_root_install_does_not_serve_openid_configuration(): void {
 		$this->at_home( 'https://example.com' );
 		$this->assertSame( '', aafm_oauth_match_well_known( '/.well-known/openid-configuration' ) );

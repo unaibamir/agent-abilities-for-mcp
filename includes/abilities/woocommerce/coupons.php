@@ -290,7 +290,14 @@ function aafm_wc_coupon_write_properties(): array {
  */
 function aafm_wc_apply_coupon_input( \WC_Coupon $coupon, array $input ): ?\WP_Error {
 	if ( array_key_exists( 'code', $input ) ) {
-		$code           = wc_format_coupon_code( aafm_sanitize_plain_text( (string) $input['code'] ) );
+		$code = wc_format_coupon_code( aafm_sanitize_plain_text( (string) $input['code'] ) );
+		if ( '' === $code ) {
+			return new \WP_Error(
+				'aafm_wc_invalid_coupon_code',
+				__( 'A coupon needs a code, so nothing was saved.', 'agent-abilities-for-mcp' ),
+				array( 'status' => 400 )
+			);
+		}
 		$conflicting_id = wc_get_coupon_id_by_code( $code, $coupon->get_id() );
 		if ( $conflicting_id ) {
 			return new \WP_Error(
@@ -433,11 +440,32 @@ function aafm_wc_apply_coupon_input( \WC_Coupon $coupon, array $input ): ?\WP_Er
 	if ( array_key_exists( 'exclude_sale_items', $input ) ) {
 		$coupon->set_exclude_sale_items( (bool) $input['exclude_sale_items'] );
 	}
-	if ( array_key_exists( 'product_ids', $input ) ) {
-		$coupon->set_product_ids( array_map( 'absint', (array) $input['product_ids'] ) );
-	}
-	if ( array_key_exists( 'excluded_product_ids', $input ) ) {
-		$coupon->set_excluded_product_ids( array_map( 'absint', (array) $input['excluded_product_ids'] ) );
+	foreach ( array( 'product_ids', 'excluded_product_ids' ) as $list_field ) {
+		if ( ! array_key_exists( $list_field, $input ) ) {
+			continue;
+		}
+		// An id that is not a product used to be stored, giving a coupon restriction that matches
+		// nothing. Refuse the whole request so a typo does not read as a working restriction.
+		$ids = array_map( 'absint', (array) $input[ $list_field ] );
+		foreach ( $ids as $product_id ) {
+			if ( ! aafm_wc_get_product( $product_id ) instanceof \WC_Product ) {
+				return new \WP_Error(
+					'aafm_wc_unknown_coupon_product',
+					sprintf(
+						/* translators: 1: the input field name, 2: the product id that does not exist. */
+						__( '%1$s names product %2$d, which does not exist, so nothing was saved.', 'agent-abilities-for-mcp' ),
+						$list_field,
+						$product_id
+					),
+					array( 'status' => 400 )
+				);
+			}
+		}
+		if ( 'product_ids' === $list_field ) {
+			$coupon->set_product_ids( $ids );
+		} else {
+			$coupon->set_excluded_product_ids( $ids );
+		}
 	}
 	if ( array_key_exists( 'email_restrictions', $input ) ) {
 		$coupon->set_email_restrictions(

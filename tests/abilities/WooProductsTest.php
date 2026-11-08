@@ -670,6 +670,41 @@ final class WooProductsTest extends TestCase {
 		$this->assertSame( '', $read['sale_price'], 'The cleared sale price round-trips on a following read.' );
 	}
 
+	public function test_a_sale_price_above_the_regular_price_is_refused_on_create_and_update(): void {
+		$this->acting_as( 'administrator' );
+
+		$create = wp_get_ability( 'aafm/wc-create-product' )->execute(
+			array(
+				'name'          => 'Backwards Sale',
+				'regular_price' => '10.00',
+				'sale_price'    => '12.00',
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $create );
+		$this->assertSame( 'aafm_wc_sale_above_regular', $create->get_error_code() );
+
+		$ok = wp_get_ability( 'aafm/wc-create-product' )->execute(
+			array(
+				'name'          => 'Fair Sale',
+				'regular_price' => '10.00',
+				'sale_price'    => '8.00',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $ok );
+		$this->assertSame( '8.00', $ok['sale_price'] );
+
+		$update = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id' => (int) $ok['id'],
+				'sale_price' => '11.00',
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $update, 'The check reads the stored regular price when only the sale price is sent.' );
+		$this->assertSame( 'aafm_wc_sale_above_regular', $update->get_error_code() );
+		$read = wp_get_ability( 'aafm/wc-get-product' )->execute( array( 'product_id' => (int) $ok['id'] ) );
+		$this->assertSame( '8.00', $read['sale_price'], 'A refused update leaves the sale price alone.' );
+	}
+
 	public function test_create_product_denies_an_editor(): void {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(

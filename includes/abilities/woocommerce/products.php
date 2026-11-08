@@ -724,6 +724,21 @@ function aafm_wc_apply_product_input( \WC_Product $product, array $input ): ?\WP
 	if ( array_key_exists( 'sale_price', $input ) ) {
 		$product->set_sale_price( aafm_wc_sanitize_price( $input['sale_price'] ) );
 	}
+	// WooCommerce admin refuses a sale price above the regular price, and the store otherwise drops it
+	// while the call reads as a success. Checked on the RESULTING pair, so a request that sends only
+	// the sale price is held against the stored regular price. Only when a price was sent, so an
+	// unrelated edit to a product another plugin left in this state still goes through.
+	if ( array_key_exists( 'regular_price', $input ) || array_key_exists( 'sale_price', $input ) ) {
+		$regular = (string) $product->get_regular_price();
+		$sale    = (string) $product->get_sale_price();
+		if ( '' !== $regular && '' !== $sale && (float) $sale > (float) $regular ) {
+			return new \WP_Error(
+				'aafm_wc_sale_above_regular',
+				__( 'The sale price cannot be higher than the regular price, so nothing was saved. Lower the sale price or raise the regular price.', 'agent-abilities-for-mcp' ),
+				array( 'status' => 400 )
+			);
+		}
+	}
 	// stock_status is derived by WooCommerce from stock_quantity whenever stock is managed, so
 	// validate_props() overwrites a caller-supplied stock_status on save. Refuse the contradictory
 	// pair rather than report a success that never applied.

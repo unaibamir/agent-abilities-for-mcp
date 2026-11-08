@@ -352,7 +352,8 @@ final class DescriptionTruthSweepTest extends TestCase {
 	public function test_replace_sitewide_says_to_rerun_and_warns_when_the_new_text_contains_the_old(): void {
 		$description = (string) aafm_get_abilities_registry()['aafm/replace-sitewide']['description'];
 		$this->assertStringContainsString( 'run the call again', $description );
-		$this->assertStringContainsString( 'If the new text contains the search text', $description );
-		$this->assertStringContainsString( 'check total_matches rather than repeating blindly', $description );
+		$this->assertStringContainsString( 'Skipped posts keep matching', $description );
+		$this->assertStringContainsString( 'posts whose new text contains the search text', $description );
+		$this->assertStringContainsString( 'stop when a call changes nothing', $description );
 	}
 }

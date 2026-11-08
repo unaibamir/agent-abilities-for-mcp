@@ -1177,6 +1177,105 @@ final class BridgeWrapperTest extends TestCase {
 	}
 
 	/**
+	 * A foreign input schema with a top-level oneOf (WooCommerce product-create/update) makes ChatGPT
+	 * silently drop the whole tools/list refresh. The wrapper advertises one plain object instead:
+	 * branch properties merged, enum values unioned, only keys every branch requires still required.
+	 */
+	public function test_bridged_input_schema_with_a_top_level_oneof_is_flattened_to_a_plain_object(): void {
+		$this->register_foreign_with_schema( 'demo/one-of', array( 'type' => 'object' ), static fn() => array(), $this->one_of_input_schema() );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'demo/one-of' ) );
+		$this->register_wrappers();
+
+		$schema = wp_get_ability( 'aafm-bridge/demo-one-of' )->get_input_schema();
+
+		$this->assertSame( 'object', $schema['type'] );
+		foreach ( array( 'oneOf', 'anyOf', 'allOf', 'not' ) as $keyword ) {
+			$this->assertArrayNotHasKey( $keyword, $schema, "Top-level $keyword must not reach an MCP client." );
+		}
+		$this->assertSame( array( 'id', 'kind', 'sku', 'note' ), array_keys( $schema['properties'] ) );
+		$this->assertSame( array( 'a', 'b' ), $schema['properties']['kind']['enum'], 'Branch enums are unioned so either branch value validates.' );
+		$this->assertSame( array( 'id', 'kind' ), $schema['required'], 'Only keys every branch requires stay required.' );
+	}
+
+	/**
+	 * Flattening only changes what is advertised. The foreign ability's own validation still runs on
+	 * execute, against its original oneOf schema.
+	 */
+	public function test_a_flattened_bridged_schema_still_gets_the_foreign_oneof_validation_on_execute(): void {
+		$this->acting_as( 'administrator' );
+		$this->register_foreign_with_schema( 'demo/one-of', array( 'type' => 'object' ), static fn() => array( 'ok' => true ), $this->one_of_input_schema() );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'demo/one-of' ) );
+		$this->register_wrappers();
+		$wrapper = wp_get_ability( 'aafm-bridge/demo-one-of' );
+
+		$valid = $wrapper->execute(
+			array(
+				'id'   => 1,
+				'kind' => 'a',
+				'sku'  => 'x',
+			)
+		);
+		$this->assertSame( array( 'ok' => true ), $valid, 'A valid branch passes.' );
+
+		$bad = $wrapper->execute(
+			array(
+				'id'   => 1,
+				'kind' => 'a',
+			)
+		);
+		$this->assertInstanceOf( \WP_Error::class, $bad, 'Input matching no branch is refused by the foreign validator.' );
+	}
+
+	/**
+	 * A schema without a combinator comes back unchanged.
+	 */
+	public function test_a_flattened_schema_leaves_a_plain_object_schema_untouched(): void {
+		$plain = array(
+			'type'       => 'object',
+			'properties' => array( 'v' => array( 'type' => 'string' ) ),
+			'required'   => array( 'v' ),
+		);
+		$this->assertSame( $plain, aafm_flatten_schema_combinators( $plain ) );
+	}
+
+	/**
+	 * A two-branch oneOf input schema: both branches require id and kind, each adds its own field.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private function one_of_input_schema(): array {
+		$kind = static fn( string $value ): array => array(
+			'type' => 'string',
+			'enum' => array( $value ),
+		);
+		return array(
+			'type'  => 'object',
+			'oneOf' => array(
+				array(
+					'type'                 => 'object',
+					'required'             => array( 'id', 'kind', 'sku' ),
+					'properties'           => array(
+						'id'   => array( 'type' => 'integer' ),
+						'kind' => $kind( 'a' ),
+						'sku'  => array( 'type' => 'string' ),
+					),
+					'additionalProperties' => false,
+				),
+				array(
+					'type'                 => 'object',
+					'required'             => array( 'id', 'kind', 'note' ),
+					'properties'           => array(
+						'id'   => array( 'type' => 'integer' ),
+						'kind' => $kind( 'b' ),
+						'note' => array( 'type' => 'string' ),
+					),
+					'additionalProperties' => false,
+				),
+			),
+		);
+	}
+
+	/**
 	 * Register a foreign ability whose OUTPUT schema carries a keyword outside the client
 	 * allow-list, mirroring register_foreign_with_unsupported_schema_keyword() above but for
 	 * get_output_schema() instead of get_input_schema().

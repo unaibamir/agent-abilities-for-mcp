@@ -244,7 +244,90 @@ function aafm_prepare_bridge_schema_for_client( array $schema ): array {
  */
 function aafm_bridge_input_schema( $ability ): array {
 	$schema = method_exists( $ability, 'get_input_schema' ) ? $ability->get_input_schema() : array();
-	return aafm_prepare_bridge_schema_for_client( aafm_normalize_json_schema( $schema ) );
+	return aafm_prepare_bridge_schema_for_client( aafm_flatten_schema_combinators( aafm_normalize_json_schema( $schema ) ) );
+}
+
+/**
+ * Flatten a top-level oneOf/anyOf/allOf/not on a bridged input schema into one plain object schema.
+ *
+ * ChatGPT silently rejects a whole tools/list refresh when any tool's inputSchema carries one of
+ * these at the root (WooCommerce's product-create and product-update do), and keeps showing the
+ * stale list with no error. The advertised schema is only a hint: the foreign ability still
+ * validates the real input against its own original schema on execute, so nothing is loosened.
+ *
+ * Branch properties are merged (first definition wins, but enum values are unioned so each branch's
+ * value still validates), `required` keeps only keys every branch requires (allOf: all of them),
+ * and the alternatives are spelled out in the description. `not` is dropped.
+ *
+ * @param array<string,mixed> $schema A normalized JSON schema.
+ * @return array<string,mixed> The schema with no top-level combinator.
+ */
+function aafm_flatten_schema_combinators( array $schema ): array {
+	$branches = array();
+	$required = null;
+	$notes    = array();
+	foreach ( array( 'oneOf', 'anyOf', 'allOf' ) as $keyword ) {
+		if ( ! isset( $schema[ $keyword ] ) ) {
+			continue;
+		}
+		$list = is_array( $schema[ $keyword ] ) ? array_values( array_filter( $schema[ $keyword ], 'is_array' ) ) : array();
+		unset( $schema[ $keyword ] );
+		foreach ( $list as $branch ) {
+			$branch_required = isset( $branch['required'] ) && is_array( $branch['required'] ) ? array_values( array_map( 'strval', $branch['required'] ) ) : array();
+			if ( 'allOf' === $keyword ) {
+				$schema['required'] = array_values( array_unique( array_merge( isset( $schema['required'] ) ? (array) $schema['required'] : array(), $branch_required ) ) );
+			} else {
+				$required = null === $required ? $branch_required : array_values( array_intersect( $required, $branch_required ) );
+				$notes[]  = $branch_required;
+			}
+			$branches[] = $branch;
+		}
+	}
+	unset( $schema['not'] );
+
+	if ( array() === $branches ) {
+		return $schema;
+	}
+
+	$properties = isset( $schema['properties'] ) && is_array( $schema['properties'] ) ? $schema['properties'] : array();
+	foreach ( $branches as $branch ) {
+		$branch_props = isset( $branch['properties'] ) && is_array( $branch['properties'] ) ? $branch['properties'] : array();
+		foreach ( $branch_props as $name => $prop ) {
+			if ( ! isset( $properties[ $name ] ) ) {
+				$properties[ $name ] = $prop;
+			} elseif ( isset( $properties[ $name ]['enum'], $prop['enum'] ) && is_array( $properties[ $name ]['enum'] ) && is_array( $prop['enum'] ) ) {
+				$properties[ $name ]['enum'] = array_values( array_unique( array_merge( $properties[ $name ]['enum'], $prop['enum'] ), SORT_REGULAR ) );
+			}
+		}
+	}
+	if ( array() !== $properties ) {
+		$schema['properties'] = $properties;
+	}
+
+	if ( null !== $required ) {
+		$schema['required'] = array_values( array_unique( array_merge( isset( $schema['required'] ) ? (array) $schema['required'] : array(), $required ) ) );
+	}
+	if ( array() === ( $schema['required'] ?? null ) ) {
+		unset( $schema['required'] );
+	}
+
+	$notes = array_unique(
+		array_map(
+			static function ( array $keys ): string {
+				return implode( ', ', $keys );
+			},
+			array_filter( $notes )
+		)
+	);
+	if ( count( $notes ) > 1 ) {
+		$note = sprintf(
+			/* translators: %s: semicolon-separated groups of required field names, one group per accepted input shape. */
+			__( 'Accepted input shapes require: %s.', 'agent-abilities-for-mcp' ),
+			implode( '; ', $notes )
+		);
+		$schema['description'] = isset( $schema['description'] ) && '' !== $schema['description'] ? $schema['description'] . ' ' . $note : $note;
+	}
+	return $schema;
 }
 
 /**

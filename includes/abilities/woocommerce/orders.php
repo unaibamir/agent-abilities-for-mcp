@@ -2508,6 +2508,16 @@ function aafm_exec_wc_create_order_refund( array $input ) {
 		return aafm_generic_error();
 	}
 
+	// The schema's amount pattern admits "0" and "0.00". A refund of nothing is not a refund, and
+	// WooCommerce would create an empty refund record for it.
+	if ( (float) $amount <= 0 ) {
+		return new \WP_Error(
+			'aafm_wc_invalid_refund_amount',
+			__( 'The refund amount must be greater than zero, so no refund was created.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
+	}
+
 	$refund_args = array(
 		'order_id' => $order_id,
 		'amount'   => $amount,

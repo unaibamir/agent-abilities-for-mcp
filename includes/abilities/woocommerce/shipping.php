@@ -269,15 +269,24 @@ function aafm_wc_shipping_zone_write_properties(): array {
  *
  * @param \WC_Shipping_Zone   $zone  Zone object to mutate.
  * @param array<string,mixed> $input Validated input fields (zone_id already extracted).
- * @return void
+ * @return \WP_Error|null An error when the name is empty, otherwise null.
  */
-function aafm_wc_apply_shipping_zone_input( \WC_Shipping_Zone $zone, array $input ): void {
+function aafm_wc_apply_shipping_zone_input( \WC_Shipping_Zone $zone, array $input ): ?\WP_Error {
 	if ( array_key_exists( 'zone_name', $input ) ) {
-		$zone->set_zone_name( aafm_sanitize_plain_text( (string) $input['zone_name'] ) );
+		$name = aafm_sanitize_plain_text( (string) $input['zone_name'] );
+		if ( '' === trim( $name ) ) {
+			return new \WP_Error(
+				'aafm_wc_invalid_zone_name',
+				__( 'A shipping zone needs a name, so nothing was saved.', 'agent-abilities-for-mcp' ),
+				array( 'status' => 400 )
+			);
+		}
+		$zone->set_zone_name( $name );
 	}
 	if ( array_key_exists( 'zone_order', $input ) ) {
 		$zone->set_zone_order( absint( $input['zone_order'] ) );
 	}
+	return null;
 }
 
 // =============================================================================
@@ -467,8 +476,11 @@ function aafm_exec_wc_create_shipping_zone( array $input ) {
 		return aafm_generic_error();
 	}
 
-	$zone = new \WC_Shipping_Zone();
-	aafm_wc_apply_shipping_zone_input( $zone, $input );
+	$zone  = new \WC_Shipping_Zone();
+	$error = aafm_wc_apply_shipping_zone_input( $zone, $input );
+	if ( null !== $error ) {
+		return $error;
+	}
 
 	$id = (int) aafm_wc_write(
 		'save',
@@ -563,7 +575,10 @@ function aafm_exec_wc_update_shipping_zone( array $input ) {
 
 	$fields = $input;
 	unset( $fields['zone_id'] );
-	aafm_wc_apply_shipping_zone_input( $zone, $fields );
+	$error = aafm_wc_apply_shipping_zone_input( $zone, $fields );
+	if ( null !== $error ) {
+		return $error;
+	}
 	$saved_id = (int) aafm_wc_write(
 		'save',
 		array(

@@ -253,6 +253,27 @@ final class WooShippingTest extends TestCase {
 		$this->assertSame( 3, $res['zone_order'] );
 	}
 
+	public function test_shipping_zone_create_and_update_refuse_an_empty_name(): void {
+		$this->acting_as( 'administrator' );
+
+		foreach ( array( '', '   ' ) as $name ) {
+			$create = wp_get_ability( 'aafm/wc-create-shipping-zone' )->execute( array( 'zone_name' => $name ) );
+			$this->assertInstanceOf( WP_Error::class, $create, 'create with "' . $name . '"' );
+			$this->assertSame( 'aafm_wc_invalid_zone_name', $create->get_error_code() );
+
+			$update = wp_get_ability( 'aafm/wc-update-shipping-zone' )->execute(
+				array(
+					'zone_id'   => 1,
+					'zone_name' => $name,
+				)
+			);
+			$this->assertInstanceOf( WP_Error::class, $update, 'update with "' . $name . '"' );
+			$this->assertSame( 'aafm_wc_invalid_zone_name', $update->get_error_code() );
+		}
+		$still = wp_get_ability( 'aafm/wc-get-shipping-zone' )->execute( array( 'zone_id' => 1 ) );
+		$this->assertNotSame( '', $still['zone_name'], 'A refused update leaves the zone name alone.' );
+	}
+
 	/**
 	 * Store failure surfaces as WP_Error, not a false success.
 	 */

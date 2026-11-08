@@ -1717,7 +1717,13 @@ function aafm_post_tool_reach_refused( string $name, array $input ): bool {
 	}
 	$id   = isset( $input['post_id'] ) && is_numeric( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
 	$post = $id ? aafm_exact_object( 'post', $id ) : null;
-	return $post instanceof WP_Post && ! aafm_post_tool_reach_allowed( $post, $tools[ $name ][0], $tools[ $name ][1] );
+	if ( ! $post instanceof WP_Post ) {
+		return false;
+	}
+	// A user the capability check also refuses is labelled for that, since turning the type's own
+	// tool on would not let the call through.
+	$capable = 'update' === $tools[ $name ][0] ? aafm_can_edit_post_object( $post ) : aafm_can_delete_post_object( $post );
+	return $capable && ! aafm_post_tool_reach_allowed( $post, $tools[ $name ][0], $tools[ $name ][1] );
 }
 
 /**

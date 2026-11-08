@@ -306,7 +306,8 @@ final class PageBuilderGuardTest extends TestCase {
 				'settings' => (object) array( 'text' => 'Stewart platform draft' ),
 			),
 		);
-		$id               = self::factory()->post->create(
+		kses_remove_filters();
+		$id = self::factory()->post->create(
 			array(
 				'post_title'   => 'Stewart #1939',
 				'post_content' => $original_content,
@@ -314,11 +315,12 @@ final class PageBuilderGuardTest extends TestCase {
 				'post_status'  => 'publish',
 			)
 		);
+		$this->assertSame( $original_content, get_post( $id )->post_content, 'precondition: fixture stores raw builder fallback markup' );
 		update_post_meta( $id, '_fl_builder_data', $builder_data );
 		update_post_meta( $id, '_fl_builder_draft', $builder_draft );
 		update_post_meta( $id, '_fl_builder_enabled', '1' );
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
-		// Force unfiltered_html off via map_meta_cap so core's wp_filter_post_kses would strip <script> if post_content were re-sanitized.
+		// Force unfiltered_html off via map_meta_cap and re-init KSES so core's wp_filter_post_kses would strip <script> if post_content were re-sanitized.
 		$revoke_unfiltered = static function ( array $caps, string $cap ): array {
 			if ( 'unfiltered_html' === $cap ) {
 				return array( 'do_not_allow' );
@@ -326,6 +328,7 @@ final class PageBuilderGuardTest extends TestCase {
 			return $caps;
 		};
 		add_filter( 'map_meta_cap', $revoke_unfiltered, 10, 2 );
+		kses_init();
 
 		try {
 			$result = aafm_exec_update_post(

@@ -499,6 +499,38 @@ final class WooVariationsTest extends TestCase {
 		$this->assertContains( (int) $res['id'], wp_list_pluck( $list['variations'], 'id' ) );
 	}
 
+	public function test_a_variation_sale_price_above_the_regular_price_is_refused(): void {
+		$this->acting_as( 'administrator' );
+
+		$create = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id'    => 500,
+				'regular_price' => '10.00',
+				'sale_price'    => '12.00',
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $create );
+		$this->assertSame( 'aafm_wc_sale_above_regular', $create->get_error_code() );
+
+		$ok = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id'    => 500,
+				'regular_price' => '10.00',
+				'sale_price'    => '8.00',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $ok );
+
+		$update = wp_get_ability( 'aafm/wc-update-product-variation' )->execute(
+			array(
+				'variation_id' => (int) $ok['id'],
+				'sale_price'   => '11.00',
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $update, 'An update that sends only the sale price is held against the stored regular price.' );
+		$this->assertSame( 'aafm_wc_sale_above_regular', $update->get_error_code() );
+	}
+
 	public function test_create_variation_requires_parent_product_id(): void {
 		$this->acting_as( 'administrator' );
 		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute( array( 'sku' => 'NO-PARENT' ) );

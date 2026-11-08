@@ -556,6 +556,19 @@ function aafm_wc_apply_variation_input( \WC_Product_Variation $variation, array 
 	if ( array_key_exists( 'sale_price', $input ) ) {
 		$variation->set_sale_price( aafm_wc_sanitize_price( $input['sale_price'] ) );
 	}
+	// Same refusal as wc-create-product: the store drops a sale price above the regular price while the
+	// call reads as a success. Checked on the resulting pair, and only when a price was sent.
+	if ( array_key_exists( 'regular_price', $input ) || array_key_exists( 'sale_price', $input ) ) {
+		$regular = (string) $variation->get_regular_price();
+		$sale    = (string) $variation->get_sale_price();
+		if ( '' !== $regular && '' !== $sale && (float) $sale > (float) $regular ) {
+			return new \WP_Error(
+				'aafm_wc_sale_above_regular',
+				__( 'The sale price cannot be higher than the regular price, so nothing was saved. Lower the sale price or raise the regular price.', 'agent-abilities-for-mcp' ),
+				array( 'status' => 400 )
+			);
+		}
+	}
 	// Apply manage_stock first so the stock_status guard below can read the EFFECTIVE state.
 	// WC_Product_Variation::get_manage_stock() returns true (self-managed), false (standalone,
 	// unmanaged), or the string 'parent' (inherits the parent's management). validate_props()

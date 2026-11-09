@@ -537,6 +537,7 @@ final class UndoAgentRulesTest extends UndoTestCase {
 			'rank math serialized array' => array( 'aafm/rankmath-update-post', 'rank_math_canonical_url', 'a:1:{i:0;s:1:"x";}', false ),
 			'rank math javascript'       => array( 'aafm/rankmath-update-post', 'rank_math_canonical_url', 'javascript:alert(1)', false ),
 			'rank math https'            => array( 'aafm/rankmath-update-post', 'rank_math_canonical_url', 'https://example.test/', true ),
+			'slim seo array canonical'   => array( 'aafm/slim-seo-update-post', 'slim_seo', serialize( array( 'canonical' => array( 'x' ) ) ), false ), // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- the stored shape of a legacy row.
 		);
 	}
 

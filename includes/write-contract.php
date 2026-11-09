@@ -426,10 +426,10 @@ function aafm_meta_restore_unfiltered( string $type, string $key, string $subtyp
 	if ( null === $raw_rows ) {
 		return false;
 	}
-	// add_metadata() sanitizes the unslashed value without an object subtype, then stores maybe_serialize() of it.
+	// add_metadata() sanitizes the unslashed value with the object's subtype, then stores maybe_serialize() of it.
 	foreach ( $raw_rows as $raw ) {
 		$inspect = aafm_meta_raw_inspect( (string) $raw );
-		if ( null !== $inspect['reason'] || maybe_serialize( sanitize_meta( $key, $inspect['value'], $type ) ) !== (string) $raw ) {
+		if ( null !== $inspect['reason'] || maybe_serialize( sanitize_meta( $key, $inspect['value'], $type, $subtype ) ) !== (string) $raw ) {
 			return false;
 		}
 	}
@@ -533,7 +533,7 @@ function aafm_meta_restore_rows( string $type, int $id, string $key, array $raw_
 	};
 
 	$raw_rows = array_values( array_map( 'strval', $raw_rows ) );
-	if ( ! aafm_meta_restore_unfiltered( $type, $key, '', $raw_rows ) ) {
+	if ( ! aafm_meta_restore_unfiltered( $type, $key, (string) get_object_subtype( $type, $id ), $raw_rows ) ) {
 		return $finish( AAFM_WRITE_REFUSED, false );
 	}
 	$values = array();
@@ -579,7 +579,10 @@ function aafm_meta_restore_rows( string $type, int $id, string $key, array $raw_
 		$landed = $after['ok'] && 0 === $rows['aliased'] && array_keys( $new ) === $added && array_values( $new ) === $raw_rows;
 	}
 	if ( ! $landed ) {
-		foreach ( $added as $meta_id ) {
+		// Remove only an id a fresh read shows as a row of this object and key: a short-circuit can answer with any id.
+		$now  = array() === $added ? null : aafm_meta_raw_snapshot( $type, $id, array( $key ) );
+		$mine = null !== $now && $now['ok'] ? array_diff( array_intersect( $added, $now['by_key'][ $key ]['ids'] ), $base['ids'] ) : array();
+		foreach ( $mine as $meta_id ) {
 			delete_metadata_by_mid( $type, $meta_id );
 		}
 		wp_cache_delete( $id, $type . '_meta' );

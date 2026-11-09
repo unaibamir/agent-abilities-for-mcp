@@ -1058,7 +1058,7 @@ function aafm_undo_apply( int $change_id, string $source ) {
 		if ( in_array( $field, array( 'term:name', 'term:description' ), true ) && is_string( $value ) && wp_unslash( sanitize_term_field( substr( $field, 5 ), wp_slash( $value ), $id, $d['taxonomy'], 'db' ) ) !== $value ) {
 			return $release( 'would_change' );
 		}
-		if ( 0 === strpos( (string) $field, 'meta:' ) && ! aafm_meta_restore_unfiltered( $type, substr( (string) $field, 5 ), '', array_map( 'strval', (array) $value ) ) ) {
+		if ( 0 === strpos( (string) $field, 'meta:' ) && ! aafm_meta_restore_unfiltered( $type, substr( (string) $field, 5 ), (string) get_object_subtype( $type, $id ), array_map( 'strval', (array) $value ) ) ) {
 			return $release( 'meta_filtered' );
 		}
 	}

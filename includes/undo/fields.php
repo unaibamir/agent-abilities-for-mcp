@@ -82,6 +82,10 @@ function aafm_undo_field_flag( string $field, $value ): ?string {
 			return 'secret_shaped';
 		}
 		foreach ( (array) $value as $raw ) {
+			// Length first: a large serialized value is refused before it is decoded.
+			if ( strlen( (string) $raw ) > AAFM_UNDO_MAX_CHANGE_BYTES ) {
+				return 'too_large';
+			}
 			$reason = aafm_meta_raw_restorable( (string) $raw );
 			if ( null !== $reason ) {
 				return $reason;
@@ -396,9 +400,10 @@ function aafm_undo_certify( string $object_type, int $object_id, array $values, 
  *
  * @param int                 $post_id Post id.
  * @param array<string,mixed> $columns Column to the value that was there (strings, or null for SQL NULL).
- * @return void
+ * @return bool False when a companion value could not be read, in which case nothing is written: a guessed
+ *              title or description would overwrite a field the change never touched.
  */
-function aafm_undo_write_aioseo( int $post_id, array $columns ): void {
+function aafm_undo_write_aioseo( int $post_id, array $columns ): bool {
 	$patch_keys = array_flip( aafm_undo_aioseo_columns() );
 	$flags      = array( 'robots_default', 'robots_noindex', 'robots_nofollow', 'twitter_use_og' );
 	$data       = array();
@@ -409,12 +414,16 @@ function aafm_undo_write_aioseo( int $post_id, array $columns ): void {
 	}
 	foreach ( array( 'title', 'description' ) as $key ) {
 		if ( ! array_key_exists( $key, $data ) ) {
-			$now          = aafm_undo_read_fields( 'post', $post_id, array( 'aioseo:' . $key ) );
-			$data[ $key ] = null === $now ? '' : (string) $now['values'][ 'aioseo:' . $key ];
+			$now = aafm_undo_read_fields( 'post', $post_id, array( 'aioseo:' . $key ) );
+			if ( null === $now ) {
+				return false;
+			}
+			$data[ $key ] = (string) $now['values'][ 'aioseo:' . $key ];
 		}
 	}
 	aafm_aioseo_write( $post_id, $data );
 	aafm_collect_meta_touch( 'post', $post_id );
+	return true;
 }
 
 /**

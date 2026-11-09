@@ -2867,6 +2867,56 @@ final class MetaWriteContractTest extends TestCase {
 		$this->assertSame( array( 'a', 'b' ), $this->raw_rows( $post ), 'Both baseline rows are untouched.' );
 	}
 
+	public function test_restore_rows_cleanup_never_deletes_a_row_it_did_not_create(): void {
+		$post  = self::factory()->post->create();
+		$other = self::factory()->post->create();
+		add_post_meta( $post, self::RAW_KEY, 'a' );
+		// An unrelated row with a higher meta id than every baseline row.
+		add_post_meta( $other, 'aafm_unrelated', 'keep me' );
+		$unrelated = aafm_meta_raw_snapshot( 'post', $other, array( 'aafm_unrelated' ) )['by_key']['aafm_unrelated']['ids'][0];
+		$lie       = static fn() => $unrelated;
+		add_filter( 'add_post_metadata', $lie );
+
+		try {
+			$restored = aafm_meta_restore_rows( 'post', $post, self::RAW_KEY, array( 'x' ) );
+		} finally {
+			remove_filter( 'add_post_metadata', $lie );
+		}
+
+		$this->assertFalse( $restored );
+		$this->assertSame( 'keep me', get_post_meta( $other, 'aafm_unrelated', true ), 'A short-circuit answering with another row\'s id must not cost that row.' );
+		$this->assertSame( array( 'a' ), $this->raw_rows( $post ) );
+	}
+
+	public function test_a_subtype_scoped_sanitizer_that_changes_a_value_is_refused_before_any_write(): void {
+		$post = self::factory()->post->create();
+		add_post_meta( $post, self::RAW_KEY, 'a' );
+		register_meta(
+			'post',
+			self::RAW_KEY,
+			array(
+				'object_subtype'    => 'post',
+				'sanitize_callback' => static fn( $value ) => strtoupper( (string) $value ),
+			)
+		);
+		$added = 0;
+		$count = static function () use ( &$added ): void {
+			++$added;
+		};
+		add_action( 'added_post_meta', $count );
+
+		try {
+			$restored = aafm_meta_restore_rows( 'post', $post, self::RAW_KEY, array( 'lower' ) );
+		} finally {
+			remove_action( 'added_post_meta', $count );
+			unregister_meta_key( 'post', self::RAW_KEY, 'post' );
+		}
+
+		$this->assertFalse( $restored );
+		$this->assertSame( 0, $added, 'Refused up front: no add fired and was rolled back.' );
+		$this->assertSame( array( 'a' ), $this->raw_rows( $post ) );
+	}
+
 	public function test_restore_rows_rejects_an_add_id_that_is_not_a_new_row_of_this_key(): void {
 		global $wpdb;
 		$post = self::factory()->post->create();

@@ -332,6 +332,13 @@ final class UndoCaptureFailureTest extends UndoTestCase {
 		$this->assertNull( $rows[0]['before_values'] );
 	}
 
+	public function test_a_meta_value_over_the_size_bound_is_refused_before_it_is_decoded(): void {
+		// A malformed serialized string would read as not_exact if it were decoded first; its length decides first.
+		$raw = 'a:1:{' . str_repeat( 'x', AAFM_UNDO_MAX_CHANGE_BYTES + 10 ) . '}';
+
+		$this->assertSame( 'too_large', aafm_undo_field_flag( 'meta:aafm_note', array( $raw ) ) );
+	}
+
 	public function test_a_hard_blocked_key_never_reaches_the_table(): void {
 		$fields = aafm_undo_fields_post_write(
 			array(

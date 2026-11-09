@@ -9,6 +9,8 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Undo;
 
+use AAFM\Tests\Support\QueryFaultInjector;
+
 final class UndoHonestyTest extends UndoTestCase {
 
 	public function set_up(): void {
@@ -303,6 +305,18 @@ final class UndoHonestyTest extends UndoTestCase {
 
 		$other = aafm_undo_certify( 'post', $post, array( 'aioseo:title' => 'Something else' ) );
 		$this->assertSame( array( 'aioseo:title' ), $other['missed'] );
+	}
+
+	public function test_an_aioseo_restore_writes_nothing_when_a_companion_value_cannot_be_read(): void {
+		$post = self::factory()->post->create();
+		$this->aioseo_table_with( $post, 'Keep me' );
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$wpdb->query( $wpdb->prepare( 'ALTER TABLE %i ADD COLUMN robots_noindex TINYINT NULL, ADD COLUMN description TEXT NULL', aafm_undo_aioseo_table() ) );
+
+		$wrote = QueryFaultInjector::fail_query( 'FROM `' . aafm_undo_aioseo_table() . '`', static fn() => aafm_undo_write_aioseo( $post, array( 'robots_noindex' => '1' ) ) );
+
+		$this->assertFalse( $wrote, 'A failed companion read aborts before the vendor save, which would otherwise write a guessed title.' );
 	}
 
 	public function test_aioseo_post_without_a_row_flags_every_field_as_no_vendor_row(): void {

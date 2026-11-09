@@ -473,7 +473,7 @@ function aafm_ajax_undo_revert_group(): void {
 		$payload['message'] = sprintf(
 			/* translators: %s: the changes that were not reverted, each with its reason. */
 			__( 'Nothing was reverted. %s', 'agent-abilities-for-mcp' ),
-			implode( ' ', array_map( static fn( array $r ): string => sprintf( '#%d: %s', (int) $r['change_id'], (string) $r['message'] ), $results ) )
+			implode( ' ', array_map( static fn( array $r ): string => sprintf( '#%d: %s', (int) $r['change_id'], (string) ( $r['message'] ?? '' ) ), $results ) )
 		);
 	}
 	aafm_undo_ajax_finish( $row_id, array() === $landed ? 'error' : 'success', $detail, $payload, array() !== $landed );

@@ -1093,7 +1093,7 @@ function aafm_undo_apply( int $change_id, string $source ) {
 		$thrown = $e;
 	}
 
-	$state_now = aafm_undo_read_fields( $type, $id, $recorded['fields'], $context );
+	$state_now = aafm_undo_read_fields( $type, $id, $recorded['fields'] ?? array(), $context );
 	$fault     = static function () use ( $thrown, $source ): void {
 		if ( null !== $thrown ) {
 			aafm_undo_engine_fault( $thrown, 'owner' === $source ? 'aafm/owner-revert' : 'aafm/undo-change' );

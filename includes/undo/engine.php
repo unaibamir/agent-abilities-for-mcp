@@ -1009,17 +1009,46 @@ function aafm_undo_apply( int $change_id, string $source ) {
 	if ( aafm_undo_claim_is_stale( $row ) ) {
 		aafm_undo_reclaim_stale( $change_id, (string) $row['reason'] );
 	}
-	$claimed = aafm_undo_update(
+	$claimed_at = (string) time();
+	$claimed    = aafm_undo_update(
 		$change_id,
 		array(
 			'status' => 'undoing',
-			'reason' => (string) time(),
+			'reason' => $claimed_at,
 		),
 		array( 'ready' )
 	);
 	if ( 1 !== $claimed ) {
 		return aafm_undo_refusal( 'interrupted' );
 	}
+
+	try {
+		return aafm_undo_apply_claimed( $row, $source, $claimed_at );
+	} catch ( \Throwable $e ) {
+		// Anything that threw outside the write's own settlement puts the row back; a retry is safe either way.
+		aafm_undo_update(
+			$change_id,
+			array(
+				'status' => 'ready',
+				'reason' => '',
+			),
+			array( 'undoing' )
+		);
+		aafm_undo_engine_fault( $e, 'owner' === $source ? 'aafm/owner-revert' : 'aafm/undo-change' );
+		return new \WP_Error( 'aafm_undo_failed', __( 'The undo did not finish, so check the item before trying again.', 'agent-abilities-for-mcp' ) );
+	}
+}
+
+/**
+ * The part of a revert that runs while the row is claimed: object checks, conflict check, record, write and settle.
+ *
+ * @param array<string,mixed> $row        The claimed change row.
+ * @param string              $source     'owner' or 'agent'.
+ * @param string              $claimed_at The claim time written to the row's reason column.
+ * @return array<string,mixed>|\WP_Error
+ */
+function aafm_undo_apply_claimed( array $row, string $source, string $claimed_at ) {
+	$change_id = (int) $row['id'];
 	// Every refusal from here until a write lands puts the row back.
 	$release = static function ( string $reason ) use ( $change_id ) {
 		aafm_undo_update(
@@ -1086,6 +1115,14 @@ function aafm_undo_apply( int $change_id, string $source ) {
 			aafm_undo_delete( $new_id );
 			return $release( 'changed_since' );
 		}
+	}
+
+	// Still the holder of the claim? A claim left past the grace can be taken by another request, and this
+	// one may have been paused in a slow hook; if so it must not write on top of the other.
+	$held = aafm_undo_get_view( $change_id );
+	if ( ! $held['ok'] || null === $held['row'] || 'undoing' !== $held['row']['status'] || (string) $held['row']['reason'] !== $claimed_at ) {
+		aafm_undo_delete( $new_id );
+		return aafm_undo_refusal( 'interrupted' );
 	}
 
 	// ponytail: a human save landing between the read above and the write below wins or loses the way two WordPress

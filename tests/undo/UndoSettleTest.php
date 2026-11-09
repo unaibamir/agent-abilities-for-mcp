@@ -121,6 +121,47 @@ final class UndoSettleTest extends UndoTestCase {
 		$this->assertSame( 'ready', $this->status_of( $change ), 'Settled before the rethrow, not stranded in undoing.' );
 	}
 
+	public function test_a_hook_that_throws_before_the_write_even_starts_puts_the_row_back(): void {
+		add_filter( 'aafm_rethrow_ability_exceptions', '__return_false' );
+		list( $post, $change ) = $this->titled_b();
+
+		$boom = static function (): void {
+			throw new \RuntimeException( 'a capability filter failed' );
+		};
+		add_filter( 'map_meta_cap', $boom );
+		$result = aafm_undo_apply( $change, 'owner' );
+		remove_filter( 'map_meta_cap', $boom );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'aafm_undo_failed', $result->get_error_code() );
+		$this->assertSame( 'B', get_post( $post )->post_title );
+		$this->assertSame( 'ready', $this->status_of( $change ) );
+		$this->assertIsArray( aafm_undo_apply( $change, 'owner' ), 'A retry works once the hook is gone.' );
+	}
+
+	public function test_a_revert_that_lost_its_claim_to_another_request_does_not_write(): void {
+		global $wpdb;
+		list( $post, $change ) = $this->titled_b();
+		$steal                 = static function ( string $query ) use ( $change, $wpdb ): string {
+			// The recovery row is inserted right before the write: another request has reclaimed the row by then.
+			if ( 0 === strpos( $query, 'INSERT INTO `' . aafm_changes_table() . '`' ) ) {
+				remove_all_filters( 'query' );
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$wpdb->query( $wpdb->prepare( "UPDATE %i SET reason = 'taken-by-another' WHERE id = %d", aafm_changes_table(), $change ) );
+			}
+			return $query;
+		};
+		add_filter( 'query', $steal );
+		$result = aafm_undo_apply( $change, 'owner' );
+		remove_filter( 'query', $steal );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'aafm_undo_interrupted', $result->get_error_code() );
+		$this->assertSame( 'B', get_post( $post )->post_title, 'The paused request must not write over the other one.' );
+		$this->assertSame( 'undoing', $this->status_of( $change ), 'The other request still owns the claim.' );
+		$this->assertCount( 1, $this->change_rows(), 'Its recovery row is removed.' );
+	}
+
 	public function test_a_failed_verifying_read_keeps_the_recovery_row_and_does_not_claim_a_no_op(): void {
 		global $wpdb;
 		list( $post, $change ) = $this->titled_b();

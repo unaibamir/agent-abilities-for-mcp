@@ -94,7 +94,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'label'        => __( 'Replace in post', 'agent-abilities-for-mcp' ),
 		'description'  => sprintf(
 			/* translators: %s: page builder names, for example Elementor and Divi. */
-			__( 'Literal find-and-replace inside a post\'s content. Sanitizes the replacement text and edits only the replaced spans of the body; untouched content is left byte-for-byte as it was, and status is never touched. Reaches a page, product, event, venue, organizer or listing only while that type\'s own tool is on. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
+			__( 'Literal find-and-replace inside a post\'s content. Sanitizes the replacement text and edits only the replaced spans of the body; untouched content is left byte-for-byte as it was, and status is never touched. Matches literal text only: markdown such as [text](url) is inserted as typed, not turned into a link, and text inside markup (an href, src or other attribute) is refused, so use replace-block or update-post for links, src and markup. Reaches a page, product, event, venue, organizer or listing only while that type\'s own tool is on. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
 			aafm_page_builder_names()
 		),
 		'group'        => 'writes',

@@ -98,6 +98,14 @@ final class DescriptionCoverageTest extends TestCase {
 	 * hatch, so a stale or wrong entry (an ability renamed/removed, or one that already got its
 	 * descriptions written) is caught rather than silently carried forever.
 	 */
+	public function test_replace_in_post_says_it_is_literal_text_only_and_names_the_tools_for_links(): void {
+		$description = aafm_ability_description( 'aafm/replace-in-post' );
+
+		$this->assertStringContainsString( 'markdown', $description );
+		$this->assertStringContainsString( 'replace-block', $description );
+		$this->assertStringContainsString( 'update-post', $description );
+	}
+
 	public function test_allowlist_entries_exist_and_are_still_genuinely_bare(): void {
 		$registry = aafm_get_abilities_registry();
 		$stale    = array();

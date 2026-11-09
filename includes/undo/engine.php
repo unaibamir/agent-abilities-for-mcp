@@ -1299,6 +1299,14 @@ function aafm_undo_run_write( array $row, array $d, array $context, string $sour
 				} finally {
 					remove_filter( 'wp_untrash_post_status', $filter, 10 );
 				}
+				// A draft's empty slug and floating date do not survive the trip: trashing writes "__trashed" and a
+				// real GMT date, and untrash keeps both. Put back what the change recorded where it now differs.
+				$recorded = array_intersect_key( $d['before'], array_flip( array( 'post:post_name', 'post:post_date', 'post:post_date_gmt' ) ) );
+				$now      = array() === $recorded ? null : aafm_undo_read_fields( 'post', $id, array_merge( array( 'post:post_status' ), array_keys( $recorded ) ) );
+				// Only once the untrash itself took: a vetoed untrash is a failure, not something to patch over.
+				if ( null !== $now && 'trash' !== $now['values']['post:post_status'] && array_diff_assoc( $recorded, $now['values'] ) !== array() ) {
+					aafm_undo_write_fields( 'post', $id, $recorded );
+				}
 				$wanted = array(
 					'post:post_status' => $status,
 					'post:post_name'   => (string) ( $d['before']['post:post_name'] ?? '' ),

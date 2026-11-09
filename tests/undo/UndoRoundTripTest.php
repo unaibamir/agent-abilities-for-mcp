@@ -320,6 +320,34 @@ final class UndoRoundTripTest extends UndoTestCase {
 		$this->assertSame( array(), $this->raw_meta( $post, '_thumbnail_id' ) );
 	}
 
+	/**
+	 * A draft has an empty slug and a floating date. Trashing it makes core write "__trashed" and a real GMT
+	 * date, and untrash used to leave both behind: the revert came back as reverted_with_differences.
+	 */
+	public function test_trash_of_a_slugless_draft_reverts_to_the_empty_slug_and_floating_date(): void {
+		global $wpdb;
+		$post = self::factory()->post->create(
+			array(
+				'post_status' => 'draft',
+				'post_name'   => '',
+			)
+		);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- a test fixture write.
+		$wpdb->update( $wpdb->posts, array( 'post_date_gmt' => '0000-00-00 00:00:00', 'post_name' => '' ), array( 'ID' => $post ) ); // phpcs:ignore WordPress.Arrays.ArrayDeclarationSpacing.AssociativeArrayFound
+		clean_post_cache( $post );
+		$before = $this->post_row( $post );
+		$change = $this->change_from( 'aafm/trash-post', array( 'post_id' => $post ) );
+		$this->assertSame( '__trashed', $this->post_row( $post )['post_name'], 'Guard: core suffixed the slug.' );
+
+		$this->revert( $change );
+
+		$after = $this->post_row( $post );
+		$this->assertSame( 'draft', $after['post_status'] );
+		$this->assertSame( $before['post_name'], $after['post_name'] );
+		$this->assertSame( $before['post_date'], $after['post_date'] );
+		$this->assertSame( $before['post_date_gmt'], $after['post_date_gmt'] );
+	}
+
 	public function test_trash_of_a_published_post_reverts_to_published(): void {
 		$post   = self::factory()->post->create(
 			array(

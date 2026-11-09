@@ -201,7 +201,8 @@ function aafm_undo_fields_none(): array {
  * @return string[]
  */
 function aafm_undo_fields_trash(): array {
-	return array( 'post:post_status', 'post:post_name' );
+	// The dates too: trashing a draft turns its floating date into a real one, and only a recorded value lets the undo put it back.
+	return array( 'post:post_status', 'post:post_name', 'post:post_date', 'post:post_date_gmt' );
 }
 
 /**

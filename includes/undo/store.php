@@ -148,6 +148,38 @@ function aafm_undo_update( int $id, array $data, array $where_status = array() )
 }
 
 /**
+ * Whether a row stuck in `undoing` has been there past the in-flight grace, judged by the claim time kept in its
+ * reason column. A row with no readable claim time is never stale.
+ *
+ * ponytail: the claim time rides in `reason` (empty again the moment the row leaves `undoing`) to avoid a column
+ * for one rare recovery; give it its own column if another state ever needs a timestamp.
+ *
+ * @param array<string,mixed> $row A change row.
+ * @return bool
+ */
+function aafm_undo_claim_is_stale( array $row ): bool {
+	$claimed = (string) ( $row['reason'] ?? '' );
+	return 'undoing' === ( $row['status'] ?? '' ) && ctype_digit( $claimed ) && (int) $claimed < time() - AAFM_UNDO_PENDING_GRACE;
+}
+
+/**
+ * Put a stale `undoing` row back to `ready`, only if its claim time is still the one that was read, so two
+ * requests cannot both reclaim it. The next claim is the normal atomic one.
+ *
+ * @param int    $id      Row id.
+ * @param string $claimed The claim time read from the row.
+ * @return bool Whether this call released the row.
+ */
+function aafm_undo_reclaim_stale( int $id, string $claimed ): bool {
+	global $wpdb;
+	$suppressed = $wpdb->suppress_errors( true );
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$result = $wpdb->query( $wpdb->prepare( "UPDATE %i SET status = 'ready', reason = '' WHERE id = %d AND status = 'undoing' AND reason = %s", aafm_changes_table(), $id, $claimed ) );
+	$wpdb->suppress_errors( $suppressed );
+	return 1 === $result;
+}
+
+/**
  * Delete one change row (a call that changed nothing leaves no row).
  *
  * @param int $id Row id.

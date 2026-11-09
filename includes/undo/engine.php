@@ -99,6 +99,7 @@ function aafm_undo_open_sitewide( ?array $handle = null, bool $forget = false ):
  * @return void
  */
 function aafm_undo_reset_request_state(): void {
+	aafm_undo_settle_creates( null, true );
 	aafm_undo_current_row_id( null, true );
 	aafm_undo_open_sitewide( null, true );
 }
@@ -298,6 +299,7 @@ function aafm_undo_begin( string $ability, array $input, int $row_id ): ?array {
  * @return array<string,mixed>|null
  */
 function aafm_undo_begin_inner( string $ability, array $input, int $row_id ): ?array {
+	aafm_undo_current_row_id( null, true ); // Each call sets its own row id below; none carries over from the last.
 	if ( 0 !== strpos( $ability, 'aafm/' ) || aafm_ability_is_read( $ability ) ) {
 		return null;
 	}
@@ -478,7 +480,7 @@ function aafm_undo_finalize_change( array $h ): array {
 			'snapshot_bytes' => strlen( $json ),
 		)
 	);
-	return $written < 0 ? $not_undoable( 'capture_failed' ) : array( 'status' => 'ready' );
+	return $written < 1 ? $not_undoable( 'capture_failed' ) : array( 'status' => 'ready' );
 }
 
 /**
@@ -521,7 +523,7 @@ function aafm_undo_finalize_create( array $h, $result ): array {
 	foreach ( $after['values'] as $field => $value ) {
 		$hashes[ $field ] = aafm_undo_hash( $value );
 	}
-	aafm_undo_update(
+	$written = aafm_undo_update(
 		$h['change_id'],
 		array(
 			'object_id'    => $post_id,
@@ -529,7 +531,71 @@ function aafm_undo_finalize_create( array $h, $result ): array {
 			'after_hashes' => wp_json_encode( $hashes ),
 		)
 	);
+	if ( $written > 0 ) {
+		aafm_undo_settle_creates( array( (int) $h['change_id'], $post_id ) );
+	}
+	if ( $written < 1 ) {
+		aafm_undo_update(
+			$h['change_id'],
+			array(
+				'object_id' => $post_id,
+				'status'    => 'not_undoable',
+				'reason'    => 'capture_failed',
+			)
+		);
+		return array(
+			'status' => 'not_undoable',
+			'reason' => 'capture_failed',
+		);
+	}
 	return array( 'status' => 'ready' );
+}
+
+/**
+ * The creates whose whole-object fingerprint is re-taken once the request is over.
+ *
+ * Other plugins keep bookkeeping on a new post after the call returns (WPML adds its word count in the
+ * shutdown phase). The fingerprint exists to catch a later edit by someone else, so it is taken again at
+ * the last shutdown callback, after that bookkeeping and before the post can be edited by anyone.
+ *
+ * @param array{0:int,1:int}|null $add  Change id and post id to settle at shutdown, or null to run the settle.
+ * @param bool                    $forget Drop the pending list (the test seam).
+ * @return void
+ */
+function aafm_undo_settle_creates( ?array $add = null, bool $forget = false ): void {
+	static $pending = array();
+
+	if ( $forget ) {
+		$pending = array();
+		return;
+	}
+	if ( null !== $add ) {
+		if ( array() === $pending ) {
+			add_action( 'shutdown', 'aafm_undo_settle_creates', PHP_INT_MAX );
+		}
+		$pending[ $add[0] ] = $add[1];
+		return;
+	}
+	try {
+		foreach ( $pending as $change_id => $post_id ) {
+			$view = aafm_undo_get_view( (int) $change_id );
+			$row  = $view['row'];
+			if ( ! $view['ok'] || null === $row || 'ready' !== $row['status'] ) {
+				continue;
+			}
+			$fingerprint = aafm_undo_object_fingerprint( (int) $post_id );
+			$after       = (array) json_decode( (string) $row['after_hashes'], true );
+			if ( null === $fingerprint || ! isset( $after['fp:object'] ) ) {
+				continue;
+			}
+			$after['fp:object'] = aafm_undo_hash( $fingerprint );
+			aafm_undo_update( (int) $change_id, array( 'after_hashes' => wp_json_encode( $after ) ), array( 'ready' ) );
+		}
+	} catch ( \Throwable $e ) {
+		aafm_undo_engine_fault( $e, 'aafm/undo-capture' );
+	}
+	$pending = array();
+	remove_action( 'shutdown', 'aafm_undo_settle_creates', PHP_INT_MAX );
 }
 
 /**
@@ -701,6 +767,9 @@ function aafm_undo_row_state( array $row, string $source ): array {
 	);
 
 	$status = (string) $row['status'];
+	if ( aafm_undo_claim_is_stale( $row ) ) {
+		$status = 'ready'; // A claim that never settled can be taken again: the conflict check keeps a retry safe.
+	}
 	if ( 'reverted' === $status ) {
 		return $no( 'already_reverted' );
 	}
@@ -741,7 +810,7 @@ function aafm_undo_row_state( array $row, string $source ): array {
  *
  * @param array<string,mixed> $target A change row.
  * @param string              $source 'owner' or 'agent'.
- * @return array{ok: bool, id: int, reason?: string, read?: array<string,mixed>}
+ * @return array{ok: bool, id: int, reason?: string, fields?: string[], read?: array<string,mixed>}
  */
 function aafm_undo_record_current( array $target, string $source ): array {
 	$decoded = aafm_undo_decode_row( $target );
@@ -800,9 +869,10 @@ function aafm_undo_record_current( array $target, string $source ): array {
 		)
 	);
 	return $id > 0 ? array(
-		'ok'   => true,
-		'id'   => $id,
-		'read' => $read['values'],
+		'ok'     => true,
+		'id'     => $id,
+		'fields' => $revert,
+		'read'   => $read['values'],
 	) : array(
 		'ok'     => false,
 		'id'     => 0,
@@ -924,12 +994,30 @@ function aafm_undo_apply( int $change_id, string $source ) {
 	if ( ! $state['undoable'] ) {
 		return aafm_undo_refusal( $state['reason'] ?? 'not_allowed' );
 	}
-	if ( 1 !== aafm_undo_update( $change_id, array( 'status' => 'undoing' ), array( 'ready' ) ) ) {
+	if ( aafm_undo_claim_is_stale( $row ) ) {
+		aafm_undo_reclaim_stale( $change_id, (string) $row['reason'] );
+	}
+	$claimed = aafm_undo_update(
+		$change_id,
+		array(
+			'status' => 'undoing',
+			'reason' => (string) time(),
+		),
+		array( 'ready' )
+	);
+	if ( 1 !== $claimed ) {
 		return aafm_undo_refusal( 'interrupted' );
 	}
 	// Every refusal from here until a write lands puts the row back.
 	$release = static function ( string $reason ) use ( $change_id ) {
-		aafm_undo_update( $change_id, array( 'status' => 'ready' ), array( 'undoing' ) );
+		aafm_undo_update(
+			$change_id,
+			array(
+				'status' => 'ready',
+				'reason' => '',
+			),
+			array( 'undoing' )
+		);
 		return aafm_undo_refusal( $reason );
 	};
 
@@ -991,43 +1079,82 @@ function aafm_undo_apply( int $change_id, string $source ) {
 	// ponytail: a human save landing between the read above and the write below wins or loses the way two WordPress
 	// editors saving at once do; core has no compare-and-swap and row locks held across wp_update_post() would risk
 	// lock waits with other plugins. Add a lock only if that window ever shows up in practice.
-	$wrote = aafm_undo_run_write( $row, $d, $context, $source );
-
-	$new_row   = aafm_undo_get_view( $new_id )['row'];
-	$new_d     = null === $new_row ? array( 'fields' => array() ) : aafm_undo_decode_row( $new_row );
-	$state_now = aafm_undo_read_fields( $type, $id, $new_d['fields'], $context );
-	$hashes    = array();
-	foreach ( null === $state_now ? array() : $state_now['values'] as $field => $value ) {
-		$hashes[ $field ] = aafm_undo_hash( $value );
+	$thrown = null;
+	$wrote  = array(
+		'certified'   => array(),
+		'missed'      => $d['fields'],
+		'differences' => array(),
+		'read'        => null,
+	);
+	try {
+		$wrote = aafm_undo_run_write( $row, $d, $context, $source );
+	} catch ( \Throwable $e ) {
+		// A hook threw mid-write: settle by what landed, below, then report the fault.
+		$thrown = $e;
 	}
+
+	$state_now = aafm_undo_read_fields( $type, $id, $recorded['fields'], $context );
+	$fault     = static function () use ( $thrown, $source ): void {
+		if ( null !== $thrown ) {
+			aafm_undo_engine_fault( $thrown, 'owner' === $source ? 'aafm/owner-revert' : 'aafm/undo-change' );
+		}
+	};
+	if ( null === $state_now ) {
+		// The write may or may not have landed. Keep the recovery row, and a retry is safe: it refuses as changed_since when the write landed.
+		aafm_undo_update(
+			$change_id,
+			array(
+				'status' => 'ready',
+				'reason' => '',
+			),
+			array( 'undoing' )
+		);
+		$fault();
+		return new \WP_Error( 'aafm_undo_failed', __( 'The undo could not be confirmed, so check the item before trying again.', 'agent-abilities-for-mcp' ) );
+	}
+	$hashes = array();
 	$landed = false;
-	foreach ( $hashes as $field => $hash ) {
-		$landed = $landed || ( aafm_undo_hash( $recorded['read'][ $field ] ?? null ) !== $hash );
+	foreach ( $state_now['values'] as $field => $value ) {
+		$hashes[ $field ] = aafm_undo_hash( $value );
+		$landed           = $landed || aafm_undo_hash( $recorded['read'][ $field ] ?? null ) !== $hashes[ $field ];
 	}
 
 	if ( ! $landed ) {
 		aafm_undo_delete( $new_id );
-		aafm_undo_update( $change_id, array( 'status' => 'ready' ), array( 'undoing' ) );
+		aafm_undo_update(
+			$change_id,
+			array(
+				'status' => 'ready',
+				'reason' => '',
+			),
+			array( 'undoing' )
+		);
+		$fault();
 		return new \WP_Error( 'aafm_undo_failed', __( 'The undo did not change anything, so nothing was written.', 'agent-abilities-for-mcp' ) );
 	}
 
-	aafm_undo_update(
+	$new_saved = 1 === aafm_undo_update(
 		$new_id,
 		array(
 			'status'       => 'ready',
 			'after_hashes' => wp_json_encode( $hashes ),
 		)
 	);
-	aafm_undo_update(
+	$old_saved = 1 === aafm_undo_update(
 		$change_id,
 		array(
 			'status'                => 'reverted',
+			'reason'                => '',
 			'reverted_by_change_id' => $new_id,
 		),
 		array( 'undoing' )
 	);
 	aafm_undo_enforce_caps();
+	$fault();
 
+	if ( ! $new_saved || ! $old_saved ) {
+		return new \WP_Error( 'aafm_undo_failed', __( 'The undo was applied, but its history entry could not be saved. Check the item.', 'agent-abilities-for-mcp' ) );
+	}
 	if ( array() !== $wrote['missed'] ) {
 		return new \WP_Error(
 			'aafm_undo_failed',

@@ -595,6 +595,7 @@ function aafm_policy_options(): array {
 		'aafm_denied_term_meta_keys',
 		'aafm_denied_user_meta_keys',
 		'aafm_read_only_mode',
+		'aafm_undo_capture_off',
 		'aafm_block_guard_strict',
 		'aafm_rate_limit_per_min',
 		'aafm_ip_allowlist',

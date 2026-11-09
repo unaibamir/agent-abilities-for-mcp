@@ -64,6 +64,8 @@ require_once AAFM_PLUGIN_DIR . 'includes/audit/notifications.php';
 // here, after the option-cache, audit-log and detail files it calls and before any hook,
 // migration or activation callback runs, since activation runs without plugins_loaded.
 require_once AAFM_PLUGIN_DIR . 'includes/write-contract.php';
+// The change history store (undo). After the audit log, whose installer creates its table.
+require_once AAFM_PLUGIN_DIR . 'includes/undo/store.php';
 // The high-risk floor. Required at top level, not inside the bootstrap, because both the admin
 // screens and the registration walk read it, and neither should have to care which ran first.
 require_once AAFM_PLUGIN_DIR . 'includes/audit/high-risk.php';
@@ -113,6 +115,8 @@ register_deactivation_hook( AAFM_PLUGIN_FILE, 'aafm_unschedule_log_prune' );
 
 // The cron event fires this action; the handler prunes entries past the retention window.
 add_action( 'aafm_prune_activity_log_daily', 'aafm_prune_activity_log' );
+// Change history keeps its own 30 day window, whatever the log retention says.
+add_action( 'aafm_prune_activity_log_daily', 'aafm_undo_prune' );
 
 // OAuth storage schema is required early so the activation hook can install its tables.
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/schema.php';

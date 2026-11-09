@@ -15,7 +15,7 @@ use AAFM\Tests\TestCase;
 final class DurationTest extends TestCase {
 
 	public function test_schema_is_version_six_and_verify_requires_the_duration_column(): void {
-		$this->assertSame( '6', AAFM_ACTIVITY_LOG_SCHEMA_VERSION );
+		$this->assertSame( '7', AAFM_ACTIVITY_LOG_SCHEMA_VERSION );
 		$this->assertTrue( aafm_activity_log_has_column( aafm_activity_log_table(), 'duration_ms' ) );
 		$this->assertTrue( aafm_activity_log_schema_verify() );
 	}
@@ -36,7 +36,7 @@ final class DurationTest extends TestCase {
 		$wpdb->query( "DROP TEMPORARY TABLE IF EXISTS {$table}" );
 		aafm_install_activity_log();
 		$this->assertTrue( aafm_activity_log_schema_verify() );
-		$this->assertSame( '6', get_option( 'aafm_activity_log_schema_version' ) );
+		$this->assertSame( '7', get_option( 'aafm_activity_log_schema_version' ) );
 	}
 
 	public function test_a_successful_call_records_a_duration(): void {

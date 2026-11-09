@@ -95,7 +95,7 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/admin/settings.php|aafm_render_settings_tab|1' => array( 'aafm_high_risk_abilities_unlocked' ),
 		'includes/admin/settings.php|aafm_render_settings_tab|2' => array( 'aafm_delete_data_on_uninstall' ),
 		'includes/audit/high-risk.php|aafm_high_risk_unlocked|1' => array( 'aafm_high_risk_abilities_unlocked' ),
-		'includes/audit/read-only.php|aafm_stored_switch_on|1' => array( 'aafm_pause_all', 'aafm_read_only_mode' ),
+		'includes/audit/read-only.php|aafm_stored_switch_on|1' => array( 'aafm_pause_all', 'aafm_read_only_mode', 'aafm_undo_capture_off' ),
 		'includes/block-guard.php|aafm_block_guard_is_strict|1' => array( 'aafm_block_guard_strict' ),
 		'includes/bridge.php|aafm_get_stored_bridged_abilities_raw|1' => array( 'aafm_enabled_bridged_abilities' ),
 		'includes/default-server.php|aafm_default_server_mode|1' => array( 'aafm_default_server_mode' ),
@@ -386,7 +386,7 @@ final class OptionReadSweepTest extends TestCase {
 			$options = array_merge( $options, $list );
 		}
 
-		$this->assertCount( 29, aafm_policy_options() );
+		$this->assertCount( 30, aafm_policy_options() );
 		$this->assertSame( $this->sorted( aafm_policy_options() ), $this->sorted( array_values( array_unique( $options ) ) ) );
 	}
 

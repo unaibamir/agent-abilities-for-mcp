@@ -37,6 +37,7 @@
 			<directory>admin</directory>
 			<directory>oauth</directory>
 			<directory>coexistence</directory>
+			<directory>undo</directory>
 			<file>WireShapeTest.php</file>
 		</testsuite>
 	</testsuites>

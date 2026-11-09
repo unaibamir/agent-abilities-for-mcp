@@ -63,6 +63,12 @@ abstract class TestCase extends WP_UnitTestCase {
 		// custom table, so it must exist before any ability is invoked.
 		aafm_install_activity_log();
 		aafm_clear_activity_log();
+		// Same TRUNCATE reason: no change row may survive into the next test.
+		aafm_undo_clear();
+		aafm_undo_capture_off( true );
+		aafm_undo_age_batch( true );
+		aafm_undo_enforce_caps( true );
+		delete_option( 'aafm_undo_capture_off' );
 		delete_option( 'aafm_enabled_abilities' );
 		// A schema upgrade that commits mid-test (DDL) can leave its lock row behind for a minute; the lock
 		// would then make the next test's aafm_maybe_upgrade_activity_log() skip its upgrade.

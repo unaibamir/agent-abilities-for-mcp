@@ -531,6 +531,30 @@ final class WooVariationsTest extends TestCase {
 		$this->assertSame( 'aafm_wc_sale_above_regular', $update->get_error_code() );
 	}
 
+	public function test_a_variation_sale_price_can_be_cleared_with_an_empty_string(): void {
+		$this->acting_as( 'administrator' );
+		$ok = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id'    => 500,
+				'regular_price' => '10.00',
+				'sale_price'    => '8.00',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $ok );
+		$this->assertSame( '8.00', $ok['sale_price'] );
+
+		$cleared = wp_get_ability( 'aafm/wc-update-product-variation' )->execute(
+			array(
+				'variation_id' => (int) $ok['id'],
+				'sale_price'   => '',
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $cleared, 'An empty sale price ends the sale, as it does on wc-update-product.' );
+		$this->assertSame( '', $cleared['sale_price'] );
+		$this->assertSame( '10.00', $cleared['regular_price'] );
+	}
+
 	public function test_create_variation_requires_parent_product_id(): void {
 		$this->acting_as( 'administrator' );
 		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute( array( 'sku' => 'NO-PARENT' ) );

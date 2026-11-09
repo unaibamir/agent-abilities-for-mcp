@@ -1219,7 +1219,8 @@ function aafm_undo_apply_claimed( array $row, string $source, string $claimed_at
 		'outcome'       => array() === $wrote['differences'] ? 'reverted' : 'reverted_with_differences',
 		'change_id'     => $change_id,
 		'new_change_id' => $new_id,
-		'fields'        => array_map( static fn( string $f ): string => (string) substr( $f, (int) strpos( $f, ':' ) + 1 ), $d['fields'] ),
+		// The fingerprints of a create are bookkeeping, not fields anyone sees.
+		'fields'        => array_map( static fn( string $f ): string => (string) substr( $f, (int) strpos( $f, ':' ) + 1 ), array_values( array_filter( $d['fields'], static fn( string $f ): bool => 0 !== strpos( $f, 'fp:' ) ) ) ),
 	);
 	if ( array() !== $wrote['differences'] ) {
 		$out['differences'] = array_map( static fn( string $f ): string => (string) substr( $f, (int) strpos( $f, ':' ) + 1 ), $wrote['differences'] );

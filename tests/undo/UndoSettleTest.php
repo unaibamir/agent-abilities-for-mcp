@@ -296,6 +296,15 @@ final class UndoSettleTest extends UndoTestCase {
 		$this->assertSame( 'trash', get_post( $post )->post_status );
 	}
 
+	public function test_a_create_revert_does_not_list_the_fingerprints_as_fields(): void {
+		$result = $this->run_tool( 'aafm/create-post', array( 'title' => 'Fresh' ) );
+
+		$outcome = aafm_undo_apply( (int) $result['undo']['change_ids'][0], 'owner' );
+
+		$this->assertIsArray( $outcome );
+		$this->assertSame( array( 'post_status', 'post_title', 'post_content', 'post_excerpt', 'post_name' ), $outcome['fields'] );
+	}
+
 	public function test_a_create_still_refuses_a_later_edit_after_the_shutdown_settle(): void {
 		$result = $this->run_tool( 'aafm/create-post', array( 'title' => 'Fresh' ) );
 		$post   = (int) $result['post']['id'];

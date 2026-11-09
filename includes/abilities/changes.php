@@ -179,6 +179,12 @@ function aafm_args_undo_change(): array {
 /**
  * Permission for both tools. Every real check runs in execute, so "not found" and "not yours" are one answer.
  *
+ * The floor is `read` on purpose, so tools/list shows both tools to any signed-in user, a subscriber
+ * included. They can use neither: a connection only ever sees its own changes, a subscriber's connection
+ * has none, and undo-change checks again that the connection may still make the edit. Hiding the tools
+ * by capability would need a guess at which write tools a role holds, and a wrong guess hides the undo
+ * from a custom role that can write.
+ *
  * @return bool
  */
 function aafm_perm_changes_tool(): bool {

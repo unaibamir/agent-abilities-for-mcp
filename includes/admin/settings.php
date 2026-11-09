@@ -667,6 +667,10 @@ function aafm_config_option_names(): array {
 		// money-moving abilities back behind the floor rather than leave them reachable because
 		// someone unlocked the category once; uninstall-with-delete-data removes the row outright.
 		'aafm_high_risk_abilities_unlocked',
+		// Change history (undo): the capture off-switch (absent means on, so a reset turns capture back on)
+		// and the one-time upgrade notice's dismissed flag.
+		'aafm_undo_capture_off',
+		'aafm_undo_notice_dismissed',
 		// Read-only mode. Cleared for the same reason the switch above is, from the other side: a
 		// reset returns the site to out-of-the-box, and out of the box the mode is off. Nothing is
 		// exposed by that on its own, because a reset also clears every enabled ability.
@@ -769,6 +773,9 @@ function aafm_uninstall_site_data(): void {
 	wp_clear_scheduled_hook( 'aafm_oauth_cleanup' );
 	wp_clear_scheduled_hook( 'aafm_notifications_digest' );
 
+	// Before-values are content, so change history goes on every uninstall, whatever the flag says.
+	aafm_drop_changes_table();
+
 	if ( ! aafm_uninstall_should_delete_data() ) {
 		return;
 	}
@@ -857,6 +864,11 @@ function aafm_reset_plugin(): bool {
 	if ( ! aafm_clear_activity_log() ) {
 		$ok = false;
 	} elseif ( ! aafm_log_activity_cleared_marker() ) {
+		$ok = false;
+	}
+
+	// Reset also empties change history. A missing table counts as empty.
+	if ( ! aafm_undo_clear() ) {
 		$ok = false;
 	}
 

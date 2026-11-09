@@ -940,6 +940,51 @@ function aafm_meta_key_refusal_error( string $name, array $input ): ?array {
 }
 
 /**
+ * Say why add-post-terms was refused when the post's content type is not exposed to agents.
+ *
+ * The bare "Permission denied" read as a missing privilege, and an agent asked to categorise a
+ * WooCommerce product gave up although aafm-wc-update-product sets its categories and tags. Whether a
+ * type is exposed is a site setting, not a caller property, so the sentence is the same bytes for
+ * everyone it is given to. It is only given to a caller who may edit that post anyway: a caller who
+ * cannot keeps the bare refusal and learns nothing about the type of an id they cannot touch. The
+ * sentence carries no id, term or value from the call.
+ *
+ * @param string              $name  Ability name.
+ * @param array<string,mixed> $input Call arguments.
+ * @return array{error:\WP_Error,code:string}|null The refusal and its reason code, or null to leave the call alone.
+ */
+function aafm_post_type_refusal_error( string $name, array $input ): ?array {
+	if ( 'aafm/add-post-terms' !== $name || ! aafm_post_type_not_exposed_for_editor( $input ) ) {
+		return null;
+	}
+	$post    = aafm_exact_object( 'post', absint( $input['post_id'] ) );
+	$message = __( 'This content type is not exposed to agents, so its terms cannot be changed with this tool. A site administrator can expose it in the Content sub-tab of the Abilities tab.', 'agent-abilities-for-mcp' );
+	$own     = $post instanceof WP_Post ? aafm_type_own_tool( $post->post_type, 'update' ) : '';
+	if ( '' !== $own ) {
+		/* translators: %s: the tool that manages this content type. */
+		$message .= ' ' . sprintf( __( 'This type has its own tool, %s, which can change them.', 'agent-abilities-for-mcp' ), aafm_mcp_tool_name( $own ) );
+	}
+	return array(
+		'error' => new WP_Error( 'aafm_post_type_not_exposed', $message ),
+		'code'  => 'type_not_exposed',
+	);
+}
+
+/**
+ * Whether a post_id names a post the caller may edit whose content type is not exposed to agents.
+ *
+ * @param array<string,mixed> $input Call arguments.
+ * @return bool
+ */
+function aafm_post_type_not_exposed_for_editor( array $input ): bool {
+	$id   = isset( $input['post_id'] ) && is_numeric( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
+	return $post instanceof WP_Post
+		&& is_wp_error( aafm_validate_post_type( $post->post_type ) )
+		&& aafm_user_can_checked( 'edit_post', $id );
+}
+
+/**
  * Register one ability through the audited, guarded, rate-limited choke point.
  *
  * @param string              $name Ability name.
@@ -1134,7 +1179,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		// A meta call whose KEY the site's policy refuses is answered with that reason on the wire as
 		// well (see aafm_meta_key_refusal_error()). Only for a well-formed call that the reserved-key
 		// routes above did not already answer.
-		$key_refusal = array() === $missing && null === $unreachable ? aafm_meta_key_refusal_error( $name, $call_args ) : null;
+		$key_refusal = array() === $missing && null === $unreachable ? ( aafm_meta_key_refusal_error( $name, $call_args ) ?? aafm_post_type_refusal_error( $name, $call_args ) ) : null;
 
 		if ( $paused ) {
 			// A paused connection lists tools but may not call one. The refusal is a tool error, not a

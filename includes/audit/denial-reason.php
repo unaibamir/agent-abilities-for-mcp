@@ -37,6 +37,7 @@ function aafm_denial_reason_labels(): array {
 		'connection_paused'   => __( 'this connection is paused', 'agent-abilities-for-mcp' ),
 		'access_paused'       => __( 'all access is paused', 'agent-abilities-for-mcp' ),
 		'type_tool_off'       => __( 'this content type\'s own tool is off', 'agent-abilities-for-mcp' ),
+		'type_not_exposed'    => __( 'this content type is not exposed to agents', 'agent-abilities-for-mcp' ),
 	);
 }
 
@@ -187,6 +188,9 @@ function aafm_denial_reason_for_permission( string $name, array $input ): string
 	}
 	if ( aafm_post_tool_reach_refused( $name, $input ) ) {
 		return 'type_tool_off';
+	}
+	if ( 'aafm/add-post-terms' === $name && aafm_post_type_not_exposed_for_editor( $input ) ) {
+		return 'type_not_exposed';
 	}
 	return 'capability';
 }

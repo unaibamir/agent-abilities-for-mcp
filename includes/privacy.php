@@ -68,7 +68,31 @@ function aafm_privacy_user_id( string $email ): int {
 }
 
 /**
- * Export a user's change history rows: tool, object, field names and time. Never a value.
+ * The WHERE fragment for the change rows that belong to a data subject: rows the user made, rows on posts the
+ * user authored, and rows whose stored values hold the email address as written or JSON escaped. The export
+ * and the eraser share it, so what is offered is what is removed.
+ *
+ * @param string $email   Email address of the data subject.
+ * @param int    $user_id The account's id, or 0 when none has the address.
+ * @return string A prepared fragment, or '' when nothing can be matched (no account and no address).
+ */
+function aafm_privacy_changes_match( string $email, int $user_id ): string {
+	global $wpdb;
+
+	$parts = array();
+	if ( $user_id > 0 ) {
+		$parts[] = $wpdb->prepare( 'principal_user_id = %d', $user_id );
+		$parts[] = $wpdb->prepare( "( object_type = 'post' AND object_id IN ( SELECT ID FROM %i WHERE post_author = %d ) )", $wpdb->posts, $user_id );
+	}
+	// An empty address would match every stored value.
+	if ( '' !== $email ) {
+		$parts[] = $wpdb->prepare( '( before_values LIKE %s OR before_values LIKE %s )', '%' . $wpdb->esc_like( $email ) . '%', '%' . $wpdb->esc_like( trim( (string) wp_json_encode( $email ), '"' ) ) . '%' );
+	}
+	return array() === $parts ? '' : '( ' . implode( ' OR ', $parts ) . ' )';
+}
+
+/**
+ * Export the change history rows that belong to a data subject (the same rows the eraser removes): tool, object, field names and time. Never a value.
  *
  * @param string $email Email address of the data subject.
  * @param int    $page  Page, from 1.
@@ -77,14 +101,15 @@ function aafm_privacy_user_id( string $email ): int {
 function aafm_privacy_export_changes( $email, $page = 1 ): array {
 	global $wpdb;
 
-	$user_id = aafm_privacy_user_id( (string) $email );
-	if ( $user_id < 1 ) {
+	$match = aafm_privacy_changes_match( (string) $email, aafm_privacy_user_id( (string) $email ) );
+	if ( '' === $match ) {
 		return array(
 			'data' => array(),
 			'done' => true,
 		);
 	}
-	$rows = aafm_wpdb_results( $wpdb->prepare( 'SELECT id, ability, object_type, object_id, fields, created_at FROM %i WHERE principal_user_id = %d ORDER BY id ASC LIMIT %d OFFSET %d', aafm_changes_table(), $user_id, AAFM_PRIVACY_BATCH, max( 0, (int) $page - 1 ) * AAFM_PRIVACY_BATCH ) );
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- $match is built from prepared fragments.
+	$rows = aafm_wpdb_results( $wpdb->prepare( "SELECT id, ability, object_type, object_id, fields, created_at FROM %i WHERE {$match} ORDER BY id ASC LIMIT %d OFFSET %d", aafm_changes_table(), AAFM_PRIVACY_BATCH, max( 0, (int) $page - 1 ) * AAFM_PRIVACY_BATCH ) );
 	$data = array();
 	foreach ( $rows['ok'] ? (array) $rows['value'] : array() as $row ) {
 		$data[] = array(
@@ -182,17 +207,15 @@ function aafm_privacy_erase_changes( $email, $page = 1 ): array {
 	global $wpdb;
 
 	unset( $page );
-	$email    = (string) $email;
-	$user_id  = aafm_privacy_user_id( $email );
-	$raw      = '%' . $wpdb->esc_like( $email ) . '%';
-	$escaped  = '%' . $wpdb->esc_like( trim( (string) wp_json_encode( $email ), '"' ) ) . '%';
-	$by_email = $wpdb->prepare( '( before_values LIKE %s OR before_values LIKE %s )', $raw, $escaped );
-	if ( $user_id > 0 ) {
-		$by_actor  = $wpdb->prepare( 'principal_user_id = %d', $user_id );
-		$by_author = $wpdb->prepare( "( object_type = 'post' AND object_id IN ( SELECT ID FROM %i WHERE post_author = %d ) )", $wpdb->posts, $user_id );
-		$match     = "( {$by_actor} OR {$by_author} OR {$by_email} )";
-	} else {
-		$match = $by_email;
+	$email = (string) $email;
+	$match = aafm_privacy_changes_match( $email, aafm_privacy_user_id( $email ) );
+	if ( '' === $match ) {
+		return array(
+			'items_removed'  => false,
+			'items_retained' => false,
+			'messages'       => array(),
+			'done'           => true,
+		);
 	}
 
 	$suppressed = $wpdb->suppress_errors( true );
@@ -233,7 +256,15 @@ function aafm_privacy_erase_activity( $email, $page = 1 ): array {
 	$email   = (string) $email;
 	$user_id = aafm_privacy_user_id( $email );
 	$table   = aafm_activity_log_table();
-	$blank   = "( principal_login <> '' OR source_ip <> '' )";
+	if ( '' === $email ) {
+		return array(
+			'items_removed'  => false,
+			'items_retained' => false,
+			'messages'       => array(),
+			'done'           => true,
+		);
+	}
+	$blank = "( principal_login <> '' OR source_ip <> '' )";
 
 	$suppressed = $wpdb->suppress_errors( true );
 	if ( $user_id > 0 ) {

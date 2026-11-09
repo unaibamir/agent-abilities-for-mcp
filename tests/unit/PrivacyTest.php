@@ -89,6 +89,63 @@ final class PrivacyTest extends TestCase {
 		$this->assertStringStartsWith( 'aafm-change-', $out['data'][0]['item_id'] );
 	}
 
+	public function test_change_exporter_offers_the_same_rows_the_eraser_removes(): void {
+		$user      = self::factory()->user->create( array( 'user_email' => 'both@example.test' ) );
+		$other     = self::factory()->user->create();
+		$post      = self::factory()->post->create( array( 'post_author' => $user ) );
+		$by_author = $this->change(
+			array(
+				'principal_user_id' => $other,
+				'object_id'         => $post,
+			)
+		);
+		$by_email  = $this->change(
+			array(
+				'principal_user_id' => $other,
+				'before_values'     => '{"post:post_content":"write to both@example.test"}',
+			)
+		);
+		$this->change( array( 'principal_user_id' => $other ) );
+
+		$out  = aafm_privacy_export_changes( 'both@example.test', 1 );
+		$ids  = array_column( $out['data'], 'item_id' );
+		$json = (string) wp_json_encode( $out );
+
+		sort( $ids );
+		$this->assertSame( array( 'aafm-change-' . $by_author, 'aafm-change-' . $by_email ), $ids );
+		$this->assertStringNotContainsString( 'write to both', $json, 'Rows are listed, values are not.' );
+	}
+
+	public function test_an_empty_email_erases_nothing(): void {
+		global $wpdb;
+		$other = self::factory()->user->create();
+		$this->change( array( 'principal_user_id' => $other ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->insert(
+			aafm_activity_log_table(),
+			array(
+				'ability'           => 'aafm/get-posts',
+				'status'            => 'success',
+				'event_type'        => 'ability_call',
+				'principal_user_id' => 0,
+				'principal_login'   => '',
+				'source_ip'         => '203.0.113.9',
+				'created_at'        => gmdate( 'Y-m-d H:i:s' ),
+			)
+		);
+
+		$changes  = aafm_privacy_erase_changes( '', 1 );
+		$activity = aafm_privacy_erase_activity( '', 1 );
+
+		$this->assertTrue( $changes['done'] );
+		$this->assertFalse( $changes['items_removed'] );
+		$this->assertTrue( $activity['done'] );
+		$this->assertFalse( $activity['items_removed'] );
+		$this->assertSame( 1, $this->change_count() );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$this->assertSame( '203.0.113.9', (string) $wpdb->get_var( $wpdb->prepare( 'SELECT source_ip FROM %i LIMIT 1', aafm_activity_log_table() ) ) );
+	}
+
 	public function test_change_eraser_removes_rows_by_actor_by_author_and_by_email(): void {
 		$user      = self::factory()->user->create( array( 'user_email' => 'gone@example.test' ) );
 		$other     = self::factory()->user->create();

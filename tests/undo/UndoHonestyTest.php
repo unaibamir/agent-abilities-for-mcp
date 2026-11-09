@@ -61,6 +61,7 @@ final class UndoHonestyTest extends UndoTestCase {
 			'aafm/update-post-meta',
 			array(
 				'post_id'  => $post,
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- a test fixture query on a tiny table.
 				'meta_key' => 'aafm_note',
 				'value'    => 'new',
 			)
@@ -84,6 +85,7 @@ final class UndoHonestyTest extends UndoTestCase {
 			'aafm/update-post-meta',
 			array(
 				'post_id'  => $post,
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- a test fixture query on a tiny table.
 				'meta_key' => 'aafm_note',
 				'value'    => 'new',
 			)
@@ -104,11 +106,12 @@ final class UndoHonestyTest extends UndoTestCase {
 			'aafm/update-post-meta',
 			array(
 				'post_id'  => $post,
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- a test fixture query on a tiny table.
 				'meta_key' => 'aafm_note',
 				'value'    => 'new',
 			)
 		); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- tool argument.
-		$upper = static fn( $value ) => strtoupper( (string) $value );
+		$upper  = static fn( $value ) => strtoupper( (string) $value );
 		add_filter( 'sanitize_post_meta_aafm_note', $upper );
 		$result = aafm_undo_apply( $change, 'owner' );
 		remove_filter( 'sanitize_post_meta_aafm_note', $upper );
@@ -125,11 +128,12 @@ final class UndoHonestyTest extends UndoTestCase {
 			'aafm/update-post-meta',
 			array(
 				'post_id'  => $post,
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- a test fixture query on a tiny table.
 				'meta_key' => 'aafm_note',
 				'value'    => 'new',
 			)
 		); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- tool argument.
-		$keep = static fn( $value ) => trim( (string) $value );
+		$keep   = static fn( $value ) => trim( (string) $value );
 		add_filter( 'sanitize_post_meta_aafm_note', $keep );
 		$result = aafm_undo_apply( $change, 'owner' );
 		remove_filter( 'sanitize_post_meta_aafm_note', $keep );

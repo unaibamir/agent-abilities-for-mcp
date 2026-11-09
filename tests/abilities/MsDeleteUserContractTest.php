@@ -76,7 +76,7 @@ final class MsDeleteUserContractTest extends TestCase {
 
 		// The wire body must say exactly that.
 		$this->assertSame(
-			'{"deleted":false,"removed_from_site":true}',
+			'{"deleted":false,"removed_from_site":true,"undo":{"undoable":false,"change_ids":[],"reason":"permanent_delete"}}',
 			wp_json_encode( $res ),
 			'on multisite the ability must report a site removal, never a deletion that did not happen.'
 		);

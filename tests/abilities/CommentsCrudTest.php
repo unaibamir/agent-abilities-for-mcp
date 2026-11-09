@@ -442,6 +442,11 @@ final class CommentsCrudTest extends TestCase {
 			array(
 				'deleted'    => true,
 				'comment_id' => $comment,
+				'undo'       => array(
+					'undoable'   => false,
+					'change_ids' => array(),
+					'reason'     => 'permanent_delete',
+				),
 			),
 			$out
 		);

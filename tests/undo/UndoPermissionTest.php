@@ -150,6 +150,7 @@ final class UndoPermissionTest extends UndoTestCase {
 			'aafm/update-post-meta',
 			array(
 				'post_id'  => $post,
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- a test fixture query on a tiny table.
 				'meta_key' => 'aafm_note',
 				'value'    => 'new',
 			)

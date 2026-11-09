@@ -2775,11 +2775,13 @@ final class MetaWriteContractTest extends TestCase {
 	}
 
 	/**
+	 * Hooks that make a meta key unsafe to restore: each pairs a way to arm it with a way to disarm it.
+	 *
 	 * @return array<string,array{0:callable,1:callable}>
 	 */
 	public function data_filtered_keys(): array {
 		return array(
-			'registered sanitizer'          => array(
+			'registered sanitizer'            => array(
 				static function (): void {
 					register_meta( 'post', self::RAW_KEY, array( 'sanitize_callback' => 'sanitize_text_field' ) );
 				},
@@ -2787,7 +2789,7 @@ final class MetaWriteContractTest extends TestCase {
 					unregister_meta_key( 'post', self::RAW_KEY );
 				},
 			),
-			'subtype scoped sanitizer'      => array(
+			'subtype scoped sanitizer'        => array(
 				static function (): void {
 					register_meta(
 						'post',
@@ -2802,7 +2804,7 @@ final class MetaWriteContractTest extends TestCase {
 					unregister_meta_key( 'post', self::RAW_KEY, 'post' );
 				},
 			),
-			'add short circuit'             => array(
+			'add short circuit'               => array(
 				static function (): void {
 					add_filter( 'add_post_metadata', '__return_true' );
 				},
@@ -2810,7 +2812,7 @@ final class MetaWriteContractTest extends TestCase {
 					remove_filter( 'add_post_metadata', '__return_true' );
 				},
 			),
-			'delete short circuit'          => array(
+			'delete short circuit'            => array(
 				static function (): void {
 					add_filter( 'delete_post_metadata', '__return_false' );
 				},
@@ -2830,7 +2832,12 @@ final class MetaWriteContractTest extends TestCase {
 	}
 
 	/**
+	 * A key with a sanitizer or an add or delete short circuit is refused, and restorable again once the hook is gone.
+	 *
 	 * @dataProvider data_filtered_keys
+	 *
+	 * @param callable $arm    Installs the hook.
+	 * @param callable $disarm Removes it.
 	 */
 	public function test_unfiltered_refuses_a_key_with_a_registered_sanitizer_or_an_add_or_delete_short_circuit( callable $arm, callable $disarm ): void {
 		$this->assertTrue( aafm_meta_restore_unfiltered( 'post', self::RAW_KEY, '' ), 'precondition: an untouched key is restorable.' );

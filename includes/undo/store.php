@@ -575,7 +575,7 @@ function aafm_undo_field_names( array $row ): array {
 function aafm_undo_list_for_connection( int $user_id, string $client_id, string $object_type, int $object_id, int $page, int $per_page ): array {
 	global $wpdb;
 
-	$sql  = "SELECT * FROM %i WHERE source = 'agent' AND principal_user_id = %d AND client_id = %s AND object_type = %s AND object_id = %d AND created_at >= %s AND NOT ( status = 'pending' AND created_at >= %s ) ORDER BY id DESC LIMIT %d OFFSET %d";
+	$sql = "SELECT * FROM %i WHERE source = 'agent' AND principal_user_id = %d AND client_id = %s AND object_type = %s AND object_id = %d AND created_at >= %s AND NOT ( status = 'pending' AND created_at >= %s ) ORDER BY id DESC LIMIT %d OFFSET %d";
 	// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- a constant statement with placeholders.
 	$rows = aafm_wpdb_results( $wpdb->prepare( $sql, aafm_changes_table(), $user_id, $client_id, $object_type, $object_id, aafm_undo_cutoff( AAFM_UNDO_AGENT_WINDOW ), aafm_undo_cutoff( AAFM_UNDO_PENDING_GRACE ), $per_page + 1, max( 0, $page - 1 ) * $per_page ) );
 	return array(

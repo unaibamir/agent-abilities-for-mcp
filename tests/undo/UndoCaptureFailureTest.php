@@ -344,6 +344,7 @@ final class UndoCaptureFailureTest extends UndoTestCase {
 
 		$this->assertNotContains( 'meta:_edit_lock', $fields );
 		$this->assertContains( 'meta:aafm_note', $fields );
+		// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- a test fixture query on a tiny table.
 		$this->assertSame( array(), aafm_undo_fields_post_meta_key( array( 'meta_key' => '_edit_lock' ) ) );
 	}
 }

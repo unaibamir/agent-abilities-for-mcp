@@ -347,10 +347,12 @@ final class UndoStoreTest extends TestCase {
 			static function (): bool {
 				wp_cache_delete( 'aafm_undo_capture_off', 'options' );
 				wp_cache_delete( 'alloptions', 'options' );
+				// A batched request keeps its policy rows for the rest of the request; drop them so this read hits the fault.
+				aafm_policy_reset_request_state();
 				return aafm_undo_capture_off();
 			}
 		);
-		$this->assertTrue( $broken, 'An unreadable switch reads as off-switch-on, so nothing is recorded.' );
+		$this->assertTrue( $broken, 'An unreadable switch row reads as the capture switch being on (capture off), so nothing is recorded.' );
 	}
 
 	public function test_capture_switch_memo_is_forgotten_when_the_option_changes(): void {

@@ -248,14 +248,13 @@ final class PrivacyTest extends TestCase {
 	}
 
 	public function test_a_failed_activity_export_read_is_an_error_not_an_empty_finished_export(): void {
-		$user = self::factory()->user->create( array( 'user_email' => 'logfail@example.test' ) );
+		self::factory()->user->create( array( 'user_email' => 'logfail@example.test' ) );
 		ob_start();
 		$out = QueryFaultInjector::break_query_with_real_error( 'FROM `' . aafm_activity_log_table() . '`', fn() => aafm_privacy_export_activity( 'logfail@example.test', 1 ) );
 		ob_end_clean();
 
 		$this->assertWPError( $out );
 		$this->assertSame( 'aafm_privacy_read_failed', $out->get_error_code() );
-		$this->assertNotSame( 0, $user );
 	}
 
 	public function test_change_eraser_reports_retained_on_a_failed_query(): void {

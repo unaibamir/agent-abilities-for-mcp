@@ -153,6 +153,14 @@ The plugin calls no AI provider and sends no telemetry. It makes two kinds of re
 The Model Context Protocol is an open specification that Anthropic originally developed. Claude, ChatGPT, Cursor, VS Code, Gemini and other product names belong to their owners, and Agent Abilities for MCP is a third-party plugin that isn't affiliated with, endorsed by or sponsored by any of them.
 
 ## Changelog
+### 1.11.2
+
+* **Feature:** A new Changes tab keeps 30 days of what agents changed and lets you revert changes made with 25 tools: post, page and custom post type edits, creates, trashes, block edits, terms, custom fields, featured images and SEO fields. A site-wide find and replace reverts as one group. History starts recording with this update, can be switched off in Settings, and WordPress's export and erase personal data tools cover it.
+* **Feature:** Two new tools, list-changes and undo-change, let an agent see and undo its own changes from the last 24 hours. Both start off, and undo-change is destructive, so no preset includes it.
+* **Feature:** Every write tool now says in its response whether the change can be undone. Tools that can't, such as permanent deletes, orders and refunds, say why.
+* **Fix:** WordPress's export and erase personal data tools now cover the activity log too.
+* **Chore:** Change history is stored in its own table, which is dropped on every uninstall and emptied by Reset.
+
 ### 1.11.1
 
 * **Fix:** The high-risk lock now holds wc-create-order, WooCommerce's own order status and order update tools, and the Secure Custom Fields tools that can store a callback name, and its filter accepts other plugins' slugs. Shop manager connections no longer reach wc-create-order, and post tools no longer reach a type whose own tool is off.

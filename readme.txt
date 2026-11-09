@@ -295,9 +295,13 @@ The MCP endpoint refuses requests sent from a web page on another site, as the M
 
 Under Settings, Notifications, pick an admin notice, an email right away or one email a day, then tick the events you care about, such as a new app being authorized or a burst of denied calls. Nothing is sent until you do. The [safety controls guide](https://agentabilitieswp.com/docs/safety-controls/?utm_source=wordpress.org&utm_medium=readme&utm_campaign=plugin-listing) lists every event and the sending limits, and the emails themselves link to the Activity Log and never include the content of a call, a user name or an IP address.
 
+= Can I undo what an AI agent changed? =
+
+Yes, for most edits. The Changes tab keeps 30 days of what agents changed with 25 tools (edits to posts, pages and custom post types, creates, trashes, block edits, terms, custom fields, featured images and SEO fields) and reverts a change if the item hasn't been edited since. It shows field names, never contents, and a revert that would overwrite a newer edit is refused. Permanent deletes, orders, refunds, user accounts and file uploads can't be undone, and each of those tools says so in its response. Notifications, webhooks and anything already read are not recalled. Two optional tools, list-changes and undo-change, let an agent undo its own changes from the last 24 hours, and both start off. History records only while the plugin is active, can be switched off in Settings, and is removed on uninstall.
+
 = Does uninstalling the plugin revoke my agent's access? =
 
-Not by itself. Deleting the plugin leaves the dedicated agent user and its Application Passwords in place because they're ordinary WordPress accounts, and by default it keeps your settings, activity log and OAuth data too, so a reinstall picks up where you left off. Switch on Delete data on uninstall in Settings first if you want that data removed, and to cut an agent off, revoke its OAuth connection on the Connection tab or delete its Application Password or user on the Users screen.
+Not by itself. Deleting the plugin leaves the dedicated agent user and its Application Passwords in place because they're ordinary WordPress accounts, and by default it keeps your settings, activity log and OAuth data too, so a reinstall picks up where you left off. Switch on Delete data on uninstall in Settings first if you want that data removed (change history is always removed, whatever that switch says), and to cut an agent off, revoke its OAuth connection on the Connection tab or delete its Application Password or user on the Users screen.
 
 = How do I report a security issue? =
 
@@ -323,6 +327,14 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 16. Application Passwords: the agent users' passwords with when each was created and last used, the address it was last used from, and a Revoke button.
 
 == Changelog ==
+
+= 1.11.2 =
+
+* **Feature:** A new Changes tab keeps 30 days of what agents changed and lets you revert changes made with 25 tools: post, page and custom post type edits, creates, trashes, block edits, terms, custom fields, featured images and SEO fields. A site-wide find and replace reverts as one group. History starts recording with this update, can be switched off in Settings, and WordPress's export and erase personal data tools cover it.
+* **Feature:** Two new tools, list-changes and undo-change, let an agent see and undo its own changes from the last 24 hours. Both start off, and undo-change is destructive, so no preset includes it.
+* **Feature:** Every write tool now says in its response whether the change can be undone. Tools that can't, such as permanent deletes, orders and refunds, say why.
+* **Fix:** WordPress's export and erase personal data tools now cover the activity log too.
+* **Chore:** Change history is stored in its own table, which is dropped on every uninstall and emptied by Reset.
 
 = 1.11.1 =
 
@@ -429,6 +441,10 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 [Full release history](https://agentabilitieswp.com/changelog/?utm_source=wordpress.org&utm_medium=readme&utm_campaign=plugin-listing).
 
 == Upgrade Notice ==
+
+= 1.11.2 =
+
+Change history now records agent edits from this update, in a new table kept 30 days and dropped on uninstall. Turn it off under Settings. The two new agent undo tools start off.
 
 = 1.11.1 =
 

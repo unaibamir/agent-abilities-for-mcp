@@ -69,6 +69,9 @@ require_once AAFM_PLUGIN_DIR . 'includes/undo/store.php';
 require_once AAFM_PLUGIN_DIR . 'includes/undo/surfaces.php';
 require_once AAFM_PLUGIN_DIR . 'includes/undo/fields.php';
 require_once AAFM_PLUGIN_DIR . 'includes/undo/engine.php';
+require_once AAFM_PLUGIN_DIR . 'includes/privacy.php';
+add_filter( 'wp_privacy_personal_data_exporters', 'aafm_privacy_register_exporters' );
+add_filter( 'wp_privacy_personal_data_erasers', 'aafm_privacy_register_erasers' );
 // The high-risk floor. Required at top level, not inside the bootstrap, because both the admin
 // screens and the registration walk read it, and neither should have to care which ran first.
 require_once AAFM_PLUGIN_DIR . 'includes/audit/high-risk.php';

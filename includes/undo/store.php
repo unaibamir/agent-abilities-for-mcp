@@ -537,3 +537,24 @@ function aafm_undo_group_members( string $group_id ): array {
 		'rows' => $rows['ok'] ? array_values( (array) $rows['value'] ) : array(),
 	);
 }
+
+/**
+ * The field names of a row, without the family prefix on post and term columns.
+ *
+ * @param array<string,mixed> $row A change row.
+ * @return string[]
+ */
+function aafm_undo_field_names( array $row ): array {
+	$fields = array_values( array_filter( (array) json_decode( (string) ( $row['fields'] ?? '[]' ), true ), 'is_string' ) );
+	return array_map(
+		static function ( string $field ): string {
+			foreach ( array( 'post:', 'term:', 'aioseo:' ) as $prefix ) {
+				if ( 0 === strpos( $field, $prefix ) ) {
+					return substr( $field, strlen( $prefix ) );
+				}
+			}
+			return $field;
+		},
+		$fields
+	);
+}

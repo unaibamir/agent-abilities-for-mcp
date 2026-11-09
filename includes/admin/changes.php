@@ -51,27 +51,6 @@ function aafm_changes_status_pill( array $state, string $status ): array {
 }
 
 /**
- * The field names of a row, without the family prefix on post and term columns.
- *
- * @param array<string,mixed> $row A change row.
- * @return string[]
- */
-function aafm_changes_field_names( array $row ): array {
-	$fields = array_values( array_filter( (array) json_decode( (string) ( $row['fields'] ?? '[]' ), true ), 'is_string' ) );
-	return array_map(
-		static function ( string $field ): string {
-			foreach ( array( 'post:', 'term:', 'aioseo:' ) as $prefix ) {
-				if ( 0 === strpos( $field, $prefix ) ) {
-					return substr( $field, strlen( $prefix ) );
-				}
-			}
-			return $field;
-		},
-		$fields
-	);
-}
-
-/**
  * The Item cell: a link to the edit screen by id, never a title.
  *
  * @param array<string,mixed> $row A change row.
@@ -107,7 +86,7 @@ function aafm_changes_item_html( array $row ): string {
  * @return string URL or ''.
  */
 function aafm_changes_compare_url( array $row ): string {
-	if ( 'post' !== $row['object_type'] || ! in_array( 'post_content', aafm_changes_field_names( $row ), true ) ) {
+	if ( 'post' !== $row['object_type'] || ! in_array( 'post_content', aafm_undo_field_names( $row ), true ) ) {
 		return '';
 	}
 	$post = aafm_exact_object( 'post', (int) $row['object_id'] );
@@ -132,7 +111,7 @@ function aafm_changes_row_html( array $row ): string {
 	$by     = $user instanceof WP_User ? (string) $user->display_name : __( 'Deleted user', 'agent-abilities-for-mcp' );
 	$who    = 'owner' === $row['source'] ? __( 'you', 'agent-abilities-for-mcp' ) : __( 'agent', 'agent-abilities-for-mcp' );
 	$tool   = (string) preg_replace( '#^aafm/#', '', (string) $row['ability'] );
-	$fields = implode( ', ', aafm_changes_field_names( $row ) );
+	$fields = implode( ', ', aafm_undo_field_names( $row ) );
 	$reason = empty( $state['undoable'] ) && ! empty( $state['reason'] ) ? aafm_undo_reason_message( (string) $state['reason'] ) : '';
 
 	$action = '';

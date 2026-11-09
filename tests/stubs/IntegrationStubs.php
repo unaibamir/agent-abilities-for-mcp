@@ -649,17 +649,17 @@ PHP;
 		WcOrderStubStore::seed(
 			5001,
 			array(
-				'number'         => '5001',
-				'status'         => 'processing',
-				'total'          => '49.99',
-				'currency'       => 'USD',
-				'date_created'   => '2024-06-01T10:00:00',
-				'date_paid'      => '2024-06-01T10:01:00',
-				'customer_id'    => 42,
-				'customer_note'  => 'Please deliver before noon.',
+				'number'               => '5001',
+				'status'               => 'processing',
+				'total'                => '49.99',
+				'currency'             => 'USD',
+				'date_created'         => '2024-06-01T10:00:00',
+				'date_paid'            => '2024-06-01T10:01:00',
+				'customer_id'          => 42,
+				'customer_note'        => 'Please deliver before noon.',
 				'payment_method'       => 'bacs',
 				'payment_method_title' => 'Direct bank transfer',
-				'items'          => array(
+				'items'                => array(
 					array(
 						'id'         => 1,
 						'name'       => 'Test Widget',
@@ -669,7 +669,7 @@ PHP;
 						'total'      => '39.98',
 					),
 				),
-				'billing'        => array(
+				'billing'              => array(
 					'first_name' => 'Jane',
 					'last_name'  => 'Doe',
 					'company'    => 'Acme Corp',
@@ -682,7 +682,7 @@ PHP;
 					'email'      => 'billing@example.com',
 					'phone'      => '+1-555-0100',
 				),
-				'shipping'       => array(
+				'shipping'             => array(
 					'first_name' => 'Jane',
 					'last_name'  => 'Doe',
 					'company'    => '',
@@ -693,9 +693,9 @@ PHP;
 					'postcode'   => '62701',
 					'country'    => 'US',
 				),
-				'total_tax'      => '4.00',
-				'subtotal'       => '39.98',
-				'shipping_total' => '5.99',
+				'total_tax'            => '4.00',
+				'subtotal'             => '39.98',
+				'shipping_total'       => '5.99',
 			)
 		);
 	}

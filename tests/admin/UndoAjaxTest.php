@@ -284,6 +284,81 @@ final class UndoAjaxTest extends UndoTestCase {
 		$this->assertSame( 'aafm/owner-clear-history', $this->undo_rows()[0]['ability'] );
 	}
 
+	/**
+	 * Run a replace-sitewide call over one post and return its post id and group id.
+	 *
+	 * @return array{0:int,1:string}
+	 */
+	private function sitewide_group(): array {
+		$post = self::factory()->post->create( array( 'post_content' => 'needle one' ) );
+		$this->run_tool(
+			'aafm/replace-sitewide',
+			array(
+				'search'  => 'needle',
+				'replace' => 'thread',
+				'dry_run' => false,
+			)
+		);
+		return array( $post, (string) $this->change_rows()[0]['group_id'] );
+	}
+
+	public function test_revert_all_needs_a_valid_nonce_and_logs_the_refusal(): void {
+		list( $post, $group ) = $this->sitewide_group();
+		$_POST                = array(
+			'nonce'    => 'bad',
+			'group_id' => $group,
+		);
+		$_REQUEST['nonce']    = 'bad';
+		$this->intercept_die();
+
+		$out = $this->run_handler( 'aafm_ajax_undo_revert_group' );
+
+		$this->assertFalse( $out['success'] );
+		$this->assertSame( 'thread one', get_post( $post )->post_content );
+		$rows = $this->undo_rows();
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'error', $rows[0]['status'] );
+		$this->assertSame( 'aafm/owner-revert-group', $rows[0]['ability'] );
+	}
+
+	public function test_revert_all_needs_manage_options(): void {
+		list( $post, $group ) = $this->sitewide_group();
+		$this->post_as( 'editor', array( 'group_id' => $group ) );
+
+		$out = $this->run_handler( 'aafm_ajax_undo_revert_group' );
+
+		$this->assertFalse( $out['success'] );
+		$this->assertSame( 'thread one', get_post( $post )->post_content );
+		$this->assertSame( 'denied', $this->undo_rows()[0]['status'] );
+	}
+
+	public function test_clear_history_needs_a_valid_nonce_and_logs_the_refusal(): void {
+		$this->change( self::factory()->post->create( array( 'post_title' => 'A' ) ) );
+		$_POST             = array( 'nonce' => 'bad' );
+		$_REQUEST['nonce'] = 'bad';
+		$this->intercept_die();
+
+		$out = $this->run_handler( 'aafm_ajax_undo_clear_history' );
+
+		$this->assertFalse( $out['success'] );
+		$this->assertCount( 1, $this->change_rows(), 'The history is still there.' );
+		$rows = $this->undo_rows();
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'error', $rows[0]['status'] );
+		$this->assertSame( 'aafm/owner-clear-history', $rows[0]['ability'] );
+	}
+
+	public function test_clear_history_needs_manage_options(): void {
+		$this->change( self::factory()->post->create( array( 'post_title' => 'A' ) ) );
+		$this->post_as( 'editor', array() );
+
+		$out = $this->run_handler( 'aafm_ajax_undo_clear_history' );
+
+		$this->assertFalse( $out['success'] );
+		$this->assertCount( 1, $this->change_rows(), 'The history is still there.' );
+		$this->assertSame( 'denied', $this->undo_rows()[0]['status'] );
+	}
+
 	public function test_clearing_the_activity_log_leaves_change_history_and_groups_untouched(): void {
 		$post = self::factory()->post->create(
 			array(

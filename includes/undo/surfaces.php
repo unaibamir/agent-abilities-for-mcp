@@ -337,7 +337,7 @@ function aafm_undo_reason_message( string $reason ): string {
 function aafm_undo_response_schema(): array {
 	return array(
 		'type'                 => 'object',
-		'description'          => __( 'Whether this change can be undone, with the change ids, or the reason it cannot.', 'agent-abilities-for-mcp' ),
+		'description'          => __( 'Whether this change can be undone, with the change ids, or the reason it cannot. When only some posts of a find and replace were recorded, undoable is false with a reason and change_ids still lists the ones that can be undone.', 'agent-abilities-for-mcp' ),
 		'properties'           => array(
 			'undoable'   => array( 'type' => 'boolean' ),
 			'change_ids' => array(

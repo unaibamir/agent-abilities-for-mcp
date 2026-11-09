@@ -298,6 +298,7 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				/* translators: %s: how many changes of the group were reverted. */
 				'undoGroupPartial'         => __( '%s of the changes were reverted. Not reverted:', 'agent-abilities-for-mcp' ),
 				'undoCleared'              => __( 'History cleared.', 'agent-abilities-for-mcp' ),
+				'undoEmpty'                => __( 'No changes recorded yet. When an agent edits a post, a term, a custom field or SEO data, the change shows up here.', 'agent-abilities-for-mcp' ),
 				/* translators: %s: error message returned by the server. */
 				'errorWithMessage'         => __( 'Error: %s', 'agent-abilities-for-mcp' ),
 				'errorUnknown'             => __( 'unknown', 'agent-abilities-for-mcp' ),

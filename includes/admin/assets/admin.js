@@ -2325,6 +2325,12 @@
 					}
 					card.querySelector( '.aafm-table-wrap' )?.remove();
 					card.querySelector( '.aafm-pager' )?.remove();
+					if ( ! card.querySelector( '.aafm-empty-state' ) ) {
+						const empty = document.createElement( 'div' );
+						empty.className = 'aafm-empty-state';
+						empty.textContent = this.#t( 'undoEmpty', 'No changes recorded yet. When an agent edits a post, a term, a custom field or SEO data, the change shows up here.' );
+						card.querySelector( '.aafm-changes-clear' )?.before( empty );
+					}
 				} );
 			} );
 		}

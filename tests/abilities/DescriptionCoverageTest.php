@@ -106,6 +106,24 @@ final class DescriptionCoverageTest extends TestCase {
 		$this->assertStringContainsString( 'update-post', $description );
 	}
 
+	/**
+	 * Core stores the new state on update and saves no revision on insert, so a post with no earlier revisions
+	 * has no earlier copy to restore. No copy of the text may promise one.
+	 */
+	public function test_replace_tools_do_not_promise_a_restore_from_revision_history(): void {
+		$copies = array();
+		foreach ( array( 'aafm/replace-in-post', 'aafm/replace-block' ) as $name ) {
+			$copies[ $name . ' description' ] = aafm_ability_description( $name );
+			$copies[ $name . ' disclosure' ]  = aafm_ability_disclosures()[ $name ];
+		}
+
+		foreach ( $copies as $label => $text ) {
+			$this->assertStringNotContainsString( 'can be restored from revision history', $text, $label );
+			$this->assertStringContainsString( 'no earlier revisions', $text, $label );
+			$this->assertStringContainsString( 'Changes tab', $text, $label );
+		}
+	}
+
 	public function test_allowlist_entries_exist_and_are_still_genuinely_bare(): void {
 		$registry = aafm_get_abilities_registry();
 		$stale    = array();

@@ -484,7 +484,7 @@ function aafm_ajax_undo_revert_group(): void {
 		$payload['message'] = sprintf(
 			/* translators: %s: the changes that were not reverted, each with its reason. */
 			__( 'Nothing was reverted. %s', 'agent-abilities-for-mcp' ),
-			implode( ' ', array_map( static fn( array $r ): string => sprintf( '%s: %s', '' !== (string) $r['item'] ? (string) $r['item'] : '#' . (int) $r['change_id'], (string) ( $r['message'] ?? '' ) ), $skipped ) )
+			implode( ' ', array_map( static fn( array $r ): string => sprintf( '%s: %s', '' !== (string) ( $r['item'] ?? '' ) ? (string) $r['item'] : '#' . (int) $r['change_id'], (string) ( $r['message'] ?? '' ) ), $skipped ) )
 		);
 	}
 	$failed = array() === $landed && array() !== $skipped;

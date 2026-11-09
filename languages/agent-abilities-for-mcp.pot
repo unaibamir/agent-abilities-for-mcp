@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-09T19:17:13+05:00\n"
+"POT-Creation-Date: 2026-11-10T02:54:37+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -10678,8 +10678,8 @@ msgstr ""
 
 #: includes/helpers.php:1242
 #: includes/helpers.php:1249
-#: includes/write-contract.php:931
-#: includes/write-contract.php:1178
+#: includes/write-contract.php:936
+#: includes/write-contract.php:1183
 msgid "Only text, number, or boolean meta values are supported."
 msgstr ""
 
@@ -11684,16 +11684,26 @@ msgstr ""
 msgid "The undo could not be confirmed, so check the item before trying again."
 msgstr ""
 
-#: includes/undo/engine.php:1190
+#: includes/undo/engine.php:1194
+msgid "The undo did not change anything: a plugin altered the value as it was restored, so the field was left as it is."
+msgstr ""
+
+#: includes/undo/engine.php:1195
 msgid "The undo did not change anything, so nothing was written."
 msgstr ""
 
-#: includes/undo/engine.php:1213
+#: includes/undo/engine.php:1219
 msgid "The undo was applied, but its history entry could not be saved. Check the item."
 msgstr ""
 
 #. translators: 1: comma-separated field names, 2: change id
-#: includes/undo/engine.php:1220
+#: includes/undo/engine.php:1228
+#, php-format
+msgid "The undo did not fully apply: %1$s did not match, so a plugin probably changed the value as it was restored. Change %2$d records the current state and can be reverted."
+msgstr ""
+
+#. translators: 1: comma-separated field names, 2: change id
+#: includes/undo/engine.php:1230
 #, php-format
 msgid "The undo did not fully apply: %1$s did not match. Change %2$d records the current state and can be reverted."
 msgstr ""

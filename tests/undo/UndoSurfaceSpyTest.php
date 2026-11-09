@@ -76,6 +76,81 @@ final class UndoSurfaceSpyTest extends UndoTestCase {
 		$this->assertContains( 'meta:aafm_note', $touched['meta'] ? array_map( static fn( $k ) => 'meta:' . $k, $touched['meta'] ) : array(), 'precondition: the spy saw the meta write.' );
 	}
 
+	/**
+	 * Tools beside update-post whose meta and term writes the spy can see without a vendor plugin.
+	 *
+	 * @return array<string,array{0:string}>
+	 */
+	public function data_other_post_tools(): array {
+		return array(
+			'update-page'        => array( 'aafm/update-page' ),
+			'update-post-meta'   => array( 'aafm/update-post-meta' ),
+			'delete-post-meta'   => array( 'aafm/delete-post-meta' ),
+			'add-post-terms'     => array( 'aafm/add-post-terms' ),
+			'set-featured-image' => array( 'aafm/set-featured-image' ),
+		);
+	}
+
+	/**
+	 * Every meta key and taxonomy one of these tools writes sits inside what its surface declares.
+	 *
+	 * @dataProvider data_other_post_tools
+	 *
+	 * @param string $ability Ability name.
+	 */
+	public function test_other_tools_declare_every_actual_write( string $ability ): void {
+		$this->acting_as( 'administrator' );
+		update_option( 'aafm_allowed_meta_keys', array( 'aafm_note' ) );
+		$post  = self::factory()->post->create(
+			array(
+				'post_type'  => 'aafm/update-page' === $ability ? 'page' : 'post',
+				'post_title' => 'Old',
+			)
+		);
+		$image = self::factory()->attachment->create_upload_object( DIR_TESTDATA . '/images/canola.jpg', $post );
+		$term  = self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+		add_post_meta( $post, 'aafm_note', 'before' );
+		$inputs = array(
+			'aafm/update-page'        => array(
+				'page_id' => $post,
+				'title'   => 'New',
+				'meta'    => array( 'aafm_note' => 'n' ),
+			),
+			'aafm/update-post-meta'   => array(
+				'post_id'  => $post,
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- tool argument.
+				'meta_key' => 'aafm_note',
+				'value'    => 'n',
+			),
+			'aafm/delete-post-meta'   => array(
+				'post_id'  => $post,
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- tool argument.
+				'meta_key' => 'aafm_note',
+			),
+			'aafm/add-post-terms'     => array(
+				'post_id'  => $post,
+				'taxonomy' => 'category',
+				'term_ids' => array( $term ),
+			),
+			'aafm/set-featured-image' => array(
+				'post_id'       => $post,
+				'attachment_id' => $image,
+			),
+		);
+		$input  = $inputs[ $ability ];
+
+		$touched  = $this->spy( $ability, $input );
+		$declared = aafm_undo_surfaces()[ $ability ]['fields']( $input );
+
+		$this->assertNotSame( array(), array_merge( $touched['meta'], $touched['terms'] ), 'precondition: the spy saw a write.' );
+		foreach ( $touched['meta'] as $key ) {
+			$this->assertContains( 'meta:' . $key, $declared, "{$ability} wrote meta {$key} outside its declared surface." );
+		}
+		foreach ( $touched['terms'] as $taxonomy ) {
+			$this->assertContains( 'terms:' . $taxonomy, $declared, "{$ability} wrote taxonomy {$taxonomy} outside its declared surface." );
+		}
+	}
+
 	public function test_trash_post_writes_only_core_trash_meta_beyond_its_declared_fields(): void {
 		$this->acting_as( 'administrator' );
 		$post = self::factory()->post->create( array( 'post_status' => 'publish' ) );

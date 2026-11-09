@@ -487,6 +487,39 @@ function aafm_ajax_save_settings(): void {
 		$clean['aafm_default_server_mode'] = $mode_before;
 	}
 
+	// Change history. Posted-only through a marker field, like the Site Brief, so a save that does not
+	// carry the control leaves the switch alone. It follows the read-only switch's path: the off-switch
+	// row is written through aafm_persist_operator_switch(), never the verified-settings map, because
+	// that map would store a row for the on state. A turn-off or turn-on that did not take is logged
+	// as an error and answered, never reported as done.
+	$undo_posted = isset( $posted['aafm_undo_capture_shown'] );
+	if ( $undo_posted ) {
+		$undo_was_off = aafm_stored_switch_on( 'aafm_undo_capture_off' );
+		$undo_to_off  = empty( $posted['aafm_undo_capture'] );
+		if ( $undo_was_off !== $undo_to_off ) {
+			$undo_persisted = aafm_persist_operator_switch( 'aafm_undo_capture_off', $undo_to_off );
+			$undo_user      = wp_get_current_user();
+			if ( $undo_persisted ) {
+				$undo_detail = $undo_to_off ? __( 'Change history turned off', 'agent-abilities-for-mcp' ) : __( 'Change history turned on', 'agent-abilities-for-mcp' );
+			} else {
+				$undo_detail = $undo_to_off ? __( 'Change history could not be turned off', 'agent-abilities-for-mcp' ) : __( 'Change history could not be turned on', 'agent-abilities-for-mcp' );
+			}
+			aafm_log_activity(
+				array(
+					'ability'           => 'aafm/change-history',
+					'principal_user_id' => (int) $undo_user->ID,
+					'principal_login'   => $undo_user->user_login ? (string) $undo_user->user_login : '',
+					'status'            => $undo_persisted ? 'success' : 'error',
+					'event_type'        => 'setting_changed',
+					'detail'            => $undo_detail,
+				)
+			);
+			if ( ! $undo_persisted ) {
+				wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Change history', 'agent-abilities-for-mcp' ) ) ) );
+			}
+		}
+	}
+
 	// Every requested restrictive change is safely in place and every ordinary setting verified, so
 	// only now is either governance switch allowed to move in the permissive direction.
 	if ( $clean['aafm_high_risk_abilities_unlocked'] ) {
@@ -1194,6 +1227,17 @@ function aafm_render_settings_tab(): void {
 		)
 	);
 
+	// Change history. admin.js sends a marker field when this control is on the page, since an
+	// unchecked box posts nothing.
+	aafm_render_set_row(
+		array(
+			'label'   => __( 'Keep change history', 'agent-abilities-for-mcp' ),
+			'control' => '<label class="aafm-switch"><input type="checkbox" id="aafm-undo-capture" name="aafm_undo_capture" value="1" ' . checked( ! aafm_stored_switch_on( 'aafm_undo_capture_off' ), true, false ) . '><span class="aafm-switch-track"></span></label> '
+				. '<label for="aafm-undo-capture">' . esc_html__( 'Record what agents change so you can revert it from the Changes tab.', 'agent-abilities-for-mcp' ) . '</label>',
+			'help'    => __( 'History is kept for 30 days while the plugin is active, because the clean-up needs the plugin loaded. The before-values stay in this site\'s database and its backups, and they are dropped when the plugin is uninstalled. Turning this off does not delete history that is already kept.', 'agent-abilities-for-mcp' ),
+		)
+	);
+
 	// Strict block validation. Same toggle-switch contract as force draft; the <input>
 	// name/value/checked() is what the save handler and its tests bind to, not this markup.
 	aafm_render_set_row(
@@ -1271,7 +1315,7 @@ function aafm_render_settings_tab(): void {
 	}
 	$delete_on_uninstall_control  = '<label class="aafm-switch"><input type="checkbox" id="aafm-delete-data-on-uninstall" name="aafm_delete_data_on_uninstall" value="1" ' . checked( $delete_checked, true, false ) . '><span class="aafm-switch-track"></span></label> '
 		. '<label for="aafm-delete-data-on-uninstall">' . esc_html__( 'Permanently remove all plugin data when the plugin is deleted.', 'agent-abilities-for-mcp' ) . '</label>';
-	$delete_on_uninstall_control .= '<p class="help">' . esc_html__( 'When this is off (the default), your settings, activity log, and OAuth data are kept if you delete the plugin, so a reinstall picks up your configuration. Turn it on only if you want everything removed. This cannot be undone.', 'agent-abilities-for-mcp' ) . '</p>';
+	$delete_on_uninstall_control .= '<p class="help">' . esc_html__( 'When this is off (the default), your settings, activity log, and OAuth data are kept if you delete the plugin, so a reinstall picks up your configuration. Change history is the exception: it is removed on every uninstall, whatever this says. Turn this on only if you want everything else removed too. This cannot be undone.', 'agent-abilities-for-mcp' ) . '</p>';
 	$delete_on_uninstall_control .= aafm_get_set_more_html(
 		__( 'See more about deleting data on uninstall', 'agent-abilities-for-mcp' ),
 		'<p class="help">' . esc_html__( "Either way, uninstalling this plugin never revokes an agent's access on its own. It never removes the dedicated agent user or any Application Password issued to it, since those are ordinary WordPress account credentials the plugin does not own. To cut off an agent, revoke its OAuth grant on the Connection tab, or delete its Application Password or user account from the Users screen, before or after you remove the plugin.", 'agent-abilities-for-mcp' ) . '</p>'
@@ -1326,7 +1370,7 @@ function aafm_render_settings_tab(): void {
 	echo '<div class="aafm-set-label">' . esc_html__( 'Reset plugin', 'agent-abilities-for-mcp' ) . '<span class="opt">' . esc_html__( 'Cannot be undone', 'agent-abilities-for-mcp' ) . '</span></div>';
 	echo '<div class="aafm-set-control">';
 	echo '<button type="button" id="aafm-reset-plugin" class="aafm-btn aafm-btn-danger">' . esc_html__( 'Reset plugin to defaults', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-reset-status" aria-live="polite"></span>';
-	echo '<p class="help">' . esc_html__( 'Clears every plugin setting - enabled abilities, exposed content types and meta keys, and all safety controls - and empties the activity log. Your agent user and anything it created (posts and other content) are left untouched. This cannot be undone.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="help">' . esc_html__( 'Clears every plugin setting - enabled abilities, exposed content types and meta keys, and all safety controls - and empties the activity log and the change history. Your agent user and anything it created (posts and other content) are left untouched. This cannot be undone.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div></div>';
 
 	echo '</div>';

@@ -664,4 +664,47 @@ final class SettingsSaveTest extends TestCase {
 		// wp_kses writes the ampersand as &amp; on WordPress 7.0 and as &#038; on 6.9; both are the same link.
 		$this->assertMatchesRegularExpression( '/admin\.php\?page=agent-abilities-for-mcp&(?:amp|#038);tab=connection">Connection tab<\/a>/', $html );
 	}
+
+	public function test_unchecking_keep_history_stores_the_off_switch_and_logs_it(): void {
+		$json = $this->save_settings( array( 'aafm_undo_capture_shown' => '1' ) );
+
+		$this->assertTrue( (bool) ( $json['success'] ?? false ), wp_json_encode( $json ) );
+		$this->assertTrue( aafm_stored_switch_on( 'aafm_undo_capture_off' ), 'The off-switch row is stored.' );
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$detail = $wpdb->get_var( $wpdb->prepare( 'SELECT detail FROM %i WHERE ability = %s ORDER BY id DESC LIMIT 1', aafm_activity_log_table(), 'aafm/change-history' ) );
+		$this->assertSame( 'Change history turned off', $detail );
+		delete_option( 'aafm_undo_capture_off' );
+	}
+
+	public function test_checking_keep_history_leaves_no_row(): void {
+		update_option( 'aafm_undo_capture_off', '1' );
+		$this->save_settings(
+			array(
+				'aafm_undo_capture_shown' => '1',
+				'aafm_undo_capture'       => '1',
+			)
+		);
+
+		$this->assertFalse( get_option( 'aafm_undo_capture_off', false ), 'On is the absent row.' );
+		$this->assertFalse( aafm_stored_switch_on( 'aafm_undo_capture_off' ) );
+	}
+
+	public function test_a_save_that_does_not_carry_the_control_leaves_history_alone(): void {
+		update_option( 'aafm_undo_capture_off', '1' );
+		$this->save_settings( array() );
+
+		$this->assertTrue( aafm_stored_switch_on( 'aafm_undo_capture_off' ) );
+		delete_option( 'aafm_undo_capture_off' );
+	}
+
+	public function test_reset_turns_history_back_on(): void {
+		aafm_install_activity_log();
+		aafm_install_oauth_tables();
+		update_option( 'aafm_undo_capture_off', '1' );
+		aafm_reset_plugin();
+
+		$this->assertFalse( get_option( 'aafm_undo_capture_off', false ) );
+		$this->assertFalse( aafm_stored_switch_on( 'aafm_undo_capture_off' ) );
+	}
 }

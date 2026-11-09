@@ -268,7 +268,7 @@ function aafm_args_list_menu_items(): array {
 					'type'  => 'array',
 					'items' => array(
 						'type'       => 'object',
-						'properties' => aafm_menu_item_output_properties(),
+						'properties' => aafm_menu_item_output_properties( true ),
 					),
 				),
 			),

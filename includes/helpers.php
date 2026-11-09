@@ -3225,9 +3225,10 @@ function aafm_redact_menu_item( $item ): array {
  * Mirrors what aafm_redact_menu_item() returns - every key, with its type - so the
  * list-menu-items output_schema can describe its array element shape instead of leaving it open.
  *
+ * @param bool $listed True for list-menu-items, whose `order` is a 1..N rank; false for the stored menu_order.
  * @return array<string,mixed>
  */
-function aafm_menu_item_output_properties(): array {
+function aafm_menu_item_output_properties( bool $listed = false ): array {
 	return array(
 		'id'        => array( 'type' => 'integer' ),
 		'title'     => array( 'type' => 'string' ),
@@ -3236,7 +3237,12 @@ function aafm_menu_item_output_properties(): array {
 		'object'    => array( 'type' => 'string' ),
 		'object_id' => array( 'type' => 'integer' ),
 		'parent'    => array( 'type' => 'integer' ),
-		'order'     => array( 'type' => 'integer' ),
+		'order'     => array(
+			'type'        => 'integer',
+			'description' => $listed
+				? __( 'The item\'s place in this list, numbered 1 to N. It is not the stored position, which create-menu-item and update-menu-item return.', 'agent-abilities-for-mcp' )
+				: __( 'The item\'s stored position (menu_order), which can start at 0 and have gaps. list-menu-items numbers its items 1 to N instead, so compare places there.', 'agent-abilities-for-mcp' ),
+		),
 	);
 }
 

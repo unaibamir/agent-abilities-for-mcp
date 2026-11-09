@@ -530,6 +530,9 @@ final class YoastTest extends TestCase {
 		$admin   = $this->acting_as( 'administrator' );
 		$post_id = (int) self::factory()->post->create( array( 'post_author' => $admin ) );
 		update_post_meta( $post_id, '_yoast_wpseo_title', 'Old' );
+		// Change history reads the same table first, so keep it out of the way: this test is about the tool's own read.
+		$history_off = static fn() => '1';
+		add_filter( 'pre_option_aafm_undo_capture_off', $history_off );
 
 		$res = \AAFM\Tests\Support\QueryFaultInjector::break_query_with_real_error(
 			array( 'meta_key, meta_value,', $wpdb->postmeta ),
@@ -541,6 +544,7 @@ final class YoastTest extends TestCase {
 			},
 			1
 		);
+		remove_filter( 'pre_option_aafm_undo_capture_off', $history_off );
 
 		$this->assertInstanceOf( WP_Error::class, $res );
 		$this->assertSame( 'aafm_yoast_write_unconfirmed', $res->get_error_code() );

@@ -621,7 +621,7 @@ final class CoreObjectLoadLeakTest extends TestCase {
 				)
 			)
 		);
-		$this->assert_refused( $out, 'delete-user' );
+		$this->assert_refused( $out, 'delete-user', 'aafm_reassign_required' );
 		clean_user_cache( $victim );
 		$this->assertInstanceOf( \WP_User::class, get_userdata( $victim ) );
 	}

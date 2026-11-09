@@ -478,7 +478,12 @@ function aafm_undo_write_fields( string $object_type, int $object_id, array $val
 		$post = aafm_exact_object_chain( 'post', $object_id );
 		if ( $post instanceof WP_Post ) {
 			$postarr = array_merge( array( 'ID' => $object_id ), $post_cols );
-			$pinned  = $builder_excerpt ? aafm_page_builder_excerpt_start( $post ) : null;
+			if ( isset( $post_cols['post_date'] ) ) {
+				// wp_update_post() clears a draft's date to the save time unless edit_date is set, which would
+				// move the date the restore just put back.
+				$postarr['edit_date'] = true;
+			}
+			$pinned = $builder_excerpt ? aafm_page_builder_excerpt_start( $post ) : null;
 			if ( is_array( $pinned ) ) {
 				aafm_page_builder_write_excerpt( $object_id, $postarr, $pinned );
 			} elseif ( ! $builder_excerpt ) {

@@ -262,6 +262,47 @@ final class UndoRoundTripTest extends UndoTestCase {
 		$this->assertSame( 'Desc', get_term( $term, 'category' )->description );
 	}
 
+	/**
+	 * Core clears a draft's date to "now" on every save, so the forward edit moves post_date and an
+	 * undo that did not ask core to keep the date reported a difference although the content was back.
+	 */
+	public function test_a_draft_edit_reverts_cleanly_with_its_floating_date_restored(): void {
+		global $wpdb;
+		$post = self::factory()->post->create(
+			array(
+				'post_title'  => 'Old',
+				'post_status' => 'draft',
+			)
+		);
+		// A draft's date floats: post_date_gmt stays zero and post_date is the last save time.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- a test fixture write.
+		$wpdb->update(
+			$wpdb->posts,
+			array(
+				'post_date'     => '2020-01-02 03:04:05',
+				'post_date_gmt' => '0000-00-00 00:00:00',
+			),
+			array( 'ID' => $post )
+		);
+		clean_post_cache( $post );
+		$before = $this->post_row( $post );
+		$change = $this->change_from(
+			'aafm/update-post',
+			array(
+				'post_id' => $post,
+				'title'   => 'New',
+			)
+		);
+		$this->assertNotSame( $before['post_date'], $this->post_row( $post )['post_date'], 'Guard: core moved the draft date on save.' );
+
+		$this->revert( $change );
+
+		$after = $this->post_row( $post );
+		$this->assertSame( 'Old', $after['post_title'] );
+		$this->assertSame( $before['post_date'], $after['post_date'] );
+		$this->assertSame( '0000-00-00 00:00:00', $after['post_date_gmt'] );
+	}
+
 	public function test_set_featured_image_reverts_to_no_image(): void {
 		$post   = self::factory()->post->create();
 		$image  = self::factory()->attachment->create_upload_object( DIR_TESTDATA . '/images/canola.jpg', $post );

@@ -73,6 +73,7 @@ function aafm_args_list_changes(): array {
 				'page'        => array(
 					'type'        => 'integer',
 					'minimum'     => 1,
+					'maximum'     => AAFM_LIST_PAGE_MAX,
 					'description' => __( '1-based page number. Defaults to 1.', 'agent-abilities-for-mcp' ),
 				),
 			),
@@ -205,7 +206,7 @@ function aafm_exec_list_changes( array $input ) {
 	$type      = 'term' === ( $input['object_type'] ?? '' ) ? 'term' : 'post';
 	$object_id = absint( $input['object_id'] ?? 0 );
 	$per_page  = min( 20, max( 1, (int) ( $input['per_page'] ?? 20 ) ) );
-	$page      = max( 1, (int) ( $input['page'] ?? 1 ) );
+	$page      = min( AAFM_LIST_PAGE_MAX, max( 1, (int) ( $input['page'] ?? 1 ) ) );
 	$empty     = array(
 		'changes'  => array(),
 		'page'     => $page,

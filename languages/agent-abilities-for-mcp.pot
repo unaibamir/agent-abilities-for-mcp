@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-10T03:43:27+05:00\n"
+"POT-Creation-Date: 2026-11-10T04:01:43+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -523,7 +523,7 @@ msgstr ""
 msgid "The id of one of this connection's own changes from the last 24 hours, as list-changes returned it."
 msgstr ""
 
-#: includes/abilities/changes.php:295
+#: includes/abilities/changes.php:326
 msgid "Notifications, webhooks and anything already read are not recalled."
 msgstr ""
 
@@ -11760,141 +11760,141 @@ msgstr ""
 msgid "The undo did not fully apply: %1$s did not match. Change %2$d records the current state and can be reverted."
 msgstr ""
 
-#: includes/undo/surfaces.php:285
+#: includes/undo/surfaces.php:286
 msgid "This tool does not record its changes, so they cannot be undone."
 msgstr ""
 
-#: includes/undo/surfaces.php:286
+#: includes/undo/surfaces.php:287
 msgid "This permanently deletes the item, so it cannot be undone."
 msgstr ""
 
-#: includes/undo/surfaces.php:287
+#: includes/undo/surfaces.php:288
 msgid "This tool has effects outside the site content, so it cannot be undone."
 msgstr ""
 
-#: includes/undo/surfaces.php:288
+#: includes/undo/surfaces.php:289
 msgid "This changes account or site settings data, which is not recorded."
 msgstr ""
 
-#: includes/undo/surfaces.php:289
+#: includes/undo/surfaces.php:290
 msgid "This created a file, which is not recorded."
 msgstr ""
 
-#: includes/undo/surfaces.php:290
+#: includes/undo/surfaces.php:291
 msgid "Terms have no Trash, so creating one cannot be undone here."
 msgstr ""
 
-#: includes/undo/surfaces.php:291
+#: includes/undo/surfaces.php:292
 msgid "The call changed nothing, so there is nothing to undo."
 msgstr ""
 
-#: includes/undo/surfaces.php:292
+#: includes/undo/surfaces.php:293
 msgid "Change history is switched off."
 msgstr ""
 
-#: includes/undo/surfaces.php:293
+#: includes/undo/surfaces.php:294
 msgid "This change could not be recorded."
 msgstr ""
 
-#: includes/undo/surfaces.php:294
+#: includes/undo/surfaces.php:295
 msgid "This change is too large to keep for undo."
 msgstr ""
 
-#: includes/undo/surfaces.php:295
+#: includes/undo/surfaces.php:296
 msgid "This change holds text that cannot be stored safely for undo."
 msgstr ""
 
-#: includes/undo/surfaces.php:296
+#: includes/undo/surfaces.php:297
 msgid "This change holds a stored PHP object, which cannot be restored exactly."
 msgstr ""
 
-#: includes/undo/surfaces.php:297
+#: includes/undo/surfaces.php:298
 msgid "This change cannot be restored exactly."
 msgstr ""
 
-#: includes/undo/surfaces.php:298
+#: includes/undo/surfaces.php:299
 msgid "This key looks like a secret, so no copy of its value is kept."
 msgstr ""
 
-#: includes/undo/surfaces.php:299
+#: includes/undo/surfaces.php:300
 msgid "The SEO plugin had no stored row for this post, so there is nothing to restore."
 msgstr ""
 
-#: includes/undo/surfaces.php:300
+#: includes/undo/surfaces.php:301
 msgid "This change did not finish being recorded."
 msgstr ""
 
-#: includes/undo/surfaces.php:301
+#: includes/undo/surfaces.php:302
 msgid "The item changed after this edit, so undoing it could overwrite newer work."
 msgstr ""
 
-#: includes/undo/surfaces.php:302
+#: includes/undo/surfaces.php:303
 msgid "This change is older than 30 days and is no longer kept."
 msgstr ""
 
-#: includes/undo/surfaces.php:303
+#: includes/undo/surfaces.php:304
 msgid "A plugin filters this field, so it cannot be restored exactly."
 msgstr ""
 
-#: includes/undo/surfaces.php:304
+#: includes/undo/surfaces.php:305
 msgid "The undo attempt could not be logged, so nothing was changed."
 msgstr ""
 
-#: includes/undo/surfaces.php:305
+#: includes/undo/surfaces.php:306
 msgid "Another undo of this change is running or did not finish."
 msgstr ""
 
-#: includes/undo/surfaces.php:306
+#: includes/undo/surfaces.php:307
 msgid "This change was already reverted."
 msgstr ""
 
-#: includes/undo/surfaces.php:307
+#: includes/undo/surfaces.php:308
 msgid "Agents can only undo changes from the last 24 hours."
 msgstr ""
 
-#: includes/undo/surfaces.php:308
+#: includes/undo/surfaces.php:309
 msgid "Only a site owner can undo this change, from the Changes tab."
 msgstr ""
 
-#: includes/undo/surfaces.php:309
+#: includes/undo/surfaces.php:310
 msgid "A page builder now owns this post, so the change cannot be restored."
 msgstr ""
 
-#: includes/undo/surfaces.php:310
+#: includes/undo/surfaces.php:311
 msgid "Something this change depends on no longer exists."
 msgstr ""
 
-#: includes/undo/surfaces.php:311
+#: includes/undo/surfaces.php:312
 msgid "The Trash is switched off, so this cannot be undone."
 msgstr ""
 
-#: includes/undo/surfaces.php:312
+#: includes/undo/surfaces.php:313
 msgid "The item is no longer in the Trash."
 msgstr ""
 
-#: includes/undo/surfaces.php:313
+#: includes/undo/surfaces.php:314
 msgid "WordPress would store the old value differently now, so a restore would not be exact. Use Revisions instead."
 msgstr ""
 
-#: includes/undo/surfaces.php:314
+#: includes/undo/surfaces.php:315
 msgid "Force draft would change the status this undo restores."
 msgstr ""
 
-#: includes/undo/surfaces.php:315
+#: includes/undo/surfaces.php:316
 msgid "This undo is not allowed."
 msgstr ""
 
-#: includes/undo/surfaces.php:316
+#: includes/undo/surfaces.php:317
 msgid "The stored change could not be read."
 msgstr ""
 
 #. translators: %d: how many undo calls one agent connection may make per hour.
-#: includes/undo/surfaces.php:318
+#: includes/undo/surfaces.php:319
 #, php-format
 msgid "Too many undo calls: an agent connection may make %d per hour. Try again within the hour."
 msgstr ""
 
-#: includes/undo/surfaces.php:341
+#: includes/undo/surfaces.php:342
 msgid "Whether this change can be undone, with the change ids, or the reason it cannot. When only some posts of a find and replace were recorded, undoable is false with a reason and change_ids still lists the ones that can be undone."
 msgstr ""
 

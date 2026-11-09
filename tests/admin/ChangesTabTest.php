@@ -76,6 +76,40 @@ final class ChangesTabTest extends UndoTestCase {
 		$this->assertStringContainsString( '3 posts changed', $html );
 	}
 
+	/**
+	 * The WordPress test suite turns CREATE TABLE into a TEMPORARY table, and MySQL cannot open one twice in
+	 * one statement ("Can't reopen table", error 1137), so the lookup of a group's rows is a separate query.
+	 * MariaDB tolerates it, so this checks the statements rather than the engine: no query may name the
+	 * changes table twice.
+	 */
+	public function test_no_changes_tab_query_names_the_changes_table_twice(): void {
+		foreach ( array( 'a', 'b' ) as $suffix ) {
+			self::factory()->post->create( array( 'post_content' => 'needle ' . $suffix ) );
+		}
+		$this->run_tool(
+			'aafm/replace-sitewide',
+			array(
+				'search'  => 'needle',
+				'replace' => 'thread',
+				'dry_run' => false,
+			)
+		);
+		$table = aafm_changes_table();
+		$twice = array();
+		$watch = static function ( string $query ) use ( $table, &$twice ): string {
+			if ( substr_count( $query, '`' . $table . '`' ) + substr_count( $query, ' ' . $table . ' ' ) > 1 ) {
+				$twice[] = $query;
+			}
+			return $query;
+		};
+		add_filter( 'query', $watch );
+		$html = $this->render();
+		remove_filter( 'query', $watch );
+
+		$this->assertSame( array(), $twice );
+		$this->assertStringContainsString( '2 posts changed', $html, 'The group still renders as one row with both members.' );
+	}
+
 	public function test_rows_from_two_calls_are_never_grouped_even_after_a_log_clear_mid_call(): void {
 		$post = self::factory()->post->create( array( 'post_content' => 'needle one' ) );
 		$this->run_tool(

@@ -552,9 +552,21 @@ function aafm_undo_list_for_tab( int $page, int $per_page ): array {
 
 	$columns = 'id, log_row_id, group_id, ability, source, principal_user_id, client_id, object_type, object_id, undo_op, status, reason, fields, perm_input, after_hashes, before_sha256, reverts_change_id, reverted_by_change_id, snapshot_bytes, created_at';
 	$marks   = implode( ', ', array_fill( 0, count( $ids ), '%d' ) );
-	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- the column list is a constant and the marks are generated from the id list.
-	$sql  = "SELECT {$columns}, IF( before_values IS NULL, NULL, '1' ) AS before_values, ( SHA2( before_values, 256 ) = before_sha256 ) AS hash_ok FROM %i WHERE ( id IN ( {$marks} ) OR group_id IN ( SELECT group_id FROM %i WHERE id IN ( {$marks} ) AND group_id <> '' AND ability = 'aafm/replace-sitewide' ) ) AND {$visible} ORDER BY id DESC";
-	$rows = aafm_wpdb_results( $wpdb->prepare( $sql, array_merge( array( $table ), $ids, array( $table ), $ids ) ) );
+
+	// The groups the lead rows belong to, read first. One query naming the table twice (a subquery on
+	// group_id) fails with "Can't reopen table" when the table is a TEMPORARY one, as the WordPress test
+	// suite makes it, so the lookup is a separate statement.
+	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- the marks are generated from the id list.
+	$groups = aafm_wpdb_results( $wpdb->prepare( "SELECT DISTINCT group_id FROM %i WHERE id IN ( {$marks} ) AND group_id <> '' AND ability = 'aafm/replace-sitewide'", array_merge( array( $table ), $ids ) ) );
+	if ( ! $groups['ok'] ) {
+		return $empty;
+	}
+	$group_ids = array_map( static fn( array $row ): string => (string) $row['group_id'], (array) $groups['value'] );
+	$in_group  = array() === $group_ids ? '' : ' OR group_id IN ( ' . implode( ', ', array_fill( 0, count( $group_ids ), '%s' ) ) . ' )';
+
+	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- the column list is a constant and the marks are generated from the id and group lists.
+	$sql  = "SELECT {$columns}, IF( before_values IS NULL, NULL, '1' ) AS before_values, ( SHA2( before_values, 256 ) = before_sha256 ) AS hash_ok FROM %i WHERE ( id IN ( {$marks} ){$in_group} ) AND {$visible} ORDER BY id DESC";
+	$rows = aafm_wpdb_results( $wpdb->prepare( $sql, array_merge( array( $table ), $ids, $group_ids ) ) );
 	// phpcs:enable
 	if ( ! $rows['ok'] ) {
 		return $empty;

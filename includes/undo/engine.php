@@ -1187,7 +1187,13 @@ function aafm_undo_apply_claimed( array $row, string $source, string $claimed_at
 			array( 'undoing' )
 		);
 		$fault();
-		return new \WP_Error( 'aafm_undo_failed', __( 'The undo did not change anything, so nothing was written.', 'agent-abilities-for-mcp' ) );
+		$plugin_changed = array() !== array_filter( $wrote['missed'], static fn( string $f ): bool => 0 === strpos( $f, 'meta:' ) );
+		return new \WP_Error(
+			'aafm_undo_failed',
+			$plugin_changed
+				? __( 'The undo did not change anything: a plugin altered the value as it was restored, so the field was left as it is.', 'agent-abilities-for-mcp' )
+				: __( 'The undo did not change anything, so nothing was written.', 'agent-abilities-for-mcp' )
+		);
 	}
 
 	$new_saved = 1 === aafm_undo_update(
@@ -1213,11 +1219,15 @@ function aafm_undo_apply_claimed( array $row, string $source, string $claimed_at
 		return new \WP_Error( 'aafm_undo_failed', __( 'The undo was applied, but its history entry could not be saved. Check the item.', 'agent-abilities-for-mcp' ) );
 	}
 	if ( array() !== $wrote['missed'] ) {
+		$meta_missed = array() !== array_filter( $wrote['missed'], static fn( string $f ): bool => 0 === strpos( $f, 'meta:' ) );
 		return new \WP_Error(
 			'aafm_undo_failed',
 			sprintf(
-				/* translators: 1: comma-separated field names, 2: change id */
-				__( 'The undo did not fully apply: %1$s did not match. Change %2$d records the current state and can be reverted.', 'agent-abilities-for-mcp' ),
+				$meta_missed
+					/* translators: 1: comma-separated field names, 2: change id */
+					? __( 'The undo did not fully apply: %1$s did not match, so a plugin probably changed the value as it was restored. Change %2$d records the current state and can be reverted.', 'agent-abilities-for-mcp' )
+					/* translators: 1: comma-separated field names, 2: change id */
+					: __( 'The undo did not fully apply: %1$s did not match. Change %2$d records the current state and can be reverted.', 'agent-abilities-for-mcp' ),
 				implode( ', ', array_map( static fn( string $f ): string => (string) substr( $f, (int) strpos( $f, ':' ) + 1 ), $wrote['missed'] ) ),
 				$new_id
 			)

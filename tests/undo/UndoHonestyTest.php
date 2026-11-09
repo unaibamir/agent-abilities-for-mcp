@@ -123,6 +123,67 @@ final class UndoHonestyTest extends UndoTestCase {
 		$this->assertSame( 'new', get_post_meta( $post, 'aafm_note', true ) );
 	}
 
+	public function test_a_plugin_rewriting_the_restored_row_as_it_is_added_is_never_reported_as_reverted(): void {
+		global $wpdb;
+		$post = self::factory()->post->create();
+		add_post_meta( $post, 'aafm_note', 'old' );
+		$change  = $this->change_from(
+			'aafm/update-post-meta',
+			array(
+				'post_id'  => $post,
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- a test fixture query on a tiny table.
+				'meta_key' => 'aafm_note',
+				'value'    => 'new',
+			)
+		); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- tool argument.
+		$rewrite = static function ( $meta_id ) use ( $wpdb ): void {
+			$wpdb->update( $wpdb->postmeta, array( 'meta_value' => 'HOSTILE' ), array( 'meta_id' => $meta_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- a test fixture write.
+		};
+		add_action( 'added_post_meta', $rewrite );
+		$result = aafm_undo_apply( $change, 'owner' );
+		remove_action( 'added_post_meta', $rewrite );
+		wp_cache_delete( $post, 'post_meta' );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'aafm_undo_failed', $result->get_error_code() );
+		$this->assertStringContainsString( 'plugin', $result->get_error_message() );
+		$this->assertSame( 'new', get_post_meta( $post, 'aafm_note', true ), 'The field is left as it was.' );
+		$this->assertSame( 'ready', aafm_undo_get_view( $change )['row']['status'], 'Nothing was reverted, so the change can be tried again.' );
+	}
+
+	public function test_a_plugin_rewriting_the_value_after_the_restore_is_reported_as_not_matching(): void {
+		global $wpdb;
+		$post = self::factory()->post->create();
+		add_post_meta( $post, 'aafm_note', 'old' );
+		$change  = $this->change_from(
+			'aafm/update-post-meta',
+			array(
+				'post_id'  => $post,
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- a test fixture query on a tiny table.
+				'meta_key' => 'aafm_note',
+				'value'    => 'new',
+			)
+		); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- tool argument.
+		$rewrite = static function ( $meta_ids, $object_id, $meta_key ) use ( $wpdb, $post ): void {
+			if ( $object_id === $post && 'aafm_note' === $meta_key ) {
+				$where = array(
+					'post_id'  => $post,
+					'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- a test fixture write.
+				);
+				$wpdb->update( $wpdb->postmeta, array( 'meta_value' => 'HOSTILE' ), $where ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- a test fixture write.
+			}
+		};
+		add_action( 'deleted_post_meta', $rewrite, 10, 3 );
+		$result = aafm_undo_apply( $change, 'owner' );
+		remove_action( 'deleted_post_meta', $rewrite, 10 );
+		wp_cache_delete( $post, 'post_meta' );
+
+		$this->assertWPError( $result, 'A restore that did not land exactly is never reported as reverted.' );
+		$this->assertSame( 'aafm_undo_failed', $result->get_error_code() );
+		$this->assertStringContainsString( 'aafm_note', $result->get_error_message() );
+		$this->assertStringContainsString( 'plugin', $result->get_error_message() );
+	}
+
 	public function test_a_sanitizer_that_keeps_the_value_lets_the_revert_through(): void {
 		$post = self::factory()->post->create();
 		add_post_meta( $post, 'aafm_note', 'old' );

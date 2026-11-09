@@ -297,7 +297,7 @@ Under Settings, Notifications, pick an admin notice, an email right away or one 
 
 = Can I undo what an AI agent changed? =
 
-Yes, for most edits. The Changes tab keeps 30 days of what agents changed with 25 tools (edits to posts, pages and custom post types, creates, trashes, block edits, terms, custom fields, featured images and SEO fields) and reverts a change if the item hasn't been edited since. It shows field names, never contents, and a revert that would overwrite a newer edit is refused. Permanent deletes, orders, refunds, user accounts and file uploads can't be undone, and each of those tools says so in its response. Notifications, webhooks and anything already read are not recalled. Two optional tools, list-changes and undo-change, let an agent undo its own changes from the last 24 hours, and both start off. History records only while the plugin is active, can be switched off in Settings, and is removed on uninstall.
+Yes, for most edits. The Changes tab keeps 30 days of what agents changed with 25 tools (edits to posts, pages and custom post types, creates, trashes, block edits, terms, custom fields, featured images and SEO fields) and reverts a change if the item hasn't been edited since. It shows field names, never contents. A revert that would overwrite a newer edit is refused. Permanent deletes, orders, refunds, user accounts and file uploads can't be undone, and each of those tools says so in its response. Notifications, webhooks and anything already read are not recalled. Two optional tools, list-changes and undo-change, let an agent undo its own changes from the last 24 hours; both start off. History records only while the plugin is active, can be switched off in Settings, and is removed on uninstall. WordPress's export and erase personal data tools cover it.
 
 = Does uninstalling the plugin revoke my agent's access? =
 
@@ -330,10 +330,10 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 
 = 1.11.2 =
 
-* **Feature:** A new Changes tab keeps 30 days of what agents changed and lets you revert changes made with 25 tools: post, page and custom post type edits, creates, trashes, block edits, terms, custom fields, featured images and SEO fields. A site-wide find and replace reverts as one group. History starts recording with this update, can be switched off in Settings, and WordPress's export and erase personal data tools cover it.
+* **Feature:** A new Changes tab keeps 30 days of what agents changed with 25 tools and reverts a change if the item hasn't been edited since. A site-wide find and replace reverts as one group.
 * **Feature:** Two new tools, list-changes and undo-change, let an agent see and undo its own changes from the last 24 hours. Both start off, and undo-change is destructive, so no preset includes it.
 * **Feature:** Every write tool now says in its response whether the change can be undone. Tools that can't, such as permanent deletes, orders and refunds, say why.
-* **Fix:** WordPress's export and erase personal data tools now cover the activity log too.
+* **Fix:** WordPress's export and erase personal data tools now cover the activity log and the new change history.
 * **Chore:** Change history is stored in its own table, which is dropped on every uninstall and emptied by Reset.
 
 = 1.11.1 =

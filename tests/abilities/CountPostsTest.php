@@ -79,6 +79,25 @@ final class CountPostsTest extends TestCase {
 		$this->assertSame( array_sum( array_map( 'intval', $by_status ) ), $out['total'] );
 	}
 
+	public function test_a_plugin_status_with_no_posts_is_left_out_of_the_breakdown(): void {
+		$this->acting_as( 'editor' );
+		register_post_status( 'aafm_unused', array( 'label' => 'Unused' ) );
+		register_post_status( 'aafm_used', array( 'label' => 'Used' ) );
+		self::factory()->post->create(
+			array(
+				'post_type'   => 'post',
+				'post_status' => 'aafm_used',
+			)
+		);
+
+		$by_status = (array) aafm_exec_count_posts( array( 'post_type' => 'post' ) )['by_status'];
+
+		$this->assertArrayNotHasKey( 'aafm_unused', $by_status, 'A zero-count plugin status is noise.' );
+		$this->assertSame( 1, $by_status['aafm_used'] );
+		$this->assertArrayHasKey( 'pending', $by_status, 'A core status keeps its bucket at zero.' );
+		$this->assertSame( 0, $by_status['pending'] );
+	}
+
 	public function test_hides_non_public_status_counts_from_non_editors(): void {
 		// Seed a mixed-status set: 2 publish + 1 draft + 1 pending.
 		$this->acting_as( 'editor' );

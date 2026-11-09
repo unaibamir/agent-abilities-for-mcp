@@ -457,8 +457,9 @@ function aafm_exec_count_posts( array $input ) {
 	$can_edit     = ( null !== $type_object ) && current_user_can( $type_object->cap->edit_posts );
 	$public_stati = get_post_stati( array( 'public' => true ) );
 
-	$by_status = array();
-	$total     = 0;
+	$core_stati = get_post_stati( array( '_builtin' => true ) );
+	$by_status  = array();
+	$total      = 0;
 	foreach ( $counts as $status => $n ) {
 		$status = (string) $status;
 		$n      = (int) $n;
@@ -466,6 +467,12 @@ function aafm_exec_count_posts( array $input ) {
 		// Hide non-public status counts from callers who cannot edit this post type.
 		if ( ! $can_edit && ! in_array( $status, $public_stati, true ) ) {
 			$n = 0;
+		}
+
+		// A status a plugin registered and no post uses is noise (a store can register thirty). Core's own
+		// statuses keep their bucket at zero so the breakdown keeps its shape.
+		if ( 0 === $n && ! in_array( $status, $core_stati, true ) ) {
+			continue;
 		}
 
 		$by_status[ $status ] = $n;

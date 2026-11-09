@@ -728,7 +728,9 @@ function aafm_undo_row_state( array $row, string $source ): array {
 	if ( 'not_undoable' === $status ) {
 		return $no( '' !== (string) $row['reason'] ? (string) $row['reason'] : 'not_allowed' );
 	}
-	if ( 'ready' !== $status || ! hash_equals( (string) $row['before_sha256'], hash( 'sha256', (string) $row['before_values'] ) ) ) {
+	// The Changes tab never loads the values, so it hands over the hash comparison the database already made.
+	$hash_ok = array_key_exists( 'hash_ok', $row ) ? (bool) $row['hash_ok'] : hash_equals( (string) $row['before_sha256'], hash( 'sha256', (string) $row['before_values'] ) );
+	if ( 'ready' !== $status || ! $hash_ok ) {
 		return $no( 'read_failed' );
 	}
 	if ( 'agent' === $source ) {

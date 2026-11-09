@@ -482,6 +482,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/components.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/dashboard.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/review-inbox.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/admin/changes.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/missing-tools.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/connection.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/connection-cards.php';
@@ -534,12 +535,17 @@ function aafm_bootstrap() {
 		add_action( 'wp_ajax_aafm_review_request', 'aafm_ajax_review_request' );
 		add_action( 'wp_ajax_aafm_review_publish', 'aafm_ajax_review_publish' );
 		add_action( 'wp_ajax_aafm_review_discard', 'aafm_ajax_review_discard' );
+		add_action( 'wp_ajax_aafm_undo_revert', 'aafm_ajax_undo_revert' );
+		add_action( 'wp_ajax_aafm_undo_revert_group', 'aafm_ajax_undo_revert_group' );
+		add_action( 'wp_ajax_aafm_undo_clear_history', 'aafm_ajax_undo_clear_history' );
+		add_action( 'wp_ajax_aafm_undo_dismiss_notice', 'aafm_ajax_undo_dismiss_notice' );
 		// The same answer, arriving as a plain link when the notice's footer script never ran.
 		add_action( 'admin_post_aafm_review_request', 'aafm_handle_review_request_post' );
 		add_action( 'wp_ajax_aafm_notify_test', 'aafm_ajax_notify_test' );
 		add_action( 'admin_post_aafm_notify_dismiss', 'aafm_handle_notify_dismiss' );
 		add_action( 'admin_notices', 'aafm_notify_admin_notice' );
 		add_action( 'admin_notices', 'aafm_render_review_request_notice' );
+		add_action( 'admin_notices', 'aafm_render_undo_notice' );
 		add_action( 'admin_notices', 'aafm_notice_omitted_abilities' );
 		add_action( 'admin_enqueue_scripts', 'aafm_maybe_enqueue_menu_pointer' );
 	}

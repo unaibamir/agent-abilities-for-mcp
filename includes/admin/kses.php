@@ -219,6 +219,12 @@ function aafm_admin_allowed_html(): array {
 		'data-playbook-starter'     => true,
 		// 1.10.2 stale-save check.
 		'data-playbook-version'     => true,
+		// 1.11.2 Changes tab rows and Revert buttons.
+		'data-change-id'            => true,
+		'data-change-group'         => true,
+		'data-undo-revert'          => true,
+		'data-undo-revert-group'    => true,
+		'data-undo-fields'          => true,
 	);
 
 	$global = array_merge(

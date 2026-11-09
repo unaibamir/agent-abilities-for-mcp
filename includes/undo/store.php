@@ -462,3 +462,78 @@ function aafm_undo_on_network_user_delete( $user_id ): void {
 	}
 }
 add_action( 'wpmu_delete_user', 'aafm_undo_on_network_user_delete' );
+
+/**
+ * The rows the Changes tab shows, newest first, a replace-sitewide group counting as one row.
+ *
+ * Never selects the before-values: a row carries only whether values are still held and whether they
+ * still hash to what was stored, so no value can reach the page. A pending row younger than the grace
+ * period is a call still in flight and is left out.
+ *
+ * @param int $page     Page number, from 1.
+ * @param int $per_page Rows per page.
+ * @return array{ok: bool, rows: list<array<string,mixed>>, total: int}
+ */
+function aafm_undo_list_for_tab( int $page, int $per_page ): array {
+	global $wpdb;
+
+	$empty   = array(
+		'ok'    => false,
+		'rows'  => array(),
+		'total' => 0,
+	);
+	$table   = aafm_changes_table();
+	$grace   = aafm_undo_cutoff( AAFM_UNDO_PENDING_GRACE );
+	$visible = $wpdb->prepare( "NOT ( status = 'pending' AND created_at >= %s )", $grace );
+	// A sitewide call's rows share one key; every other row is its own.
+	$unit = "IF( ability = 'aafm/replace-sitewide' AND group_id <> '', group_id, CONCAT( 'r', id ) )";
+
+	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- $visible is a prepared fragment, $unit a constant, the table a %i.
+	$count = aafm_wpdb_scalar( $wpdb->prepare( "SELECT COUNT(*) FROM ( SELECT 1 FROM %i WHERE {$visible} GROUP BY {$unit} ) AS u", $table ) );
+	if ( ! $count['ok'] ) {
+		return $empty;
+	}
+	$leads = aafm_wpdb_results( $wpdb->prepare( "SELECT MAX( id ) AS lead_id FROM %i WHERE {$visible} GROUP BY {$unit} ORDER BY lead_id DESC LIMIT %d OFFSET %d", $table, $per_page, max( 0, $page - 1 ) * $per_page ) );
+	// phpcs:enable
+	if ( ! $leads['ok'] ) {
+		return $empty;
+	}
+	$ids = array_map( static fn( array $row ): int => (int) $row['lead_id'], (array) $leads['value'] );
+	if ( array() === $ids ) {
+		return array(
+			'ok'    => true,
+			'rows'  => array(),
+			'total' => (int) $count['value'],
+		);
+	}
+
+	$columns = 'id, log_row_id, group_id, ability, source, principal_user_id, client_id, object_type, object_id, undo_op, status, reason, fields, perm_input, after_hashes, before_sha256, reverts_change_id, reverted_by_change_id, snapshot_bytes, created_at';
+	$marks   = implode( ', ', array_fill( 0, count( $ids ), '%d' ) );
+	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- the column list is a constant and the marks are generated from the id list.
+	$sql  = "SELECT {$columns}, IF( before_values IS NULL, NULL, '1' ) AS before_values, ( SHA2( before_values, 256 ) = before_sha256 ) AS hash_ok FROM %i WHERE ( id IN ( {$marks} ) OR group_id IN ( SELECT group_id FROM %i WHERE id IN ( {$marks} ) AND group_id <> '' AND ability = 'aafm/replace-sitewide' ) ) AND {$visible} ORDER BY id DESC";
+	$rows = aafm_wpdb_results( $wpdb->prepare( $sql, array_merge( array( $table ), $ids, array( $table ), $ids ) ) );
+	// phpcs:enable
+	if ( ! $rows['ok'] ) {
+		return $empty;
+	}
+	return array(
+		'ok'    => true,
+		'rows'  => array_values( (array) $rows['value'] ),
+		'total' => (int) $count['value'],
+	);
+}
+
+/**
+ * The ids and tools of every row in one replace-sitewide group, newest first.
+ *
+ * @param string $group_id The 32 character group id.
+ * @return array{ok: bool, rows: list<array<string,mixed>>}
+ */
+function aafm_undo_group_members( string $group_id ): array {
+	global $wpdb;
+	$rows = aafm_wpdb_results( $wpdb->prepare( 'SELECT id, ability FROM %i WHERE group_id = %s ORDER BY id DESC LIMIT 200', aafm_changes_table(), $group_id ) );
+	return array(
+		'ok'   => $rows['ok'],
+		'rows' => $rows['ok'] ? array_values( (array) $rows['value'] ) : array(),
+	);
+}

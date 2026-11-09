@@ -148,6 +148,20 @@ function aafm_undo_update( int $id, array $data, array $where_status = array() )
 }
 
 /**
+ * Delete one change row (a call that changed nothing leaves no row).
+ *
+ * @param int $id Row id.
+ * @return void
+ */
+function aafm_undo_delete( int $id ): void {
+	global $wpdb;
+	$suppressed = $wpdb->suppress_errors( true );
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE id = %d', aafm_changes_table(), $id ) );
+	$wpdb->suppress_errors( $suppressed );
+}
+
+/**
  * Read one change row. The only row getter: an unreadable table and an absent row are different answers.
  *
  * @param int $id Row id.

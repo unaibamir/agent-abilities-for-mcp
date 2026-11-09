@@ -3477,6 +3477,8 @@ PHP;
 		'includes/page-builder-guard.php|aafm_post_has_foreign_builder_ownership|aafm_meta_rows',
 		'includes/helpers.php|aafm_apply_write_enrichment|aafm_meta_row',
 		'includes/abilities/media.php|aafm_exec_set_featured_image|aafm_meta_row',
+		// PM ruling (plan 315, Task 2): the undo history reads the raw rows of a family once, in one function.
+		'includes/undo/fields.php|aafm_undo_read_fields|aafm_meta_raw_snapshot',
 	);
 
 	/**

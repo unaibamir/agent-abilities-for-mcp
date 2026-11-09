@@ -68,6 +68,7 @@ require_once AAFM_PLUGIN_DIR . 'includes/write-contract.php';
 require_once AAFM_PLUGIN_DIR . 'includes/undo/store.php';
 require_once AAFM_PLUGIN_DIR . 'includes/undo/surfaces.php';
 require_once AAFM_PLUGIN_DIR . 'includes/undo/fields.php';
+require_once AAFM_PLUGIN_DIR . 'includes/undo/engine.php';
 // The high-risk floor. Required at top level, not inside the bootstrap, because both the admin
 // screens and the registration walk read it, and neither should have to care which ran first.
 require_once AAFM_PLUGIN_DIR . 'includes/audit/high-risk.php';

@@ -1301,6 +1301,8 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		$crash_detail = null;
 		// Wall-clock time inside the ability's own execute callback, nothing else: not the permission
 		// phase, not schema validation, not transport, not the row writes. hrtime() is monotonic.
+		// Change history: record the fields this write touches before it runs. Never fails or alters the write.
+		$undo       = aafm_undo_begin( $name, $call_args, (int) $row_id );
 		$started_at = hrtime( true );
 		$ended_at   = $started_at;
 		try {
@@ -1386,6 +1388,9 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			);
 		}
 
+		// Change history: read the fields again, settle the row and add the `undo` key to a native write's array result.
+		$result = aafm_undo_finish( $undo, $result );
+
 		// L5: a list/read call's magnitude is observability only - it is never used to alter
 		// $result or the logged status, so a mis-shaped result simply logs no count.
 		$result_count = ( $is_read_ability && ! is_wp_error( $result ) ) ? aafm_result_magnitude( $result ) : null;
@@ -1438,6 +1443,12 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 
 		return $result;
 	};
+
+	// Every native write's response says whether the change can be undone (change history, 1.11.2).
+	if ( 'aafm-writes' === (string) ( $args['category'] ?? '' ) && str_starts_with( $name, 'aafm/' ) && 'object' === ( $args['output_schema']['type'] ?? '' ) ) {
+		$args['output_schema']['properties']['undo'] = aafm_undo_response_schema();
+		aafm_undo_schema_carrier( $name, true );
+	}
 
 	// Register and record atomically through AAFM_Registration_Authority: it
 	// performs this same wp_register_ability() call itself, forces its own trusted

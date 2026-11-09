@@ -2370,31 +2370,38 @@ function aafm_exec_replace_sitewide( array $input ) {
 			continue;
 		}
 
-		$result = wp_update_post(
-			wp_slash(
-				array(
-					'ID'           => $post->ID,
-					'post_content' => $new,
-				)
-			),
-			true
-		);
-		if ( is_wp_error( $result ) ) {
-			++$failed;
-			continue;
+		// One change row per post, all sharing the call's group. Finished in the finally below, so the
+		// error, the confirm miss and the success all settle the row.
+		$undo_child = aafm_undo_begin_object( 'aafm/replace-sitewide', 'post', (int) $post->ID, array( 'post:post_content' ), array( 'post_id' => (int) $post->ID ) );
+		try {
+			$result = wp_update_post(
+				wp_slash(
+					array(
+						'ID'           => $post->ID,
+						'post_content' => $new,
+					)
+				),
+				true
+			);
+			if ( is_wp_error( $result ) ) {
+				++$failed;
+				continue;
+			}
+			// is_wp_error() alone does not catch a wp_insert_post_data filter
+			// that vetoes or reverts the content, which would count a post as updated when nothing
+			// actually changed. Confirm the exact intended content landed, matching the single-post
+			// replace-text fix above. Compare against the CANONICAL
+			// sanitize_post_field() form, not $new itself, so a legitimate normalization is not
+			// mistaken for a veto.
+			$after = aafm_exact_object( 'post', (int) $result );
+			if ( ! $after instanceof WP_Post || ! aafm_post_field_confirm_logged( $post->ID, 'post_content', $new, (string) $post->post_content ) ) {
+				++$failed;
+				continue;
+			}
+			++$updated;
+		} finally {
+			aafm_undo_finish_object( $undo_child );
 		}
-		// is_wp_error() alone does not catch a wp_insert_post_data filter
-		// that vetoes or reverts the content, which would count a post as updated when nothing
-		// actually changed. Confirm the exact intended content landed, matching the single-post
-		// replace-text fix above. Compare against the CANONICAL
-		// sanitize_post_field() form, not $new itself, so a legitimate normalization is not
-		// mistaken for a veto.
-		$after = aafm_exact_object( 'post', (int) $result );
-		if ( ! $after instanceof WP_Post || ! aafm_post_field_confirm_logged( $post->ID, 'post_content', $new, (string) $post->post_content ) ) {
-			++$failed;
-			continue;
-		}
-		++$updated;
 	}
 
 	return array(

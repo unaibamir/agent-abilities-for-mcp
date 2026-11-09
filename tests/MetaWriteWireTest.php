@@ -120,7 +120,7 @@ final class MetaWriteWireTest extends TestCase {
 					'count'  => 1,
 				),
 			),
-			$written->getStructuredContent()
+			$this->without_undo( $written->getStructuredContent() )
 		);
 
 		$unchanged = $this->call( $handler, 'aafm/update-post-meta', $args + array( 'value' => 'new' ) );
@@ -132,7 +132,7 @@ final class MetaWriteWireTest extends TestCase {
 				'status'   => 'unchanged',
 				'previous' => 'new',
 			),
-			$unchanged->getStructuredContent()
+			$this->without_undo( $unchanged->getStructuredContent() )
 		);
 
 		$read = $this->call( $handler, 'aafm/get-post-meta', $args );
@@ -142,7 +142,7 @@ final class MetaWriteWireTest extends TestCase {
 				'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- response key.
 				'value'    => 'new',
 			),
-			$read->getStructuredContent()
+			$this->without_undo( $read->getStructuredContent() )
 		);
 
 		$deleted = $this->call( $handler, 'aafm/delete-post-meta', $args );
@@ -157,7 +157,7 @@ final class MetaWriteWireTest extends TestCase {
 					'count'  => 0,
 				),
 			),
-			$deleted->getStructuredContent()
+			$this->without_undo( $deleted->getStructuredContent() )
 		);
 
 		$absent = $this->call( $handler, 'aafm/delete-post-meta', $args );
@@ -166,7 +166,7 @@ final class MetaWriteWireTest extends TestCase {
 				'deleted' => true,
 				'status'  => 'absent',
 			),
-			$absent->getStructuredContent()
+			$this->without_undo( $absent->getStructuredContent() )
 		);
 	}
 
@@ -363,7 +363,7 @@ final class MetaWriteWireTest extends TestCase {
 					'count'  => 1,
 				),
 			),
-			$written->getStructuredContent()
+			$this->without_undo( $written->getStructuredContent() )
 		);
 
 		$deleted = $this->call( $handler, 'aafm/delete-term-meta', $args );
@@ -378,7 +378,7 @@ final class MetaWriteWireTest extends TestCase {
 					'count'  => 0,
 				),
 			),
-			$deleted->getStructuredContent()
+			$this->without_undo( $deleted->getStructuredContent() )
 		);
 
 		add_filter( 'update_term_metadata', '__return_false' );
@@ -413,7 +413,7 @@ final class MetaWriteWireTest extends TestCase {
 					'count'  => 1,
 				),
 			),
-			$written->getStructuredContent()
+			$this->without_undo( $written->getStructuredContent() )
 		);
 
 		$deleted = $this->call( $handler, 'aafm/delete-user-meta', $args );
@@ -428,7 +428,7 @@ final class MetaWriteWireTest extends TestCase {
 					'count'  => 0,
 				),
 			),
-			$deleted->getStructuredContent()
+			$this->without_undo( $deleted->getStructuredContent() )
 		);
 
 		$absent = $this->call( $handler, 'aafm/delete-user-meta', $args );
@@ -437,7 +437,7 @@ final class MetaWriteWireTest extends TestCase {
 				'deleted' => true,
 				'status'  => 'absent',
 			),
-			$absent->getStructuredContent()
+			$this->without_undo( $absent->getStructuredContent() )
 		);
 	}
 
@@ -525,7 +525,7 @@ final class MetaWriteWireTest extends TestCase {
 					'count'  => 2,
 				),
 			),
-			$written->getStructuredContent()
+			$this->without_undo( $written->getStructuredContent() )
 		);
 
 		$deleted = $this->call( $handler, "aafm/delete-$type-meta", $args );
@@ -541,7 +541,7 @@ final class MetaWriteWireTest extends TestCase {
 					'count'  => 0,
 				),
 			),
-			$deleted->getStructuredContent()
+			$this->without_undo( $deleted->getStructuredContent() )
 		);
 	}
 
@@ -577,7 +577,7 @@ final class MetaWriteWireTest extends TestCase {
 				),
 				'modified_by_site' => true,
 			),
-			$written->getStructuredContent()
+			$this->without_undo( $written->getStructuredContent() )
 		);
 	}
 
@@ -643,7 +643,7 @@ final class MetaWriteWireTest extends TestCase {
 					'count'  => 1,
 				),
 			),
-			$written->getStructuredContent()
+			$this->without_undo( $written->getStructuredContent() )
 		);
 
 		$this->plant_raw_meta( $type, $id, $raw[ $kind ] );
@@ -659,7 +659,7 @@ final class MetaWriteWireTest extends TestCase {
 					'count'  => 0,
 				),
 			),
-			$deleted->getStructuredContent()
+			$this->without_undo( $deleted->getStructuredContent() )
 		);
 	}
 
@@ -686,7 +686,7 @@ final class MetaWriteWireTest extends TestCase {
 					'count'  => 1,
 				),
 			),
-			$written->getStructuredContent()
+			$this->without_undo( $written->getStructuredContent() )
 		);
 
 		delete_metadata( $type, $id, 'aafm_note' );
@@ -703,7 +703,7 @@ final class MetaWriteWireTest extends TestCase {
 					'count'  => 0,
 				),
 			),
-			$deleted->getStructuredContent()
+			$this->without_undo( $deleted->getStructuredContent() )
 		);
 	}
 

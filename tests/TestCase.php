@@ -305,6 +305,20 @@ abstract class TestCase extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A tool response body without its `undo` key, for the wire tests that pin the rest of a body
+	 * exactly. The key itself is pinned in the change history tests.
+	 *
+	 * @param mixed $body Structured content.
+	 * @return mixed
+	 */
+	protected function without_undo( $body ) {
+		if ( is_array( $body ) ) {
+			unset( $body['undo'] );
+		}
+		return $body;
+	}
+
+	/**
 	 * Whether the activity log table exists for the current blog.
 	 *
 	 * The WordPress test suite rewrites every plugin `CREATE TABLE` / `DROP TABLE`

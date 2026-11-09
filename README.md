@@ -12,7 +12,7 @@ WordPress MCP server for Claude and ChatGPT with limited access, a pause switch,
 | **Stable tag** | 1.11.2 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
-Agent Abilities for MCP is a free WordPress MCP server plugin. It adds an MCP endpoint to a site and exposes WordPress abilities to AI agents, so Claude, ChatGPT, Cursor and other MCP clients can work on it as a WordPress user you choose, with that user's role and no more. It ships 184 abilities (90 core, 94 for plugins such as WooCommerce, ACF and Yoast SEO) and every one starts switched off.
+Agent Abilities for MCP is a free WordPress MCP server plugin. It adds an MCP endpoint to a site and exposes WordPress abilities to AI agents, so Claude, ChatGPT, Cursor and other MCP clients can work on it as a WordPress user you choose, with that user's role and no more. It ships 186 abilities (92 core, 94 for plugins such as WooCommerce, ACF and Yoast SEO) and every one starts switched off.
 
 This is the GitHub home of the plugin. The listing for site owners lives on [WordPress.org](https://wordpress.org/plugins/agent-abilities-for-mcp/), and this page is for anyone who wants to read the code, wire the plugin into their own stack or send a patch.
 
@@ -24,10 +24,13 @@ Typical setups:
 * Give an AI agent read-only access: read-only mode unloads every write tool this plugin serves.
 * Let Claude or ChatGPT draft posts without publishing: Force draft on create saves the posts, pages and products an agent creates as drafts, and the Needs review card on the Dashboard lists them.
 * Pause one OAuth connection, give it an end date or a lower rate limit, or refuse every MCP request at once with Pause all access.
+* Revert what an agent changed from the Changes tab, which covers 25 of this plugin's tools and keeps 30 days.
 
 Abilities are registered on the WordPress 6.9 Abilities API and served through the official MCP Adapter, which is bundled, so if the standalone Adapter plugin is active too the plugin simply uses whichever copy loads first. Every call to its tools runs as the WordPress user the connection belongs to, over OAuth or an Application Password, and is checked against that user's capabilities.
 
 The admin screen has a switch for each ability, plus read-only mode, per-role and per-connection allowlists, a rate limit, an IP allowlist and Pause all access, and each OAuth connection gets its own pause, end date, rate limit and access preset. An Activity Log table in the site's own database records the acting user, the tool, the argument keys and an identifier-only note, and it never stores free-text content.
+
+The Changes tab keeps 30 days of what agents changed with 25 of the plugin's tools and reverts a change if the item hasn't been edited since. It shows field names, never contents, though the earlier values are stored in a table in the site's database, which uninstall always drops. Two optional tools, `aafm/list-changes` and `aafm/undo-change`, let an agent undo what its own connection changed in the last 24 hours. Both start off, and the Read only, Content editor and Shop manager presets leave `aafm/undo-change` out.
 
 Playbooks are step-by-step instructions the owner writes, and agents read the Active ones through two read tools, `aafm/list-playbooks` and `aafm/get-playbook`. Writes through the general content tools to pages owned by Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks or WPBakery are refused. An edit that only sets the excerpt goes through and leaves the stored content as it was, unless the plugin can't tell which builder owns the post. Avada's two dedicated tools are a second exception: they can change text and refuse changes to its shortcodes.
 

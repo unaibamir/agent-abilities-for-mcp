@@ -25,7 +25,7 @@ Once connected, you can ask things like:
 * "Which WooCommerce orders are still on hold?"
 * "Write a post about the spring sale and save it as a draft."
 
-There are 184 abilities (the tools an AI client can call), 90 for WordPress itself and 94 for plugins such as WooCommerce, ACF and Yoast SEO. Every one starts switched off.
+There are 186 abilities (the tools an AI client can call), 92 for WordPress itself and 94 for plugins such as WooCommerce, ACF and Yoast SEO. Every one starts switched off.
 
 = What is a WordPress MCP server? =
 
@@ -119,7 +119,7 @@ A page builder owns its page's layout, so an edit to the post text can report su
 
 It fits if you want to decide tool by tool what an AI agent can do. Your AI client talks straight to your site: the plugin calls no AI provider, sends no telemetry and has no relay, account or API key of ours in the path.
 
-It's a poor fit if you want every tool on from day one, or an undo button in wp-admin. The Activity Log keeps no copy of what the AI changed, though WordPress revision history and the Trash can still bring content back.
+It's a poor fit if you want every tool on from day one, or an undo for every kind of change. The Changes tab can revert changes from 25 of this plugin's tools for 30 days. Changes from its other tools can't be undone, including permanent deletes, orders, refunds, user accounts and file uploads.
 
 = Compatible clients =
 

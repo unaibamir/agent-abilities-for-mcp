@@ -1000,6 +1000,8 @@ function aafm_recoverable_delete_abilities(): array {
 		'aafm/trash-page',
 		'aafm/delete-block',
 		'aafm/tec-delete-event',
+		// Undoing a create moves the post to the Trash, and it refuses when the Trash is off.
+		'aafm/undo-change',
 	);
 
 	/**

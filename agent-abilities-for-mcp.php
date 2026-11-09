@@ -69,6 +69,7 @@ require_once AAFM_PLUGIN_DIR . 'includes/undo/store.php';
 require_once AAFM_PLUGIN_DIR . 'includes/undo/surfaces.php';
 require_once AAFM_PLUGIN_DIR . 'includes/undo/fields.php';
 require_once AAFM_PLUGIN_DIR . 'includes/undo/engine.php';
+require_once AAFM_PLUGIN_DIR . 'includes/undo/agent.php';
 require_once AAFM_PLUGIN_DIR . 'includes/privacy.php';
 add_filter( 'wp_privacy_personal_data_exporters', 'aafm_privacy_register_exporters' );
 add_filter( 'wp_privacy_personal_data_erasers', 'aafm_privacy_register_erasers' );
@@ -425,6 +426,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/settings.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/plugins.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/activity-log.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/changes.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/blocks.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/playbooks.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/menus.php';

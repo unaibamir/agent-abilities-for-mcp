@@ -395,7 +395,7 @@ function aafm_ajax_undo_revert(): void {
 function aafm_ajax_undo_revert_group(): void {
 	$row_id = aafm_undo_ajax_begin( 'aafm/owner-revert-group' );
 	// The nonce was checked just above; this only reads the group id.
-	$group   = isset( $_POST['group_id'] ) ? sanitize_text_field( wp_unslash( $_POST['group_id'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+	$group   = isset( $_POST['group_id'] ) && is_string( $_POST['group_id'] ) ? wp_unslash( $_POST['group_id'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- only matched against a strict pattern below, never stored.
 	$members = 1 === preg_match( '/^[A-Za-z0-9]{32}$/', $group ) ? aafm_undo_group_members( $group ) : array(
 		'ok'   => false,
 		'rows' => array(),

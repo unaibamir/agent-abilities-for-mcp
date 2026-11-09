@@ -46,7 +46,7 @@ final class UndoSurfaceSweepTest extends TestCase {
 	public function test_covered_and_refused_counts_match_the_registry(): void {
 		$writers = $this->writers();
 		$this->assertCount( 25, aafm_undo_surfaces() );
-		$this->assertCount( count( $writers ) - 25, aafm_undo_refusals() );
+		$this->assertCount( count( $writers ) - 25 - count( aafm_undo_self_recording() ), aafm_undo_refusals() );
 		$this->assertArrayHasKey( 'aafm/aioseo-update-post', aafm_undo_surfaces() );
 		$this->assertArrayNotHasKey( 'aafm/aioseo-update-post', aafm_undo_refusals() );
 	}

@@ -670,17 +670,6 @@ function aafm_undo_refusal( string $reason ): \WP_Error {
 }
 
 /**
- * The agent-only refusals (window, permission, preset). Filled in with the agent tools.
- *
- * @param array<string,mixed> $row A change row.
- * @return string|null Reason code, or null when the agent may go on.
- */
-function aafm_undo_agent_refusal( array $row ): ?string { // phpcs:ignore Generic.Functions.OpeningFunctionBraceKernighanRitchie.ContentAfterBrace -- @phpstan-ignore return.unusedType
-	unset( $row );
-	return null;
-}
-
-/**
  * A row's decoded columns.
  *
  * @param array<string,mixed> $row A change row.

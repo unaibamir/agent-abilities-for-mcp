@@ -523,6 +523,41 @@ final class UndoAgentRulesTest extends UndoTestCase {
 		$this->assertSame( $expected, aafm_undo_value_passes_forward_rules( $field, $value, $row, array( 'taxonomy' => '' ) ) );
 	}
 
+	/**
+	 * Fixed SEO meta values with whether the forward URL rule accepts each.
+	 *
+	 * @return array<string,array{0:string,1:string,2:mixed,3:bool}>
+	 */
+	public function data_seo_meta_urls(): array {
+		return array(
+			'yoast javascript canonical' => array( 'aafm/yoast-update-post', '_yoast_wpseo_canonical', 'javascript:alert(1)', false ),
+			'yoast https canonical'      => array( 'aafm/yoast-update-post', '_yoast_wpseo_canonical', 'https://example.test/page/', true ),
+			'yoast title'                => array( 'aafm/yoast-update-post', '_yoast_wpseo_title', 'A plain title', true ),
+			'rank math javascript'       => array( 'aafm/rankmath-update-post', 'rank_math_canonical_url', 'javascript:alert(1)', false ),
+			'rank math https'            => array( 'aafm/rankmath-update-post', 'rank_math_canonical_url', 'https://example.test/', true ),
+		);
+	}
+
+	/**
+	 * An older URL an agent restores must pass the URL rule its forward tool runs.
+	 *
+	 * @dataProvider data_seo_meta_urls
+	 *
+	 * @param string $ability  Forward tool.
+	 * @param string $key      Meta key.
+	 * @param string $value    Before-value row.
+	 * @param bool   $expected Whether it passes.
+	 */
+	public function test_fixed_seo_meta_urls_follow_the_forward_url_rule( string $ability, string $key, string $value, bool $expected ): void {
+		$row = array(
+			'ability'     => $ability,
+			'object_type' => 'post',
+			'object_id'   => 1,
+		);
+
+		$this->assertSame( $expected, aafm_undo_value_passes_forward_rules( 'meta:' . $key, array( $value ), $row, array( 'taxonomy' => '' ) ) );
+	}
+
 	public function test_undo_change_is_refused_in_read_only_mode(): void {
 		$post   = self::factory()->post->create( array( 'post_title' => 'A' ) );
 		$change = $this->change_from(

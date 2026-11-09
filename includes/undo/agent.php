@@ -44,6 +44,42 @@ function aafm_undo_leaves_are_plain( $value ): bool {
 }
 
 /**
+ * Whether a fixed SEO meta value that holds a URL passes the URL rule its forward tool runs.
+ *
+ * Yoast and Rank Math keep one URL per meta key; Slim SEO keeps its URLs as leaves of one array. A value that is
+ * not a URL field passes.
+ *
+ * @param string $key   Meta key.
+ * @param mixed  $value The decoded value of one row.
+ * @return bool
+ */
+function aafm_undo_seo_urls_pass( string $key, $value ): bool {
+	$url_keys = array();
+	foreach ( array( 'yoast', 'rankmath' ) as $plugin ) {
+		if ( function_exists( "aafm_{$plugin}_url_fields" ) && function_exists( "aafm_{$plugin}_fields" ) ) {
+			$fields = call_user_func( "aafm_{$plugin}_fields" );
+			foreach ( call_user_func( "aafm_{$plugin}_url_fields" ) as $field ) {
+				if ( isset( $fields[ $field ] ) ) {
+					$url_keys[ (string) $fields[ $field ] ] = (string) $field;
+				}
+			}
+		}
+	}
+	$passes = static fn( $url, string $field ): bool => ! is_string( $url ) || '' === $url || aafm_checked_url( $url, $field ) === $url;
+	if ( isset( $url_keys[ $key ] ) ) {
+		return $passes( $value, $url_keys[ $key ] );
+	}
+	if ( 'slim_seo' === $key && is_array( $value ) && function_exists( 'aafm_slim_seo_url_fields' ) ) {
+		foreach ( aafm_slim_seo_url_fields() as $field ) {
+			if ( isset( $value[ $field ] ) && ! $passes( $value[ $field ], (string) $field ) ) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+/**
  * Whether the forward tool's own sanitizer would store this value as it stands, for one recorded field.
  *
  * @param string              $field    Field id.
@@ -94,7 +130,7 @@ function aafm_undo_value_passes_forward_rules( string $field, $value, array $row
 			}
 			$decoded_value = $inspect['value'];
 			if ( in_array( $forward, aafm_undo_fixed_meta_tools(), true ) ) {
-				if ( ! aafm_undo_leaves_are_plain( $decoded_value ) ) {
+				if ( ! aafm_undo_leaves_are_plain( $decoded_value ) || ! aafm_undo_seo_urls_pass( $key, $decoded_value ) ) {
 					return false;
 				}
 			} elseif ( 'term' === $row['object_type'] ) {

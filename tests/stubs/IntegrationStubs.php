@@ -657,6 +657,8 @@ PHP;
 				'date_paid'      => '2024-06-01T10:01:00',
 				'customer_id'    => 42,
 				'customer_note'  => 'Please deliver before noon.',
+				'payment_method'       => 'bacs',
+				'payment_method_title' => 'Direct bank transfer',
 				'items'          => array(
 					array(
 						'id'         => 1,
@@ -739,6 +741,8 @@ class WC_Order {
 	public function get_date_paid() { return apply_filters( 'woocommerce_order_get_date_paid', $this->data['date_paid'] ?? null, $this ); }
 	public function get_customer_id() { return (int) apply_filters( 'woocommerce_order_get_customer_id', $this->data['customer_id'] ?? 0, $this ); }
 	public function get_customer_note() { return (string) apply_filters( 'woocommerce_order_get_customer_note', $this->data['customer_note'] ?? '', $this ); }
+	public function get_payment_method() { return (string) apply_filters( 'woocommerce_order_get_payment_method', $this->data['payment_method'] ?? '', $this ); }
+	public function get_payment_method_title() { return (string) apply_filters( 'woocommerce_order_get_payment_method_title', $this->data['payment_method_title'] ?? '', $this ); }
 	public function get_items( $types = 'line_item' ) { return (array) apply_filters( 'woocommerce_order_get_items', $this->data['items'] ?? array(), $this, $types ); }
 	public function get_total_tax() { return (string) apply_filters( 'woocommerce_order_get_total_tax', $this->data['total_tax'] ?? '0.00', $this ); }
 	public function get_subtotal() { return (string) apply_filters( 'woocommerce_order_get_subtotal', $this->data['subtotal'] ?? '0.00', $this ); }

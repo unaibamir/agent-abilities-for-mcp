@@ -263,6 +263,17 @@ final class MediaWriteTest extends TestCase {
 	/**
 	 * (a) A caller without upload_files is denied, and the denial is audited.
 	 */
+	public function test_an_upload_with_no_alt_leaves_the_alt_text_empty(): void {
+		$this->acting_as( 'administrator' );
+		$bytes = (string) file_get_contents( DIR_TESTDATA . '/images/canola.jpg' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- a local test fixture.
+
+		$res = aafm_finish_media_upload( $bytes, 'zzb-local.jpg', null );
+
+		$this->assertIsArray( $res );
+		$this->assertSame( '', get_post_meta( (int) $res['attachment_id'], '_wp_attachment_image_alt', true ), 'A filename is not alt text, so none is invented.' );
+		$this->assertArrayNotHasKey( 'alt_status', $res );
+	}
+
 	public function test_upload_media_requires_upload_files_and_audits_denial(): void {
 		$this->acting_as( 'subscriber' );
 		$this->assertFalse(

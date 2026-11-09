@@ -96,9 +96,9 @@ function aafm_privacy_changes_match( string $email, int $user_id ): string {
  *
  * @param string $email Email address of the data subject.
  * @param int    $page  Page, from 1.
- * @return array{data: list<array<string,mixed>>, done: bool}
+ * @return array{data: list<array<string,mixed>>, done: bool}|WP_Error An error when the history could not be read, so a failed read never passes for an empty, finished export.
  */
-function aafm_privacy_export_changes( $email, $page = 1 ): array {
+function aafm_privacy_export_changes( $email, $page = 1 ) {
 	global $wpdb;
 
 	$match = aafm_privacy_changes_match( (string) $email, aafm_privacy_user_id( (string) $email ) );
@@ -110,8 +110,11 @@ function aafm_privacy_export_changes( $email, $page = 1 ): array {
 	}
 	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- $match is built from prepared fragments.
 	$rows = aafm_wpdb_results( $wpdb->prepare( "SELECT id, ability, object_type, object_id, fields, created_at FROM %i WHERE {$match} ORDER BY id ASC LIMIT %d OFFSET %d", aafm_changes_table(), AAFM_PRIVACY_BATCH, max( 0, (int) $page - 1 ) * AAFM_PRIVACY_BATCH ) );
+	if ( ! $rows['ok'] ) {
+		return new WP_Error( 'aafm_privacy_read_failed', __( 'Agent Abilities could not read its change history, so this export is not complete. Try again in a moment.', 'agent-abilities-for-mcp' ) );
+	}
 	$data = array();
-	foreach ( $rows['ok'] ? (array) $rows['value'] : array() as $row ) {
+	foreach ( (array) $rows['value'] as $row ) {
 		$data[] = array(
 			'group_id'    => 'aafm-change-history',
 			'group_label' => __( 'Agent Abilities change history', 'agent-abilities-for-mcp' ),
@@ -147,9 +150,9 @@ function aafm_privacy_export_changes( $email, $page = 1 ): array {
  *
  * @param string $email Email address of the data subject.
  * @param int    $page  Page, from 1.
- * @return array{data: list<array<string,mixed>>, done: bool}
+ * @return array{data: list<array<string,mixed>>, done: bool}|WP_Error An error when the log could not be read, so a failed read never passes for an empty, finished export.
  */
-function aafm_privacy_export_activity( $email, $page = 1 ): array {
+function aafm_privacy_export_activity( $email, $page = 1 ) {
 	global $wpdb;
 
 	$user_id = aafm_privacy_user_id( (string) $email );
@@ -160,8 +163,11 @@ function aafm_privacy_export_activity( $email, $page = 1 ): array {
 		);
 	}
 	$rows = aafm_wpdb_results( $wpdb->prepare( 'SELECT id, ability, status, source_ip, created_at FROM %i WHERE principal_user_id = %d ORDER BY id ASC LIMIT %d OFFSET %d', aafm_activity_log_table(), $user_id, AAFM_PRIVACY_BATCH, max( 0, (int) $page - 1 ) * AAFM_PRIVACY_BATCH ) );
+	if ( ! $rows['ok'] ) {
+		return new WP_Error( 'aafm_privacy_read_failed', __( 'Agent Abilities could not read its activity log, so this export is not complete. Try again in a moment.', 'agent-abilities-for-mcp' ) );
+	}
 	$data = array();
-	foreach ( $rows['ok'] ? (array) $rows['value'] : array() as $row ) {
+	foreach ( (array) $rows['value'] as $row ) {
 		$data[] = array(
 			'group_id'    => 'aafm-activity-log',
 			'group_label' => __( 'Agent Abilities activity log', 'agent-abilities-for-mcp' ),

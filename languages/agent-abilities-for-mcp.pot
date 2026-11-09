@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-09T18:51:35+05:00\n"
+"POT-Creation-Date: 2026-11-09T19:17:13+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -4166,8 +4166,8 @@ msgstr ""
 
 #: includes/admin/activity-log.php:175
 #: includes/admin/changes.php:258
-#: includes/privacy.php:121
-#: includes/privacy.php:171
+#: includes/privacy.php:124
+#: includes/privacy.php:177
 msgid "Tool"
 msgstr ""
 
@@ -4219,7 +4219,7 @@ msgstr ""
 #: includes/admin/bridge-directory.php:998
 #: includes/admin/bridge-directory.php:1020
 #: includes/admin/changes.php:338
-#: includes/admin/changes.php:542
+#: includes/admin/changes.php:551
 #: includes/admin/connection-cards.php:564
 #: includes/admin/connection-cards.php:648
 #: includes/admin/connection-cards.php:851
@@ -4678,12 +4678,12 @@ msgid "When"
 msgstr ""
 
 #: includes/admin/changes.php:259
-#: includes/privacy.php:125
+#: includes/privacy.php:128
 msgid "Item"
 msgstr ""
 
 #: includes/admin/changes.php:260
-#: includes/privacy.php:129
+#: includes/privacy.php:132
 msgid "Fields"
 msgstr ""
 
@@ -4696,7 +4696,7 @@ msgstr ""
 #: includes/admin/connection-cards.php:250
 #: includes/admin/page.php:1600
 #: includes/admin/playbooks.php:196
-#: includes/privacy.php:175
+#: includes/privacy.php:181
 msgid "Status"
 msgstr ""
 
@@ -4780,27 +4780,27 @@ msgstr ""
 msgid "Nothing was reverted. %s"
 msgstr ""
 
-#: includes/admin/changes.php:502
+#: includes/admin/changes.php:511
 msgid "The change history could not be cleared. Try again in a moment."
 msgstr ""
 
 #. translators: %s: link to the Settings tab, wrapped around the words "turn it off".
-#: includes/admin/changes.php:526
+#: includes/admin/changes.php:535
 #, php-format
 msgid "Change history is now on. From this update, the changes agents make with the post, term, custom field and SEO tools are kept for 30 days so you can revert them from the Changes tab. You can %s in Settings."
 msgstr ""
 
-#: includes/admin/changes.php:527
+#: includes/admin/changes.php:536
 msgid "turn it off"
 msgstr ""
 
-#: includes/admin/changes.php:528
+#: includes/admin/changes.php:537
 #: includes/admin/notifications.php:369
 #: includes/admin/onboarding-pointer.php:208
 msgid "Dismiss"
 msgstr ""
 
-#: includes/admin/changes.php:545
+#: includes/admin/changes.php:554
 msgid "That could not be saved. Try again."
 msgstr ""
 
@@ -7709,8 +7709,8 @@ msgid "Blocked %s (locked)"
 msgstr ""
 
 #: includes/admin/page.php:1595
-#: includes/privacy.php:133
-#: includes/privacy.php:183
+#: includes/privacy.php:136
+#: includes/privacy.php:189
 msgid "Time (UTC)"
 msgstr ""
 
@@ -11394,33 +11394,41 @@ msgstr ""
 
 #: includes/privacy.php:30
 #: includes/privacy.php:49
-#: includes/privacy.php:117
+#: includes/privacy.php:120
 msgid "Agent Abilities change history"
 msgstr ""
 
 #: includes/privacy.php:34
 #: includes/privacy.php:53
-#: includes/privacy.php:167
+#: includes/privacy.php:173
 msgid "Agent Abilities activity log"
 msgstr ""
 
-#: includes/privacy.php:179
+#: includes/privacy.php:114
+msgid "Agent Abilities could not read its change history, so this export is not complete. Try again in a moment."
+msgstr ""
+
+#: includes/privacy.php:167
+msgid "Agent Abilities could not read its activity log, so this export is not complete. Try again in a moment."
+msgstr ""
+
+#: includes/privacy.php:185
 msgid "Source IP"
 msgstr ""
 
-#: includes/privacy.php:230
+#: includes/privacy.php:236
 msgid "Agent Abilities could not read its change history, so nothing was erased there."
 msgstr ""
 
-#: includes/privacy.php:283
+#: includes/privacy.php:289
 msgid "Agent Abilities could not read its activity log, so nothing was erased there."
 msgstr ""
 
-#: includes/privacy.php:292
+#: includes/privacy.php:298
 msgid "This account no longer exists, so any activity log rows it left could not be identified by its email address."
 msgstr ""
 
-#: includes/privacy.php:310
+#: includes/privacy.php:316
 msgid "Change history keeps, for 30 days while the plugin is active, the values an AI agent replaced or removed on posts, terms and custom fields, together with the acting user and the connection. The values stay in this site's database and its backups. They are removed when the plugin is uninstalled and by WordPress's erase personal data tool, which also removes the rows by the user who made them, by the author of the post they changed, and by an email address found in the stored values."
 msgstr ""
 
@@ -11668,24 +11676,24 @@ msgstr ""
 msgid "The %s value is not a valid URL, so nothing was changed. Use an https:// or http:// address, a mailto: or tel: link, a path starting with /, or an anchor starting with #."
 msgstr ""
 
-#: includes/undo/engine.php:1038
+#: includes/undo/engine.php:1042
 msgid "The undo did not finish, so check the item before trying again."
 msgstr ""
 
-#: includes/undo/engine.php:1162
+#: includes/undo/engine.php:1170
 msgid "The undo could not be confirmed, so check the item before trying again."
 msgstr ""
 
-#: includes/undo/engine.php:1182
+#: includes/undo/engine.php:1190
 msgid "The undo did not change anything, so nothing was written."
 msgstr ""
 
-#: includes/undo/engine.php:1205
+#: includes/undo/engine.php:1213
 msgid "The undo was applied, but its history entry could not be saved. Check the item."
 msgstr ""
 
 #. translators: 1: comma-separated field names, 2: change id
-#: includes/undo/engine.php:1212
+#: includes/undo/engine.php:1220
 #, php-format
 msgid "The undo did not fully apply: %1$s did not match. Change %2$d records the current state and can be reverted."
 msgstr ""

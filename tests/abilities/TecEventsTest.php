@@ -39,6 +39,14 @@ final class TecEventsTest extends TestCase {
 		);
 	}
 
+	public function test_update_event_says_a_venue_cannot_be_cleared_with_this_tool(): void {
+		$update = aafm_args_tec_update_event()['input_schema']['properties']['venue_id'];
+		$create = aafm_args_tec_create_event()['input_schema']['properties']['venue_id'];
+
+		$this->assertStringContainsString( 'cannot be cleared', $update['description'] );
+		$this->assertStringNotContainsString( 'cannot be cleared', $create['description'], 'A new event has no venue to clear.' );
+	}
+
 	public function test_create_event_requires_edit_tribe_events(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'subscriber' ) ) );
 		$this->assertFalse( aafm_tec_perm_create_event() );

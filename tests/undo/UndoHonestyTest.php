@@ -54,7 +54,7 @@ final class UndoHonestyTest extends UndoTestCase {
 		$this->assertSame( 'ready', end( $rows )['status'], 'The partial state is recorded and can be reverted.' );
 	}
 
-	public function test_a_meta_short_circuit_is_refused_before_any_write(): void {
+	public function test_a_meta_short_circuit_gives_failed_and_changes_nothing(): void {
 		$post = self::factory()->post->create();
 		add_post_meta( $post, 'aafm_note', 'old' );
 		$change = $this->change_from(
@@ -65,13 +65,77 @@ final class UndoHonestyTest extends UndoTestCase {
 				'value'    => 'new',
 			)
 		); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- tool argument.
+		$before = count( $this->change_rows() );
 		add_filter( 'add_post_metadata', '__return_false' );
 		$result = aafm_undo_apply( $change, 'owner' );
 		remove_filter( 'add_post_metadata', '__return_false' );
 
 		$this->assertWPError( $result );
+		$this->assertSame( 'aafm_undo_failed', $result->get_error_code() );
+		$this->assertSame( 'new', get_post_meta( $post, 'aafm_note', true ) );
+		$this->assertSame( 'ready', aafm_undo_get_view( $change )['row']['status'] );
+		$this->assertCount( $before, $this->change_rows() );
+	}
+
+	public function test_a_delete_short_circuit_is_refused_before_any_write(): void {
+		$post = self::factory()->post->create();
+		add_post_meta( $post, 'aafm_note', 'old' );
+		$change = $this->change_from(
+			'aafm/update-post-meta',
+			array(
+				'post_id'  => $post,
+				'meta_key' => 'aafm_note',
+				'value'    => 'new',
+			)
+		); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- tool argument.
+		add_filter( 'delete_post_metadata_by_mid', '__return_false' );
+		$result = aafm_undo_apply( $change, 'owner' );
+		remove_filter( 'delete_post_metadata_by_mid', '__return_false' );
+
+		$this->assertWPError( $result );
 		$this->assertSame( 'aafm_undo_meta_filtered', $result->get_error_code() );
 		$this->assertSame( 'new', get_post_meta( $post, 'aafm_note', true ) );
+	}
+
+	public function test_a_sanitizer_that_rewrites_the_value_is_refused_before_any_write(): void {
+		$post = self::factory()->post->create();
+		add_post_meta( $post, 'aafm_note', 'old' );
+		$change = $this->change_from(
+			'aafm/update-post-meta',
+			array(
+				'post_id'  => $post,
+				'meta_key' => 'aafm_note',
+				'value'    => 'new',
+			)
+		); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- tool argument.
+		$upper = static fn( $value ) => strtoupper( (string) $value );
+		add_filter( 'sanitize_post_meta_aafm_note', $upper );
+		$result = aafm_undo_apply( $change, 'owner' );
+		remove_filter( 'sanitize_post_meta_aafm_note', $upper );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'aafm_undo_meta_filtered', $result->get_error_code() );
+		$this->assertSame( 'new', get_post_meta( $post, 'aafm_note', true ) );
+	}
+
+	public function test_a_sanitizer_that_keeps_the_value_lets_the_revert_through(): void {
+		$post = self::factory()->post->create();
+		add_post_meta( $post, 'aafm_note', 'old' );
+		$change = $this->change_from(
+			'aafm/update-post-meta',
+			array(
+				'post_id'  => $post,
+				'meta_key' => 'aafm_note',
+				'value'    => 'new',
+			)
+		); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- tool argument.
+		$keep = static fn( $value ) => trim( (string) $value );
+		add_filter( 'sanitize_post_meta_aafm_note', $keep );
+		$result = aafm_undo_apply( $change, 'owner' );
+		remove_filter( 'sanitize_post_meta_aafm_note', $keep );
+
+		$this->assertIsArray( $result, is_wp_error( $result ) ? $result->get_error_message() : '' );
+		$this->assertSame( 'old', get_post_meta( $post, 'aafm_note', true ) );
 	}
 
 	public function test_slug_taken_since_gives_reverted_with_differences_naming_post_name(): void {
@@ -198,5 +262,51 @@ final class UndoHonestyTest extends UndoTestCase {
 
 		$this->assertIsArray( aafm_undo_apply( $new, 'owner' ) );
 		$this->assertSame( 'B', get_post( $post )->post_title );
+	}
+
+	/**
+	 * A one-column stand-in for AIOSEO's table, so the certification can be driven without the plugin.
+	 *
+	 * @param int         $post_id Post id.
+	 * @param string|null $title   Stored title.
+	 * @return void
+	 */
+	private function aioseo_table_with( int $post_id, ?string $title ): void {
+		global $wpdb;
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery
+		$wpdb->query( $wpdb->prepare( 'DROP TABLE IF EXISTS %i', aafm_undo_aioseo_table() ) );
+		$wpdb->query( $wpdb->prepare( 'CREATE TABLE %i ( post_id BIGINT UNSIGNED NOT NULL, title TEXT NULL )', aafm_undo_aioseo_table() ) );
+		$wpdb->insert(
+			aafm_undo_aioseo_table(),
+			array(
+				'post_id' => $post_id,
+				'title'   => $title,
+			)
+		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery
+	}
+
+	public function test_aioseo_normalised_value_gives_reverted_with_differences(): void {
+		$post = self::factory()->post->create();
+		$this->aioseo_table_with( $post, 'Kept ' );
+
+		$exact = aafm_undo_certify( 'post', $post, array( 'aioseo:title' => 'Kept ' ) );
+		$this->assertSame( array( 'aioseo:title' ), $exact['certified'] );
+
+		$trimmed = aafm_undo_certify( 'post', $post, array( 'aioseo:title' => 'Kept' ) );
+		$this->assertSame( array(), $trimmed['missed'], 'a trimmed value is a difference, not a miss' );
+		$this->assertSame( array( 'aioseo:title' ), $trimmed['differences'] );
+
+		$other = aafm_undo_certify( 'post', $post, array( 'aioseo:title' => 'Something else' ) );
+		$this->assertSame( array( 'aioseo:title' ), $other['missed'] );
+	}
+
+	public function test_aioseo_post_without_a_row_flags_every_field_as_no_vendor_row(): void {
+		$post = self::factory()->post->create();
+		$this->aioseo_table_with( $post + 1, 'Someone else' );
+
+		$read = aafm_undo_read_fields( 'post', $post, array( 'aioseo:title' ) );
+
+		$this->assertSame( array( 'aioseo:title' => 'no_vendor_row' ), $read['flags'] );
 	}
 }

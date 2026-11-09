@@ -837,6 +837,11 @@ function aafm_undo_object_checks( array $row, array $d ): ?string {
 	if ( ! $object instanceof \WP_Post && ! $object instanceof \WP_Term ) {
 		return 'dependency_gone';
 	}
+	foreach ( $d['fields'] as $field ) {
+		if ( 0 === strpos( (string) $field, 'aioseo:' ) && ( ! function_exists( 'aafm_aioseo_model_available' ) || ! aafm_aioseo_model_available() ) ) {
+			return 'dependency_gone';
+		}
+	}
 	if ( $term ) {
 		if ( ! aafm_user_can_checked( 'edit_term', $id ) ) {
 			return 'not_allowed';
@@ -974,7 +979,7 @@ function aafm_undo_apply( int $change_id, string $source ) {
 		if ( in_array( $field, array( 'term:name', 'term:description' ), true ) && is_string( $value ) && wp_unslash( sanitize_term_field( substr( $field, 5 ), wp_slash( $value ), $id, $d['taxonomy'], 'db' ) ) !== $value ) {
 			return $release( 'would_change' );
 		}
-		if ( 0 === strpos( (string) $field, 'meta:' ) && ! aafm_meta_restore_unfiltered( $type, substr( (string) $field, 5 ) ) ) {
+		if ( 0 === strpos( (string) $field, 'meta:' ) && ! aafm_meta_restore_unfiltered( $type, substr( (string) $field, 5 ), '', array_map( 'strval', (array) $value ) ) ) {
 			return $release( 'meta_filtered' );
 		}
 	}
@@ -986,7 +991,7 @@ function aafm_undo_apply( int $change_id, string $source ) {
 	}
 	$new_id = $recorded['id'];
 	foreach ( $d['after'] as $field => $hash ) {
-		if ( ! isset( $recorded['read'][ $field ] ) || aafm_undo_hash( $recorded['read'][ $field ] ) !== $hash ) {
+		if ( ! array_key_exists( $field, $recorded['read'] ?? array() ) || aafm_undo_hash( $recorded['read'][ $field ] ?? null ) !== $hash ) {
 			aafm_undo_delete( $new_id );
 			return $release( 'changed_since' );
 		}

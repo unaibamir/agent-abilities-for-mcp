@@ -376,31 +376,60 @@ function aafm_meta_raw_restorable( string $raw ): ?string {
 /**
  * Whether nothing can change or fake a write of this meta key.
  *
- * True only when no callback sits on the add or delete short-circuits add_metadata() and
- * delete_metadata_by_mid() run, and no sanitize callback is attached to the key (register_meta()
- * attaches one, scoped to a subtype or not). With those hooks empty, add_metadata() stores the
- * decoded value exactly and returns a real new meta id, which is what the restore proves. An empty
- * subtype checks every subtype-scoped hook of the key.
+ * False when a callback sits on the delete short-circuits delete_metadata_by_mid() runs (and, for a
+ * caller with no rows to prove, on the add short-circuit add_metadata() runs). A sanitize callback attached to the key (register_meta() attaches
+ * one, scoped to a subtype or not) also makes it false, unless the caller passes the raw rows it is
+ * about to write: then the callback is let through only when it stores each of them back unchanged,
+ * which is how a real SEO plugin's own sanitizer behaves for a value it wrote itself. With those hooks
+ * quiet, add_metadata() stores the decoded value exactly and returns a real new meta id, which is what
+ * the restore proves. An empty subtype checks every subtype-scoped hook of the key.
  *
- * @param string $type    'post', 'term' or 'user'.
- * @param string $key     Meta key.
- * @param string $subtype Object subtype, or '' for any.
+ * @param string                 $type     'post', 'term' or 'user'.
+ * @param string                 $key      Meta key.
+ * @param string                 $subtype  Object subtype, or '' for any.
+ * @param array<int,string>|null $raw_rows The raw rows about to be written, or null to refuse any sanitizer.
  * @return bool
  */
-function aafm_meta_restore_unfiltered( string $type, string $key, string $subtype = '' ): bool {
+function aafm_meta_restore_unfiltered( string $type, string $key, string $subtype = '', ?array $raw_rows = null ): bool {
 	global $wp_filter;
 
-	foreach ( array( "add_{$type}_metadata", "delete_{$type}_metadata", "delete_{$type}_metadata_by_mid", "sanitize_{$type}_meta_{$key}" ) as $hook ) {
+	// An add short-circuit cannot do harm to a caller that proves every row it adds (the restore reads
+	// each one back and removes only its own new rows on a miss), so it blocks only a caller with no rows
+	// to prove. A delete short-circuit would leave old and new rows side by side, so it always blocks.
+	$hooks = array( "delete_{$type}_metadata", "delete_{$type}_metadata_by_mid" );
+	if ( null === $raw_rows ) {
+		$hooks[] = "add_{$type}_metadata";
+	}
+	foreach ( $hooks as $hook ) {
 		if ( aafm_meta_hook_has_foreign_callback( $hook ) ) {
 			return false;
 		}
 	}
+	$sanitizers = array( "sanitize_{$type}_meta_{$key}" );
 	if ( '' !== $subtype ) {
-		return ! has_filter( "sanitize_{$type}_meta_{$key}_for_{$subtype}" );
+		$sanitizers[] = "sanitize_{$type}_meta_{$key}_for_{$subtype}";
+	} else {
+		$scoped = "sanitize_{$type}_meta_{$key}_for_";
+		foreach ( array_keys( (array) $wp_filter ) as $hook ) {
+			if ( 0 === strpos( (string) $hook, $scoped ) ) {
+				$sanitizers[] = (string) $hook;
+			}
+		}
 	}
-	$scoped = "sanitize_{$type}_meta_{$key}_for_";
-	foreach ( array_keys( (array) $wp_filter ) as $hook ) {
-		if ( 0 === strpos( (string) $hook, $scoped ) && has_filter( (string) $hook ) ) {
+	$filtered = false;
+	foreach ( $sanitizers as $hook ) {
+		$filtered = $filtered || has_filter( $hook );
+	}
+	if ( ! $filtered ) {
+		return true;
+	}
+	if ( null === $raw_rows ) {
+		return false;
+	}
+	// add_metadata() sanitizes the unslashed value without an object subtype, then stores maybe_serialize() of it.
+	foreach ( $raw_rows as $raw ) {
+		$inspect = aafm_meta_raw_inspect( (string) $raw );
+		if ( null !== $inspect['reason'] || maybe_serialize( sanitize_meta( $key, $inspect['value'], $type ) ) !== (string) $raw ) {
 			return false;
 		}
 	}
@@ -504,7 +533,7 @@ function aafm_meta_restore_rows( string $type, int $id, string $key, array $raw_
 	};
 
 	$raw_rows = array_values( array_map( 'strval', $raw_rows ) );
-	if ( ! aafm_meta_restore_unfiltered( $type, $key ) ) {
+	if ( ! aafm_meta_restore_unfiltered( $type, $key, '', $raw_rows ) ) {
 		return $finish( AAFM_WRITE_REFUSED, false );
 	}
 	$values = array();

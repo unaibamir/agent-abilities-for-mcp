@@ -173,6 +173,13 @@ function aafm_undo_surfaces(): array {
 			}
 		),
 		'aafm/slim-seo-update-post'   => $seo( array( 'post_id', 'title', 'description', 'facebook_image', 'twitter_image', 'canonical', 'noindex' ), static fn(): array => array( 'meta:slim_seo' ) ),
+		'aafm/aioseo-update-post'     => aafm_undo_surface(
+			'aioseo',
+			'post',
+			'post_id',
+			array( 'post_id', 'title', 'description', 'canonical', 'og_title', 'og_description', 'og_image', 'twitter_title', 'twitter_description', 'twitter_image', 'robots_noindex', 'robots_nofollow' ),
+			static fn(): array => array_map( static fn( string $column ): string => 'aioseo:' . $column, array_values( aafm_undo_aioseo_columns() ) )
+		),
 		'aafm/replace-sitewide'       => aafm_undo_surface( 'sitewide', '', '', array( 'search', 'replace', 'post_type', 'status', 'dry_run' ), 'aafm_undo_fields_none' ),
 	);
 

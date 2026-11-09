@@ -99,6 +99,40 @@ function aafm_undo_field_flag( string $field, $value ): ?string {
 }
 
 /**
+ * The AIOSEO columns a change records, keyed by the savePost() patch key that writes each one.
+ *
+ * The patch key and the column are the same name except for the three robots flags, whose patch keys
+ * are the bare words default, noindex and nofollow.
+ *
+ * @return array<string,string> Patch key to column.
+ */
+function aafm_undo_aioseo_columns(): array {
+	if ( ! function_exists( 'aafm_aioseo_patch_keys' ) ) {
+		return array();
+	}
+	$renamed = array(
+		'default'  => 'robots_default',
+		'noindex'  => 'robots_noindex',
+		'nofollow' => 'robots_nofollow',
+	);
+	$columns = array();
+	foreach ( aafm_aioseo_patch_keys() as $key ) {
+		$columns[ $key ] = $renamed[ $key ] ?? $key;
+	}
+	return $columns;
+}
+
+/**
+ * The AIOSEO table, which AIOSEO names with the site's own prefix.
+ *
+ * @return string
+ */
+function aafm_undo_aioseo_table(): string {
+	global $wpdb;
+	return $wpdb->prefix . 'aioseo_posts';
+}
+
+/**
  * Read the current value of every named field of one object, from the database.
  *
  * Post columns come from one row read after the post cache is cleaned, meta from one raw snapshot
@@ -117,10 +151,11 @@ function aafm_undo_read_fields( string $object_type, int $object_id, array $fiel
 	$values = array();
 	$flags  = array();
 	$groups = array(
-		'post'  => array(),
-		'meta'  => array(),
-		'terms' => array(),
-		'term'  => array(),
+		'post'   => array(),
+		'meta'   => array(),
+		'terms'  => array(),
+		'term'   => array(),
+		'aioseo' => array(),
 	);
 	foreach ( $field_ids as $field ) {
 		$kind = (string) strstr( $field, ':', true );
@@ -195,6 +230,35 @@ function aafm_undo_read_fields( string $object_type, int $object_id, array $fiel
 		}
 	}
 
+	if ( array() !== $groups['aioseo'] ) {
+		$known = array_values( aafm_undo_aioseo_columns() );
+		foreach ( $groups['aioseo'] as $column ) {
+			if ( ! in_array( $column, $known, true ) ) {
+				return null;
+			}
+		}
+		$columns = array_values( $groups['aioseo'] );
+		$sql     = 'SELECT ' . implode( ', ', array_fill( 0, count( $columns ), '%i' ) ) . ' FROM %i WHERE post_id = %d';
+		// A site without AIOSEO's table is the same as a post without its row: nothing to restore to.
+		$suppressed = $wpdb->suppress_errors( true );
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the placeholders are generated from the closed column list above.
+		$row      = aafm_wpdb_row( $wpdb->prepare( $sql, array_merge( $columns, array( aafm_undo_aioseo_table(), $object_id ) ) ) );
+		$no_table = ! $row['ok'] && false !== stripos( (string) $wpdb->last_error, "doesn't exist" );
+		$wpdb->suppress_errors( $suppressed );
+		if ( ! $row['ok'] && ! $no_table ) {
+			return null;
+		}
+		foreach ( $groups['aioseo'] as $field => $column ) {
+			if ( ! is_array( $row['value'] ) ) {
+				// AIOSEO's savePost() cannot put back "no row", and a row of defaults would be a false revert.
+				$values[ $field ] = null;
+				$flags[ $field ]  = 'no_vendor_row';
+				continue;
+			}
+			$values[ $field ] = null === $row['value'][ $column ] ? null : (string) $row['value'][ $column ];
+		}
+	}
+
 	return array(
 		'values' => $values,
 		'flags'  => $flags,
@@ -257,6 +321,30 @@ function aafm_undo_report_only_fields(): array {
 }
 
 /**
+ * Whether AIOSEO stored a value in a form it normalised from the one that was meant to land: the same
+ * text trimmed, a URL with a different trailing slash or encoding, or an empty string where the row
+ * held NULL. Reported as a difference, never as an exact match.
+ *
+ * @param string $field  Field id.
+ * @param mixed  $read   What the table holds now.
+ * @param mixed  $wanted What was meant to land.
+ * @return bool
+ */
+function aafm_undo_aioseo_normalised( string $field, $read, $wanted ): bool {
+	if ( 0 !== strpos( $field, 'aioseo:' ) ) {
+		return false;
+	}
+	if ( null === $wanted ) {
+		return '' === $read;
+	}
+	if ( ! is_string( $read ) || ! is_string( $wanted ) ) {
+		return false;
+	}
+	$is_url = false !== strpos( $field, 'url' );
+	return function_exists( 'aafm_aioseo_value_persisted' ) && aafm_aioseo_value_persisted( $read, $wanted, $is_url );
+}
+
+/**
  * Compare what a restore wanted with what the database holds now.
  *
  * Exactly certified: titles, content, excerpts, meta rows, term id lists and term name and
@@ -284,6 +372,8 @@ function aafm_undo_certify( string $object_type, int $object_id, array $values, 
 	foreach ( $values as $field => $wanted ) {
 		if ( $read['values'][ $field ] === $wanted ) {
 			$certified[] = $field;
+		} elseif ( aafm_undo_aioseo_normalised( $field, $read['values'][ $field ], $wanted ) ) {
+			$differences[] = $field;
 		} elseif ( in_array( $field, aafm_undo_report_only_fields(), true ) ) {
 			$differences[] = $field;
 		} else {
@@ -296,6 +386,35 @@ function aafm_undo_certify( string $object_type, int $object_id, array $values, 
 		'differences' => $differences,
 		'read'        => $read['values'],
 	);
+}
+
+/**
+ * Put AIOSEO columns back through its own model, the way the forward tool writes them.
+ *
+ * The model's savePost() reads the title and description of its patch unconditionally, so when the restore does not
+ * carry them the current values go along and are written back unchanged.
+ *
+ * @param int                 $post_id Post id.
+ * @param array<string,mixed> $columns Column to the value that was there (strings, or null for SQL NULL).
+ * @return void
+ */
+function aafm_undo_write_aioseo( int $post_id, array $columns ): void {
+	$patch_keys = array_flip( aafm_undo_aioseo_columns() );
+	$flags      = array( 'robots_default', 'robots_noindex', 'robots_nofollow', 'twitter_use_og' );
+	$data       = array();
+	foreach ( $columns as $column => $value ) {
+		if ( isset( $patch_keys[ $column ] ) ) {
+			$data[ $patch_keys[ $column ] ] = in_array( $column, $flags, true ) && null !== $value ? '1' === (string) $value : $value;
+		}
+	}
+	foreach ( array( 'title', 'description' ) as $key ) {
+		if ( ! array_key_exists( $key, $data ) ) {
+			$now          = aafm_undo_read_fields( 'post', $post_id, array( 'aioseo:' . $key ) );
+			$data[ $key ] = null === $now ? '' : (string) $now['values'][ 'aioseo:' . $key ];
+		}
+	}
+	aafm_aioseo_write( $post_id, $data );
+	aafm_collect_meta_touch( 'post', $post_id );
 }
 
 /**
@@ -314,11 +433,14 @@ function aafm_undo_certify( string $object_type, int $object_id, array $values, 
  */
 function aafm_undo_write_fields( string $object_type, int $object_id, array $values, array $context = array(), bool $builder_excerpt = false ): array {
 	$post_cols = array();
+	$aioseo    = array();
 	foreach ( $values as $field => $value ) {
 		$kind = (string) strstr( $field, ':', true );
 		$name = substr( $field, strlen( $kind ) + 1 );
 		if ( 'post' === $kind ) {
 			$post_cols[ $name ] = $value;
+		} elseif ( 'aioseo' === $kind ) {
+			$aioseo[ $name ] = $value;
 		} elseif ( 'terms' === $kind ) {
 			$post = aafm_exact_object_chain( 'post', $object_id );
 			if ( $post instanceof WP_Post ) {
@@ -334,6 +456,10 @@ function aafm_undo_write_fields( string $object_type, int $object_id, array $val
 				\RankMath\Sitemap\Cache_Watcher::invalidate_post( $object_id );
 			}
 		}
+	}
+
+	if ( array() !== $aioseo ) {
+		aafm_undo_write_aioseo( $object_id, $aioseo );
 	}
 
 	if ( array() !== $post_cols ) {

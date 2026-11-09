@@ -45,9 +45,10 @@ final class UndoSurfaceSweepTest extends TestCase {
 
 	public function test_covered_and_refused_counts_match_the_registry(): void {
 		$writers = $this->writers();
-		$this->assertCount( 24, aafm_undo_surfaces(), 'Run 1 covers 24 tools; AIOSEO joins in Task 5.' );
-		$this->assertCount( count( $writers ) - 24, aafm_undo_refusals() );
-		$this->assertSame( 'not_covered', aafm_undo_refusals()['aafm/aioseo-update-post'] );
+		$this->assertCount( 25, aafm_undo_surfaces() );
+		$this->assertCount( count( $writers ) - 25, aafm_undo_refusals() );
+		$this->assertArrayHasKey( 'aafm/aioseo-update-post', aafm_undo_surfaces() );
+		$this->assertArrayNotHasKey( 'aafm/aioseo-update-post', aafm_undo_refusals() );
 	}
 
 	public function test_every_input_property_of_a_covered_tool_is_handled(): void {

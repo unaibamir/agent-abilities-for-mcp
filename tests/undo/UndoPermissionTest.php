@@ -215,6 +215,29 @@ final class UndoPermissionTest extends UndoTestCase {
 		$this->assertNotSame( 'aafm_undo_rate_limited', $codes[29] );
 	}
 
+	/**
+	 * Two application passwords of one user are two connections, as the own-connection rule already treats
+	 * them. The hourly budget used to be keyed on the OAuth client id, which an application password does not
+	 * have, so they shared one.
+	 */
+	public function test_each_application_password_has_its_own_hourly_undo_budget(): void {
+		aafm_oauth_current_client_id( null, true );
+		$a = array();
+
+		$GLOBALS['wp_rest_application_password_uuid'] = 'uuid-a';
+		for ( $i = 1; $i <= 31; ++$i ) {
+			$a[] = $this->undo_code( 900000 + $i );
+		}
+
+		$GLOBALS['wp_rest_application_password_uuid'] = 'uuid-b';
+		$b = $this->undo_code( 900100 );
+		unset( $GLOBALS['wp_rest_application_password_uuid'] );
+
+		$this->assertSame( 'aafm_undo_rate_limited', $a[30], 'The first password reaches its own limit.' );
+		$this->assertNotSame( 'aafm_undo_rate_limited', $a[29] );
+		$this->assertNotSame( 'aafm_undo_rate_limited', $b, 'A second password of the same user starts with a full budget.' );
+	}
+
 	public function test_the_rate_limit_message_says_how_many_calls_and_over_what_window(): void {
 		$message = aafm_undo_reason_message( 'rate_limited' );
 

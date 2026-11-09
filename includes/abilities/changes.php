@@ -255,6 +255,33 @@ function aafm_exec_list_changes( array $input ) {
 }
 
 /**
+ * Whether this connection has used up its hourly undo-change budget, counting the call now running.
+ *
+ * An OAuth client is counted from the activity log's own rows, which carry its client id. An application
+ * password has no client id in the log, so counting there put every password of one user in a single
+ * budget; it gets a counter of its own, keyed on the same connection identity the own-connection rule uses.
+ * The counter is an hour-bucket transient, the same fixed-window shape as the per-minute limit: a burst
+ * across the hour boundary can reach twice the limit. A counter that cannot be read counts as over.
+ *
+ * @return bool
+ */
+function aafm_undo_over_limit(): bool {
+	$connection = aafm_undo_connection_id();
+	if ( 0 === strpos( $connection, 'app:' ) ) {
+		$key   = 'aafm_undo_rl_' . get_current_user_id() . '_' . substr( md5( $connection ), 0, 12 ) . '_' . gmdate( 'YmdH' );
+		$count = aafm_transient_count( $key );
+		if ( null === $count ) {
+			return true;
+		}
+		set_transient( $key, $count + 1, 2 * HOUR_IN_SECONDS );
+		return $count + 1 > AAFM_UNDO_AGENT_LIMIT;
+	}
+	global $wpdb;
+	$count = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE ability = %s AND principal_user_id = %d AND client_id = %s AND created_at >= %s', aafm_activity_log_table(), 'aafm/undo-change', get_current_user_id(), aafm_oauth_current_client_id(), aafm_undo_cutoff( HOUR_IN_SECONDS ) ) );
+	return ! $count['ok'] || (int) $count['value'] > AAFM_UNDO_AGENT_LIMIT;
+}
+
+/**
  * Execute aafm/undo-change.
  *
  * @param array<string,mixed> $input Validated input.
@@ -268,9 +295,7 @@ function aafm_exec_undo_change( array $input ) {
 
 	// Counted before the id is resolved, so a missing, foreign and own id are counted alike and still answer
 	// identically. The call's own opening row is included.
-	global $wpdb;
-	$count = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE ability = %s AND principal_user_id = %d AND client_id = %s AND created_at >= %s', aafm_activity_log_table(), 'aafm/undo-change', get_current_user_id(), aafm_oauth_current_client_id(), aafm_undo_cutoff( HOUR_IN_SECONDS ) ) );
-	if ( ! $count['ok'] || (int) $count['value'] > AAFM_UNDO_AGENT_LIMIT ) {
+	if ( aafm_undo_over_limit() ) {
 		return aafm_undo_refusal( 'rate_limited' );
 	}
 

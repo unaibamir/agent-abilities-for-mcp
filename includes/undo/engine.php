@@ -658,3 +658,477 @@ function aafm_undo_finish_object( ?array $handle ): void {
 		$handle['state']->failed = true;
 	}
 }
+
+/**
+ * A refusal: a WP_Error carrying the reason code and its message, never a value.
+ *
+ * @param string $reason Reason code.
+ * @return \WP_Error
+ */
+function aafm_undo_refusal( string $reason ): \WP_Error {
+	return new \WP_Error( 'aafm_undo_' . $reason, aafm_undo_reason_message( $reason ) );
+}
+
+/**
+ * The agent-only refusals (window, permission, preset). Filled in with the agent tools.
+ *
+ * @param array<string,mixed> $row A change row.
+ * @return string|null Reason code, or null when the agent may go on.
+ */
+function aafm_undo_agent_refusal( array $row ): ?string { // phpcs:ignore Generic.Functions.OpeningFunctionBraceKernighanRitchie.ContentAfterBrace -- @phpstan-ignore return.unusedType
+	unset( $row );
+	return null;
+}
+
+/**
+ * A row's decoded columns.
+ *
+ * @param array<string,mixed> $row A change row.
+ * @return array{fields: string[], before: array<string,mixed>, after: array<string,string>, perm: array<string,mixed>, taxonomy: string}
+ */
+function aafm_undo_decode_row( array $row ): array {
+	$perm = json_decode( (string) ( $row['perm_input'] ?? '' ), true );
+	$perm = is_array( $perm ) ? $perm : array();
+	return array(
+		'fields'   => array_values( array_filter( (array) json_decode( (string) ( $row['fields'] ?? '[]' ), true ), 'is_string' ) ),
+		'before'   => (array) json_decode( (string) ( $row['before_values'] ?? '{}' ), true ),
+		'after'    => (array) json_decode( (string) ( $row['after_hashes'] ?? '{}' ), true ),
+		'perm'     => $perm,
+		'taxonomy' => isset( $perm['taxonomy'] ) ? sanitize_key( (string) $perm['taxonomy'] ) : '',
+	);
+}
+
+/**
+ * Whether a row can be undone right now, from the row alone. Used by the Changes tab and by list-changes.
+ *
+ * @param array<string,mixed> $row    A change row.
+ * @param string              $source 'owner' or 'agent'.
+ * @return array{undoable: bool, reason?: string}
+ */
+function aafm_undo_row_state( array $row, string $source ): array {
+	$no = static fn( string $reason ): array => array(
+		'undoable' => false,
+		'reason'   => $reason,
+	);
+
+	$status = (string) $row['status'];
+	if ( 'reverted' === $status ) {
+		return $no( 'already_reverted' );
+	}
+	if ( 'undoing' === $status ) {
+		return $no( 'interrupted' );
+	}
+	if ( 'pending' === $status ) {
+		$young = strtotime( (string) $row['created_at'] . ' UTC' ) > time() - AAFM_UNDO_PENDING_GRACE;
+		return $no( $young ? 'interrupted' : 'did_not_finish' );
+	}
+	if ( aafm_undo_is_aged( $row ) || 'expired' === $status || null === $row['before_values'] ) {
+		return 'not_undoable' === $status && '' !== (string) $row['reason'] ? $no( (string) $row['reason'] ) : $no( 'expired' );
+	}
+	if ( 'not_undoable' === $status ) {
+		return $no( '' !== (string) $row['reason'] ? (string) $row['reason'] : 'not_allowed' );
+	}
+	if ( 'ready' !== $status || ! hash_equals( (string) $row['before_sha256'], hash( 'sha256', (string) $row['before_values'] ) ) ) {
+		return $no( 'read_failed' );
+	}
+	if ( 'agent' === $source ) {
+		$refusal = aafm_undo_agent_refusal( $row );
+		if ( null !== $refusal ) {
+			return $no( $refusal );
+		}
+	}
+	return array( 'undoable' => true );
+}
+
+/**
+ * Read the target's fields as they are now and store them as a new change row, so a revert can itself
+ * be reverted. Ignores the capture switch and the surface map. A value-rule refusal or a failed insert
+ * refuses the revert, because a revert never overwrites data it could not record.
+ *
+ * The one read also returns the target's own fields, so the caller's last conflict check runs on the
+ * same bytes the record was taken from.
+ *
+ * @param array<string,mixed> $target A change row.
+ * @param string              $source 'owner' or 'agent'.
+ * @return array{ok: bool, id: int, reason?: string, read?: array<string,mixed>}
+ */
+function aafm_undo_record_current( array $target, string $source ): array {
+	$decoded = aafm_undo_decode_row( $target );
+	$op      = (string) $target['undo_op'];
+	$revert  = $decoded['fields'];
+	$new_op  = 'restore';
+	if ( 'trash' === $op || 'untrash' === $op ) {
+		$revert = array( 'post:post_status', 'post:post_name' );
+		$new_op = 'trash' === $op ? 'untrash' : 'trash';
+	}
+	$context = '' !== $decoded['taxonomy'] ? array( 'taxonomy' => $decoded['taxonomy'] ) : array();
+	$read    = aafm_undo_read_fields( (string) $target['object_type'], (int) $target['object_id'], array_values( array_unique( array_merge( $decoded['fields'], $revert ) ) ), $context );
+	if ( null === $read ) {
+		return array(
+			'ok'     => false,
+			'id'     => 0,
+			'reason' => 'read_failed',
+		);
+	}
+
+	$mine  = array(
+		'values' => array_intersect_key( $read['values'], array_flip( $revert ) ),
+		'flags'  => array_intersect_key( $read['flags'], array_flip( $revert ) ),
+	);
+	$rules = aafm_undo_apply_value_rules( $mine );
+	if ( array() !== $rules['flagged'] ) {
+		return array(
+			'ok'     => false,
+			'id'     => 0,
+			'reason' => (string) reset( $rules['flagged'] ),
+		);
+	}
+	$json = aafm_undo_json( $rules['kept'] );
+	if ( null === $json ) {
+		return array(
+			'ok'     => false,
+			'id'     => 0,
+			'reason' => 'read_failed',
+		);
+	}
+	$id = aafm_undo_insert(
+		array(
+			'ability'           => 'owner' === $source ? 'aafm/owner-revert' : 'aafm/undo-change',
+			'source'            => $source,
+			'principal_user_id' => get_current_user_id(),
+			'client_id'         => 'agent' === $source ? aafm_undo_connection_id() : '',
+			'object_type'       => (string) $target['object_type'],
+			'object_id'         => (int) $target['object_id'],
+			'undo_op'           => $new_op,
+			'status'            => 'pending',
+			'fields'            => wp_json_encode( $revert ),
+			'perm_input'        => (string) $target['perm_input'],
+			'before_values'     => $json,
+			'before_sha256'     => hash( 'sha256', $json ),
+			'reverts_change_id' => (int) $target['id'],
+		)
+	);
+	return $id > 0 ? array(
+		'ok'   => true,
+		'id'   => $id,
+		'read' => $read['values'],
+	) : array(
+		'ok'     => false,
+		'id'     => 0,
+		'reason' => 'read_failed',
+	);
+}
+
+/**
+ * The object checks both sources share: the object exists, the user may edit or trash it, nothing
+ * the change depends on is gone, and a page builder has not taken the post over.
+ *
+ * @param array<string,mixed> $row Change row.
+ * @param array<string,mixed> $d   Decoded row.
+ * @return string|null Reason code of the first refusal.
+ */
+function aafm_undo_object_checks( array $row, array $d ): ?string {
+	$id   = (int) $row['object_id'];
+	$op   = (string) $row['undo_op'];
+	$term = 'term' === $row['object_type'];
+
+	// The post load comes first and the term load last, so the sweep pairs term_is_ancestor_of() below with the term load.
+	$object = ! $term ? aafm_exact_object_chain( 'post', $id ) : aafm_exact_object_chain( 'term', $id, $d['taxonomy'] );
+	if ( ! $object instanceof \WP_Post && ! $object instanceof \WP_Term ) {
+		return 'dependency_gone';
+	}
+	if ( $term ) {
+		if ( ! aafm_user_can_checked( 'edit_term', $id ) ) {
+			return 'not_allowed';
+		}
+		$parent = $d['before']['term:parent'] ?? null;
+		if ( is_int( $parent ) && $parent > 0 && ( $parent === $id || term_is_ancestor_of( $id, $parent, $d['taxonomy'] ) ) ) {
+			return 'not_allowed';
+		}
+	} elseif ( 'restore' === $op ) {
+		$wanted = $d['before']['post:post_status'] ?? null;
+		$public = is_string( $wanted ) && in_array( $wanted, array( 'publish', 'future' ), true );
+		if ( ! aafm_user_can_checked( 'edit_post', $id ) || ( $public && ! aafm_user_can_checked( 'publish_post', $id ) ) ) {
+			return 'not_allowed';
+		}
+	} elseif ( ! aafm_user_can_checked( 'delete_post', $id ) ) {
+		return 'not_allowed';
+	}
+
+	if ( ! $term && 'restore' === $op ) {
+		$owner = aafm_post_has_foreign_builder_ownership( $id );
+		if ( false !== $owner ) {
+			$post_fields = array_filter( $d['fields'], static fn( string $f ): bool => 0 === strpos( $f, 'post:' ) );
+			if ( AAFM_BUILDER_OWNERSHIP_UNKNOWN === $owner && array() !== $post_fields ) {
+				return 'builder_owned';
+			}
+			if ( array() !== $post_fields && array( 'post:post_excerpt' ) !== array_values( $post_fields ) ) {
+				return 'builder_owned';
+			}
+		}
+	}
+
+	// Anything the before-values point at must still exist.
+	$ids = array();
+	foreach ( $d['before'] as $field => $value ) {
+		if ( 'meta:_thumbnail_id' === $field && isset( $value[0] ) && absint( $value[0] ) > 0 ) {
+			if ( ! aafm_exact_object( 'post', absint( $value[0] ) ) instanceof \WP_Post ) {
+				return 'dependency_gone';
+			}
+		} elseif ( 0 === strpos( (string) $field, 'terms:' ) ) {
+			$ids = array_merge( $ids, array_map( 'intval', (array) $value ) );
+		}
+	}
+	if ( array() !== $ids ) {
+		global $wpdb;
+		$ids = array_values( array_unique( $ids ) );
+		$sql = 'SELECT COUNT(*) FROM %i WHERE term_id IN (' . implode( ', ', array_fill( 0, count( $ids ), '%d' ) ) . ')';
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- placeholders are generated from the id list.
+		$have = aafm_wpdb_scalar( $wpdb->prepare( $sql, array_merge( array( $wpdb->term_taxonomy ), $ids ) ) );
+		if ( ! $have['ok'] || (int) $have['value'] < count( $ids ) ) {
+			return $have['ok'] ? 'dependency_gone' : 'read_failed';
+		}
+	}
+
+	if ( in_array( $op, array( 'trash', 'untrash' ), true ) ) {
+		if ( 'trash' === $op && ! aafm_trash_is_enabled() ) {
+			return 'trash_off';
+		}
+	}
+	return null;
+}
+
+/**
+ * Revert one recorded change, as the owner or as an agent.
+ *
+ * Order: load and check ownership, check state, claim the row, check the object, re-read every field
+ * and refuse when one changed since, replay what WordPress would store, record the current values as
+ * a new change, compare once more, write, certify.
+ *
+ * @param int    $change_id Change id.
+ * @param string $source    'owner' or 'agent'.
+ * @return array<string,mixed>|\WP_Error outcome, change_id, new_change_id, fields, and differences when there are any.
+ */
+function aafm_undo_apply( int $change_id, string $source ) {
+	$view = aafm_undo_get_view( $change_id );
+	if ( ! $view['ok'] ) {
+		return aafm_undo_refusal( 'read_failed' );
+	}
+	$row = $view['row'];
+	if ( null === $row ) {
+		return aafm_generic_error();
+	}
+	if ( 'agent' === $source ) {
+		$connection = aafm_undo_connection_id();
+		if ( 'agent' !== $row['source'] || get_current_user_id() !== (int) $row['principal_user_id'] || '' === $connection || $row['client_id'] !== $connection ) {
+			return aafm_generic_error();
+		}
+	}
+	$state = aafm_undo_row_state( $row, $source );
+	if ( ! $state['undoable'] ) {
+		return aafm_undo_refusal( $state['reason'] ?? 'not_allowed' );
+	}
+	if ( 1 !== aafm_undo_update( $change_id, array( 'status' => 'undoing' ), array( 'ready' ) ) ) {
+		return aafm_undo_refusal( 'interrupted' );
+	}
+	// Every refusal from here until a write lands puts the row back.
+	$release = static function ( string $reason ) use ( $change_id ) {
+		aafm_undo_update( $change_id, array( 'status' => 'ready' ), array( 'undoing' ) );
+		return aafm_undo_refusal( $reason );
+	};
+
+	$d       = aafm_undo_decode_row( $row );
+	$op      = (string) $row['undo_op'];
+	$type    = (string) $row['object_type'];
+	$id      = (int) $row['object_id'];
+	$context = '' !== $d['taxonomy'] ? array( 'taxonomy' => $d['taxonomy'] ) : array();
+
+	$refusal = aafm_undo_object_checks( $row, $d );
+	if ( null !== $refusal ) {
+		return $release( $refusal );
+	}
+	if ( 'untrash' === $op || 'trash' === $op ) {
+		$status_now = aafm_undo_read_fields( 'post', $id, array( 'post:post_status' ) );
+		if ( null === $status_now ) {
+			return $release( 'read_failed' );
+		}
+		if ( 'untrash' === $op && 'trash' !== $status_now['values']['post:post_status'] ) {
+			return $release( 'not_in_trash' );
+		}
+	}
+
+	// Conflict: every recorded field must still hash to what the call left.
+	$conflict = aafm_undo_conflicts( $type, $id, $d, $context );
+	if ( null === $conflict ) {
+		return $release( 'read_failed' );
+	}
+	if ( array() !== $conflict ) {
+		return $release( 'changed_since' );
+	}
+
+	// What WordPress would store for these values must be the values: no lossy restore reported as success.
+	foreach ( $d['before'] as $field => $value ) {
+		if ( in_array( $field, array( 'post:post_title', 'post:post_content', 'post:post_excerpt' ), true ) && is_string( $value ) && aafm_post_field_canonical_replay( substr( $field, 5 ), $value, $id ) !== $value ) {
+			return $release( 'would_change' );
+		}
+		if ( in_array( $field, array( 'term:name', 'term:description' ), true ) && is_string( $value ) && wp_unslash( sanitize_term_field( substr( $field, 5 ), wp_slash( $value ), $id, $d['taxonomy'], 'db' ) ) !== $value ) {
+			return $release( 'would_change' );
+		}
+		if ( 0 === strpos( (string) $field, 'meta:' ) && ! aafm_meta_restore_unfiltered( $type, substr( (string) $field, 5 ) ) ) {
+			return $release( 'meta_filtered' );
+		}
+	}
+
+	// The last read before the write: record the current values and compare that same read once more.
+	$recorded = aafm_undo_record_current( $row, $source );
+	if ( ! $recorded['ok'] ) {
+		return $release( (string) ( $recorded['reason'] ?? 'read_failed' ) );
+	}
+	$new_id = $recorded['id'];
+	foreach ( $d['after'] as $field => $hash ) {
+		if ( ! isset( $recorded['read'][ $field ] ) || aafm_undo_hash( $recorded['read'][ $field ] ) !== $hash ) {
+			aafm_undo_delete( $new_id );
+			return $release( 'changed_since' );
+		}
+	}
+
+	// ponytail: a human save landing between the read above and the write below wins or loses the way two WordPress
+	// editors saving at once do; core has no compare-and-swap and row locks held across wp_update_post() would risk
+	// lock waits with other plugins. Add a lock only if that window ever shows up in practice.
+	$wrote = aafm_undo_run_write( $row, $d, $context, $source );
+
+	$new_row   = aafm_undo_get_view( $new_id )['row'];
+	$new_d     = null === $new_row ? array( 'fields' => array() ) : aafm_undo_decode_row( $new_row );
+	$state_now = aafm_undo_read_fields( $type, $id, $new_d['fields'], $context );
+	$hashes    = array();
+	foreach ( null === $state_now ? array() : $state_now['values'] as $field => $value ) {
+		$hashes[ $field ] = aafm_undo_hash( $value );
+	}
+	$landed = false;
+	foreach ( $hashes as $field => $hash ) {
+		$landed = $landed || ( aafm_undo_hash( $recorded['read'][ $field ] ?? null ) !== $hash );
+	}
+
+	if ( ! $landed ) {
+		aafm_undo_delete( $new_id );
+		aafm_undo_update( $change_id, array( 'status' => 'ready' ), array( 'undoing' ) );
+		return new \WP_Error( 'aafm_undo_failed', __( 'The undo did not change anything, so nothing was written.', 'agent-abilities-for-mcp' ) );
+	}
+
+	aafm_undo_update(
+		$new_id,
+		array(
+			'status'       => 'ready',
+			'after_hashes' => wp_json_encode( $hashes ),
+		)
+	);
+	aafm_undo_update(
+		$change_id,
+		array(
+			'status'                => 'reverted',
+			'reverted_by_change_id' => $new_id,
+		),
+		array( 'undoing' )
+	);
+	aafm_undo_enforce_caps();
+
+	if ( array() !== $wrote['missed'] ) {
+		return new \WP_Error(
+			'aafm_undo_failed',
+			sprintf(
+				/* translators: 1: comma-separated field names, 2: change id */
+				__( 'The undo did not fully apply: %1$s did not match. Change %2$d records the current state and can be reverted.', 'agent-abilities-for-mcp' ),
+				implode( ', ', array_map( static fn( string $f ): string => (string) substr( $f, (int) strpos( $f, ':' ) + 1 ), $wrote['missed'] ) ),
+				$new_id
+			)
+		);
+	}
+	$out = array(
+		'outcome'       => array() === $wrote['differences'] ? 'reverted' : 'reverted_with_differences',
+		'change_id'     => $change_id,
+		'new_change_id' => $new_id,
+		'fields'        => array_map( static fn( string $f ): string => (string) substr( $f, (int) strpos( $f, ':' ) + 1 ), $d['fields'] ),
+	);
+	if ( array() !== $wrote['differences'] ) {
+		$out['differences'] = array_map( static fn( string $f ): string => (string) substr( $f, (int) strpos( $f, ':' ) + 1 ), $wrote['differences'] );
+	}
+	return $out;
+}
+
+/**
+ * The fields of a row whose current hash is not the one the call left, or null when a read failed.
+ *
+ * @param string               $type    'post' or 'term'.
+ * @param int                  $id      Object id.
+ * @param array<string,mixed>  $d       Decoded row.
+ * @param array<string,string> $context taxonomy for a term.
+ * @return string[]|null
+ */
+function aafm_undo_conflicts( string $type, int $id, array $d, array $context ): ?array {
+	$read = aafm_undo_read_fields( $type, $id, array_map( 'strval', array_keys( $d['after'] ) ), $context );
+	if ( null === $read ) {
+		return null;
+	}
+	$changed = array();
+	foreach ( $d['after'] as $field => $hash ) {
+		if ( aafm_undo_hash( $read['values'][ $field ] ?? null ) !== $hash ) {
+			$changed[] = (string) $field;
+		}
+	}
+	return $changed;
+}
+
+/**
+ * Do the write for one change, as the owner or as an agent: trash, untrash or restore the fields.
+ *
+ * @param array<string,mixed>  $row     Change row.
+ * @param array<string,mixed>  $d       Decoded row.
+ * @param array<string,string> $context taxonomy for a term.
+ * @param string               $source  'owner' or 'agent'.
+ * @return array{certified: string[], missed: string[], differences: string[], read: array<string,mixed>|null}
+ */
+function aafm_undo_run_write( array $row, array $d, array $context, string $source ): array {
+	$op = (string) $row['undo_op'];
+	$id = (int) $row['object_id'];
+	if ( 'owner' === $source ) {
+		aafm_executing_ability_push( 'aafm/owner-revert' );
+	}
+	try {
+		if ( 'trash' === $op || 'untrash' === $op ) {
+			aafm_exact_object_chain( 'post', $id );
+			if ( 'trash' === $op ) {
+				wp_trash_post( $id );
+				$wanted = array( 'post:post_status' => 'trash' );
+			} else {
+				$status = (string) ( $d['before']['post:post_status'] ?? 'draft' );
+				$filter = static fn() => $status;
+				add_filter( 'wp_untrash_post_status', $filter, 10, 0 );
+				try {
+					wp_untrash_post( $id );
+				} finally {
+					remove_filter( 'wp_untrash_post_status', $filter, 10 );
+				}
+				$wanted = array(
+					'post:post_status' => $status,
+					'post:post_name'   => (string) ( $d['before']['post:post_name'] ?? '' ),
+				);
+			}
+			$result = aafm_undo_certify( 'post', $id, $wanted );
+			// A trashed post's slug is rewritten by core and untrash restores it: both reported, status certified.
+			if ( 'trash' === $op ) {
+				$result['read'] = $result['read'] ?? null;
+			}
+			return $result;
+		}
+		$post_fields     = array_filter( $d['fields'], static fn( string $f ): bool => 0 === strpos( $f, 'post:' ) );
+		$builder_excerpt = 'post' === $row['object_type'] && false !== aafm_post_has_foreign_builder_ownership( $id ) && array() !== $post_fields;
+		return aafm_undo_write_fields( (string) $row['object_type'], $id, $d['before'], $context, $builder_excerpt );
+	} finally {
+		if ( 'owner' === $source ) {
+			aafm_executing_ability_pop();
+			if ( null === aafm_executing_ability() ) {
+				aafm_refresh_after_meta_writes();
+			}
+		}
+	}
+}

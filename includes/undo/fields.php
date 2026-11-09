@@ -246,3 +246,116 @@ function aafm_undo_object_fingerprint( int $post_id ): ?string {
 	$bytes         = is_string( $json ) ? strlen( $json ) : 0;
 	return ( is_string( $json ) && $bytes <= 8 * 1024 * 1024 ) ? hash( 'sha256', $json ) : null;
 }
+
+/**
+ * The fields whose difference after a restore is reported, not counted as a miss.
+ *
+ * @return string[]
+ */
+function aafm_undo_report_only_fields(): array {
+	return array( 'post:post_name', 'post:post_status', 'post:post_date', 'post:post_date_gmt', 'term:parent' );
+}
+
+/**
+ * Compare what a restore wanted with what the database holds now.
+ *
+ * Exactly certified: titles, content, excerpts, meta rows, term id lists and term name and
+ * description. Reported only: slug, status, dates and a term parent core may normalise.
+ *
+ * @param string               $object_type 'post' or 'term'.
+ * @param int                  $object_id   Object id.
+ * @param array<string,mixed>  $values      Field id to the value that was meant to land.
+ * @param array<string,string> $context     taxonomy for a term object.
+ * @return array{certified: string[], missed: string[], differences: string[], read: array<string,mixed>|null}
+ */
+function aafm_undo_certify( string $object_type, int $object_id, array $values, array $context = array() ): array {
+	$read = aafm_undo_read_fields( $object_type, $object_id, array_keys( $values ), $context );
+	if ( null === $read ) {
+		return array(
+			'certified'   => array(),
+			'missed'      => array_keys( $values ),
+			'differences' => array(),
+			'read'        => null,
+		);
+	}
+	$certified   = array();
+	$missed      = array();
+	$differences = array();
+	foreach ( $values as $field => $wanted ) {
+		if ( $read['values'][ $field ] === $wanted ) {
+			$certified[] = $field;
+		} elseif ( in_array( $field, aafm_undo_report_only_fields(), true ) ) {
+			$differences[] = $field;
+		} else {
+			$missed[] = $field;
+		}
+	}
+	return array(
+		'certified'   => $certified,
+		'missed'      => $missed,
+		'differences' => $differences,
+		'read'        => $read['values'],
+	);
+}
+
+/**
+ * Write the given before-values back and certify what landed.
+ *
+ * Post columns go through one wp_update_post() (an excerpt-only change on a builder-owned post goes
+ * through the pinned excerpt path), terms through wp_set_object_terms() after their caches are
+ * dropped, term columns through wp_update_term(), meta rows through the write contract's exact restore.
+ *
+ * @param string               $object_type 'post' or 'term'.
+ * @param int                  $object_id   Object id.
+ * @param array<string,mixed>  $values      Field id to before-value.
+ * @param array<string,string> $context     taxonomy for a term object.
+ * @param bool                 $builder_excerpt True for an excerpt-only restore on a builder-owned post.
+ * @return array{certified: string[], missed: string[], differences: string[], read: array<string,mixed>|null}
+ */
+function aafm_undo_write_fields( string $object_type, int $object_id, array $values, array $context = array(), bool $builder_excerpt = false ): array {
+	$post_cols = array();
+	foreach ( $values as $field => $value ) {
+		$kind = (string) strstr( $field, ':', true );
+		$name = substr( $field, strlen( $kind ) + 1 );
+		if ( 'post' === $kind ) {
+			$post_cols[ $name ] = $value;
+		} elseif ( 'terms' === $kind ) {
+			$post = aafm_exact_object_chain( 'post', $object_id );
+			if ( $post instanceof WP_Post ) {
+				clean_object_term_cache( $object_id, $post->post_type );
+				wp_cache_set_terms_last_changed();
+				wp_set_object_terms( $object_id, array_map( 'intval', (array) $value ), $name );
+			}
+		} elseif ( 'meta' === $kind ) {
+			aafm_meta_restore_rows( $object_type, $object_id, $name, array_map( 'strval', (array) $value ) );
+		}
+	}
+
+	if ( array() !== $post_cols ) {
+		$post = aafm_exact_object_chain( 'post', $object_id );
+		if ( $post instanceof WP_Post ) {
+			$postarr = array_merge( array( 'ID' => $object_id ), $post_cols );
+			$pinned  = $builder_excerpt ? aafm_page_builder_excerpt_start( $post ) : null;
+			if ( is_array( $pinned ) ) {
+				aafm_page_builder_write_excerpt( $object_id, $postarr, $pinned );
+			} elseif ( ! $builder_excerpt ) {
+				wp_update_post( wp_slash( $postarr ), true );
+			}
+		}
+	}
+
+	$term_cols = array();
+	foreach ( $values as $field => $value ) {
+		if ( 0 === strpos( $field, 'term:' ) ) {
+			$term_cols[ substr( $field, 5 ) ] = $value;
+		}
+	}
+	if ( array() !== $term_cols ) {
+		$taxonomy = (string) ( $context['taxonomy'] ?? '' );
+		if ( aafm_exact_object_chain( 'term', $object_id, $taxonomy ) instanceof WP_Term ) {
+			wp_update_term( $object_id, $taxonomy, wp_slash( $term_cols ) );
+		}
+	}
+
+	return aafm_undo_certify( $object_type, $object_id, $values, $context );
+}

@@ -164,7 +164,7 @@ function aafm_undo_read_fields( string $object_type, int $object_id, array $fiel
 	foreach ( $field_ids as $field ) {
 		$kind = (string) strstr( $field, ':', true );
 		if ( 'fp' === $kind ) {
-			$fingerprint = aafm_undo_object_fingerprint( $object_id );
+			$fingerprint = aafm_undo_object_fingerprint( $object_id, 'fp:core' !== $field );
 			if ( null === $fingerprint ) {
 				return null;
 			}
@@ -278,10 +278,11 @@ function aafm_undo_read_fields( string $object_type, int $object_id, array $fiel
  * Each part is read with LIMIT 1001 and the whole is bounded: more than 1,000 rows in a part, or
  * more than 8 MiB in total, returns null, as does any failed read. Null refuses the undo.
  *
- * @param int $post_id Post id.
+ * @param int  $post_id   Post id.
+ * @param bool $with_meta False leaves the meta rows out (the fp:core field), so a later meta-only change can be told apart.
  * @return string|null
  */
-function aafm_undo_object_fingerprint( int $post_id ): ?string {
+function aafm_undo_object_fingerprint( int $post_id, bool $with_meta = true ): ?string {
 	global $wpdb;
 
 	clean_post_cache( $post_id );
@@ -305,13 +306,15 @@ function aafm_undo_object_fingerprint( int $post_id ): ?string {
 		}
 		$parts[ $name ] = $rows['value'];
 	}
-	$meta = aafm_meta_object_fingerprint( 'post', $post_id, array( '_edit_lock', '_encloseme', '_pingme' ) );
-	if ( null === $meta ) {
-		return null;
+	if ( $with_meta ) {
+		$meta = aafm_meta_object_fingerprint( 'post', $post_id, array( '_edit_lock', '_encloseme', '_pingme' ) );
+		if ( null === $meta ) {
+			return null;
+		}
+		$parts['meta'] = $meta;
 	}
-	$parts['meta'] = $meta;
-	$json          = wp_json_encode( $parts );
-	$bytes         = is_string( $json ) ? strlen( $json ) : 0;
+	$json  = wp_json_encode( $parts );
+	$bytes = is_string( $json ) ? strlen( $json ) : 0;
 	return ( is_string( $json ) && $bytes <= 8 * 1024 * 1024 ) ? hash( 'sha256', $json ) : null;
 }
 

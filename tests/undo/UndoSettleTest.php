@@ -206,19 +206,50 @@ final class UndoSettleTest extends UndoTestCase {
 		$this->assertSame( array(), $result['undo']['change_ids'] );
 	}
 
+	/**
+	 * Fire the real shutdown action with only the callbacks that matter here: the given earlier ones and the
+	 * plugin's own. Core's shutdown callbacks (output buffer flushing) must not run inside a test.
+	 *
+	 * @param callable ...$earlier Callbacks that run before the plugin's, as other plugins' do.
+	 * @return void
+	 */
+	private function fire_shutdown( callable ...$earlier ): void {
+		global $wp_filter;
+		$saved = $wp_filter['shutdown'] ?? null;
+		$hook  = new \WP_Hook();
+		foreach ( $earlier as $callback ) {
+			$hook->add_filter( 'shutdown', $callback, 10, 1 );
+		}
+		foreach ( null === $saved ? array() : ( $saved->callbacks[ PHP_INT_MAX ] ?? array() ) as $entry ) {
+			$hook->add_filter( 'shutdown', $entry['function'], PHP_INT_MAX, $entry['accepted_args'] );
+		}
+		$wp_filter['shutdown'] = $hook;
+		try {
+			do_action( 'shutdown' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core's own hook, fired on purpose.
+		} finally {
+			if ( null === $saved ) {
+				unset( $wp_filter['shutdown'] );
+			} else {
+				$wp_filter['shutdown'] = $saved;
+			}
+		}
+	}
+
 	public function test_a_create_stays_revertable_when_another_plugin_writes_meta_at_shutdown(): void {
-		$late   = static function ( int $post ): void {
-			add_post_meta( $post, '_wpml_word_count', '{"total":3}' );
-		};
 		$result = $this->run_tool( 'aafm/create-post', array( 'title' => 'Fresh' ) );
 		$post   = (int) $result['post']['id'];
 		$change = (int) $result['undo']['change_ids'][0];
+		$before = aafm_undo_get_view( $change )['row']['after_hashes'];
 
-		// What WPML does: bookkeeping meta after the call, in the shutdown phase, which the plugin runs last.
 		$this->assertSame( PHP_INT_MAX, has_action( 'shutdown', 'aafm_undo_settle_creates' ) );
-		$late( $post );
-		aafm_undo_settle_creates();
+		// What WPML does: bookkeeping meta in the shutdown phase, before the plugin's last callback.
+		$this->fire_shutdown(
+			static function () use ( $post ): void {
+				add_post_meta( $post, '_wpml_word_count', '{"total":3}' );
+			}
+		);
 
+		$this->assertNotSame( $before, aafm_undo_get_view( $change )['row']['after_hashes'], 'The fingerprint was taken again.' );
 		$outcome = aafm_undo_apply( $change, 'owner' );
 		$this->assertIsArray( $outcome, is_wp_error( $outcome ) ? $outcome->get_error_message() : '' );
 		$this->assertSame( 'trash', get_post( $post )->post_status );
@@ -228,7 +259,7 @@ final class UndoSettleTest extends UndoTestCase {
 		$result = $this->run_tool( 'aafm/create-post', array( 'title' => 'Fresh' ) );
 		$post   = (int) $result['post']['id'];
 		$change = (int) $result['undo']['change_ids'][0];
-		aafm_undo_settle_creates();
+		$this->fire_shutdown();
 
 		wp_update_post(
 			array(
@@ -239,6 +270,29 @@ final class UndoSettleTest extends UndoTestCase {
 		$outcome = aafm_undo_apply( $change, 'owner' );
 		$this->assertWPError( $outcome );
 		$this->assertSame( 'aafm_undo_changed_since', $outcome->get_error_code() );
+	}
+
+	public function test_the_shutdown_settle_does_not_absorb_a_post_edit_made_after_the_call(): void {
+		$result = $this->run_tool( 'aafm/create-post', array( 'title' => 'Fresh' ) );
+		$post   = (int) $result['post']['id'];
+		$change = (int) $result['undo']['change_ids'][0];
+
+		// A person edits the post between the call and the end of the request.
+		$this->fire_shutdown(
+			static function () use ( $post ): void {
+				wp_update_post(
+					array(
+						'ID'           => $post,
+						'post_content' => 'edited by a person',
+					)
+				);
+			}
+		);
+
+		$outcome = aafm_undo_apply( $change, 'owner' );
+		$this->assertWPError( $outcome );
+		$this->assertSame( 'aafm_undo_changed_since', $outcome->get_error_code() );
+		$this->assertNotSame( 'trash', get_post( $post )->post_status );
 	}
 
 	public function test_a_stale_self_recording_row_id_does_not_survive_the_next_call(): void {

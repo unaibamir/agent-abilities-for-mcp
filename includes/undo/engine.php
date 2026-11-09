@@ -99,7 +99,7 @@ function aafm_undo_open_sitewide( ?array $handle = null, bool $forget = false ):
  * @return void
  */
 function aafm_undo_reset_request_state(): void {
-	aafm_undo_settle_creates( null, true );
+	aafm_undo_pending_creates( null, true );
 	aafm_undo_current_row_id( null, true );
 	aafm_undo_open_sitewide( null, true );
 }
@@ -387,7 +387,7 @@ function aafm_undo_begin_create( array $base, array $surface, array $input ): ar
 	};
 	add_action( 'wp_insert_post', $listener, PHP_INT_MIN, 3 );
 
-	$field_ids = array( 'post:post_status', 'post:post_title', 'post:post_content', 'post:post_excerpt', 'post:post_name', 'fp:object' );
+	$field_ids = array( 'post:post_status', 'post:post_title', 'post:post_content', 'post:post_excerpt', 'post:post_name', 'fp:object', 'fp:core' );
 	$change_id = aafm_undo_insert(
 		array(
 			'log_row_id'        => $base['row_id'],
@@ -532,7 +532,7 @@ function aafm_undo_finalize_create( array $h, $result ): array {
 		)
 	);
 	if ( $written > 0 ) {
-		aafm_undo_settle_creates( array( (int) $h['change_id'], $post_id ) );
+		aafm_undo_pending_creates( array( (int) $h['change_id'], $post_id ) );
 	}
 	if ( $written < 1 ) {
 		aafm_undo_update(
@@ -554,47 +554,59 @@ function aafm_undo_finalize_create( array $h, $result ): array {
 /**
  * The creates whose whole-object fingerprint is re-taken once the request is over.
  *
- * Other plugins keep bookkeeping on a new post after the call returns (WPML adds its word count in the
- * shutdown phase). The fingerprint exists to catch a later edit by someone else, so it is taken again at
- * the last shutdown callback, after that bookkeeping and before the post can be edited by anyone.
- *
- * @param array{0:int,1:int}|null $add  Change id and post id to settle at shutdown, or null to run the settle.
- * @param bool                    $forget Drop the pending list (the test seam).
- * @return void
+ * @param array{0:int,1:int}|null $add    Change id and post id to settle at shutdown, or null to read the list.
+ * @param bool                    $forget Drop the list (the test seam).
+ * @return array<int,int> Change id to post id.
  */
-function aafm_undo_settle_creates( ?array $add = null, bool $forget = false ): void {
+function aafm_undo_pending_creates( ?array $add = null, bool $forget = false ): array {
 	static $pending = array();
 
 	if ( $forget ) {
 		$pending = array();
-		return;
+		return $pending;
 	}
 	if ( null !== $add ) {
 		if ( array() === $pending ) {
 			add_action( 'shutdown', 'aafm_undo_settle_creates', PHP_INT_MAX );
 		}
 		$pending[ $add[0] ] = $add[1];
-		return;
 	}
+	return $pending;
+}
+
+/**
+ * Re-take the whole-object fingerprint of this request's creates at the last shutdown callback.
+ *
+ * Other plugins keep bookkeeping on a new post after the call returns (WPML adds its word count in the
+ * shutdown phase). The fingerprint exists to catch a later edit by someone else, so it is taken again
+ * after that bookkeeping, but only when the part of the object that is not meta (the post row, terms and
+ * comments) still hashes to what the call left: anything else changed in between is not absorbed.
+ *
+ * WordPress calls a shutdown callback with an empty string, so this takes no argument.
+ *
+ * @return void
+ */
+function aafm_undo_settle_creates(): void {
 	try {
-		foreach ( $pending as $change_id => $post_id ) {
+		foreach ( aafm_undo_pending_creates() as $change_id => $post_id ) {
 			$view = aafm_undo_get_view( (int) $change_id );
 			$row  = $view['row'];
 			if ( ! $view['ok'] || null === $row || 'ready' !== $row['status'] ) {
 				continue;
 			}
-			$fingerprint = aafm_undo_object_fingerprint( (int) $post_id );
-			$after       = (array) json_decode( (string) $row['after_hashes'], true );
-			if ( null === $fingerprint || ! isset( $after['fp:object'] ) ) {
+			$after = (array) json_decode( (string) $row['after_hashes'], true );
+			$core  = aafm_undo_object_fingerprint( (int) $post_id, false );
+			$full  = aafm_undo_object_fingerprint( (int) $post_id );
+			if ( null === $core || null === $full || ! isset( $after['fp:object'], $after['fp:core'] ) || aafm_undo_hash( $core ) !== $after['fp:core'] ) {
 				continue;
 			}
-			$after['fp:object'] = aafm_undo_hash( $fingerprint );
+			$after['fp:object'] = aafm_undo_hash( $full );
 			aafm_undo_update( (int) $change_id, array( 'after_hashes' => wp_json_encode( $after ) ), array( 'ready' ) );
 		}
 	} catch ( \Throwable $e ) {
 		aafm_undo_engine_fault( $e, 'aafm/undo-capture' );
 	}
-	$pending = array();
+	aafm_undo_pending_creates( null, true );
 	remove_action( 'shutdown', 'aafm_undo_settle_creates', PHP_INT_MAX );
 }
 

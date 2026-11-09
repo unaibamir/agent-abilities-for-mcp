@@ -292,8 +292,11 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'undoClearConfirm'         => __( 'Clear all change history? Nothing can be reverted afterwards. This cannot be undone.', 'agent-abilities-for-mcp' ),
 				'undoWorking'              => __( 'Working...', 'agent-abilities-for-mcp' ),
 				'undoReverted'             => __( 'Reverted.', 'agent-abilities-for-mcp' ),
-				'undoRevertedWithDiff'     => __( 'Reverted, with differences:', 'agent-abilities-for-mcp' ),
+				'undoRevertedWithDiff'     => __( 'Reverted. WordPress stored these a little differently:', 'agent-abilities-for-mcp' ),
+				'undoPillReverted'         => __( 'Reverted', 'agent-abilities-for-mcp' ),
 				'undoGroupDone'            => __( 'Group reverted. Reload to see the new state.', 'agent-abilities-for-mcp' ),
+				/* translators: %s: how many changes of the group were reverted. */
+				'undoGroupPartial'         => __( '%s of the changes were reverted. Not reverted:', 'agent-abilities-for-mcp' ),
 				'undoCleared'              => __( 'History cleared.', 'agent-abilities-for-mcp' ),
 				/* translators: %s: error message returned by the server. */
 				'errorWithMessage'         => __( 'Error: %s', 'agent-abilities-for-mcp' ),
@@ -1713,6 +1716,8 @@ function aafm_render_admin_page(): void {
 	// Anchor for core's admin-notice relocation: the <h1> now sits inside
 	// .aafm-page-head, so mark where WordPress should drop notices.
 	echo '<hr class="wp-header-end">';
+
+	aafm_render_undo_notice();
 
 	echo '<nav class="nav-tab-wrapper">';
 	foreach ( $tabs as $slug => $label ) {

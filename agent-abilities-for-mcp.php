@@ -550,7 +550,6 @@ function aafm_bootstrap() {
 		add_action( 'admin_post_aafm_notify_dismiss', 'aafm_handle_notify_dismiss' );
 		add_action( 'admin_notices', 'aafm_notify_admin_notice' );
 		add_action( 'admin_notices', 'aafm_render_review_request_notice' );
-		add_action( 'admin_notices', 'aafm_render_undo_notice' );
 		add_action( 'admin_notices', 'aafm_notice_omitted_abilities' );
 		add_action( 'admin_enqueue_scripts', 'aafm_maybe_enqueue_menu_pointer' );
 	}

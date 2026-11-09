@@ -51,6 +51,21 @@ function aafm_changes_status_pill( array $state, string $status ): array {
 }
 
 /**
+ * The text of the Item cell: "Post 12" or "Term 4", by id and never a title.
+ *
+ * @param array<string,mixed> $row A change row.
+ * @return string Plain text.
+ */
+function aafm_changes_item_label( array $row ): string {
+	return sprintf(
+		/* translators: 1: "Post" or "Term", 2: the numeric id. */
+		__( '%1$s %2$d', 'agent-abilities-for-mcp' ),
+		'term' === $row['object_type'] ? __( 'Term', 'agent-abilities-for-mcp' ) : __( 'Post', 'agent-abilities-for-mcp' ),
+		(int) $row['object_id']
+	);
+}
+
+/**
  * The Item cell: a link to the edit screen by id, never a title.
  *
  * @param array<string,mixed> $row A change row.
@@ -58,12 +73,7 @@ function aafm_changes_status_pill( array $state, string $status ): array {
  */
 function aafm_changes_item_html( array $row ): string {
 	$id    = (int) $row['object_id'];
-	$label = sprintf(
-		/* translators: 1: "Post" or "Term", 2: the numeric id. */
-		__( '%1$s %2$d', 'agent-abilities-for-mcp' ),
-		'term' === $row['object_type'] ? __( 'Term', 'agent-abilities-for-mcp' ) : __( 'Post', 'agent-abilities-for-mcp' ),
-		$id
-	);
+	$label = aafm_changes_item_label( $row );
 	if ( 'term' === $row['object_type'] ) {
 		$perm = (array) json_decode( (string) ( $row['perm_input'] ?? '{}' ), true );
 		$link = add_query_arg(
@@ -117,10 +127,18 @@ function aafm_changes_row_html( array $row ): string {
 	$action = '';
 	if ( ! empty( $state['undoable'] ) ) {
 		$action .= sprintf(
-			'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm" data-undo-revert="%1$d" data-undo-fields="%2$s">%3$s</button>',
+			'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm" data-undo-revert="%1$d" data-undo-fields="%2$s" aria-label="%4$s">%3$s</button>',
 			(int) $row['id'],
 			esc_attr( $fields ),
-			esc_html__( 'Revert', 'agent-abilities-for-mcp' )
+			esc_html__( 'Revert', 'agent-abilities-for-mcp' ),
+			esc_attr(
+				sprintf(
+					/* translators: 1: change id, 2: "Post 12" or "Term 4". */
+					__( 'Revert change %1$d to %2$s', 'agent-abilities-for-mcp' ),
+					(int) $row['id'],
+					aafm_changes_item_label( $row )
+				)
+			)
 		);
 	}
 	$compare = aafm_changes_compare_url( $row );
@@ -129,7 +147,7 @@ function aafm_changes_row_html( array $row ): string {
 	}
 
 	return sprintf(
-		'<tr data-change-id="%1$d"><td title="%2$s">%3$s</td><td title="%4$s">%4$s</td><td>%5$s</td><td title="%6$s">%6$s</td><td title="%7$s">%8$s</td><td><span class="aafm-pill aafm-pill-%9$s">%10$s</span>%11$s</td><td class="aafm-changes-action">%12$s<span class="aafm-changes-status" aria-live="polite"></span></td></tr>',
+		'<tr data-change-id="%1$d"><td title="%2$s">%3$s</td><td title="%4$s">%4$s</td><td title="%13$s">%5$s</td><td title="%6$s">%6$s</td><td title="%7$s">%8$s</td><td><span class="aafm-pill aafm-pill-%9$s">%10$s</span>%11$s</td><td class="aafm-changes-action">%12$s<span class="aafm-changes-status" aria-live="polite"></span></td></tr>',
 		(int) $row['id'],
 		esc_attr( gmdate( 'Y-m-d H:i:s', (int) $when ) . ' UTC' ),
 		esc_html( sprintf( /* translators: %s: a time span such as "3 hours". */ __( '%s ago', 'agent-abilities-for-mcp' ), human_time_diff( (int) $when ) ) ),
@@ -141,7 +159,8 @@ function aafm_changes_row_html( array $row ): string {
 		esc_attr( $pill['variant'] ),
 		esc_html( $pill['label'] ),
 		'' === $reason ? '' : '<div class="aafm-changes-reason">' . esc_html( $reason ) . '</div>',
-		$action
+		$action,
+		esc_attr( aafm_changes_item_label( $row ) )
 	);
 }
 
@@ -165,10 +184,17 @@ function aafm_changes_group_html( array $lead, array $members ): string {
 		$items .= sprintf( '<li>%1$s <span class="aafm-pill aafm-pill-%2$s">%3$s</span></li>', aafm_changes_item_html( $member ), esc_attr( $pill['variant'] ), esc_html( $pill['label'] ) );
 	}
 	$action = $any ? sprintf(
-		'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm" data-undo-revert-group="%1$s" data-undo-fields="%2$s">%3$s</button>',
+		'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm" data-undo-revert-group="%1$s" data-undo-fields="%2$s" aria-label="%4$s">%3$s</button>',
 		esc_attr( (string) $lead['group_id'] ),
 		esc_attr( __( 'post content, on every post listed', 'agent-abilities-for-mcp' ) ),
-		esc_html__( 'Revert all', 'agent-abilities-for-mcp' )
+		esc_html__( 'Revert all', 'agent-abilities-for-mcp' ),
+		esc_attr(
+			sprintf(
+				/* translators: %d: how many posts one find and replace changed. */
+				_n( 'Revert all %d change made by one find and replace', 'Revert all %d changes made by one find and replace', count( $members ), 'agent-abilities-for-mcp' ),
+				count( $members )
+			)
+		)
 	) : '';
 
 	return sprintf(
@@ -206,7 +232,7 @@ function aafm_render_changes_tab(): void {
 	if ( ! $listing['ok'] ) {
 		$body = aafm_get_notice_html( 'error', __( 'The change history could not be read. Try again in a moment.', 'agent-abilities-for-mcp' ) );
 	} elseif ( array() === $listing['rows'] ) {
-		$body = '<div class="aafm-empty-state">' . esc_html__( 'No changes recorded yet. When an agent edits a post, a term or a custom field through one of the tools listed above, the change shows up here.', 'agent-abilities-for-mcp' ) . '</div>';
+		$body = '<div class="aafm-empty-state">' . esc_html__( 'No changes recorded yet. When an agent edits a post, a term, a custom field or SEO data, the change shows up here.', 'agent-abilities-for-mcp' ) . '</div>';
 	} else {
 		$groups = array();
 		foreach ( $listing['rows'] as $row ) {
@@ -261,6 +287,9 @@ function aafm_render_changes_tab(): void {
 		);
 	}
 
+	if ( aafm_undo_capture_off() ) {
+		$body = aafm_get_notice_html( 'warning', __( 'Change history is turned off, so new changes are not recorded. Earlier ones stay until they expire. You can turn it back on in Settings.', 'agent-abilities-for-mcp' ) ) . $body;
+	}
 	$body .= sprintf(
 		'<p class="aafm-changes-clear"><button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-changes-clear">%s</button><span class="aafm-changes-status" id="aafm-changes-clear-status" aria-live="polite"></span></p>',
 		esc_html__( 'Clear history', 'agent-abilities-for-mcp' )
@@ -272,7 +301,7 @@ function aafm_render_changes_tab(): void {
 			'id'          => 'aafm-changes-card',
 			'title'       => __( 'Changes', 'agent-abilities-for-mcp' ),
 			'icon'        => 'changes',
-			'description' => __( 'Changes agents made with the post, page, term, custom field and SEO tools are kept for 30 days while the plugin is active. Revert puts a change back if the item has not been edited since. Field names are shown, never their contents. Notifications, webhooks and anything already read are not recalled.', 'agent-abilities-for-mcp' ),
+			'description' => __( 'Changes agents made with the post, page, term, custom field and SEO tools are kept for 30 days while the plugin is active. Revert puts a change back if the item has not been edited since. Field names are shown, never their contents. When the history is full, the oldest values go first. Notifications, webhooks and anything already read are not recalled.', 'agent-abilities-for-mcp' ),
 			'body'        => $body,
 		)
 	);
@@ -358,7 +387,8 @@ function aafm_undo_ajax_finish( int $row_id, string $status, string $detail, arr
 function aafm_ajax_undo_revert(): void {
 	$row_id = aafm_undo_ajax_begin( 'aafm/owner-revert' );
 	// The nonce was checked just above; this only reads the id.
-	$id     = isset( $_POST['change_id'] ) ? absint( wp_unslash( $_POST['change_id'] ) ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+	$raw    = isset( $_POST['change_id'] ) ? wp_unslash( $_POST['change_id'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- cast to an integer on the next line.
+	$id     = is_scalar( $raw ) ? absint( $raw ) : 0;
 	$result = aafm_undo_apply( $id, 'owner' );
 
 	if ( is_wp_error( $result ) ) {
@@ -414,10 +444,13 @@ function aafm_ajax_undo_revert_group(): void {
 		$id     = (int) $member['id'];
 		$result = aafm_undo_apply( $id, 'owner' );
 		if ( is_wp_error( $result ) ) {
+			$code      = str_replace( 'aafm_undo_', '', (string) $result->get_error_code() );
 			$results[] = array(
 				'change_id' => $id,
-				'outcome'   => 'refused',
-				'reason'    => str_replace( 'aafm_undo_', '', (string) $result->get_error_code() ),
+				// A write that landed in part is a failure; every other no is a refusal.
+				'outcome'   => 'failed' === $code ? 'failed' : 'refused',
+				'reason'    => $code,
+				'message'   => $result->get_error_message(),
 			);
 			continue;
 		}
@@ -434,7 +467,16 @@ function aafm_ajax_undo_revert_group(): void {
 		count( $results ),
 		implode( ',', array_map( static fn( array $r ): int => (int) $r['change_id'], $results ) )
 	);
-	aafm_undo_ajax_finish( $row_id, array() === $landed ? 'error' : 'success', $detail, array( 'results' => $results ), true );
+	$payload = array( 'results' => $results );
+	if ( array() === $landed ) {
+		// Nothing reverted is an error, with the reasons in the message so the page can show them.
+		$payload['message'] = sprintf(
+			/* translators: %s: the changes that were not reverted, each with its reason. */
+			__( 'Nothing was reverted. %s', 'agent-abilities-for-mcp' ),
+			implode( ' ', array_map( static fn( array $r ): string => sprintf( '#%d: %s', (int) $r['change_id'], (string) $r['message'] ), $results ) )
+		);
+	}
+	aafm_undo_ajax_finish( $row_id, array() === $landed ? 'error' : 'success', $detail, $payload, array() !== $landed );
 }
 
 /**
@@ -451,14 +493,14 @@ function aafm_ajax_undo_clear_history(): void {
 }
 
 /**
- * The upgrade notice: history records from this update. Shown on this plugin's own admin pages, while
- * capture is on and the notice has not been dismissed.
+ * The upgrade notice: history records from this update. Printed inside the plugin's own admin page, right under
+ * the page head, while capture is on and the notice has not been dismissed. It is not an admin_notices notice:
+ * that hook runs outside the page wrapper, where the plugin's styles do not reach.
  *
  * @return void
  */
 function aafm_render_undo_notice(): void {
-	$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
-	if ( ! current_user_can( 'manage_options' ) || null === $screen || false === strpos( (string) $screen->id, 'agent-abilities-for-mcp' ) ) {
+	if ( ! current_user_can( 'manage_options' ) ) {
 		return;
 	}
 	if ( aafm_undo_capture_off() || get_option( 'aafm_undo_notice_dismissed', false ) ) {

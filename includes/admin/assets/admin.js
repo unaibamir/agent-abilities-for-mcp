@@ -2225,6 +2225,14 @@
 					return;
 				}
 				dismiss.disabled = false;
+				let note = document.querySelector( '#aafm-undo-notice-error' );
+				if ( ! note ) {
+					note = document.createElement( 'span' );
+					note.id = 'aafm-undo-notice-error';
+					note.setAttribute( 'role', 'alert' );
+					dismiss.after( note );
+				}
+				note.textContent = ` ${ json?.data?.message ?? this.#t( 'reviewFailed', 'That did not work. Reload the page and try again.' ) }`;
 				dismiss.focus();
 			} );
 
@@ -2249,7 +2257,16 @@
 				} else {
 					show( cell, json?.data?.message ?? this.#t( 'reviewFailed', 'That did not work. Reload the page and try again.' ) );
 				}
-				btn.focus();
+				// Focus stays on the control; when the answer removed it, the status line takes it.
+				if ( btn.isConnected ) {
+					btn.focus();
+				} else {
+					const line = cell?.querySelector( '.aafm-changes-status' );
+					if ( line ) {
+						line.tabIndex = -1;
+						line.focus();
+					}
+				}
 			};
 
 			card.addEventListener( 'click', ( event ) => {
@@ -2265,9 +2282,14 @@
 						show(
 							cell,
 							differences.length
-								? `${ this.#t( 'undoRevertedWithDiff', 'Reverted, with differences:' ) } ${ differences.join( ', ' ) }`
+								? `${ this.#t( 'undoRevertedWithDiff', 'Reverted. WordPress stored these a little differently:' ) } ${ differences.join( ', ' ) }`
 								: this.#t( 'undoReverted', 'Reverted.' )
 						);
+						const pill = cell?.closest( 'tr' )?.querySelector( '.aafm-pill' );
+						if ( pill ) {
+							pill.className = 'aafm-pill aafm-pill-neutral';
+							pill.textContent = this.#t( 'undoPillReverted', 'Reverted' );
+						}
 						revert.remove();
 					} );
 				} else if ( group ) {
@@ -2275,14 +2297,18 @@
 						return;
 					}
 					run( group, 'aafm_undo_revert_group', { group_id: group.dataset.undoRevertGroup }, ( data, cell ) => {
-						const refused = ( data.results ?? [] ).filter( ( r ) => 'refused' === r.outcome );
+						const results = data.results ?? [];
+						const skipped = results.filter( ( r ) => 'refused' === r.outcome || 'failed' === r.outcome );
+						if ( ! skipped.length ) {
+							show( cell, this.#t( 'undoGroupDone', 'Group reverted. Reload to see the new state.' ) );
+							group.remove();
+							return;
+						}
+						// A partial result keeps the button, so the skipped posts can be tried again.
 						show(
 							cell,
-							refused.length
-								? `${ this.#t( 'undoGroupDone', 'Group reverted.' ) } ${ refused.map( ( r ) => `#${ r.change_id } (${ r.reason })` ).join( ', ' ) }`
-								: this.#t( 'undoGroupDone', 'Group reverted.' )
+							`${ this.#format( this.#t( 'undoGroupPartial', '%s of the changes were reverted. Not reverted:' ), String( results.length - skipped.length ) ) } ${ skipped.map( ( r ) => `#${ r.change_id } (${ r.message ?? r.reason })` ).join( ' ' ) }`
 						);
-						group.remove();
 					} );
 				}
 			} );

@@ -588,7 +588,8 @@ function aafm_undo_group_members( string $group_id ): array {
  * @return string[]
  */
 function aafm_undo_field_names( array $row ): array {
-	$fields = array_values( array_filter( (array) json_decode( (string) ( $row['fields'] ?? '[]' ), true ), 'is_string' ) );
+	// The whole-object fingerprint of a create is bookkeeping, not a field anyone edited.
+	$fields = array_values( array_filter( (array) json_decode( (string) ( $row['fields'] ?? '[]' ), true ), static fn( $field ): bool => is_string( $field ) && 0 !== strpos( $field, 'fp:' ) ) );
 	return array_map(
 		static function ( string $field ): string {
 			foreach ( array( 'post:', 'term:', 'aioseo:' ) as $prefix ) {

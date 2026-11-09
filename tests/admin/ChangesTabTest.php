@@ -156,6 +156,70 @@ final class ChangesTabTest extends UndoTestCase {
 		$this->assertGreaterThanOrEqual( 30, count( $listing['rows'] ), 'Every member of the group comes with its lead.' );
 	}
 
+	public function test_a_hostile_tool_name_or_field_never_reaches_the_page_as_markup(): void {
+		aafm_undo_insert(
+			array(
+				'ability'       => 'aafm/"><img src=x onerror=alert(1)>',
+				'object_type'   => 'post',
+				'object_id'     => 5,
+				'undo_op'       => 'restore',
+				'status'        => 'ready',
+				'fields'        => (string) wp_json_encode( array( 'meta:"><img src=x onerror=alert(2)>' ) ),
+				'before_values' => '{}',
+				'before_sha256' => hash( 'sha256', '{}' ),
+			)
+		);
+		$html = $this->render();
+
+		$this->assertStringNotContainsString( '<img', $html );
+		$this->assertStringNotContainsString( 'onerror=alert(1)>', $html );
+		$this->assertStringContainsString( '&quot;&gt;&lt;img', $html );
+	}
+
+	public function test_each_revert_button_names_its_change_and_item(): void {
+		$post   = self::factory()->post->create();
+		$result = $this->run_tool(
+			'aafm/update-post',
+			array(
+				'post_id' => $post,
+				'title'   => 'new',
+			)
+		);
+		$change = (int) $result['undo']['change_ids'][0];
+
+		$this->assertStringContainsString( 'aria-label="Revert change ' . $change . ' to Post ' . $post . '"', $this->render() );
+	}
+
+	public function test_a_create_row_does_not_show_the_fingerprint_as_a_field(): void {
+		$this->run_tool( 'aafm/create-post', array( 'title' => 'Fresh' ) );
+
+		$html = $this->render();
+
+		$this->assertStringContainsString( 'post_title', $html );
+		$this->assertStringNotContainsString( 'fp:object', $html );
+	}
+
+	public function test_the_tab_says_so_when_history_is_off(): void {
+		update_option( 'aafm_undo_capture_off', true );
+
+		$this->assertStringContainsString( 'Change history is turned off', $this->render() );
+	}
+
+	public function test_the_upgrade_notice_prints_inside_the_page_wrapper_and_not_on_admin_notices(): void {
+		$this->assertFalse( has_action( 'admin_notices', 'aafm_render_undo_notice' ) );
+
+		ob_start();
+		aafm_render_admin_page();
+		$html = (string) ob_get_clean();
+
+		$wrap   = strpos( $html, 'aafm-wrap' );
+		$anchor = strpos( $html, 'wp-header-end' );
+		$notice = strpos( $html, 'id="aafm-undo-notice"' );
+		$nav    = strpos( $html, 'nav-tab-wrapper' );
+		$this->assertNotFalse( $notice );
+		$this->assertTrue( $wrap < $anchor && $anchor < $notice && $notice < $nav, 'The notice sits inside the wrapper, under the page head.' );
+	}
+
 	public function test_an_empty_tab_says_so(): void {
 		$this->assertStringContainsString( 'No changes recorded yet', $this->render() );
 	}

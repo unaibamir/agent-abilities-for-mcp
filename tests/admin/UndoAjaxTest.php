@@ -207,6 +207,56 @@ final class UndoAjaxTest extends UndoTestCase {
 		$this->assertContains( 'reverted', $outcomes );
 	}
 
+	public function test_revert_all_answers_an_error_when_every_member_was_refused(): void {
+		$posts = array(
+			self::factory()->post->create( array( 'post_content' => 'needle one' ) ),
+			self::factory()->post->create( array( 'post_content' => 'needle two' ) ),
+		);
+		$this->run_tool(
+			'aafm/replace-sitewide',
+			array(
+				'search'  => 'needle',
+				'replace' => 'thread',
+				'dry_run' => false,
+			)
+		);
+		$group = (string) $this->change_rows()[0]['group_id'];
+		foreach ( $posts as $post ) {
+			wp_update_post(
+				array(
+					'ID'           => $post,
+					'post_content' => 'edited by a human',
+				)
+			);
+		}
+
+		$out = $this->call( 'aafm_ajax_undo_revert_group', array( 'group_id' => $group ) );
+
+		$this->assertFalse( $out['success'], 'Nothing reverted is not a success.' );
+		$this->assertStringContainsString( 'Nothing was reverted.', $out['data']['message'] );
+		$this->assertStringContainsString( aafm_undo_reason_message( 'changed_since' ), $out['data']['message'] );
+		$this->assertSame( array( 'refused', 'refused' ), array_column( $out['data']['results'], 'outcome' ) );
+		$rows = $this->undo_rows();
+		$this->assertSame( 'error', end( $rows )['status'] );
+	}
+
+	public function test_a_change_id_sent_as_an_array_reverts_nothing(): void {
+		global $wpdb;
+		// An array used to count as the integer 1, so the change under test is the one with id 1.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$wpdb->query( $wpdb->prepare( 'ALTER TABLE %i AUTO_INCREMENT = 1', aafm_changes_table() ) );
+		$post = self::factory()->post->create( array( 'post_title' => 'A' ) );
+		$id   = $this->change( $post );
+		$this->assertSame( 1, $id, 'precondition: the change has id 1.' );
+
+		$this->post_as( 'administrator', array( 'change_id' => array( (string) $id ) ) );
+		$out = $this->run_handler( 'aafm_ajax_undo_revert' );
+
+		$this->assertFalse( $out['success'] );
+		$this->assertSame( 'B', get_post( $post )->post_title );
+		$this->assertSame( 'ready', aafm_undo_get_view( $id )['row']['status'] );
+	}
+
 	public function test_revert_all_refuses_a_malformed_group_id_and_non_sitewide_rows(): void {
 		$post   = self::factory()->post->create( array( 'post_title' => 'A' ) );
 		$change = $this->change( $post );

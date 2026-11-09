@@ -314,7 +314,8 @@ function aafm_undo_reasons(): array {
 		'status_coerced'   => __( 'Force draft would change the status this undo restores.', 'agent-abilities-for-mcp' ),
 		'not_allowed'      => __( 'This undo is not allowed.', 'agent-abilities-for-mcp' ),
 		'read_failed'      => __( 'The stored change could not be read.', 'agent-abilities-for-mcp' ),
-		'rate_limited'     => __( 'Too many undo calls. Try again later.', 'agent-abilities-for-mcp' ),
+		/* translators: %d: how many undo calls one agent connection may make per hour. */
+		'rate_limited'     => sprintf( __( 'Too many undo calls: an agent connection may make %d per hour. Try again within the hour.', 'agent-abilities-for-mcp' ), AAFM_UNDO_AGENT_LIMIT ),
 	);
 }
 

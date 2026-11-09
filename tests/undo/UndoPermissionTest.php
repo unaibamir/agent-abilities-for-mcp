@@ -215,6 +215,13 @@ final class UndoPermissionTest extends UndoTestCase {
 		$this->assertNotSame( 'aafm_undo_rate_limited', $codes[29] );
 	}
 
+	public function test_the_rate_limit_message_says_how_many_calls_and_over_what_window(): void {
+		$message = aafm_undo_reason_message( 'rate_limited' );
+
+		$this->assertStringContainsString( (string) AAFM_UNDO_AGENT_LIMIT, $message );
+		$this->assertStringContainsString( 'hour', $message );
+	}
+
 	public function test_undo_change_refuses_and_writes_nothing_when_its_activity_row_could_not_be_opened(): void {
 		$post   = self::factory()->post->create( array( 'post_title' => 'A' ) );
 		$change = $this->edit( $post );

@@ -66,6 +66,8 @@ require_once AAFM_PLUGIN_DIR . 'includes/audit/notifications.php';
 require_once AAFM_PLUGIN_DIR . 'includes/write-contract.php';
 // The change history store (undo). After the audit log, whose installer creates its table.
 require_once AAFM_PLUGIN_DIR . 'includes/undo/store.php';
+require_once AAFM_PLUGIN_DIR . 'includes/undo/surfaces.php';
+require_once AAFM_PLUGIN_DIR . 'includes/undo/fields.php';
 // The high-risk floor. Required at top level, not inside the bootstrap, because both the admin
 // screens and the registration walk read it, and neither should have to care which ran first.
 require_once AAFM_PLUGIN_DIR . 'includes/audit/high-risk.php';

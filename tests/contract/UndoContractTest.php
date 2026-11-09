@@ -17,6 +17,8 @@ require_once dirname( __DIR__ ) . '/undo/UndoTestCase.php';
 use AAFM\Tests\Undo\UndoTestCase;
 
 /**
+ * Change history against the real SEO plugins.
+ *
  * @group contract
  */
 final class UndoContractTest extends UndoTestCase {

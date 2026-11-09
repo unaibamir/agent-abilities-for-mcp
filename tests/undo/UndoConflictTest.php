@@ -386,4 +386,160 @@ final class UndoConflictTest extends UndoTestCase {
 		$this->assertWPError( $result );
 		$this->assertSame( aafm_generic_error()->get_error_code(), $result->get_error_code() );
 	}
+
+	public function test_trash_off_refuses_a_create_revert(): void {
+		$result = $this->run_tool( 'aafm/create-post', array( 'title' => 'Fresh' ) );
+		$post   = (int) $result['post']['id'];
+		add_filter( 'aafm_trash_is_enabled', '__return_false' );
+		$refusal = $this->assert_refused( (int) $result['undo']['change_ids'][0], 'trash_off' );
+		remove_filter( 'aafm_trash_is_enabled', '__return_false' );
+
+		$this->assertNotSame( 'trash', get_post( $post )->post_status );
+		$this->assertSame( 'aafm_undo_trash_off', $refusal->get_error_code() );
+	}
+
+	public function test_term_parent_revert_refuses_a_cycle(): void {
+		$parent = (int) self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+		$child  = (int) self::factory()->term->create(
+			array(
+				'taxonomy' => 'category',
+				'parent'   => $parent,
+			)
+		);
+		$change = $this->change_from(
+			'aafm/update-term',
+			array(
+				'taxonomy' => 'category',
+				'term_id'  => $child,
+				'parent'   => 0,
+			)
+		);
+		// The old parent now sits below the child: putting it back would close a loop.
+		wp_update_term( $parent, 'category', array( 'parent' => $child ) );
+
+		$this->assert_refused( $change, 'not_allowed' );
+		$this->assertSame( 0, (int) get_term( $child, 'category' )->parent );
+	}
+
+	public function test_a_write_that_errors_after_the_claim_returns_the_row_to_ready(): void {
+		$post   = self::factory()->post->create( array( 'post_title' => 'A' ) );
+		$change = $this->change_from(
+			'aafm/update-post',
+			array(
+				'post_id' => $post,
+				'title'   => 'B',
+			)
+		);
+		$before = count( $this->change_rows() );
+		add_filter( 'wp_insert_post_empty_content', '__return_true' );
+		$result = aafm_undo_apply( $change, 'owner' );
+		remove_filter( 'wp_insert_post_empty_content', '__return_true' );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'aafm_undo_failed', $result->get_error_code() );
+		$this->assertSame( 'B', get_post( $post )->post_title );
+		$this->assertSame( 'ready', aafm_undo_get_view( $change )['row']['status'] );
+		$this->assertCount( $before, $this->change_rows(), 'The pending revert row is removed again.' );
+	}
+
+	public function test_a_failed_new_row_insert_writes_nothing_and_returns_the_row_to_ready(): void {
+		global $wpdb;
+		$post   = self::factory()->post->create( array( 'post_title' => 'A' ) );
+		$change = $this->change_from(
+			'aafm/update-post',
+			array(
+				'post_id' => $post,
+				'title'   => 'B',
+			)
+		);
+		$before = count( $this->change_rows() );
+		ob_start();
+		$result = QueryFaultInjector::break_query_with_real_error( 'INSERT INTO `' . aafm_changes_table() . '`', fn() => aafm_undo_apply( $change, 'owner' ) );
+		ob_end_clean();
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'aafm_undo_read_failed', $result->get_error_code() );
+		$this->assertSame( 'B', get_post( $post )->post_title );
+		$this->assertSame( 'ready', aafm_undo_get_view( $change )['row']['status'] );
+		$this->assertCount( $before, $this->change_rows() );
+		$this->assertNotEmpty( $wpdb->prefix );
+	}
+
+	public function test_create_revert_on_a_post_with_more_comments_than_the_bound_is_refused(): void {
+		global $wpdb;
+		$result = $this->run_tool( 'aafm/create-post', array( 'title' => 'Fresh' ) );
+		$post   = (int) $result['post']['id'];
+		$values = array();
+		for ( $i = 0; $i < 1001; ++$i ) {
+			$values[] = $wpdb->prepare( '(%d, %s, %s, %s)', $post, 'c' . $i, gmdate( 'Y-m-d H:i:s' ), gmdate( 'Y-m-d H:i:s' ) );
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- fixture rows built from prepared tuples.
+		$wpdb->query( 'INSERT INTO ' . $wpdb->comments . ' (comment_post_ID, comment_content, comment_date, comment_date_gmt) VALUES ' . implode( ',', $values ) );
+
+		$this->assert_refused( (int) $result['undo']['change_ids'][0], 'read_failed' );
+		$this->assertNotSame( 'trash', get_post( $post )->post_status );
+	}
+
+	public function test_terms_revert_is_exact_with_a_stale_object_terms_cache(): void {
+		$post = self::factory()->post->create();
+		$term = (int) self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+		// Prime the term query cache while the post has only its default category, and note its version.
+		$args   = array(
+			'fields'                 => 'tt_ids',
+			'orderby'                => 'none',
+			'update_term_meta_cache' => false,
+		);
+		$stale  = wp_get_object_terms( $post, 'category', $args );
+		$stamp  = wp_cache_get( 'last_changed', 'terms' );
+		$change = $this->change_from(
+			'aafm/add-post-terms',
+			array(
+				'post_id'  => $post,
+				'taxonomy' => 'category',
+				'term_ids' => array( $term ),
+			)
+		);
+		// Put the version back so the cached, now wrong, answer is served again.
+		wp_cache_set( 'last_changed', $stamp, 'terms' );
+		$this->assertSame( $stale, wp_get_object_terms( $post, 'category', $args ), 'precondition: the cache is stale' );
+
+		$result = aafm_undo_apply( $change, 'owner' );
+		$this->assertIsArray( $result, is_wp_error( $result ) ? $result->get_error_message() : '' );
+		wp_cache_flush();
+		$this->assertNotContains( $term, array_map( 'intval', wp_get_object_terms( $post, 'category', array( 'fields' => 'ids' ) ) ) );
+	}
+
+	public function test_term_description_with_an_iframe_is_refused_before_writing_for_a_site_admin(): void {
+		$term = (int) self::factory()->term->create(
+			array(
+				'taxonomy'    => 'category',
+				'description' => 'x',
+			)
+		);
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->update( $wpdb->term_taxonomy, array( 'description' => '<iframe src="https://example.test/x"></iframe>' ), array( 'term_id' => $term ) );
+		clean_term_cache( $term, 'category' );
+		$change = $this->change_from(
+			'aafm/update-term',
+			array(
+				'taxonomy'    => 'category',
+				'term_id'     => $term,
+				'description' => 'plain',
+			)
+		);
+		$strip  = static function ( array $caps ): array {
+			unset( $caps['unfiltered_html'] );
+			return $caps;
+		};
+		add_filter( 'user_has_cap', $strip );
+		kses_init();
+		$result = aafm_undo_apply( $change, 'owner' );
+		remove_filter( 'user_has_cap', $strip );
+		kses_init();
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'aafm_undo_would_change', $result->get_error_code() );
+		$this->assertSame( 'plain', get_term( $term, 'category' )->description );
+	}
 }

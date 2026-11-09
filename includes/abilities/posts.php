@@ -2565,15 +2565,33 @@ function aafm_exec_trash_post( array $input ) {
 	if ( ! aafm_trash_is_enabled() ) {
 		return aafm_trash_disabled_error();
 	}
-	$id = absint( $input['post_id'] );
-	if ( ! aafm_exact_object_chain( 'post', $id ) instanceof WP_Post ) {
+	$id   = absint( $input['post_id'] );
+	$post = aafm_exact_object_chain( 'post', $id );
+	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
+	}
+	if ( 'trash' === $post->post_status ) {
+		return aafm_already_trashed_error();
 	}
 	$ok = wp_trash_post( $id );
 	if ( ! $ok ) {
 		return aafm_generic_error();
 	}
 	return array( 'trashed' => true );
+}
+
+/**
+ * The refusal for trashing something already in the Trash. The caller could read the status from the
+ * item itself, so naming it shows nothing new.
+ *
+ * @return WP_Error
+ */
+function aafm_already_trashed_error(): WP_Error {
+	return new WP_Error(
+		'aafm_already_trashed',
+		__( 'That item is already in the Trash, so nothing was changed.', 'agent-abilities-for-mcp' ),
+		array( 'status' => 400 )
+	);
 }
 
 /**

@@ -978,7 +978,7 @@ function aafm_post_type_refusal_error( string $name, array $input ): ?array {
  */
 function aafm_post_type_not_exposed_for_editor( array $input ): bool {
 	$id   = isset( $input['post_id'] ) && is_numeric( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	$post = $id ? aafm_exact_object( 'post', $id ) : null;
+	$post = $id ? aafm_exact_object_chain( 'post', $id ) : null;
 	return $post instanceof WP_Post
 		&& is_wp_error( aafm_validate_post_type( $post->post_type ) )
 		&& aafm_user_can_checked( 'edit_post', $id );

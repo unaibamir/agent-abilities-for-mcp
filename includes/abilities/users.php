@@ -687,7 +687,7 @@ function aafm_exec_update_user( array $input ) {
 	// after the write, rolling the admin role back if the demote left zero admins.
 	$writer = static function () use ( $data, $id, $demotes_admin ) {
 		if ( $demotes_admin && aafm_count_administrators() <= 1 ) {
-			return aafm_generic_error();
+			return aafm_last_administrator_error( 'role' );
 		}
 
 		$result = wp_update_user( $data );
@@ -710,6 +710,25 @@ function aafm_exec_update_user( array $input ) {
 	return $demotes_admin
 		? aafm_with_named_lock( AAFM_LAST_ADMIN_LOCK, $writer )
 		: $writer();
+}
+
+/**
+ * The refusal for a change that would leave the site with no administrator.
+ *
+ * The caller already holds the capability to list administrators, so naming the reason shows it
+ * nothing new and tells it what to do next.
+ *
+ * @param string $change 'role' for a demotion, 'delete' for a deletion.
+ * @return WP_Error
+ */
+function aafm_last_administrator_error( string $change ): WP_Error {
+	return new WP_Error(
+		'aafm_last_administrator',
+		'delete' === $change
+			? __( 'This is the site\'s last administrator, so it was not deleted. Give another user the administrator role first.', 'agent-abilities-for-mcp' )
+			: __( 'This is the site\'s last administrator, so its role was not changed. Give another user the administrator role first.', 'agent-abilities-for-mcp' ),
+		array( 'status' => 400 )
+	);
 }
 
 /**
@@ -812,12 +831,20 @@ function aafm_exec_delete_user( array $input ) {
 
 	// Never delete the current user.
 	if ( get_current_user_id() === $id ) {
-		return aafm_generic_error();
+		return new WP_Error(
+			'aafm_cannot_delete_self',
+			__( 'You cannot delete your own account, so nothing was deleted.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
 	}
 
 	// The reassign target is mandatory, must exist, and must not be the victim.
 	if ( ! $reassign || $reassign === $id || ! aafm_exact_object( 'user', $reassign ) instanceof WP_User ) {
-		return aafm_generic_error();
+		return new WP_Error(
+			'aafm_reassign_required',
+			__( 'Pass reassign_to as the id of another existing user who takes over this user\'s content, so nothing was deleted.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
 	}
 
 	$victim_is_admin = in_array( 'administrator', (array) $victim->roles, true );
@@ -828,7 +855,7 @@ function aafm_exec_delete_user( array $input ) {
 	// the plain path. The check is re-run inside the lock.
 	$deleter = static function () use ( $id, $reassign, $victim_is_admin ) {
 		if ( $victim_is_admin && aafm_count_administrators() <= 1 ) {
-			return aafm_generic_error();
+			return aafm_last_administrator_error( 'delete' );
 		}
 
 		require_once ABSPATH . 'wp-admin/includes/user.php';

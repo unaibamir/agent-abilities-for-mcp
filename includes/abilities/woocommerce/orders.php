@@ -2518,6 +2518,22 @@ function aafm_exec_wc_create_order_refund( array $input ) {
 		);
 	}
 
+	// wc_create_refund() refuses an amount above what is left with a message nobody sees here. The order's
+	// own totals are already readable with wc-get-order, so the refusal can name the figure.
+	$decimals  = wc_get_price_decimals();
+	$remaining = round( (float) $order->get_total() - (float) $order->get_total_refunded(), $decimals );
+	if ( round( (float) $amount, $decimals ) > $remaining ) {
+		return new \WP_Error(
+			'aafm_wc_refund_exceeds_remaining',
+			sprintf(
+				/* translators: %s: the amount still refundable on the order. */
+				__( 'The refund amount is more than the %s still refundable on this order, so no refund was created.', 'agent-abilities-for-mcp' ),
+				wc_format_decimal( $remaining, $decimals )
+			),
+			array( 'status' => 400 )
+		);
+	}
+
 	$refund_args = array(
 		'order_id' => $order_id,
 		'amount'   => $amount,

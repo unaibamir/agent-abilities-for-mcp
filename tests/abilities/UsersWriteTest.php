@@ -233,6 +233,7 @@ final class UsersWriteTest extends TestCase {
 			)
 		);
 		$this->assertInstanceOf( WP_Error::class, $res, 'demoting the sole admin must be refused.' );
+		$this->assertSame( 'aafm_last_administrator', $res->get_error_code() );
 		$this->assertContains( 'administrator', (array) get_userdata( $admin )->roles, 'sole admin must stay an admin.' );
 	}
 
@@ -285,6 +286,7 @@ final class UsersWriteTest extends TestCase {
 		// Missing reassign target → refused (orphaned-content guard), NOT a schema rejection.
 		$res = wp_get_ability( 'aafm/delete-user' )->execute( array( 'user_id' => $victim ) );
 		$this->assertInstanceOf( WP_Error::class, $res, 'delete-user must require a reassign target.' );
+		$this->assertSame( 'aafm_reassign_required', $res->get_error_code() );
 		$this->assertInstanceOf( \WP_User::class, get_userdata( $victim ), 'victim must survive the missing-reassign refusal.' );
 
 		// With a reassign target → deleted.
@@ -308,6 +310,7 @@ final class UsersWriteTest extends TestCase {
 			)
 		);
 		$this->assertInstanceOf( WP_Error::class, $res, 'must never delete self.' );
+		$this->assertSame( 'aafm_cannot_delete_self', $res->get_error_code() );
 		$this->assertInstanceOf( \WP_User::class, get_userdata( $admin ) );
 	}
 
@@ -633,9 +636,9 @@ final class UsersWriteTest extends TestCase {
 	}
 
 	/**
-	 * W2-T8 (step 14, row U5): a healthy delete of the only administrator keeps its exact refusal.
+	 * W2-T8 (step 14, row U5): a healthy delete of the only administrator is refused with the named reason.
 	 */
-	public function test_delete_user_of_the_only_administrator_keeps_its_exact_refusal(): void {
+	public function test_delete_user_of_the_only_administrator_says_it_is_the_last_administrator(): void {
 		list( $victim, $reassign ) = $this->sole_admin_victim();
 
 		$res = wp_get_ability( 'aafm/delete-user' )->execute(
@@ -646,8 +649,8 @@ final class UsersWriteTest extends TestCase {
 		);
 
 		$this->assertInstanceOf( WP_Error::class, $res );
-		$this->assertSame( 'aafm_error', $res->get_error_code() );
-		$this->assertSame( 'The request could not be completed.', $res->get_error_message() );
+		$this->assertSame( 'aafm_last_administrator', $res->get_error_code() );
+		$this->assertStringContainsString( 'last administrator', $res->get_error_message() );
 		$this->assertInstanceOf( \WP_User::class, get_userdata( $victim ), 'the last admin must survive.' );
 	}
 

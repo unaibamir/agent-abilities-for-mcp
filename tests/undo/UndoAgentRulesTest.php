@@ -533,6 +533,8 @@ final class UndoAgentRulesTest extends UndoTestCase {
 			'yoast javascript canonical' => array( 'aafm/yoast-update-post', '_yoast_wpseo_canonical', 'javascript:alert(1)', false ),
 			'yoast https canonical'      => array( 'aafm/yoast-update-post', '_yoast_wpseo_canonical', 'https://example.test/page/', true ),
 			'yoast title'                => array( 'aafm/yoast-update-post', '_yoast_wpseo_title', 'A plain title', true ),
+			'yoast serialized array'     => array( 'aafm/yoast-update-post', '_yoast_wpseo_canonical', 'a:1:{i:0;s:1:"x";}', false ),
+			'rank math serialized array' => array( 'aafm/rankmath-update-post', 'rank_math_canonical_url', 'a:1:{i:0;s:1:"x";}', false ),
 			'rank math javascript'       => array( 'aafm/rankmath-update-post', 'rank_math_canonical_url', 'javascript:alert(1)', false ),
 			'rank math https'            => array( 'aafm/rankmath-update-post', 'rank_math_canonical_url', 'https://example.test/', true ),
 		);

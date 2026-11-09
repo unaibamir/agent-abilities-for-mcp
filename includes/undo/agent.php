@@ -46,8 +46,8 @@ function aafm_undo_leaves_are_plain( $value ): bool {
 /**
  * Whether a fixed SEO meta value that holds a URL passes the URL rule its forward tool runs.
  *
- * Yoast and Rank Math keep one URL per meta key; Slim SEO keeps its URLs as leaves of one array. A value that is
- * not a URL field passes.
+ * Yoast and Rank Math keep one URL per meta key; Slim SEO keeps its URLs as leaves of one array. A key that is not a
+ * URL field passes; a URL field that holds anything but a string does not.
  *
  * @param string $key   Meta key.
  * @param mixed  $value The decoded value of one row.
@@ -65,7 +65,8 @@ function aafm_undo_seo_urls_pass( string $key, $value ): bool {
 			}
 		}
 	}
-	$passes = static fn( $url, string $field ): bool => ! is_string( $url ) || '' === $url || aafm_checked_url( $url, $field ) === $url;
+	// A URL field holds a string; anything else a legacy row stored there cannot be restored by an agent.
+	$passes = static fn( $url, string $field ): bool => is_string( $url ) && ( '' === $url || aafm_checked_url( $url, $field ) === $url );
 	if ( isset( $url_keys[ $key ] ) ) {
 		return $passes( $value, $url_keys[ $key ] );
 	}

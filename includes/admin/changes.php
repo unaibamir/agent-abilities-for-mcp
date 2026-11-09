@@ -181,7 +181,7 @@ function aafm_changes_group_html( array $lead, array $members ): string {
 		$state  = aafm_undo_row_state( $member, 'owner' );
 		$any    = $any || ! empty( $state['undoable'] );
 		$pill   = aafm_changes_status_pill( $state, (string) $member['status'] );
-		$items .= sprintf( '<li>%1$s <span class="aafm-pill aafm-pill-%2$s">%3$s</span></li>', aafm_changes_item_html( $member ), esc_attr( $pill['variant'] ), esc_html( $pill['label'] ) );
+		$items .= sprintf( '<li data-change-id="%4$d">%1$s <span class="aafm-pill aafm-pill-%2$s">%3$s</span></li>', aafm_changes_item_html( $member ), esc_attr( $pill['variant'] ), esc_html( $pill['label'] ), (int) $member['id'] );
 	}
 	$action = $any ? sprintf(
 		'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm" data-undo-revert-group="%1$s" data-undo-fields="%2$s" aria-label="%4$s">%3$s</button>',
@@ -441,7 +441,16 @@ function aafm_ajax_undo_revert_group(): void {
 	$results = array();
 	$landed  = array();
 	foreach ( $members['rows'] as $member ) {
-		$id     = (int) $member['id'];
+		$id   = (int) $member['id'];
+		$view = aafm_undo_get_view( $id );
+		// A member reverted by an earlier click is done, not a refusal: a retry only asks for what is left.
+		if ( $view['ok'] && null !== $view['row'] && 'reverted' === $view['row']['status'] ) {
+			$results[] = array(
+				'change_id' => $id,
+				'outcome'   => 'already',
+			);
+			continue;
+		}
 		$result = aafm_undo_apply( $id, 'owner' );
 		if ( is_wp_error( $result ) ) {
 			$code      = str_replace( 'aafm_undo_', '', (string) $result->get_error_code() );
@@ -451,6 +460,7 @@ function aafm_ajax_undo_revert_group(): void {
 				'outcome'   => 'failed' === $code ? 'failed' : 'refused',
 				'reason'    => $code,
 				'message'   => $result->get_error_message(),
+				'item'      => $view['ok'] && null !== $view['row'] ? aafm_changes_item_label( $view['row'] ) : '',
 			);
 			continue;
 		}
@@ -460,7 +470,8 @@ function aafm_ajax_undo_revert_group(): void {
 			'outcome'   => $result['outcome'],
 		);
 	}
-	$detail = sprintf(
+	$skipped = array_filter( $results, static fn( array $r ): bool => in_array( $r['outcome'], array( 'refused', 'failed' ), true ) );
+	$detail  = sprintf(
 		/* translators: 1: how many changes were reverted, 2: how many were in the group, 3: comma-separated change ids. */
 		__( 'Reverted %1$d of %2$d changes in a group: %3$s', 'agent-abilities-for-mcp' ),
 		count( $landed ),
@@ -468,15 +479,16 @@ function aafm_ajax_undo_revert_group(): void {
 		implode( ',', array_map( static fn( array $r ): int => (int) $r['change_id'], $results ) )
 	);
 	$payload = array( 'results' => $results );
-	if ( array() === $landed ) {
+	if ( array() === $landed && array() !== $skipped ) {
 		// Nothing reverted is an error, with the reasons in the message so the page can show them.
 		$payload['message'] = sprintf(
 			/* translators: %s: the changes that were not reverted, each with its reason. */
 			__( 'Nothing was reverted. %s', 'agent-abilities-for-mcp' ),
-			implode( ' ', array_map( static fn( array $r ): string => sprintf( '#%d: %s', (int) $r['change_id'], (string) ( $r['message'] ?? '' ) ), $results ) )
+			implode( ' ', array_map( static fn( array $r ): string => sprintf( '%s: %s', '' !== (string) $r['item'] ? (string) $r['item'] : '#' . (int) $r['change_id'], (string) ( $r['message'] ?? '' ) ), $skipped ) )
 		);
 	}
-	aafm_undo_ajax_finish( $row_id, array() === $landed ? 'error' : 'success', $detail, $payload, array() !== $landed );
+	$failed = array() === $landed && array() !== $skipped;
+	aafm_undo_ajax_finish( $row_id, $failed ? 'error' : 'success', $detail, $payload, ! $failed );
 }
 
 /**
@@ -513,7 +525,7 @@ function aafm_render_undo_notice(): void {
 			/* translators: %s: link to the Settings tab, wrapped around the words "turn it off". */
 			__( 'Change history is now on. From this update, the changes agents make with the post, term, custom field and SEO tools are kept for 30 days so you can revert them from the Changes tab. You can %s in Settings.', 'agent-abilities-for-mcp' ),
 			'<a href="' . esc_url( admin_url( 'admin.php?page=agent-abilities-for-mcp&tab=settings#aafm-undo-capture' ) ) . '">' . esc_html__( 'turn it off', 'agent-abilities-for-mcp' ) . '</a>'
-		) . ' <button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm" id="aafm-undo-notice-dismiss">' . esc_html__( 'Dismiss', 'agent-abilities-for-mcp' ) . '</button>',
+		) . '<span class="aafm-undo-notice-actions"><button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm" id="aafm-undo-notice-dismiss">' . esc_html__( 'Dismiss', 'agent-abilities-for-mcp' ) . '</button></span>',
 		array( 'html' => true )
 	);
 	echo '</div>';

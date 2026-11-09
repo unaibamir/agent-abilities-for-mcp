@@ -2222,6 +2222,12 @@
 				const json = await this.#post( 'aafm_undo_dismiss_notice' );
 				if ( json?.success ) {
 					document.querySelector( '#aafm-undo-notice' )?.remove();
+					// The button is gone, so focus goes to the page heading instead of dropping to the body.
+					const heading = document.querySelector( '.aafm-page-head h1' );
+					if ( heading ) {
+						heading.tabIndex = -1;
+						heading.focus();
+					}
 					return;
 				}
 				dismiss.disabled = false;
@@ -2299,6 +2305,16 @@
 					run( group, 'aafm_undo_revert_group', { group_id: group.dataset.undoRevertGroup }, ( data, cell ) => {
 						const results = data.results ?? [];
 						const skipped = results.filter( ( r ) => 'refused' === r.outcome || 'failed' === r.outcome );
+						// Members that are done now read as reverted in the opened list.
+						results
+							.filter( ( r ) => ! skipped.includes( r ) )
+							.forEach( ( r ) => {
+								const pill = cell?.closest( 'tr' )?.querySelector( `li[data-change-id="${ r.change_id }"] .aafm-pill` );
+								if ( pill ) {
+									pill.className = 'aafm-pill aafm-pill-neutral';
+									pill.textContent = this.#t( 'undoPillReverted', 'Reverted' );
+								}
+							} );
 						if ( ! skipped.length ) {
 							show( cell, this.#t( 'undoGroupDone', 'Group reverted. Reload to see the new state.' ) );
 							group.remove();
@@ -2307,7 +2323,7 @@
 						// A partial result keeps the button, so the skipped posts can be tried again.
 						show(
 							cell,
-							`${ this.#format( this.#t( 'undoGroupPartial', '%s of the changes were reverted. Not reverted:' ), String( results.length - skipped.length ) ) } ${ skipped.map( ( r ) => `#${ r.change_id } (${ r.message ?? r.reason })` ).join( ' ' ) }`
+							`${ this.#format( this.#t( 'undoGroupPartial', '%s of the changes were reverted. Not reverted:' ), String( results.length - skipped.length ) ) } ${ skipped.map( ( r ) => `${ r.item || `#${ r.change_id }` } (${ r.message ?? r.reason })` ).join( ' ' ) }`
 						);
 					} );
 				}

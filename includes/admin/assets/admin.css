@@ -3708,6 +3708,11 @@
 /* The upgrade notice sits under the page head, inside the page wrapper. */
 .aafm-undo-notice-wrap {
 	margin-block: var(--aafm-space-3) 0;
+
+	.aafm-undo-notice-actions {
+		display: block;
+		margin-block-start: var(--aafm-space-2);
+	}
 }
 
 /* Changes tab: what agents changed, and the owner's Revert. */
@@ -3731,7 +3736,7 @@
 		white-space: normal;
 	}
 
-	th:nth-child(1) { inline-size: 110px; }
+	th:nth-child(1) { inline-size: 125px; }
 	th:nth-child(2) { inline-size: 150px; }
 	th:nth-child(3) { inline-size: 120px; }
 	th:nth-child(5) { inline-size: 150px; }

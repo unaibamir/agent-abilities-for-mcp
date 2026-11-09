@@ -220,6 +220,22 @@ final class ChangesTabTest extends UndoTestCase {
 		$this->assertTrue( $wrap < $anchor && $anchor < $notice && $notice < $nav, 'The notice sits inside the wrapper, under the page head.' );
 	}
 
+	public function test_each_group_member_carries_its_change_id_for_the_page_to_update(): void {
+		$post = self::factory()->post->create( array( 'post_content' => 'needle one' ) );
+		$this->run_tool(
+			'aafm/replace-sitewide',
+			array(
+				'search'  => 'needle',
+				'replace' => 'thread',
+				'dry_run' => false,
+			)
+		);
+		$member = (int) $this->change_rows()[0]['id'];
+
+		$this->assertStringContainsString( '<li data-change-id="' . $member . '">', $this->render() );
+		$this->assertNotSame( 0, $post );
+	}
+
 	public function test_an_empty_tab_says_so(): void {
 		$this->assertStringContainsString( 'No changes recorded yet', $this->render() );
 	}

@@ -332,4 +332,72 @@ final class UndoAjaxTest extends UndoTestCase {
 		$this->assertTrue( $good['success'] );
 		$this->assertNotEmpty( get_option( 'aafm_undo_notice_dismissed', false ) );
 	}
+
+	public function test_dismissing_the_notice_needs_manage_options(): void {
+		$this->post_as( 'editor', array() );
+
+		$out = $this->run_handler( 'aafm_ajax_undo_dismiss_notice' );
+
+		$this->assertFalse( $out['success'] );
+		$this->assertFalse( (bool) get_option( 'aafm_undo_notice_dismissed', false ), 'A user without manage_options cannot dismiss it for everyone.' );
+	}
+
+	public function test_a_revert_all_retry_asks_only_for_what_is_left(): void {
+		$one = self::factory()->post->create( array( 'post_content' => 'needle one' ) );
+		$two = self::factory()->post->create( array( 'post_content' => 'needle two' ) );
+		$this->run_tool(
+			'aafm/replace-sitewide',
+			array(
+				'search'  => 'needle',
+				'replace' => 'thread',
+				'dry_run' => false,
+			)
+		);
+		$group = (string) $this->change_rows()[0]['group_id'];
+		wp_update_post(
+			array(
+				'ID'           => $two,
+				'post_content' => 'edited by a human',
+			)
+		);
+		$first = $this->call( 'aafm_ajax_undo_revert_group', array( 'group_id' => $group ) );
+		$this->assertTrue( $first['success'] );
+		$this->assertSame( 'needle one', get_post( $one )->post_content );
+		$refused = array_values( array_filter( $first['data']['results'], static fn( array $r ): bool => 'refused' === $r['outcome'] ) );
+		$this->assertStringStartsWith( 'Post ', $refused[0]['item'], 'A refused member is named by its item, not a bare id.' );
+
+		// The person puts the post back as the call left it; the retry only has that one left to do.
+		wp_update_post(
+			array(
+				'ID'           => $two,
+				'post_content' => 'thread two',
+			)
+		);
+		$second   = $this->call( 'aafm_ajax_undo_revert_group', array( 'group_id' => $group ) );
+		$outcomes = array_column( $second['data']['results'], 'outcome' );
+
+		$this->assertTrue( $second['success'] );
+		$this->assertContains( 'already', $outcomes );
+		$this->assertNotContains( 'refused', $outcomes, 'Nothing is left to skip, so the page can finish the group.' );
+		$this->assertSame( 'needle two', get_post( $two )->post_content );
+	}
+
+	public function test_a_revert_all_over_a_finished_group_is_not_an_error(): void {
+		self::factory()->post->create( array( 'post_content' => 'needle one' ) );
+		$this->run_tool(
+			'aafm/replace-sitewide',
+			array(
+				'search'  => 'needle',
+				'replace' => 'thread',
+				'dry_run' => false,
+			)
+		);
+		$group = (string) $this->change_rows()[0]['group_id'];
+		$this->call( 'aafm_ajax_undo_revert_group', array( 'group_id' => $group ) );
+
+		$again = $this->call( 'aafm_ajax_undo_revert_group', array( 'group_id' => $group ) );
+
+		$this->assertTrue( $again['success'] );
+		$this->assertSame( array( 'already' ), array_unique( array_column( $again['data']['results'], 'outcome' ) ) );
+	}
 }

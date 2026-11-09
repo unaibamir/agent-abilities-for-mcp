@@ -489,13 +489,14 @@ leg_upgrade() {
 	init_ok upgrade "$FROM to $cur" "$ROUTE_OURS"
 	pages_ok upgrade "$FROM to $cur"
 	log_ok upgrade "$FROM to $cur"
-	local schema col
+	local schema col changes
 	schema=$(W eval 'echo aafm_read_option_views( "aafm_activity_log_schema_version" )["db_value"];' 2>/dev/null)
 	col=$(W eval 'echo aafm_activity_log_has_column( aafm_activity_log_table(), "duration_ms" ) ? "yes" : "no";' 2>/dev/null)
-	if [ "$schema" = 6 ] && [ "$col" = yes ]; then
-		pass upgrade "after $FROM to $cur the activity log is schema 6 and has duration_ms"
+	changes=$(W eval 'echo aafm_activity_log_table_present( aafm_changes_table() ) ? "yes" : "no";' 2>/dev/null)
+	if [ "$schema" = 7 ] && [ "$col" = yes ] && [ "$changes" = yes ]; then
+		pass upgrade "after $FROM to $cur the activity log is schema 7, has duration_ms and the change table exists"
 	else
-		fail upgrade "after $FROM to $cur: schema '$schema', duration_ms '$col' (wanted 6 and yes)"
+		fail upgrade "after $FROM to $cur: schema '$schema', duration_ms '$col', change table '$changes' (wanted 7, yes and yes)"
 	fi
 }
 

@@ -2867,6 +2867,40 @@ final class MetaWriteContractTest extends TestCase {
 		$this->assertSame( array( 'a', 'b' ), $this->raw_rows( $post ), 'Both baseline rows are untouched.' );
 	}
 
+	public function test_restore_rows_reports_unconfirmed_when_the_proving_reads_fail_after_an_add(): void {
+		global $wpdb;
+		$post = self::factory()->post->create();
+		add_post_meta( $post, self::RAW_KEY, 'a' );
+		$seen     = 0;
+		$statuses = array();
+		$watch    = static function ( array $result ) use ( &$statuses ): void {
+			$statuses[] = $result['status'] ?? '';
+		};
+		add_action( 'aafm_write_completed', $watch );
+		// The baseline read passes; the read that proves the new rows, and the cleanup's own read, fail.
+		$break = static function ( string $query ) use ( &$seen ): string {
+			if ( false !== strpos( $query, 'meta_key IN' ) && ++$seen >= 2 ) {
+				return 'SELECT * FROM aafm_missing_table_for_test';
+			}
+			if ( false !== strpos( $query, 'AS object_id' ) ) {
+				return 'SELECT * FROM aafm_missing_table_for_test';
+			}
+			return $query;
+		};
+		ob_start();
+		$suppressed = $wpdb->suppress_errors( true );
+		add_filter( 'query', $break );
+		$restored = aafm_meta_restore_rows( 'post', $post, self::RAW_KEY, array( 'x' ) );
+		remove_filter( 'query', $break );
+		$wpdb->suppress_errors( $suppressed );
+		ob_end_clean();
+		remove_action( 'aafm_write_completed', $watch );
+
+		$this->assertFalse( $restored );
+		$this->assertSame( array( AAFM_WRITE_UNCONFIRMED ), $statuses, 'An add that cannot be proved or removed is reported as unconfirmed, not as a clean refusal.' );
+		$this->assertSame( array( 'a', 'x' ), $this->raw_rows( $post ), 'The baseline row is untouched; the unproved new row is left for the owner to see.' );
+	}
+
 	public function test_restore_rows_cleanup_never_deletes_a_row_it_did_not_create(): void {
 		$post  = self::factory()->post->create();
 		$other = self::factory()->post->create();

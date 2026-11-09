@@ -579,14 +579,22 @@ function aafm_meta_restore_rows( string $type, int $id, string $key, array $raw_
 		$landed = $after['ok'] && 0 === $rows['aliased'] && array_keys( $new ) === $added && array_values( $new ) === $raw_rows;
 	}
 	if ( ! $landed ) {
-		// Remove only an id a fresh read shows as a row of this object and key: a short-circuit can answer with any id.
-		$now  = array() === $added ? null : aafm_meta_raw_snapshot( $type, $id, array( $key ) );
-		$mine = null !== $now && $now['ok'] ? array_diff( array_intersect( $added, $now['by_key'][ $key ]['ids'] ), $base['ids'] ) : array();
-		foreach ( $mine as $meta_id ) {
-			delete_metadata_by_mid( $type, $meta_id );
+		// Remove only an id that reads back, straight from the database, as a row of this object and key: a
+		// short-circuit can answer with any id. An id that cannot be proved stays, and the outcome says so.
+		global $wpdb;
+		$cols     = aafm_meta_columns( $type );
+		$unproved = false;
+		foreach ( $added as $meta_id ) {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- the column names come from aafm_meta_columns().
+			$read = aafm_wpdb_row( $wpdb->prepare( "SELECT {$cols['object_id_column']} AS object_id, meta_key FROM %i WHERE {$cols['id_column']} = %d", _get_meta_table( $type ), $meta_id ) );
+			if ( ! $read['ok'] ) {
+				$unproved = true;
+			} elseif ( is_array( $read['value'] ) && (int) $read['value']['object_id'] === $id && (string) $read['value']['meta_key'] === $key && ! in_array( $meta_id, $base['ids'], true ) ) {
+				delete_metadata_by_mid( $type, $meta_id );
+			}
 		}
 		wp_cache_delete( $id, $type . '_meta' );
-		return $finish( AAFM_WRITE_REFUSED, false );
+		return $finish( $unproved && array() !== $added ? AAFM_WRITE_UNCONFIRMED : AAFM_WRITE_REFUSED, false );
 	}
 
 	foreach ( $base['ids'] as $meta_id ) {

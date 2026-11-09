@@ -163,6 +163,26 @@ final class UndoStoreTest extends TestCase {
 		$this->assertSame( 129, $this->count_rows(), 'Rows stay; only values go.' );
 	}
 
+	public function test_byte_cap_ends_under_the_cap_when_older_rows_are_small(): void {
+		global $wpdb;
+		$this->fill( 201, 1024 );
+		$this->fill( 128, 2 * 1024 * 1024 ); // 256 MiB of newer rows plus 201 KiB of older ones.
+
+		aafm_undo_enforce_caps();
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$total = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COALESCE(SUM(snapshot_bytes), 0) FROM %i', aafm_changes_table() ) );
+		$this->assertLessThanOrEqual( AAFM_UNDO_MAX_SITE_BYTES, $total, 'The pass count must not leave the site over the cap.' );
+	}
+
+	public function test_clear_keeps_the_id_counter_so_a_held_id_never_names_a_later_change(): void {
+		$first = $this->seed();
+		aafm_undo_clear();
+		$second = $this->seed();
+
+		$this->assertGreaterThan( $first, $second );
+	}
+
 	public function test_byte_cap_skips_valueless_rows_and_terminates(): void {
 		global $wpdb;
 		$id = $this->seed( array( 'snapshot_bytes' => 300 * 1024 * 1024 ) );

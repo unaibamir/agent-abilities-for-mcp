@@ -14,22 +14,20 @@ declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
-if ( ! defined( 'AAFM_UNDO_RETENTION_DAYS' ) ) {
-	// Rows older than this are expired and removed; no filter, no setting (a longer window gets its own ruling).
-	define( 'AAFM_UNDO_RETENTION_DAYS', 30 );
-	// An agent may undo only its own connection's changes from this window.
-	define( 'AAFM_UNDO_AGENT_WINDOW', DAY_IN_SECONDS );
-	// One change keeps at most this many bytes of before-values.
-	define( 'AAFM_UNDO_MAX_CHANGE_BYTES', 2 * 1024 * 1024 );
-	// The whole site keeps at most this many bytes of before-values.
-	define( 'AAFM_UNDO_MAX_SITE_BYTES', 256 * 1024 * 1024 );
-	// The table keeps at most this many rows.
-	define( 'AAFM_UNDO_MAX_ROWS', 20000 );
-	// An agent connection may call undo-change this often per hour.
-	define( 'AAFM_UNDO_AGENT_LIMIT', 30 );
-	// A pending or undoing row younger than this is a call still in flight.
-	define( 'AAFM_UNDO_PENDING_GRACE', 5 * MINUTE_IN_SECONDS );
-}
+// Rows older than this are expired and removed; no filter, no setting (a longer window gets its own ruling).
+defined( 'AAFM_UNDO_RETENTION_DAYS' ) || define( 'AAFM_UNDO_RETENTION_DAYS', 30 );
+// An agent may undo only its own connection's changes from this window.
+defined( 'AAFM_UNDO_AGENT_WINDOW' ) || define( 'AAFM_UNDO_AGENT_WINDOW', DAY_IN_SECONDS );
+// One change keeps at most this many bytes of before-values.
+defined( 'AAFM_UNDO_MAX_CHANGE_BYTES' ) || define( 'AAFM_UNDO_MAX_CHANGE_BYTES', 2 * 1024 * 1024 );
+// The whole site keeps at most this many bytes of before-values.
+defined( 'AAFM_UNDO_MAX_SITE_BYTES' ) || define( 'AAFM_UNDO_MAX_SITE_BYTES', 256 * 1024 * 1024 );
+// The table keeps at most this many rows.
+defined( 'AAFM_UNDO_MAX_ROWS' ) || define( 'AAFM_UNDO_MAX_ROWS', 20000 );
+// An agent connection may call undo-change this often per hour.
+defined( 'AAFM_UNDO_AGENT_LIMIT' ) || define( 'AAFM_UNDO_AGENT_LIMIT', 30 );
+// A pending or undoing row younger than this is a call still in flight.
+defined( 'AAFM_UNDO_PENDING_GRACE' ) || define( 'AAFM_UNDO_PENDING_GRACE', 5 * MINUTE_IN_SECONDS );
 
 /**
  * The columns of the change table and the format of each. The id and created_at are handled apart.
@@ -151,8 +149,8 @@ function aafm_undo_update( int $id, array $data, array $where_status = array() )
  * Whether a row stuck in `undoing` has been there past the in-flight grace, judged by the claim time kept in its
  * reason column. A row with no readable claim time is never stale.
  *
- * ponytail: the claim time rides in `reason` (empty again the moment the row leaves `undoing`) to avoid a column
- * for one rare recovery; give it its own column if another state ever needs a timestamp.
+ * The claim time rides in `reason` (empty again the moment the row leaves `undoing`) to avoid a column for one
+ * rare recovery; give it its own column if another state ever needs a timestamp.
  *
  * @param array<string,mixed> $row A change row.
  * @return bool
@@ -331,19 +329,31 @@ function aafm_undo_enforce_caps( bool $forget = false ): void {
 	$in_flight  = aafm_undo_cutoff( AAFM_UNDO_PENDING_GRACE );
 	$suppressed = $wpdb->suppress_errors( true );
 
-	// Byte cap: drop the oldest values, keep the rows. Each pass either zeroes at least one row's
-	// bytes or affects nothing, so the loop ends.
+	// Byte cap: drop the oldest values, keep the rows. Each pass frees the oldest rows' own bytes until the
+	// excess is covered, so mixed row sizes cannot leave the site over the cap; a pass that frees nothing ends the loop.
 	for ( $pass = 0; $pass < 200; $pass++ ) {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$sum = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COALESCE(SUM(snapshot_bytes), 0) FROM %i', $table ) );
 		if ( ! $sum['ok'] || (int) $sum['value'] <= AAFM_UNDO_MAX_SITE_BYTES ) {
 			break;
 		}
-		// Expire no more than the excess needs: one change holds at most AAFM_UNDO_MAX_CHANGE_BYTES,
-		// so this many rows is enough or the next pass takes a few more.
-		$rows = max( 1, min( 500, (int) ceil( ( (int) $sum['value'] - AAFM_UNDO_MAX_SITE_BYTES ) / AAFM_UNDO_MAX_CHANGE_BYTES ) ) );
+		$excess = (int) $sum['value'] - AAFM_UNDO_MAX_SITE_BYTES;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$affected = $wpdb->query( $wpdb->prepare( "UPDATE %i SET before_values = NULL, snapshot_bytes = 0, status = IF( status = 'ready', 'expired', status ) WHERE before_values IS NOT NULL AND snapshot_bytes > 0 AND NOT ( status IN ('pending', 'undoing') AND created_at > %s ) ORDER BY id ASC LIMIT %d", $table, $in_flight, $rows ) );
+		$oldest = aafm_wpdb_results( $wpdb->prepare( "SELECT id, snapshot_bytes FROM %i WHERE before_values IS NOT NULL AND snapshot_bytes > 0 AND NOT ( status IN ('pending', 'undoing') AND created_at > %s ) ORDER BY id ASC LIMIT 500", $table, $in_flight ) );
+		$ids    = array();
+		foreach ( $oldest['ok'] ? (array) $oldest['value'] : array() as $row ) {
+			$ids[]   = (int) $row['id'];
+			$excess -= (int) $row['snapshot_bytes'];
+			if ( $excess <= 0 ) {
+				break;
+			}
+		}
+		if ( array() === $ids ) {
+			break;
+		}
+		$marks = implode( ', ', array_fill( 0, count( $ids ), '%d' ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- the marks are generated from the id list.
+		$affected = $wpdb->query( $wpdb->prepare( "UPDATE %i SET before_values = NULL, snapshot_bytes = 0, status = IF( status = 'ready', 'expired', status ) WHERE id IN ( {$marks} )", array_merge( array( $table ), $ids ) ) );
 		if ( ! is_int( $affected ) || $affected < 1 ) {
 			break;
 		}
@@ -403,8 +413,9 @@ function aafm_undo_clear(): bool {
 	if ( ! aafm_activity_log_table_present( $table ) ) {
 		return true;
 	}
+	// A DELETE and not a TRUNCATE: the id counter keeps counting, so an id an agent holds never names a later change.
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$wpdb->query( $wpdb->prepare( 'TRUNCATE TABLE %i', $table ) );
+	$wpdb->query( $wpdb->prepare( 'DELETE FROM %i', $table ) );
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$remaining = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $table ) );
 	return $remaining['ok'] && 0 === (int) $remaining['value'];

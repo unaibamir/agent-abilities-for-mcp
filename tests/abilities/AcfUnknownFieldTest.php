@@ -169,6 +169,9 @@ final class AcfUnknownFieldTest extends TestCase {
 		$this->assertSame( 'aafm_acf_unknown_field', $result->get_error_code() );
 		$this->assertStringContainsString( 'livetest_field', $result->get_error_message() );
 		$this->assertStringContainsString( 'acf-list-field-groups', $result->get_error_message() );
+		// The list shows keys and labels, not names, so the hint must say which one it gives.
+		$this->assertStringContainsString( 'field_', $result->get_error_message() );
+		$this->assertStringNotContainsString( 'field names you can use', $result->get_error_message() );
 		$this->assertSame( 0, $this->meta_rows( 'livetest_field' ) );
 	}
 

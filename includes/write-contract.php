@@ -391,7 +391,7 @@ function aafm_meta_restore_unfiltered( string $type, string $key, string $subtyp
 	global $wp_filter;
 
 	foreach ( array( "add_{$type}_metadata", "delete_{$type}_metadata", "delete_{$type}_metadata_by_mid", "sanitize_{$type}_meta_{$key}" ) as $hook ) {
-		if ( has_filter( $hook ) ) {
+		if ( aafm_meta_hook_has_foreign_callback( $hook ) ) {
 			return false;
 		}
 	}
@@ -405,6 +405,33 @@ function aafm_meta_restore_unfiltered( string $type, string $key, string $subtyp
 		}
 	}
 	return true;
+}
+
+/**
+ * Whether a hook has a callback other than core's own term meta support check.
+ *
+ * Core attaches wp_check_term_meta_support_prefilter() to the add and delete term meta hooks on
+ * every request. It only answers when the term meta table is missing, so it cannot fake a write and
+ * must not make every term meta restore look filtered.
+ *
+ * @param string $hook Hook name.
+ * @return bool
+ */
+function aafm_meta_hook_has_foreign_callback( string $hook ): bool {
+	global $wp_filter;
+
+	if ( ! has_filter( $hook ) ) {
+		return false;
+	}
+	$callbacks = isset( $wp_filter[ $hook ] ) ? $wp_filter[ $hook ]->callbacks : array();
+	foreach ( $callbacks as $priority_callbacks ) {
+		foreach ( $priority_callbacks as $callback ) {
+			if ( 'wp_check_term_meta_support_prefilter' !== $callback['function'] ) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 /**

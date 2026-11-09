@@ -328,6 +328,11 @@ function aafm_undo_write_fields( string $object_type, int $object_id, array $val
 			}
 		} elseif ( 'meta' === $kind ) {
 			aafm_meta_restore_rows( $object_type, $object_id, $name, array_map( 'strval', (array) $value ) );
+			// Rank Math's sitemap reads rank_math_robots but only invalidates on a post save, so a bare
+			// meta write needs the same nudge the forward tool gives (rankmath.php).
+			if ( 'rank_math_robots' === $name && 'post' === $object_type && class_exists( 'RankMath\\Sitemap\\Cache_Watcher' ) ) {
+				\RankMath\Sitemap\Cache_Watcher::invalidate_post( $object_id );
+			}
 		}
 	}
 

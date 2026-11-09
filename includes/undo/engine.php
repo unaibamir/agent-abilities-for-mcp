@@ -600,6 +600,10 @@ function aafm_undo_settle_creates(): void {
 			if ( null === $core || null === $full || ! isset( $after['fp:object'], $after['fp:core'] ) || aafm_undo_hash( $core ) !== $after['fp:core'] ) {
 				continue;
 			}
+			// ponytail: everything in the meta table at this point is accepted, not only what other plugins' callbacks
+			// wrote, so a person's meta-only edit made between the call and shutdown is absorbed too. Tracking the meta
+			// keys written during the request, per key, and settling only those would close it; the window is the
+			// tail of one request.
 			$after['fp:object'] = aafm_undo_hash( $full );
 			aafm_undo_update( (int) $change_id, array( 'after_hashes' => wp_json_encode( $after ) ), array( 'ready' ) );
 		}
@@ -1119,6 +1123,10 @@ function aafm_undo_apply_claimed( array $row, string $source, string $claimed_at
 
 	// Still the holder of the claim? A claim left past the grace can be taken by another request, and this
 	// one may have been paused in a slow hook; if so it must not write on top of the other.
+	// ponytail: this closes the pause before this read, not one after it. A request paused between this read and
+	// the write below can still resume once another request has reclaimed the row. A lease that stays valid through
+	// the write (a lock held across wp_update_post(), which risks lock waits with other plugins) would close it; add
+	// it only if two reverts of one change are ever seen to overlap.
 	$held = aafm_undo_get_view( $change_id );
 	if ( ! $held['ok'] || null === $held['row'] || 'undoing' !== $held['row']['status'] || (string) $held['row']['reason'] !== $claimed_at ) {
 		aafm_undo_delete( $new_id );

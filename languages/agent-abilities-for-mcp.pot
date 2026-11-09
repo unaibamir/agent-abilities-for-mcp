@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-09T18:17:37+05:00\n"
+"POT-Creation-Date: 2026-11-09T18:51:35+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -4219,7 +4219,7 @@ msgstr ""
 #: includes/admin/bridge-directory.php:998
 #: includes/admin/bridge-directory.php:1020
 #: includes/admin/changes.php:338
-#: includes/admin/changes.php:530
+#: includes/admin/changes.php:542
 #: includes/admin/connection-cards.php:564
 #: includes/admin/connection-cards.php:648
 #: includes/admin/connection-cards.php:851
@@ -4769,38 +4769,38 @@ msgid "That group of changes cannot be reverted together."
 msgstr ""
 
 #. translators: 1: how many changes were reverted, 2: how many were in the group, 3: comma-separated change ids.
-#: includes/admin/changes.php:465
+#: includes/admin/changes.php:476
 #, php-format
 msgid "Reverted %1$d of %2$d changes in a group: %3$s"
 msgstr ""
 
 #. translators: %s: the changes that were not reverted, each with its reason.
-#: includes/admin/changes.php:475
+#: includes/admin/changes.php:486
 #, php-format
 msgid "Nothing was reverted. %s"
 msgstr ""
 
-#: includes/admin/changes.php:490
+#: includes/admin/changes.php:502
 msgid "The change history could not be cleared. Try again in a moment."
 msgstr ""
 
 #. translators: %s: link to the Settings tab, wrapped around the words "turn it off".
-#: includes/admin/changes.php:514
+#: includes/admin/changes.php:526
 #, php-format
 msgid "Change history is now on. From this update, the changes agents make with the post, term, custom field and SEO tools are kept for 30 days so you can revert them from the Changes tab. You can %s in Settings."
 msgstr ""
 
-#: includes/admin/changes.php:515
+#: includes/admin/changes.php:527
 msgid "turn it off"
 msgstr ""
 
-#: includes/admin/changes.php:516
+#: includes/admin/changes.php:528
 #: includes/admin/notifications.php:369
 #: includes/admin/onboarding-pointer.php:208
 msgid "Dismiss"
 msgstr ""
 
-#: includes/admin/changes.php:533
+#: includes/admin/changes.php:545
 msgid "That could not be saved. Try again."
 msgstr ""
 
@@ -10678,8 +10678,8 @@ msgstr ""
 
 #: includes/helpers.php:1242
 #: includes/helpers.php:1249
-#: includes/write-contract.php:923
-#: includes/write-contract.php:1170
+#: includes/write-contract.php:931
+#: includes/write-contract.php:1178
 msgid "Only text, number, or boolean meta values are supported."
 msgstr ""
 
@@ -11668,20 +11668,24 @@ msgstr ""
 msgid "The %s value is not a valid URL, so nothing was changed. Use an https:// or http:// address, a mailto: or tel: link, a path starting with /, or an anchor starting with #."
 msgstr ""
 
-#: includes/undo/engine.php:1113
+#: includes/undo/engine.php:1038
+msgid "The undo did not finish, so check the item before trying again."
+msgstr ""
+
+#: includes/undo/engine.php:1162
 msgid "The undo could not be confirmed, so check the item before trying again."
 msgstr ""
 
-#: includes/undo/engine.php:1133
+#: includes/undo/engine.php:1182
 msgid "The undo did not change anything, so nothing was written."
 msgstr ""
 
-#: includes/undo/engine.php:1156
+#: includes/undo/engine.php:1205
 msgid "The undo was applied, but its history entry could not be saved. Check the item."
 msgstr ""
 
 #. translators: 1: comma-separated field names, 2: change id
-#: includes/undo/engine.php:1163
+#: includes/undo/engine.php:1212
 #, php-format
 msgid "The undo did not fully apply: %1$s did not match. Change %2$d records the current state and can be reverted."
 msgstr ""

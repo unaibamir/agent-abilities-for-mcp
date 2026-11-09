@@ -2215,13 +2215,30 @@ class WC_Payment_Gateways {
 		return new static();
 	}
 
-	/** @return array<string,\WC_Payment_Gateway> */
+	/**
+	 * Sorted the way WC_Payment_Gateways::init() sorts: each gateway is filed under the number the
+	 * woocommerce_gateway_order option holds for it (one with no number goes after 999), the list is
+	 * ksort()ed, and two gateways holding the same number leave only the later one.
+	 *
+	 * @return array<string,\WC_Payment_Gateway>
+	 */
 	public function payment_gateways() {
-		$out = array();
+		$ordering = (array) get_option( 'woocommerce_gateway_order' );
+		$end      = 999;
+		$keyed    = array();
 		foreach ( \AAFM\Tests\WcGatewayStubStore::all() as $id => $data ) {
-			$gw              = new \WC_Payment_Gateway( $data );
-			$gw->settings    = $data['settings'] ?? array();
-			$out[ (string) $id ] = $gw;
+			$gw           = new \WC_Payment_Gateway( $data );
+			$gw->settings = $data['settings'] ?? array();
+			if ( isset( $ordering[ $id ] ) && is_numeric( $ordering[ $id ] ) ) {
+				$keyed[ (int) $ordering[ $id ] ] = $gw;
+			} else {
+				$keyed[ $end++ ] = $gw;
+			}
+		}
+		ksort( $keyed );
+		$out = array();
+		foreach ( $keyed as $gw ) {
+			$out[ (string) $gw->id ] = $gw;
 		}
 		return $out;
 	}

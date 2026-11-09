@@ -40,7 +40,7 @@ VENDORS="
 woocommerce	${WOOCOMMERCE_VERSION}
 advanced-custom-fields	6.3.6
 wordpress-seo	24.0
-all-in-one-seo-pack	4.7.0
+all-in-one-seo-pack	4.9.8
 seo-by-rank-math	1.0.240
 "
 

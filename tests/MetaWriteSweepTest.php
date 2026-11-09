@@ -3501,7 +3501,7 @@ PHP;
 				continue;
 			}
 			$name = $this->last_name_segment( $token[1] );
-			if ( 'aafm_meta_row' !== $name && 'aafm_meta_rows' !== $name ) {
+			if ( ! in_array( $name, array( 'aafm_meta_row', 'aafm_meta_rows', 'aafm_meta_raw_snapshot' ), true ) ) {
 				continue;
 			}
 			list( $open ) = $this->significant_token( $tokens, $i + 1 );
@@ -3517,6 +3517,13 @@ PHP;
 	public function test_flags_a_raw_meta_row_read_outside_the_helper_file(): void {
 		$source = "<?php\nfunction f( \$id ) {\n\t\$a = aafm_meta_row( 'post', \$id, 'k' );\n\t\$b = \\aafm_meta_rows( 'post', \$id, 'k' );\n}\n";
 		$this->assertSame( array( 'includes/fixture.php|f|aafm_meta_row', 'includes/fixture.php|f|aafm_meta_rows' ), $this->raw_meta_row_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_raw_snapshot_outside_the_sanctioned_list_is_flagged(): void {
+		$source = "<?php\nfunction f( \$id ) {\n\t\$a = aafm_meta_raw_snapshot( 'post', \$id, array( 'k' ) );\n}\n";
+		$keys   = $this->raw_meta_row_keys( $source, 'includes/undo/fields.php' );
+		$this->assertSame( array( 'includes/undo/fields.php|f|aafm_meta_raw_snapshot' ), $keys );
+		$this->assertNotContains( $keys[0], self::SANCTIONED_RAW_META_ROW_READS, 'An unlisted call site is not sanctioned, so the sweep reports it.' );
 	}
 
 	public function test_ignores_a_raw_meta_row_read_inside_the_helper_file(): void {

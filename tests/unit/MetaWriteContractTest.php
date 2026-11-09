@@ -2658,4 +2658,283 @@ final class MetaWriteContractTest extends TestCase {
 		$this->assertSame( 'refused', $result['status'], $label );
 		$this->assertFalse( wp_cache_get( $id, $type . '_meta' ), $label );
 	}
+
+	// --- Exact raw rows for the change history (restore) ---------------------
+
+	private const RAW_KEY = 'aafm_raw_key';
+
+	/**
+	 * The raw meta_value strings of one key, in meta id order.
+	 *
+	 * @param int    $post_id Post id.
+	 * @param string $key     Meta key.
+	 * @return list<string>
+	 */
+	private function raw_rows( int $post_id, string $key = self::RAW_KEY ): array {
+		return aafm_meta_raw_snapshot( 'post', $post_id, array( $key ) )['by_key'][ $key ]['raw'];
+	}
+
+	public function test_raw_snapshot_reads_several_keys_in_one_query_in_meta_id_order(): void {
+		$post = self::factory()->post->create();
+		foreach ( array( 'x', 'y', 'z' ) as $v ) {
+			add_post_meta( $post, 'aafm_raw_a', $v );
+		}
+		add_post_meta( $post, 'aafm_raw_b', 'w' );
+
+		$queries = 0;
+		$tap     = static function ( string $query ) use ( &$queries ): string {
+			if ( false !== strpos( $query, 'postmeta' ) && 0 === stripos( ltrim( $query ), 'SELECT' ) ) {
+				++$queries;
+			}
+			return $query;
+		};
+		add_filter( 'query', $tap );
+		$snap = aafm_meta_raw_snapshot( 'post', $post, array( 'aafm_raw_a', 'aafm_raw_b', 'aafm_raw_missing' ) );
+		remove_filter( 'query', $tap );
+
+		$this->assertTrue( $snap['ok'] );
+		$this->assertSame( 1, $queries, 'One query reads the whole family.' );
+		$this->assertSame( array( 'x', 'y', 'z' ), $snap['by_key']['aafm_raw_a']['raw'] );
+		$this->assertSame( array( 'w' ), $snap['by_key']['aafm_raw_b']['raw'] );
+		$this->assertSame( array(), $snap['by_key']['aafm_raw_missing']['raw'], 'Absent is an empty list, not an empty string.' );
+		$ids = $snap['by_key']['aafm_raw_a']['ids'];
+		$this->assertCount( 3, $ids );
+		$sorted = $ids;
+		sort( $sorted );
+		$this->assertSame( $sorted, $ids );
+	}
+
+	public function test_raw_snapshot_returns_meta_ids(): void {
+		global $wpdb;
+		$post = self::factory()->post->create();
+		add_post_meta( $post, self::RAW_KEY, 'one' );
+		add_post_meta( $post, self::RAW_KEY, 'two' );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$expected = array_map( 'intval', $wpdb->get_col( $wpdb->prepare( 'SELECT meta_id FROM %i WHERE post_id = %d AND meta_key = %s ORDER BY meta_id', $wpdb->postmeta, $post, self::RAW_KEY ) ) );
+
+		$this->assertSame( $expected, aafm_meta_raw_snapshot( 'post', $post, array( self::RAW_KEY ) )['by_key'][ self::RAW_KEY ]['ids'] );
+	}
+
+	public function test_raw_snapshot_reports_not_ok_on_a_failed_query(): void {
+		$post = self::factory()->post->create();
+
+		$snap = QueryFaultInjector::fail_query( 'meta_key IN', static fn() => aafm_meta_raw_snapshot( 'post', $post, array( self::RAW_KEY ) ) );
+
+		$this->assertFalse( $snap['ok'] );
+	}
+
+	public function test_restore_rows_rebuilds_three_rows_under_one_key_exactly(): void {
+		$post = self::factory()->post->create();
+		foreach ( array( 'a', 'b', 'c' ) as $v ) {
+			add_post_meta( $post, self::RAW_KEY, $v );
+		}
+		$before = $this->raw_rows( $post );
+		update_post_meta( $post, self::RAW_KEY, 'changed', 'a' );
+		delete_post_meta( $post, self::RAW_KEY, 'c' );
+
+		$this->assertTrue( aafm_meta_restore_rows( 'post', $post, self::RAW_KEY, $before ) );
+
+		$this->assertSame( array( 'a', 'b', 'c' ), $this->raw_rows( $post ) );
+	}
+
+	public function test_restore_rows_with_an_empty_list_leaves_the_key_absent(): void {
+		$post = self::factory()->post->create();
+		add_post_meta( $post, self::RAW_KEY, 'a' );
+		add_post_meta( $post, self::RAW_KEY, 'b' );
+
+		$this->assertTrue( aafm_meta_restore_rows( 'post', $post, self::RAW_KEY, array() ) );
+
+		$this->assertSame( array(), $this->raw_rows( $post ) );
+		$this->assertFalse( metadata_exists( 'post', $post, self::RAW_KEY ) );
+	}
+
+	public function test_restore_rows_keeps_a_stored_string_that_looks_serialized_as_a_string(): void {
+		$post = self::factory()->post->create();
+		add_post_meta( $post, self::RAW_KEY, 'a:0:{}' );
+		$raw = $this->raw_rows( $post );
+		$this->assertSame( array( 's:6:"a:0:{}";' ), $raw, 'precondition: core double-serializes it.' );
+		update_post_meta( $post, self::RAW_KEY, 'other' );
+
+		$this->assertTrue( aafm_meta_restore_rows( 'post', $post, self::RAW_KEY, $raw ) );
+
+		$this->assertSame( $raw, $this->raw_rows( $post ) );
+		$this->assertSame( 'a:0:{}', get_post_meta( $post, self::RAW_KEY, true ) );
+	}
+
+	public function test_restore_rows_keeps_a_backslash(): void {
+		$post = self::factory()->post->create();
+		add_post_meta( $post, self::RAW_KEY, wp_slash( 'C:\Users\x' ) );
+		$raw = $this->raw_rows( $post );
+		$this->assertSame( array( 'C:\Users\x' ), $raw );
+		update_post_meta( $post, self::RAW_KEY, 'other' );
+
+		$this->assertTrue( aafm_meta_restore_rows( 'post', $post, self::RAW_KEY, $raw ) );
+
+		$this->assertSame( $raw, $this->raw_rows( $post ) );
+	}
+
+	/**
+	 * @return array<string,array{0:callable,1:callable}>
+	 */
+	public function data_filtered_keys(): array {
+		return array(
+			'registered sanitizer'          => array(
+				static function (): void {
+					register_meta( 'post', self::RAW_KEY, array( 'sanitize_callback' => 'sanitize_text_field' ) );
+				},
+				static function (): void {
+					unregister_meta_key( 'post', self::RAW_KEY );
+				},
+			),
+			'subtype scoped sanitizer'      => array(
+				static function (): void {
+					register_meta(
+						'post',
+						self::RAW_KEY,
+						array(
+							'object_subtype'    => 'post',
+							'sanitize_callback' => 'sanitize_text_field',
+						)
+					);
+				},
+				static function (): void {
+					unregister_meta_key( 'post', self::RAW_KEY, 'post' );
+				},
+			),
+			'add short circuit'             => array(
+				static function (): void {
+					add_filter( 'add_post_metadata', '__return_true' );
+				},
+				static function (): void {
+					remove_filter( 'add_post_metadata', '__return_true' );
+				},
+			),
+			'delete short circuit'          => array(
+				static function (): void {
+					add_filter( 'delete_post_metadata', '__return_false' );
+				},
+				static function (): void {
+					remove_filter( 'delete_post_metadata', '__return_false' );
+				},
+			),
+			'delete by meta id short circuit' => array(
+				static function (): void {
+					add_filter( 'delete_post_metadata_by_mid', '__return_false' );
+				},
+				static function (): void {
+					remove_filter( 'delete_post_metadata_by_mid', '__return_false' );
+				},
+			),
+		);
+	}
+
+	/**
+	 * @dataProvider data_filtered_keys
+	 */
+	public function test_unfiltered_refuses_a_key_with_a_registered_sanitizer_or_an_add_or_delete_short_circuit( callable $arm, callable $disarm ): void {
+		$this->assertTrue( aafm_meta_restore_unfiltered( 'post', self::RAW_KEY, '' ), 'precondition: an untouched key is restorable.' );
+		$arm();
+		try {
+			$this->assertFalse( aafm_meta_restore_unfiltered( 'post', self::RAW_KEY, '' ) );
+		} finally {
+			$disarm();
+		}
+	}
+
+	public function test_restore_rows_refuses_before_writing_when_a_short_circuit_is_hooked(): void {
+		$post = self::factory()->post->create();
+		add_post_meta( $post, self::RAW_KEY, 'a' );
+		add_post_meta( $post, self::RAW_KEY, 'b' );
+		$baseline_ids = aafm_meta_raw_snapshot( 'post', $post, array( self::RAW_KEY ) )['by_key'][ self::RAW_KEY ]['ids'];
+		$lie          = static fn() => $baseline_ids[0];
+		add_filter( 'add_post_metadata', $lie );
+
+		try {
+			$restored = aafm_meta_restore_rows( 'post', $post, self::RAW_KEY, array( 'x' ) );
+		} finally {
+			remove_filter( 'add_post_metadata', $lie );
+		}
+
+		$this->assertFalse( $restored );
+		$this->assertSame( array( 'a', 'b' ), $this->raw_rows( $post ), 'Both baseline rows are untouched.' );
+	}
+
+	public function test_restore_rows_rejects_an_add_id_that_is_not_a_new_row_of_this_key(): void {
+		global $wpdb;
+		$post = self::factory()->post->create();
+		add_post_meta( $post, self::RAW_KEY, 'a' );
+		add_post_meta( $post, self::RAW_KEY, 'b' );
+		// A row core says it added but that does not read back.
+		$vanish = static function ( $meta_id ) use ( $wpdb ): void {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->delete( $wpdb->postmeta, array( 'meta_id' => $meta_id ), array( '%d' ) );
+		};
+		add_action( 'added_post_meta', $vanish );
+
+		try {
+			$restored = aafm_meta_restore_rows( 'post', $post, self::RAW_KEY, array( 'x', 'y' ) );
+		} finally {
+			remove_action( 'added_post_meta', $vanish );
+		}
+
+		$this->assertFalse( $restored );
+		$this->assertSame( array( 'a', 'b' ), $this->raw_rows( $post ), 'The baseline rows were never touched.' );
+	}
+
+	public function test_restore_rows_refuses_before_deleting_when_another_spelling_of_the_key_exists(): void {
+		global $wpdb;
+		$post = self::factory()->post->create();
+		add_post_meta( $post, 'aafm_spell', 'lower' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->insert(
+			$wpdb->postmeta,
+			array(
+				'post_id'    => $post,
+				'meta_key'   => 'AAFM_SPELL', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'meta_value' => 'upper', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			)
+		);
+		$snap = aafm_meta_raw_snapshot( 'post', $post, array( 'aafm_spell' ) );
+		$this->assertSame( 1, $snap['by_key']['aafm_spell']['aliased'], 'precondition: the collation matched the other spelling.' );
+
+		$this->assertFalse( aafm_meta_restore_rows( 'post', $post, 'aafm_spell', array( 'lower' ) ) );
+
+		$this->assertSame( 'upper', get_post_meta( $post, 'AAFM_SPELL', true ), 'The aliased row still exists.' );
+	}
+
+	public function test_object_fingerprint_changes_with_any_meta_row_but_not_a_skipped_key(): void {
+		$post = self::factory()->post->create();
+		add_post_meta( $post, 'aafm_fp', '1' );
+		$first = aafm_meta_object_fingerprint( 'post', $post, array( '_edit_lock' ) );
+
+		add_post_meta( $post, '_edit_lock', 'abc' );
+		$this->assertSame( $first, aafm_meta_object_fingerprint( 'post', $post, array( '_edit_lock' ) ), 'A skipped key does not move the fingerprint.' );
+
+		add_post_meta( $post, 'aafm_fp_other', '2' );
+		$this->assertNotSame( $first, aafm_meta_object_fingerprint( 'post', $post, array( '_edit_lock' ) ) );
+	}
+
+	public function test_object_fingerprint_is_null_on_a_failed_read(): void {
+		$post = self::factory()->post->create();
+
+		$fp = QueryFaultInjector::fail_query( array( 'postmeta', 'LIMIT 1001' ), static fn() => aafm_meta_object_fingerprint( 'post', $post, array() ) );
+
+		$this->assertNull( $fp );
+	}
+
+	public function test_raw_restorable_refuses_an_object(): void {
+		$this->assertSame( 'holds_object', aafm_meta_raw_restorable( 'O:8:"stdClass":0:{}' ) );
+		$this->assertSame( 'holds_object', aafm_meta_raw_restorable( 'a:1:{i:0;O:8:"stdClass":0:{}}' ) );
+	}
+
+	public function test_raw_restorable_refuses_b0_and_other_values_maybe_serialize_would_not_reproduce(): void {
+		$this->assertSame( 'not_exact', aafm_meta_raw_restorable( 'b:0;' ) );
+		$this->assertSame( 'not_exact', aafm_meta_raw_restorable( 'i:5;' ) );
+		$this->assertNull( aafm_meta_raw_restorable( 'plain' ) );
+		$this->assertNull( aafm_meta_raw_restorable( '' ) );
+		$this->assertNull( aafm_meta_raw_restorable( 'a:0:{}' ) );
+		$this->assertNull( aafm_meta_raw_restorable( 's:6:"a:0:{}";' ) );
+		$this->assertNull( aafm_meta_raw_restorable( 'a:1:{s:1:"k";s:1:"v";}' ) );
+	}
 }

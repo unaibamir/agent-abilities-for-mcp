@@ -221,6 +221,326 @@ function aafm_meta_rows( string $type, int $id, array $keys ): array {
 }
 
 /**
+ * Read the raw meta_value strings, and the meta ids, of several keys of one object in one query.
+ *
+ * The undo history needs the stored bytes, not the unserialized value aafm_meta_rows() returns, and
+ * needs the meta ids to add and remove rows by id. Each key's entry covers only the rows stored
+ * under exactly that spelling, in meta id order. aliased counts the rows the column's collation
+ * matched under another spelling, plus any row whose meta_value is SQL NULL: neither can be put
+ * back byte for byte, so a key with aliased above zero is never offered for restore. A key with no
+ * row has an empty raw list, which is different from one row holding an empty string.
+ *
+ * @param string   $type 'post', 'term' or 'user'.
+ * @param int      $id   Object id.
+ * @param string[] $keys Meta keys to read.
+ * @return array{ok: bool, by_key: array<string, array{raw: list<string>, ids: list<int>, aliased: int}>}
+ */
+function aafm_meta_raw_snapshot( string $type, int $id, array $keys ): array {
+	global $wpdb;
+
+	$keys   = array_values( array_unique( array_map( 'strval', $keys ), SORT_STRING ) );
+	$by_key = array();
+	foreach ( $keys as $key ) {
+		$by_key[ $key ] = array(
+			'raw'     => array(),
+			'ids'     => array(),
+			'aliased' => 0,
+		);
+	}
+
+	$table = _get_meta_table( $type );
+	if ( ! $table || array() === $keys ) {
+		return array(
+			'ok'     => (bool) $table,
+			'by_key' => $by_key,
+		);
+	}
+
+	$cols             = aafm_meta_columns( $type );
+	$id_column        = $cols['id_column'];
+	$object_id_column = $cols['object_id_column'];
+
+	$flags = array();
+	foreach ( array_keys( $keys ) as $index ) {
+		$flags[] = "meta_key = %s AS aafm_match_{$index}";
+	}
+	$flag_columns = implode( ', ', $flags );
+	$placeholders = implode( ', ', array_fill( 0, count( $keys ), '%s' ) );
+	$sql          = "SELECT {$id_column}, {$object_id_column}, meta_key, meta_value, {$flag_columns} FROM %i WHERE {$object_id_column} = %d AND meta_key IN ({$placeholders}) ORDER BY {$id_column}";
+	$args         = array_merge( $keys, array( $table, $id ), $keys );
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- see aafm_meta_row(); $flag_columns holds only placeholders and aliases built from list indexes.
+	$view = aafm_wpdb_results( $wpdb->prepare( $sql, $args ) );
+	if ( ! $view['ok'] ) {
+		return array(
+			'ok'     => false,
+			'by_key' => $by_key,
+		);
+	}
+
+	$raw     = array_fill_keys( $keys, array() );
+	$ids     = array_fill_keys( $keys, array() );
+	$aliased = array_fill_keys( $keys, 0 );
+	foreach ( (array) $view['value'] as $row ) {
+		foreach ( $keys as $index => $key ) {
+			if ( empty( $row[ "aafm_match_{$index}" ] ) ) {
+				continue;
+			}
+			if ( (string) $row['meta_key'] === $key && null !== $row['meta_value'] ) {
+				$raw[ $key ][] = (string) $row['meta_value'];
+				$ids[ $key ][] = (int) $row[ $id_column ];
+			} else {
+				++$aliased[ $key ];
+			}
+		}
+	}
+	foreach ( $keys as $key ) {
+		$by_key[ $key ] = array(
+			'raw'     => $raw[ $key ],
+			'ids'     => $ids[ $key ],
+			'aliased' => $aliased[ $key ],
+		);
+	}
+
+	return array(
+		'ok'     => true,
+		'by_key' => $by_key,
+	);
+}
+
+/**
+ * Whether a value holds an object anywhere inside it.
+ *
+ * @param mixed $value A decoded meta value.
+ * @return bool
+ */
+function aafm_meta_value_holds_object( $value ): bool {
+	if ( is_object( $value ) ) {
+		return true;
+	}
+	if ( is_array( $value ) ) {
+		foreach ( $value as $item ) {
+			if ( aafm_meta_value_holds_object( $item ) ) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+/**
+ * Decode a raw meta_value string the way core stores it, and say whether it comes back byte for byte.
+ *
+ * A serialized string is decoded without classes (an object comes back as a
+ * __PHP_Incomplete_Class, which is refused). The value is restorable only when maybe_serialize() of
+ * the decoded value reproduces the raw string exactly: that is the transform add_metadata() applies,
+ * so it also catches b:0; and other forms core would write differently, and a string only the
+ * non-strict is_serialized() takes for serialized data.
+ *
+ * @param string $raw The raw meta_value.
+ * @return array{reason: string|null, value: mixed} reason is null when exact, else holds_object or not_exact.
+ */
+function aafm_meta_raw_inspect( string $raw ): array {
+	$value = $raw;
+	if ( is_serialized( $raw ) ) {
+		// A malformed string that is_serialized() accepts raises a notice; it is a refusal here, not a log line.
+		set_error_handler( static fn(): bool => true ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_set_error_handler -- swallows unserialize()'s notice for one call.
+		try {
+			$value = unserialize( $raw, array( 'allowed_classes' => false ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize -- a stored meta_value, decoded without classes, before the exactness check below.
+		} finally {
+			restore_error_handler();
+		}
+		if ( aafm_meta_value_holds_object( $value ) ) {
+			return array(
+				'reason' => 'holds_object',
+				'value'  => null,
+			);
+		}
+	}
+
+	return array(
+		'reason' => maybe_serialize( $value ) === $raw ? null : 'not_exact',
+		'value'  => $value,
+	);
+}
+
+/**
+ * Whether a raw meta_value can be restored exactly.
+ *
+ * @param string $raw The raw meta_value.
+ * @return string|null Null when exact, else holds_object or not_exact.
+ */
+function aafm_meta_raw_restorable( string $raw ): ?string {
+	return aafm_meta_raw_inspect( $raw )['reason'];
+}
+
+/**
+ * Whether nothing can change or fake a write of this meta key.
+ *
+ * True only when no callback sits on the add or delete short-circuits add_metadata() and
+ * delete_metadata_by_mid() run, and no sanitize callback is attached to the key (register_meta()
+ * attaches one, scoped to a subtype or not). With those hooks empty, add_metadata() stores the
+ * decoded value exactly and returns a real new meta id, which is what the restore proves. An empty
+ * subtype checks every subtype-scoped hook of the key.
+ *
+ * @param string $type    'post', 'term' or 'user'.
+ * @param string $key     Meta key.
+ * @param string $subtype Object subtype, or '' for any.
+ * @return bool
+ */
+function aafm_meta_restore_unfiltered( string $type, string $key, string $subtype = '' ): bool {
+	global $wp_filter;
+
+	foreach ( array( "add_{$type}_metadata", "delete_{$type}_metadata", "delete_{$type}_metadata_by_mid", "sanitize_{$type}_meta_{$key}" ) as $hook ) {
+		if ( has_filter( $hook ) ) {
+			return false;
+		}
+	}
+	if ( '' !== $subtype ) {
+		return ! has_filter( "sanitize_{$type}_meta_{$key}_for_{$subtype}" );
+	}
+	$scoped = "sanitize_{$type}_meta_{$key}_for_";
+	foreach ( array_keys( (array) $wp_filter ) as $hook ) {
+		if ( 0 === strpos( (string) $hook, $scoped ) && has_filter( (string) $hook ) ) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/**
+ * A SHA-256 over every raw meta row of an object, except the skipped keys.
+ *
+ * Key, value and meta id order all count. Read with one failure-aware query and bounded: more than
+ * 1,000 rows or 8 MiB of values returns null, the same as a failed read, which makes the caller refuse.
+ *
+ * @param string   $type      'post', 'term' or 'user'.
+ * @param int      $id        Object id.
+ * @param string[] $skip_keys Meta keys left out of the hash.
+ * @return string|null The hash, or null when the read failed or was over the bound.
+ */
+function aafm_meta_object_fingerprint( string $type, int $id, array $skip_keys ): ?string {
+	global $wpdb;
+
+	$table = _get_meta_table( $type );
+	if ( ! $table ) {
+		return null;
+	}
+	$cols             = aafm_meta_columns( $type );
+	$id_column        = $cols['id_column'];
+	$object_id_column = $cols['object_id_column'];
+
+	$sql = "SELECT {$id_column}, meta_key, meta_value FROM %i WHERE {$object_id_column} = %d ORDER BY {$id_column} LIMIT 1001";
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- see aafm_meta_row().
+	$view = aafm_wpdb_results( $wpdb->prepare( $sql, $table, $id ) );
+	if ( ! $view['ok'] || count( (array) $view['value'] ) > 1000 ) {
+		return null;
+	}
+
+	$context = hash_init( 'sha256' );
+	$bytes   = 0;
+	foreach ( (array) $view['value'] as $row ) {
+		if ( in_array( (string) $row['meta_key'], $skip_keys, true ) ) {
+			continue;
+		}
+		$value  = null === $row['meta_value'] ? "\0null" : (string) $row['meta_value'];
+		$bytes += strlen( $value );
+		if ( $bytes > 8 * 1024 * 1024 ) {
+			return null;
+		}
+		hash_update( $context, (string) $row['meta_key'] . "\0" . $value . "\0" );
+	}
+	return hash_final( $context );
+}
+
+/**
+ * Put the rows of one meta key back to exactly the given raw strings, adding before removing.
+ *
+ * Refuses with no write unless nothing can change or fake a write of the key, the baseline reads
+ * clean and no row is stored under another spelling. The replacement rows are added first, each
+ * accepted only as a new meta id above every baseline id that reads back as a row of this object and
+ * key holding exactly the raw bytes; any miss removes only the new rows and leaves the baseline alone.
+ * Then the baseline rows go by id and the key is re-read: true only when its raw rows equal the
+ * target in order. An empty target adds nothing and removes the baseline rows. Emits one write outcome
+ * row carrying identifiers only.
+ *
+ * @param string            $type     'post' or 'term'.
+ * @param int               $id       Object id.
+ * @param string            $key      Meta key.
+ * @param array<int,string> $raw_rows The raw meta_value strings to restore, in order.
+ * @return bool True when the key now holds exactly the target rows.
+ */
+function aafm_meta_restore_rows( string $type, int $id, string $key, array $raw_rows ): bool {
+	$target = aafm_meta_write_target( $type, $id, $key );
+	$finish = static function ( string $status, bool $ok ) use ( $target ): bool {
+		aafm_emit_write_outcome( array( 'status' => $status ), $target );
+		return $ok;
+	};
+
+	$raw_rows = array_values( array_map( 'strval', $raw_rows ) );
+	if ( ! aafm_meta_restore_unfiltered( $type, $key ) ) {
+		return $finish( AAFM_WRITE_REFUSED, false );
+	}
+	$values = array();
+	foreach ( $raw_rows as $raw ) {
+		$inspect = aafm_meta_raw_inspect( $raw );
+		if ( null !== $inspect['reason'] ) {
+			return $finish( AAFM_WRITE_REFUSED, false );
+		}
+		$values[] = $inspect['value'];
+	}
+
+	wp_cache_delete( $id, $type . '_meta' );
+	$baseline = aafm_meta_raw_snapshot( $type, $id, array( $key ) );
+	if ( ! $baseline['ok'] ) {
+		return $finish( AAFM_WRITE_READ_FAILED, false );
+	}
+	$base = $baseline['by_key'][ $key ];
+	if ( $base['aliased'] > 0 ) {
+		return $finish( AAFM_WRITE_REFUSED, false );
+	}
+
+	$floor = array() === $base['ids'] ? 0 : max( $base['ids'] );
+	$added = array();
+	foreach ( $values as $value ) {
+		$meta_id = add_metadata( $type, $id, wp_slash( $key ), wp_slash( $value ) );
+		if ( ! is_int( $meta_id ) || $meta_id <= $floor ) {
+			break;
+		}
+		$added[] = $meta_id;
+		$floor   = $meta_id;
+	}
+
+	$landed = count( $added ) === count( $values );
+	if ( $landed && array() !== $added ) {
+		$after = aafm_meta_raw_snapshot( $type, $id, array( $key ) );
+		$rows  = $after['by_key'][ $key ];
+		$new   = array();
+		foreach ( $rows['ids'] as $index => $meta_id ) {
+			if ( ! in_array( $meta_id, $base['ids'], true ) ) {
+				$new[ $meta_id ] = $rows['raw'][ $index ];
+			}
+		}
+		$landed = $after['ok'] && 0 === $rows['aliased'] && array_keys( $new ) === $added && array_values( $new ) === $raw_rows;
+	}
+	if ( ! $landed ) {
+		foreach ( $added as $meta_id ) {
+			delete_metadata_by_mid( $type, $meta_id );
+		}
+		wp_cache_delete( $id, $type . '_meta' );
+		return $finish( AAFM_WRITE_REFUSED, false );
+	}
+
+	foreach ( $base['ids'] as $meta_id ) {
+		delete_metadata_by_mid( $type, $meta_id );
+	}
+	wp_cache_delete( $id, $type . '_meta' );
+
+	$final = aafm_meta_raw_snapshot( $type, $id, array( $key ) );
+	$exact = $final['ok'] && 0 === $final['by_key'][ $key ]['aliased'] && $final['by_key'][ $key ]['raw'] === $raw_rows;
+	return $finish( $exact ? AAFM_WRITE_WRITTEN : AAFM_WRITE_UNCONFIRMED, $exact );
+}
+
+/**
  * Whether two of the requested keys are one key to the database, compared under the meta_key
  * column's own collation.
  *

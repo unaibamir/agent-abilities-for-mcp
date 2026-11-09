@@ -159,7 +159,7 @@ The Model Context Protocol is an open specification that Anthropic originally de
 ### 1.11.2
 
 * **Feature:** A new Changes tab keeps 30 days of what agents changed with 25 tools and reverts a change if the item hasn't been edited since. A site-wide find and replace reverts as one group.
-* **Feature:** Two new tools, list-changes and undo-change, let an agent see and undo its own changes from the last 24 hours. Both start off, and undo-change is destructive, so no preset includes it.
+* **Feature:** Two new tools, list-changes and undo-change, let an agent see and undo its own changes from the last 24 hours. Both start off, and undo-change is destructive, so the Read only, Content editor and Shop manager presets leave it out.
 * **Feature:** Every write tool now says in its response whether the change can be undone. Tools that can't, such as permanent deletes, orders and refunds, say why.
 * **Fix:** WordPress's export and erase personal data tools now cover the activity log and the new change history.
 * **Chore:** Change history is stored in its own table, which is dropped on every uninstall and emptied by Reset.

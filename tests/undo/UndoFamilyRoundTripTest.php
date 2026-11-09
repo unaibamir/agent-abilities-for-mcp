@@ -211,6 +211,65 @@ final class UndoFamilyRoundTripTest extends UndoTestCase {
 		$this->assertSame( $before_desc, $this->raw( $post, '_yoast_wpseo_metadesc' ) );
 	}
 
+	/**
+	 * Install what The Events Calendar installs: a delete_post_metadata callback at priority 15 that only answers
+	 * for a key the post does not have, plus pass-through callbacks on the other short-circuit hooks the restore runs.
+	 *
+	 * @return callable The remover.
+	 */
+	private function arm_harmless_meta_callbacks(): callable {
+		$delete = static function ( $check, $object_id, $meta_key ) {
+			return metadata_exists( 'post', (int) $object_id, (string) $meta_key ) ? $check : true;
+		};
+		$pass   = static fn( $check ) => $check;
+		add_filter( 'delete_post_metadata', $delete, 15, 3 );
+		add_filter( 'delete_post_metadata_by_mid', $pass );
+		add_filter( 'add_post_metadata', $pass );
+		return static function () use ( $delete, $pass ): void {
+			remove_filter( 'delete_post_metadata', $delete, 15 );
+			remove_filter( 'delete_post_metadata_by_mid', $pass );
+			remove_filter( 'add_post_metadata', $pass );
+		};
+	}
+
+	public function test_a_featured_image_revert_succeeds_beside_a_harmless_meta_delete_callback(): void {
+		$post   = self::factory()->post->create();
+		$image  = self::factory()->attachment->create_upload_object( DIR_TESTDATA . '/images/canola.jpg', $post );
+		$change = $this->change_from(
+			'aafm/set-featured-image',
+			array(
+				'post_id'       => $post,
+				'attachment_id' => $image,
+			)
+		);
+		$remove = $this->arm_harmless_meta_callbacks();
+		try {
+			$this->revert( $change );
+		} finally {
+			$remove();
+		}
+		$this->assertSame( array(), $this->raw( $post, '_thumbnail_id' ) );
+	}
+
+	public function test_an_seo_field_revert_succeeds_beside_a_harmless_meta_delete_callback(): void {
+		$post = self::factory()->post->create();
+		update_post_meta( $post, '_yoast_wpseo_title', 'Old SEO title' );
+		$change = $this->change_from(
+			'aafm/yoast-update-post',
+			array(
+				'post_id' => $post,
+				'title'   => 'New SEO title',
+			)
+		);
+		$remove = $this->arm_harmless_meta_callbacks();
+		try {
+			$this->revert( $change );
+		} finally {
+			$remove();
+		}
+		$this->assertSame( array( 'Old SEO title' ), $this->raw( $post, '_yoast_wpseo_title' ) );
+	}
+
 	public function test_rank_math_robots_round_trip_keeps_the_serialized_row(): void {
 		$post = self::factory()->post->create();
 		update_post_meta( $post, 'rank_math_robots', array( 'index' ) );

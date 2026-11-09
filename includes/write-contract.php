@@ -376,13 +376,18 @@ function aafm_meta_raw_restorable( string $raw ): ?string {
 /**
  * Whether nothing can change or fake a write of this meta key.
  *
- * False when a callback sits on the delete short-circuits delete_metadata_by_mid() runs (and, for a
- * caller with no rows to prove, on the add short-circuit add_metadata() runs). A sanitize callback attached to the key (register_meta() attaches
- * one, scoped to a subtype or not) also makes it false, unless the caller passes the raw rows it is
- * about to write: then the callback is let through only when it stores each of them back unchanged,
- * which is how a real SEO plugin's own sanitizer behaves for a value it wrote itself. With those hooks
- * quiet, add_metadata() stores the decoded value exactly and returns a real new meta id, which is what
- * the restore proves. An empty subtype checks every subtype-scoped hook of the key.
+ * Judged by what the restore actually runs. delete_metadata_by_mid() fires only the by-mid short-circuit
+ * and never delete_{type}_metadata, so a callback on that hook (The Events Calendar adds one that answers
+ * only for a key the post lacks) cannot touch a restore and does not count. The by-mid hook is asked the
+ * question the restore will put to it: a callback that answers anything but null would leave old and new
+ * rows side by side, while a pass-through callback does not. For a caller with no rows to prove, the add
+ * short-circuit blocks too. A sanitize callback attached to the key (register_meta() attaches one, scoped
+ * to a subtype or not) also makes it false, unless the caller passes the raw rows it is about to write:
+ * then the callback is let through only when it stores each of them back unchanged, which is how a real
+ * SEO plugin's own sanitizer behaves for a value it wrote itself. With those hooks quiet, add_metadata()
+ * stores the decoded value exactly and returns a real new meta id, which is what the restore proves. An
+ * empty subtype checks every subtype-scoped hook of the key. Whatever slips past is caught after the write,
+ * where the restore reads every row back and reports a mismatch.
  *
  * @param string                 $type     'post', 'term' or 'user'.
  * @param string                 $key      Meta key.
@@ -393,17 +398,17 @@ function aafm_meta_raw_restorable( string $raw ): ?string {
 function aafm_meta_restore_unfiltered( string $type, string $key, string $subtype = '', ?array $raw_rows = null ): bool {
 	global $wp_filter;
 
+	// ponytail: the probe uses an id no row has, so a callback that short-circuits for one real id only passes
+	// here; the read-back in aafm_meta_restore_rows() then reports it as unconfirmed.
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core's own hook, asked the question delete_metadata_by_mid() asks.
+	if ( null !== apply_filters( "delete_{$type}_metadata_by_mid", null, PHP_INT_MAX ) ) {
+		return false;
+	}
 	// An add short-circuit cannot do harm to a caller that proves every row it adds (the restore reads
 	// each one back and removes only its own new rows on a miss), so it blocks only a caller with no rows
-	// to prove. A delete short-circuit would leave old and new rows side by side, so it always blocks.
-	$hooks = array( "delete_{$type}_metadata", "delete_{$type}_metadata_by_mid" );
-	if ( null === $raw_rows ) {
-		$hooks[] = "add_{$type}_metadata";
-	}
-	foreach ( $hooks as $hook ) {
-		if ( aafm_meta_hook_has_foreign_callback( $hook ) ) {
-			return false;
-		}
+	// to prove.
+	if ( null === $raw_rows && aafm_meta_hook_has_foreign_callback( "add_{$type}_metadata" ) ) {
+		return false;
 	}
 	$sanitizers = array( "sanitize_{$type}_meta_{$key}" );
 	if ( '' !== $subtype ) {

@@ -2812,14 +2812,6 @@ final class MetaWriteContractTest extends TestCase {
 					remove_filter( 'add_post_metadata', '__return_true' );
 				},
 			),
-			'delete short circuit'            => array(
-				static function (): void {
-					add_filter( 'delete_post_metadata', '__return_false' );
-				},
-				static function (): void {
-					remove_filter( 'delete_post_metadata', '__return_false' );
-				},
-			),
 			'delete by meta id short circuit' => array(
 				static function (): void {
 					add_filter( 'delete_post_metadata_by_mid', '__return_false' );
@@ -2846,6 +2838,20 @@ final class MetaWriteContractTest extends TestCase {
 			$this->assertFalse( aafm_meta_restore_unfiltered( 'post', self::RAW_KEY, '' ) );
 		} finally {
 			$disarm();
+		}
+	}
+
+	public function test_unfiltered_ignores_a_callback_on_a_hook_the_restore_never_runs_and_a_pass_through_one(): void {
+		// delete_metadata_by_mid() never fires delete_post_metadata: The Events Calendar hooks it at priority 15.
+		$delete = static fn( $check, $object_id, $meta_key ) => metadata_exists( 'post', (int) $object_id, (string) $meta_key ) ? $check : true;
+		$pass   = static fn( $check ) => $check;
+		add_filter( 'delete_post_metadata', $delete, 15, 3 );
+		add_filter( 'delete_post_metadata_by_mid', $pass );
+		try {
+			$this->assertTrue( aafm_meta_restore_unfiltered( 'post', self::RAW_KEY, '', array( 'a' ) ) );
+		} finally {
+			remove_filter( 'delete_post_metadata', $delete, 15 );
+			remove_filter( 'delete_post_metadata_by_mid', $pass );
 		}
 	}
 

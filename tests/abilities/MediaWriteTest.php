@@ -259,10 +259,6 @@ final class MediaWriteTest extends TestCase {
 		$this->assertSame( $image, (int) get_post_thumbnail_id( $post ) );
 	}
 
-
-	/**
-	 * (a) A caller without upload_files is denied, and the denial is audited.
-	 */
 	public function test_an_upload_with_no_alt_leaves_the_alt_text_empty(): void {
 		$this->acting_as( 'administrator' );
 		$bytes = (string) file_get_contents( DIR_TESTDATA . '/images/canola.jpg' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- a local test fixture.
@@ -274,6 +270,9 @@ final class MediaWriteTest extends TestCase {
 		$this->assertArrayNotHasKey( 'alt_status', $res );
 	}
 
+	/**
+	 * (a) A caller without upload_files is denied, and the denial is audited.
+	 */
 	public function test_upload_media_requires_upload_files_and_audits_denial(): void {
 		$this->acting_as( 'subscriber' );
 		$this->assertFalse(

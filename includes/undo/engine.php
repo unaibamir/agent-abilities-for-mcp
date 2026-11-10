@@ -1301,6 +1301,10 @@ function aafm_undo_run_write( array $row, array $d, array $context, string $sour
 				}
 				// A draft's empty slug and floating date do not survive the trip: trashing writes "__trashed" and a
 				// real GMT date, and untrash keeps both. Put back what the change recorded where it now differs.
+				// ponytail: this is a second wp_update_post() after core's own untrash update, so save_post fires
+				// twice on a revert that needs the fix-up. Folding it into one means overriding the dates and slug in
+				// wp_insert_post_data during wp_untrash_post(), which couples this to core's untrash internals; do
+				// that only if a hooked plugin is ever seen to mind the extra save.
 				$recorded = array_intersect_key( $d['before'], array_flip( array( 'post:post_name', 'post:post_date', 'post:post_date_gmt' ) ) );
 				$now      = array() === $recorded ? null : aafm_undo_read_fields( 'post', $id, array_merge( array( 'post:post_status' ), array_keys( $recorded ) ) );
 				// Only once the untrash itself took: a vetoed untrash is a failure, not something to patch over.

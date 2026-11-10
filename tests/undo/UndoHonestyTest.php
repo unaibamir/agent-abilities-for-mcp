@@ -184,6 +184,36 @@ final class UndoHonestyTest extends UndoTestCase {
 		$this->assertStringContainsString( 'plugin', $result->get_error_message() );
 	}
 
+	public function test_a_filter_changing_the_restored_dates_gives_a_difference_not_a_clean_revert(): void {
+		global $wpdb;
+		$post = self::factory()->post->create( array( 'post_status' => 'draft' ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- a test fixture write.
+		$wpdb->update(
+			$wpdb->posts,
+			array(
+				'post_date'     => '2020-01-02 03:04:05',
+				'post_date_gmt' => '0000-00-00 00:00:00',
+				'post_name'     => '',
+			),
+			array( 'ID' => $post )
+		);
+		clean_post_cache( $post );
+		$change = $this->change_from( 'aafm/trash-post', array( 'post_id' => $post ) );
+		$move   = static function ( array $data ): array {
+			if ( '' === $data['post_name'] && 'draft' === $data['post_status'] ) {
+				$data['post_date'] = '2001-01-01 00:00:00';
+			}
+			return $data;
+		};
+		add_filter( 'wp_insert_post_data', $move );
+		$result = aafm_undo_apply( $change, 'owner' );
+		remove_filter( 'wp_insert_post_data', $move );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'reverted_with_differences', $result['outcome'] );
+		$this->assertContains( 'post_date', $result['differences'] );
+	}
+
 	public function test_a_sanitizer_that_keeps_the_value_lets_the_revert_through(): void {
 		$post = self::factory()->post->create();
 		add_post_meta( $post, 'aafm_note', 'old' );

@@ -772,7 +772,7 @@ function aafm_exec_tec_delete_event( array $input ) {
 	if ( ! aafm_trash_is_enabled() ) {
 		return aafm_trash_disabled_error();
 	}
-	$id = absint( $input['event_id'] ?? 0 );
+	$id   = absint( $input['event_id'] ?? 0 );
 	$post = aafm_exact_object_chain( 'post', $id );
 	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();

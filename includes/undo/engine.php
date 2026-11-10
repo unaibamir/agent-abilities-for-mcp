@@ -1191,7 +1191,7 @@ function aafm_undo_apply_claimed( array $row, string $source, string $claimed_at
 		return new \WP_Error(
 			'aafm_undo_failed',
 			$plugin_changed
-				? __( 'The undo did not change anything: a plugin altered the value as it was restored, so the field was left as it is.', 'agent-abilities-for-mcp' )
+				? __( 'The undo did not change anything: the field could not be restored exactly, possibly because a plugin altered the value as it was written, so it was left as it is.', 'agent-abilities-for-mcp' )
 				: __( 'The undo did not change anything, so nothing was written.', 'agent-abilities-for-mcp' )
 		);
 	}
@@ -1225,7 +1225,7 @@ function aafm_undo_apply_claimed( array $row, string $source, string $claimed_at
 			sprintf(
 				$meta_missed
 					/* translators: 1: comma-separated field names, 2: change id */
-					? __( 'The undo did not fully apply: %1$s did not match, so a plugin probably changed the value as it was restored. Change %2$d records the current state and can be reverted.', 'agent-abilities-for-mcp' )
+					? __( 'The undo did not fully apply: %1$s did not match, so the value may have been changed as it was restored, possibly by a plugin. Change %2$d records the current state and can be reverted.', 'agent-abilities-for-mcp' )
 					/* translators: 1: comma-separated field names, 2: change id */
 					: __( 'The undo did not fully apply: %1$s did not match. Change %2$d records the current state and can be reverted.', 'agent-abilities-for-mcp' ),
 				implode( ', ', array_map( static fn( string $f ): string => (string) substr( $f, (int) strpos( $f, ':' ) + 1 ), $wrote['missed'] ) ),

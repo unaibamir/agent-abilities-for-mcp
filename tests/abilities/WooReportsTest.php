@@ -1197,6 +1197,72 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
+	 * WooCommerce keeps placeholder entries in the same option (payment extension suggestions and the offline
+	 * group, keyed with a leading underscore). They are not gateways, so a reorder leaves their slots alone and
+	 * renumbers only among the gateways, inside the slots the gateways already held.
+	 */
+	public function test_update_payment_gateway_order_keeps_placeholder_entries_in_their_slots(): void {
+		$this->acting_as( 'administrator' );
+		update_option(
+			'woocommerce_gateway_order',
+			array(
+				'_wc_pes_woopayments'               => 0,
+				'_wc_pes_paypal_full_stack'         => 1,
+				'_wc_offline_payment_methods_group' => 2,
+				'paypal'                            => 3,
+				'stripe'                            => 4,
+			)
+		);
+		$this->assertSame( array( 'paypal', 'stripe' ), array_keys( \WC_Payment_Gateways::instance()->payment_gateways() ), 'Guard: paypal sits first.' );
+
+		$res = aafm_exec_wc_update_payment_gateway(
+			array(
+				'gateway_id' => 'paypal',
+				'order'      => 1,
+			)
+		);
+
+		$this->assertIsArray( $res );
+		$this->assertSame( 1, $res['order'] );
+		$map = get_option( 'woocommerce_gateway_order' );
+		$this->assertSame( 0, (int) $map['_wc_pes_woopayments'] );
+		$this->assertSame( 1, (int) $map['_wc_pes_paypal_full_stack'] );
+		$this->assertSame( 2, (int) $map['_wc_offline_payment_methods_group'] );
+		$this->assertSame( array( 'stripe', 'paypal' ), array_keys( \WC_Payment_Gateways::instance()->payment_gateways() ) );
+		$this->assertSame( 2, count( array_unique( array( (int) $map['paypal'], (int) $map['stripe'] ) ) ) );
+	}
+
+	/**
+	 * An entry for a gateway that is not loaded (its plugin is off) must not share a key with a loaded one, or
+	 * it would collide when the plugin comes back.
+	 */
+	public function test_update_payment_gateway_order_moves_a_stale_entry_off_a_key_a_gateway_now_holds(): void {
+		$this->acting_as( 'administrator' );
+		update_option(
+			'woocommerce_gateway_order',
+			array(
+				'ghost'  => 0,
+				'paypal' => 1,
+				'stripe' => 2,
+			)
+		);
+
+		$res = aafm_exec_wc_update_payment_gateway(
+			array(
+				'gateway_id' => 'stripe',
+				'order'      => 0,
+			)
+		);
+
+		$this->assertIsArray( $res );
+		$map    = get_option( 'woocommerce_gateway_order' );
+		$loaded = array( (int) $map['paypal'], (int) $map['stripe'] );
+		$this->assertSame( 2, count( array_unique( $loaded ) ), 'The loaded gateways have distinct keys.' );
+		$this->assertNotContains( (int) $map['ghost'], $loaded, 'The stale entry shares no key with a loaded gateway.' );
+		$this->assertSame( array( 'stripe', 'paypal' ), array_keys( \WC_Payment_Gateways::instance()->payment_gateways() ) );
+	}
+
+	/**
 	 * Update gateway: audit-logs success.
 	 */
 	public function test_update_payment_gateway_logs_success(): void {
@@ -1873,8 +1939,8 @@ final class WooReportsTest extends TestCase {
 
 		$this->assertSame(
 			array(
-				'paypal' => 1,
-				'stripe' => 0,
+				'paypal' => 2,
+				'stripe' => 1,
 			),
 			get_option( 'woocommerce_gateway_order' ),
 			'Guard: the cache shows the refused order.'

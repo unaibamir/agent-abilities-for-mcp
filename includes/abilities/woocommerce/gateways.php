@@ -797,28 +797,50 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 		do_action( 'woocommerce_update_option', array( 'id' => $gateway->get_option_key() ) );
 	}
 
-	$order_ids = null;
+	$order_ids   = null;
+	$order_slots = array();
 	if ( null !== $order_row ) {
 		// Display order is not a per-gateway setting, and WC_Payment_Gateway has no `order` property
 		// to set (M13) - WooCommerce keeps order in the woocommerce_gateway_order option (a
 		// gateway_id => sort key map) and files each gateway in an array under that key, so two gateways
 		// holding one key leave only one of them in payment_gateways(). The input is a position, the same
-		// thing the read reports: this gateway moves to that place in the current list and every gateway
-		// is renumbered 0, 1, 2 from the list, the way WooCommerce's own drag-sort saves it. The merge is
-		// into the row read above rather than get_option(), whose filters can add entries; an entry for a
-		// gateway that is not loaded keeps its relative place after the loaded ones, so it cannot collide
-		// when its plugin comes back.
+		// thing the read reports: this gateway moves to that place in the current list. The loaded gateways
+		// are renumbered among the sort keys they already hold (a gateway with none gets a key above every
+		// existing one), so the map's other entries keep their slots: WooCommerce also keeps placeholder
+		// entries in this option (a leading underscore, for payment extension suggestions and the offline
+		// group) and they are not gateways. A stale entry for a gateway that is not loaded and shares a key
+		// with a loaded one is moved above them, so it cannot collide when its plugin comes back. The merge is
+		// into the row read above rather than get_option(), whose filters can add entries.
 		$order_ids = array_values( array_diff( array_map( 'strval', array_keys( $gateways ) ), array( $gateway_id ) ) );
 		array_splice( $order_ids, min( max( 0, (int) $input['order'] ), count( $order_ids ) ), 0, array( $gateway_id ) );
 		$ordering = is_array( $order_row['value'] ) ? $order_row['value'] : array();
-		$stale    = array_diff_key( $ordering, array_flip( $order_ids ) );
-		asort( $stale );
-		foreach ( $order_ids as $position => $id ) {
-			$ordering[ $id ] = $position;
+		$keys     = array();
+		foreach ( $ordering as $entry ) {
+			if ( is_numeric( $entry ) ) {
+				$keys[] = (int) $entry;
+			}
 		}
-		$next = count( $order_ids );
-		foreach ( array_keys( $stale ) as $id ) {
-			$ordering[ $id ] = $next++;
+		$fresh = array() === $keys ? 0 : max( $keys ) + 1;
+		$slots = array();
+		foreach ( $order_ids as $id ) {
+			if ( isset( $ordering[ $id ] ) && is_numeric( $ordering[ $id ] ) ) {
+				$slots[] = (int) $ordering[ $id ];
+			}
+		}
+		$slots = array_values( array_unique( $slots ) );
+		sort( $slots );
+		while ( count( $slots ) < count( $order_ids ) ) {
+			$slots[] = $fresh++;
+		}
+		$order_slots = array();
+		foreach ( $order_ids as $position => $id ) {
+			$ordering[ $id ]    = $slots[ $position ];
+			$order_slots[ $id ] = $slots[ $position ];
+		}
+		foreach ( $ordering as $id => $entry ) {
+			if ( ! isset( $order_slots[ $id ] ) && 0 !== strpos( (string) $id, '_' ) && is_numeric( $entry ) && in_array( (int) $entry, $slots, true ) ) {
+				$ordering[ $id ] = $fresh++;
+			}
 		}
 		aafm_wc_write(
 			'option',
@@ -862,8 +884,8 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 		$saved_order = aafm_option_row( 'woocommerce_gateway_order' );
 		$saved_map   = $saved_order['found'] && is_array( $saved_order['value'] ) ? $saved_order['value'] : array();
 		$landed      = true;
-		foreach ( $order_ids as $position => $id ) {
-			$landed = $landed && aafm_stored_id_matches( $saved_map[ $id ] ?? null, $position );
+		foreach ( $order_slots as $id => $slot ) {
+			$landed = $landed && aafm_stored_id_matches( $saved_map[ $id ] ?? null, $slot );
 		}
 		if ( $landed ) {
 			$persisted_keys[] = 'order';

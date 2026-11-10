@@ -834,7 +834,9 @@ function aafm_undo_record_current( array $target, string $source ): array {
 	$revert  = $decoded['fields'];
 	$new_op  = 'restore';
 	if ( 'trash' === $op || 'untrash' === $op ) {
-		$revert = array( 'post:post_status', 'post:post_name' );
+		// The dates too, as the forward trash capture holds them: without them a second and third undo lose a
+		// draft's empty slug and floating date again.
+		$revert = array( 'post:post_status', 'post:post_name', 'post:post_date', 'post:post_date_gmt' );
 		$new_op = 'trash' === $op ? 'untrash' : 'trash';
 	}
 	$context = '' !== $decoded['taxonomy'] ? array( 'taxonomy' => $decoded['taxonomy'] ) : array();
@@ -1311,9 +1313,14 @@ function aafm_undo_run_write( array $row, array $d, array $context, string $sour
 				if ( null !== $now && 'trash' !== $now['values']['post:post_status'] && array_diff_assoc( $recorded, $now['values'] ) !== array() ) {
 					aafm_undo_write_fields( 'post', $id, $recorded );
 				}
-				$wanted = array(
-					'post:post_status' => $status,
-					'post:post_name'   => (string) ( $d['before']['post:post_name'] ?? '' ),
+				// Certified against everything the fix-up was asked to put back, so a filter that changes the
+				// restored dates is reported as a difference and not as a clean revert.
+				$wanted = array_merge(
+					array(
+						'post:post_status' => $status,
+						'post:post_name'   => (string) ( $d['before']['post:post_name'] ?? '' ),
+					),
+					array_diff_key( $recorded, array( 'post:post_name' => true ) )
 				);
 			}
 			$result = aafm_undo_certify( 'post', $id, $wanted );

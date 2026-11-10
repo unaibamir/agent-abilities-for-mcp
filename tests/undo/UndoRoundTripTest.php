@@ -348,6 +348,38 @@ final class UndoRoundTripTest extends UndoTestCase {
 		$this->assertSame( $before['post_date_gmt'], $after['post_date_gmt'] );
 	}
 
+	/**
+	 * The inverse records of a trash revert must hold the dates too, or a second and third undo lose the draft's
+	 * empty slug and floating date again.
+	 */
+	public function test_undoing_a_trash_three_times_keeps_the_slugless_drafts_slug_and_date(): void {
+		global $wpdb;
+		$post = self::factory()->post->create( array( 'post_status' => 'draft' ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- a test fixture write.
+		$wpdb->update(
+			$wpdb->posts,
+			array(
+				'post_date_gmt' => '0000-00-00 00:00:00',
+				'post_name'     => '',
+			),
+			array( 'ID' => $post )
+		);
+		clean_post_cache( $post );
+		$before = $this->post_row( $post );
+		$first  = $this->change_from( 'aafm/trash-post', array( 'post_id' => $post ) );
+
+		$one = $this->revert( $first );
+		$two = $this->revert( $one['new_change_id'] );
+		$this->assertSame( 'trash', $this->post_row( $post )['post_status'], 'The second undo trashes it again.' );
+		$this->revert( $two['new_change_id'] );
+
+		$after = $this->post_row( $post );
+		$this->assertSame( 'draft', $after['post_status'] );
+		$this->assertSame( $before['post_name'], $after['post_name'] );
+		$this->assertSame( $before['post_date'], $after['post_date'] );
+		$this->assertSame( $before['post_date_gmt'], $after['post_date_gmt'] );
+	}
+
 	public function test_trash_of_a_published_post_reverts_to_published(): void {
 		$post   = self::factory()->post->create(
 			array(

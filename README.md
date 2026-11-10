@@ -113,6 +113,7 @@ These are the main extension points. Every name starts with `aafm_`.
 | `aafm_rate_limit_per_min`, `aafm_ip_allowlist`, `aafm_max_title_len` | filters | Adjust the stored value. A filter cannot switch off a limit the site owner set in Settings. |
 | `aafm_page_builder_markers` | filter | Map of post meta key to builder name used by the page builder guard. |
 | `aafm_allowed_post_types` | filter | Custom post types exposed to the content tools. Types that fail the eligibility check stay refused. |
+| `aafm_undo_secret_key_patterns` | filter | Regular expressions for meta keys whose values change history must never keep. Receives the default pattern and can only add; the defaults always stay. |
 
 ### WP-CLI
 
@@ -160,7 +161,7 @@ The Model Context Protocol is an open specification that Anthropic originally de
 
 * **Feature:** A new Changes tab keeps 30 days of what agents changed with 25 tools and reverts a change if the item hasn't been edited since, and a site-wide find and replace reverts as one group. Every write tool now reports whether its change can be undone, with a reason when it can't (permanent deletes, orders, refunds).
 * **Feature:** Two new tools, list-changes and undo-change, let an agent see and undo its own changes from the last 24 hours, up to 30 undo calls an hour per connection. Both start off, and undo-change is destructive, so the Read only, Content editor and Shop manager presets leave it out.
-* **Fix:** wc-update-payment-gateway's order is now a zero-based position, as wc-list-payment-gateways reports it, and the write renumbers the stored gateway order, so a script that passed a stored sort value now gets a position. wc-get-order returns payment_method and payment_method_title, a variation's sale price can be cleared with an empty string, and WordPress's export and erase personal data tools now cover the activity log and the new change history.
+* **Fix:** wc-update-payment-gateway's order is now a zero-based position, as wc-get-payment-gateway reports it, and the write renumbers the stored gateway order, so a script that passed a stored sort value now gets a position. wc-get-order returns payment_method and payment_method_title, a variation's sale price can be cleared with an empty string, and WordPress's export and erase personal data tools now cover the activity log and the new change history.
 * **Fix:** A refund above the remaining amount, a user deleting their own account, deleting or demoting the last administrator, a missing reassign user, trashing an item already in the Trash and a tool aimed at a content type that isn't exposed now each return a named error instead of a generic one.
 * **Chore:** Change history is stored in its own table, which is dropped on every uninstall and emptied by Reset, and several tool descriptions and messages were reworded.
 

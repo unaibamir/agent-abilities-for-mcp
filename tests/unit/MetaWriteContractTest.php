@@ -2855,6 +2855,37 @@ final class MetaWriteContractTest extends TestCase {
 		}
 	}
 
+	public function test_restore_rows_refuses_before_writing_when_a_delete_veto_covers_only_real_rows(): void {
+		$post = self::factory()->post->create();
+		add_post_meta( $post, self::RAW_KEY, 'a' );
+		// Answers null for an id no row has, so the generic probe passes; the veto bites only real rows.
+		$veto = static fn( $check, $meta_id ) => $meta_id < PHP_INT_MAX ? false : $check;
+		add_filter( 'delete_post_metadata_by_mid', $veto, 10, 2 );
+
+		try {
+			$restored = aafm_meta_restore_rows( 'post', $post, self::RAW_KEY, array( 'x' ) );
+		} finally {
+			remove_filter( 'delete_post_metadata_by_mid', $veto, 10 );
+		}
+
+		$this->assertFalse( $restored );
+		$this->assertSame( array( 'a' ), $this->raw_rows( $post ), 'Nothing was added beside the old row.' );
+	}
+
+	public function test_a_by_mid_callback_that_reads_the_row_does_not_warn_on_the_probe(): void {
+		$reader = static function ( $check, $meta_id ) {
+			$row  = get_metadata_by_mid( 'post', $meta_id );
+			$name = $row->meta_key; // A row that does not exist is false, and reading a property of it warns on PHP 8.
+			return $name ? $check : $check;
+		};
+		add_filter( 'delete_post_metadata_by_mid', $reader, 10, 2 );
+		try {
+			$this->assertTrue( aafm_meta_restore_unfiltered( 'post', self::RAW_KEY, '', array( 'a' ) ) );
+		} finally {
+			remove_filter( 'delete_post_metadata_by_mid', $reader, 10 );
+		}
+	}
+
 	public function test_restore_rows_refuses_before_writing_when_a_short_circuit_is_hooked(): void {
 		$post = self::factory()->post->create();
 		add_post_meta( $post, self::RAW_KEY, 'a' );

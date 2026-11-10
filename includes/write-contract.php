@@ -374,6 +374,27 @@ function aafm_meta_raw_restorable( string $raw ): ?string {
 }
 
 /**
+ * Whether a delete_{type}_metadata_by_mid callback answers for this meta id, which would leave old and
+ * restored rows side by side. Asks the question delete_metadata_by_mid() asks, without deleting.
+ *
+ * A callback written for real rows may read a property of the row it is handed; for an id no row has that
+ * raises a PHP warning, and it is swallowed here because the answer is all that matters.
+ *
+ * @param string $type    'post', 'term' or 'user'.
+ * @param int    $meta_id The meta id to ask about.
+ * @return bool True when a callback short-circuits the delete.
+ */
+function aafm_meta_by_mid_vetoed( string $type, int $meta_id ): bool {
+	set_error_handler( static fn(): bool => true ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_set_error_handler -- swallows a foreign callback's notice for one call.
+	try {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core's own hook.
+		return null !== apply_filters( "delete_{$type}_metadata_by_mid", null, $meta_id );
+	} finally {
+		restore_error_handler();
+	}
+}
+
+/**
  * Whether nothing can change or fake a write of this meta key.
  *
  * Judged by what the restore actually runs. delete_metadata_by_mid() fires only the by-mid short-circuit
@@ -398,10 +419,10 @@ function aafm_meta_raw_restorable( string $raw ): ?string {
 function aafm_meta_restore_unfiltered( string $type, string $key, string $subtype = '', ?array $raw_rows = null ): bool {
 	global $wp_filter;
 
-	// ponytail: the probe uses an id no row has, so a callback that short-circuits for one real id only passes
-	// here; the read-back in aafm_meta_restore_rows() then reports it as unconfirmed.
-	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core's own hook, asked the question delete_metadata_by_mid() asks.
-	if ( null !== apply_filters( "delete_{$type}_metadata_by_mid", null, PHP_INT_MAX ) ) {
+	// ponytail: this probe uses an id no row has, so it catches a short-circuit that answers for every id and
+	// lets the pre-write message say so; aafm_meta_restore_rows() asks again with a real baseline id before it
+	// writes, which catches a veto that bites only real rows.
+	if ( aafm_meta_by_mid_vetoed( $type, PHP_INT_MAX ) ) {
 		return false;
 	}
 	// An add short-circuit cannot do harm to a caller that proves every row it adds (the restore reads
@@ -557,6 +578,11 @@ function aafm_meta_restore_rows( string $type, int $id, string $key, array $raw_
 	}
 	$base = $baseline['by_key'][ $key ];
 	if ( $base['aliased'] > 0 ) {
+		return $finish( AAFM_WRITE_REFUSED, false );
+	}
+	// Ask the delete hook about a real baseline row before anything is added: a veto that bites only real rows
+	// would leave the old and the restored rows side by side.
+	if ( array() !== $base['ids'] && aafm_meta_by_mid_vetoed( $type, max( $base['ids'] ) ) ) {
 		return $finish( AAFM_WRITE_REFUSED, false );
 	}
 

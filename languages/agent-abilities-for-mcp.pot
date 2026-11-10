@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-10T04:14:05+05:00\n"
+"POT-Creation-Date: 2026-11-10T14:40:39+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -2646,35 +2646,35 @@ msgstr ""
 msgid "New role slug to assign. Only honored when the caller holds the promote-users capability, can promote this specific user, and the role is one they are allowed to hand out; otherwise the whole update is rejected, not just the role change. A change that would demote the site's last remaining administrator is always refused."
 msgstr ""
 
-#: includes/abilities/users.php:728
+#: includes/abilities/users.php:729
 msgid "This is the site's last administrator, so it was not deleted. Give another user the administrator role first."
 msgstr ""
 
-#: includes/abilities/users.php:729
+#: includes/abilities/users.php:730
 msgid "This is the site's last administrator, so its role was not changed. Give another user the administrator role first."
 msgstr ""
 
-#: includes/abilities/users.php:755
+#: includes/abilities/users.php:756
 msgid "ID of the user to permanently delete. Refused for the caller's own account and for the site's last remaining administrator."
 msgstr ""
 
-#: includes/abilities/users.php:760
+#: includes/abilities/users.php:761
 msgid "ID of an existing user to reassign the deleted user's content to. Not marked required by the schema, but the delete is refused without it: it must be given, must exist, and must differ from the user being deleted."
 msgstr ""
 
-#: includes/abilities/users.php:771
+#: includes/abilities/users.php:772
 msgid "True when the account was permanently deleted (single-site). False on multisite, where core only removes the user from the current site."
 msgstr ""
 
-#: includes/abilities/users.php:775
+#: includes/abilities/users.php:776
 msgid "Present on multisite: the user was removed from the current site, but the network account and its logins still exist."
 msgstr ""
 
-#: includes/abilities/users.php:836
+#: includes/abilities/users.php:837
 msgid "You cannot delete your own account, so nothing was deleted."
 msgstr ""
 
-#: includes/abilities/users.php:845
+#: includes/abilities/users.php:852
 msgid "Pass reassign_to as the id of another existing user who takes over this user's content, so nothing was deleted."
 msgstr ""
 
@@ -10712,8 +10712,8 @@ msgstr ""
 
 #: includes/helpers.php:1242
 #: includes/helpers.php:1249
-#: includes/write-contract.php:936
-#: includes/write-contract.php:1183
+#: includes/write-contract.php:962
+#: includes/write-contract.php:1209
 msgid "Only text, number, or boolean meta values are supported."
 msgstr ""
 
@@ -11588,33 +11588,33 @@ msgstr ""
 msgid "That meta key is protected or reserved, so no user can reach it through this tool."
 msgstr ""
 
-#: includes/register.php:961
-msgid "This content type is not exposed to agents, so its terms cannot be changed with this tool. A site administrator can expose it in the Content sub-tab of the Abilities tab."
+#: includes/register.php:963
+msgid "This content type is not exposed to agents, so this tool cannot change it. A site administrator can expose it in the Content sub-tab of the Abilities tab."
 msgstr ""
 
 #. translators: %s: the tool that manages this content type.
-#: includes/register.php:965
+#: includes/register.php:967
 #, php-format
-msgid "This type has its own tool, %s, which can change them."
+msgid "This type has its own tool, %s, which can change it."
 msgstr ""
 
 #. translators: %s: ability name
-#: includes/register.php:1001
+#: includes/register.php:1003
 #, php-format
 msgid "Ability \"%s\" was not registered: a permission_callback is required."
 msgstr ""
 
 #. translators: %s: ability name
-#: includes/register.php:1016
+#: includes/register.php:1018
 #, php-format
 msgid "Ability \"%s\" was not registered: an execute_callback is required."
 msgstr ""
 
-#: includes/register.php:1432
+#: includes/register.php:1434
 msgid "This ability returned an unexpected result. Please try again or contact the site administrator."
 msgstr ""
 
-#: includes/register.php:1521
+#: includes/register.php:1523
 msgid "This ability could not complete because of an unexpected error. The site administrator can find the details in the activity log."
 msgstr ""
 
@@ -11737,7 +11737,7 @@ msgid "The undo could not be confirmed, so check the item before trying again."
 msgstr ""
 
 #: includes/undo/engine.php:1194
-msgid "The undo did not change anything: a plugin altered the value as it was restored, so the field was left as it is."
+msgid "The undo did not change anything: the field could not be restored exactly, possibly because a plugin altered the value as it was written, so it was left as it is."
 msgstr ""
 
 #: includes/undo/engine.php:1195
@@ -11751,7 +11751,7 @@ msgstr ""
 #. translators: 1: comma-separated field names, 2: change id
 #: includes/undo/engine.php:1228
 #, php-format
-msgid "The undo did not fully apply: %1$s did not match, so a plugin probably changed the value as it was restored. Change %2$d records the current state and can be reverted."
+msgid "The undo did not fully apply: %1$s did not match, so the value may have been changed as it was restored, possibly by a plugin. Change %2$d records the current state and can be reverted."
 msgstr ""
 
 #. translators: 1: comma-separated field names, 2: change id

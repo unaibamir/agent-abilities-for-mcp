@@ -2571,7 +2571,7 @@ function aafm_exec_trash_post( array $input ) {
 		return aafm_generic_error();
 	}
 	if ( 'trash' === $post->post_status ) {
-		return aafm_already_trashed_error();
+		return aafm_already_trashed_error( $post );
 	}
 	$ok = wp_trash_post( $id );
 	if ( ! $ok ) {
@@ -2581,12 +2581,22 @@ function aafm_exec_trash_post( array $input ) {
 }
 
 /**
- * The refusal for trashing something already in the Trash. The caller could read the status from the
- * item itself, so naming it shows nothing new.
+ * The refusal for trashing something already in the Trash. The status is only named to a caller who can read
+ * that post; anyone else gets the generic answer, so the message cannot confirm the state of a post they
+ * cannot see.
  *
+ * The tools for content types that sit outside the generic post exposure list (reusable blocks, events)
+ * pass $own_gate: their permission callback already demanded a per-object delete capability on this very
+ * item, which is the stronger check, and the generic list would refuse a type those tools legitimately own.
+ *
+ * @param WP_Post $post     The post that is already in the Trash.
+ * @param bool    $own_gate True when the calling tool's own per-object permission already vouched for the caller.
  * @return WP_Error
  */
-function aafm_already_trashed_error(): WP_Error {
+function aafm_already_trashed_error( WP_Post $post, bool $own_gate = false ): WP_Error {
+	if ( ! $own_gate && ! aafm_can_read_post_object( $post ) ) {
+		return aafm_generic_error();
+	}
 	return new WP_Error(
 		'aafm_already_trashed',
 		__( 'That item is already in the Trash, so nothing was changed.', 'agent-abilities-for-mcp' ),

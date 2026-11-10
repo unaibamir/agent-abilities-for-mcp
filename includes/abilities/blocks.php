@@ -804,7 +804,7 @@ function aafm_exec_delete_block( array $input ) {
 		return aafm_generic_error();
 	}
 	if ( 'trash' === $post->post_status ) {
-		return aafm_already_trashed_error();
+		return aafm_already_trashed_error( $post, true );
 	}
 	$result = wp_trash_post( $id );
 	if ( ! $result instanceof WP_Post ) {

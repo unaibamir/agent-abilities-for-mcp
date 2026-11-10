@@ -778,7 +778,7 @@ function aafm_exec_tec_delete_event( array $input ) {
 		return aafm_generic_error();
 	}
 	if ( 'trash' === $post->post_status ) {
-		return aafm_already_trashed_error();
+		return aafm_already_trashed_error( $post, true );
 	}
 	if ( ! wp_trash_post( $id ) ) {
 		return aafm_generic_error();

@@ -43,6 +43,24 @@ final class TrashAlreadyTrashedTest extends TestCase {
 		$this->assertSame( 'aafm_already_trashed', $res->get_error_code() );
 	}
 
+	public function test_the_already_trashed_message_is_only_given_for_a_post_the_caller_can_read(): void {
+		register_post_type(
+			'aafm_unexposed',
+			array(
+				'public' => true,
+				'label'  => 'Unexposed',
+			)
+		);
+		$readable   = get_post( self::factory()->post->create( array( 'post_status' => 'trash' ) ) );
+		$unexposed  = get_post( self::factory()->post->create( array( 'post_type' => 'aafm_unexposed', 'post_status' => 'trash' ) ) ); // phpcs:ignore WordPress.Arrays.ArrayDeclarationSpacing.AssociativeArrayFound
+		$specific   = aafm_already_trashed_error( $readable );
+		$other_type = aafm_already_trashed_error( $unexposed );
+		unregister_post_type( 'aafm_unexposed' );
+
+		$this->assertSame( 'aafm_already_trashed', $specific->get_error_code() );
+		$this->assertSame( 'aafm_error', $other_type->get_error_code(), 'A post the caller cannot read gets the generic answer.' );
+	}
+
 	public function test_trash_post_still_trashes_a_live_post(): void {
 		$post = self::factory()->post->create( array( 'post_status' => 'publish' ) );
 

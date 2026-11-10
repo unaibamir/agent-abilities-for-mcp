@@ -799,8 +799,12 @@ function aafm_exec_delete_block( array $input ) {
 		// the delete was refused instead of getting the generic error.
 		return aafm_trash_disabled_error();
 	}
-	if ( ! aafm_exact_object_chain( 'post', $id ) instanceof WP_Post ) {
+	$post = aafm_exact_object_chain( 'post', $id );
+	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
+	}
+	if ( 'trash' === $post->post_status ) {
+		return aafm_already_trashed_error();
 	}
 	$result = wp_trash_post( $id );
 	if ( ! $result instanceof WP_Post ) {

@@ -263,6 +263,18 @@ final class BlocksTest extends TestCase {
 		$this->assertNotFalse( wp_untrash_post( $id ), 'trashed block is recoverable.' );
 	}
 
+	public function test_delete_block_on_a_trashed_block_says_it_is_already_in_the_trash(): void {
+		$this->register_blocks();
+		$id = $this->make_block( 'Gone' );
+		wp_trash_post( $id );
+		$this->acting_as( 'editor' );
+
+		$res = wp_get_ability( 'aafm/delete-block' )->execute( array( 'block_id' => $id ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $res );
+		$this->assertSame( 'aafm_already_trashed', $res->get_error_code() );
+	}
+
 	public function test_delete_block_refuses_a_non_block(): void {
 		$this->register_blocks();
 		$post_id = (int) self::factory()->post->create( array( 'post_type' => 'post' ) );

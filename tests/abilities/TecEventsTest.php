@@ -497,6 +497,16 @@ final class TecEventsTest extends TestCase {
 		);
 	}
 
+	public function test_delete_event_on_a_trashed_event_says_it_is_already_in_the_trash(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$event_id = $this->create_event( array( 'post_status' => 'trash' ) );
+
+		$out = aafm_exec_tec_delete_event( array( 'event_id' => $event_id ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_already_trashed', $out->get_error_code() );
+	}
+
 	public function test_delete_event_trashes_not_permanently_deletes(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		$event_id = $this->create_event();

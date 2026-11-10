@@ -158,11 +158,11 @@ The Model Context Protocol is an open specification that Anthropic originally de
 ## Changelog
 ### 1.11.2
 
-* **Feature:** A new Changes tab keeps 30 days of what agents changed with 25 tools and reverts a change if the item hasn't been edited since. A site-wide find and replace reverts as one group.
-* **Feature:** Two new tools, list-changes and undo-change, let an agent see and undo its own changes from the last 24 hours. Both start off, and undo-change is destructive, so the Read only, Content editor and Shop manager presets leave it out.
-* **Feature:** Every write tool now says in its response whether the change can be undone. Tools that can't, such as permanent deletes, orders and refunds, say why.
-* **Fix:** WordPress's export and erase personal data tools now cover the activity log and the new change history.
-* **Chore:** Change history is stored in its own table, which is dropped on every uninstall and emptied by Reset.
+* **Feature:** A new Changes tab keeps 30 days of what agents changed with 25 tools and reverts a change if the item hasn't been edited since, and a site-wide find and replace reverts as one group. Every write tool now reports whether its change can be undone, with a reason when it can't (permanent deletes, orders, refunds).
+* **Feature:** Two new tools, list-changes and undo-change, let an agent see and undo its own changes from the last 24 hours, up to 30 undo calls an hour per connection. Both start off, and undo-change is destructive, so the Read only, Content editor and Shop manager presets leave it out.
+* **Fix:** wc-update-payment-gateway's order is now a zero-based position, as wc-list-payment-gateways reports it, and the write renumbers the stored gateway order, so a script that passed a stored sort value now gets a position. wc-get-order returns payment_method and payment_method_title, a variation's sale price can be cleared with an empty string, and WordPress's export and erase personal data tools now cover the activity log and the new change history.
+* **Fix:** A refund above the remaining amount, a user deleting their own account, deleting or demoting the last administrator, a missing reassign user, trashing an item already in the Trash and a tool aimed at a content type that isn't exposed now each return a named error instead of a generic one.
+* **Chore:** Change history is stored in its own table, which is dropped on every uninstall and emptied by Reset, and several tool descriptions and messages were reworded.
 
 ### 1.11.1
 

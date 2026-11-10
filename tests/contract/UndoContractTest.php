@@ -12,7 +12,12 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Contract;
 
-require_once dirname( __DIR__ ) . '/undo/UndoTestCase.php';
+// The contract bootstrap's loader has no lowercase-folder fallback, so on a case-sensitive disk the base class
+// has to be required here. The main bootstrap's loader may already have declared it from tests/Undo/ on a
+// case-insensitive one, where a second require_once of tests/undo/ would declare it twice, so ask first.
+if ( ! class_exists( 'AAFM\Tests\Undo\UndoTestCase' ) ) {
+	require_once dirname( __DIR__ ) . '/undo/UndoTestCase.php';
+}
 
 use AAFM\Tests\Undo\UndoTestCase;
 

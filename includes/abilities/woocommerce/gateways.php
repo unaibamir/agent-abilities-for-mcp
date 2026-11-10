@@ -829,7 +829,7 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 		}
 		$slots = array_values( array_unique( $slots ) );
 		sort( $slots );
-		while ( count( $slots ) < count( $order_ids ) ) {
+		for ( $held = count( $slots ), $wanted = count( $order_ids ); $held < $wanted; ++$held ) {
 			$slots[] = $fresh++;
 		}
 		$order_slots = array();

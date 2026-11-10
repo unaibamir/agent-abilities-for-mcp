@@ -271,23 +271,25 @@ function aafm_rich_wc_order( \WC_Order $order ): array {
 	$shipping_out = empty( $shipping ) ? (object) array() : $shipping;
 
 	return array(
-		'id'            => (int) $order->get_id(),
-		'number'        => (string) $order->get_order_number(),
-		'status'        => (string) $order->get_status(),
-		'currency'      => (string) $order->get_currency(),
-		'date_created'  => aafm_wc_date_string( $order->get_date_created() ),
-		'date_paid'     => aafm_wc_date_string( $order->get_date_paid() ),
-		'customer_id'   => (int) $order->get_customer_id(),
-		'customer_note' => (string) $order->get_customer_note(),
-		'line_items'    => $line_items,
-		'totals'        => array(
+		'id'                   => (int) $order->get_id(),
+		'number'               => (string) $order->get_order_number(),
+		'status'               => (string) $order->get_status(),
+		'currency'             => (string) $order->get_currency(),
+		'date_created'         => aafm_wc_date_string( $order->get_date_created() ),
+		'date_paid'            => aafm_wc_date_string( $order->get_date_paid() ),
+		'customer_id'          => (int) $order->get_customer_id(),
+		'customer_note'        => (string) $order->get_customer_note(),
+		'payment_method'       => (string) $order->get_payment_method(),
+		'payment_method_title' => (string) $order->get_payment_method_title(),
+		'line_items'           => $line_items,
+		'totals'               => array(
 			'total'    => (string) $order->get_total(),
 			'subtotal' => (string) $order->get_subtotal(),
 			'tax'      => (string) $order->get_total_tax(),
 			'shipping' => (string) $order->get_shipping_total(),
 		),
-		'billing'       => $billing_out,
-		'shipping'      => $shipping_out,
+		'billing'              => $billing_out,
+		'shipping'             => $shipping_out,
 	);
 }
 
@@ -1500,15 +1502,17 @@ function aafm_wc_unresolved_line_items_error( array $unresolved ): \WP_Error {
  */
 function aafm_wc_order_output_properties(): array {
 	return array(
-		'id'            => array( 'type' => 'integer' ),
-		'number'        => array( 'type' => 'string' ),
-		'status'        => array( 'type' => 'string' ),
-		'currency'      => array( 'type' => 'string' ),
-		'date_created'  => array( 'type' => array( 'string', 'null' ) ),
-		'date_paid'     => array( 'type' => array( 'string', 'null' ) ),
-		'customer_id'   => array( 'type' => 'integer' ),
-		'customer_note' => array( 'type' => 'string' ),
-		'line_items'    => array(
+		'id'                   => array( 'type' => 'integer' ),
+		'number'               => array( 'type' => 'string' ),
+		'status'               => array( 'type' => 'string' ),
+		'currency'             => array( 'type' => 'string' ),
+		'date_created'         => array( 'type' => array( 'string', 'null' ) ),
+		'date_paid'            => array( 'type' => array( 'string', 'null' ) ),
+		'customer_id'          => array( 'type' => 'integer' ),
+		'customer_note'        => array( 'type' => 'string' ),
+		'payment_method'       => array( 'type' => 'string' ),
+		'payment_method_title' => array( 'type' => 'string' ),
+		'line_items'           => array(
 			'type'  => 'array',
 			'items' => array(
 				'type'                 => 'object',
@@ -1526,7 +1530,7 @@ function aafm_wc_order_output_properties(): array {
 				'additionalProperties' => false,
 			),
 		),
-		'totals'        => array(
+		'totals'               => array(
 			'type'                 => 'object',
 			'properties'           => array(
 				'total'    => array( 'type' => 'string' ),
@@ -1536,12 +1540,12 @@ function aafm_wc_order_output_properties(): array {
 			),
 			'additionalProperties' => false,
 		),
-		'billing'       => array(
+		'billing'              => array(
 			'type'                 => 'object',
 			'properties'           => aafm_wc_address_schema_props( 'billing', false ),
 			'additionalProperties' => false,
 		),
-		'shipping'      => array(
+		'shipping'             => array(
 			'type'                 => 'object',
 			'properties'           => aafm_wc_address_schema_props( 'shipping', false ),
 			'additionalProperties' => false,
@@ -2514,6 +2518,22 @@ function aafm_exec_wc_create_order_refund( array $input ) {
 		return new \WP_Error(
 			'aafm_wc_invalid_refund_amount',
 			__( 'The refund amount must be greater than zero, so no refund was created.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
+	}
+
+	// wc_create_refund() refuses an amount above what is left with a message nobody sees here. The order's
+	// own totals are already readable with wc-get-order, so the refusal can name the figure.
+	$decimals  = wc_get_price_decimals();
+	$remaining = round( (float) $order->get_total() - (float) $order->get_total_refunded(), $decimals );
+	if ( round( (float) $amount, $decimals ) > $remaining ) {
+		return new \WP_Error(
+			'aafm_wc_refund_exceeds_remaining',
+			sprintf(
+				/* translators: %s: the amount still refundable on the order. */
+				__( 'The refund amount is more than the %s still refundable on this order, so no refund was created.', 'agent-abilities-for-mcp' ),
+				wc_format_decimal( $remaining, $decimals )
+			),
 			array( 'status' => 400 )
 		);
 	}

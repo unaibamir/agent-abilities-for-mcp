@@ -581,16 +581,17 @@ function aafm_exec_tec_create_event( array $input ) {
  * @return array<string,mixed>
  */
 function aafm_args_tec_update_event(): array {
-	$schema                               = aafm_args_tec_create_event();
-	$properties                           = $schema['input_schema']['properties'];
-	$properties['event_id']               = array(
+	$schema                                = aafm_args_tec_create_event();
+	$properties                            = $schema['input_schema']['properties'];
+	$properties['event_id']                = array(
 		'type'        => 'integer',
 		'minimum'     => 1,
 		'description' => __( 'ID of the event to update.', 'agent-abilities-for-mcp' ),
 	);
-	$properties['status']['description']  = __( 'Post status, e.g. draft or publish. Leave it out to keep the event\'s current status.', 'agent-abilities-for-mcp' );
-	$schema['input_schema']['properties'] = $properties;
-	$schema['input_schema']['required']   = array( 'event_id' );
+	$properties['status']['description']   = __( 'Post status, e.g. draft or publish. Leave it out to keep the event\'s current status.', 'agent-abilities-for-mcp' );
+	$properties['venue_id']['description'] = __( 'ID of an existing venue to associate with this event. A venue cannot be cleared with this tool; remove it in the event editor.', 'agent-abilities-for-mcp' );
+	$schema['input_schema']['properties']  = $properties;
+	$schema['input_schema']['required']    = array( 'event_id' );
 
 	return array(
 		'label'               => aafm_ability_label( 'aafm/tec-update-event' ),
@@ -771,9 +772,13 @@ function aafm_exec_tec_delete_event( array $input ) {
 	if ( ! aafm_trash_is_enabled() ) {
 		return aafm_trash_disabled_error();
 	}
-	$id = absint( $input['event_id'] ?? 0 );
-	if ( ! aafm_exact_object_chain( 'post', $id ) instanceof WP_Post ) {
+	$id   = absint( $input['event_id'] ?? 0 );
+	$post = aafm_exact_object_chain( 'post', $id );
+	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
+	}
+	if ( 'trash' === $post->post_status ) {
+		return aafm_already_trashed_error( $post, true );
 	}
 	if ( ! wp_trash_post( $id ) ) {
 		return aafm_generic_error();

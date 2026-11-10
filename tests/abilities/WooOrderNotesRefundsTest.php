@@ -581,6 +581,24 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->assertSame( array(), WcOrderStubStore::get_refunds_for_order( 5001 ), 'A refused refund creates nothing.' );
 	}
 
+	public function test_create_order_refund_over_the_refundable_amount_says_how_much_is_left(): void {
+		$this->register_group_c();
+		$this->acting_as( 'administrator' );
+		WcOrderStubStore::seed_refunds( 5001, array() );
+
+		$res = wp_get_ability( 'aafm/wc-create-order-refund' )->execute(
+			array(
+				'order_id' => 5001,
+				'amount'   => '999.00',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_refund_exceeds_remaining', $res->get_error_code() );
+		$this->assertStringContainsString( '49.99', $res->get_error_message() );
+		$this->assertSame( array(), WcOrderStubStore::get_refunds_for_order( 5001 ), 'A refused refund creates nothing.' );
+	}
+
 	/**
 	 * Refund reason is PII-adjacent and is returned as-is - must not be stripped.
 	 * It is returned under the Integrations security disclaimer.
@@ -1164,6 +1182,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 			$order_id,
 			array(
 				'status' => 'processing',
+				'total'  => '100.00',
 				'items'  => array(
 					array(
 						'id'         => $line_item_id,
@@ -1301,6 +1320,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 			6004,
 			array(
 				'status' => 'processing',
+				'total'  => '100.00',
 				'items'  => array(
 					array(
 						'id'    => 50,

@@ -844,6 +844,16 @@ function aafm_activity_detail_map(): array {
 			),
 			'link'     => 'post',
 		),
+		'aafm/undo-change'                 => array(
+			/* translators: %s: the numeric ID of the change that was undone. */
+			'template' => __( 'Undid change #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'change_id',
+					'type' => 'id',
+				),
+			),
+		),
 		'aafm/create-menu'                 => array(
 			/* translators: %s: the new menu's numeric ID. */
 			'template'  => __( 'Created menu #%s', 'agent-abilities-for-mcp' ),

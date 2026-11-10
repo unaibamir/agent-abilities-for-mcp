@@ -462,6 +462,100 @@ final class ReservedMetaKeyRouteTest extends TestCase {
 	}
 
 	/**
+	 * A post of a type the operator has not exposed used to come back as the bare "Permission denied", which
+	 * an agent reads as a missing privilege. The reason is site configuration, so it is only given to a
+	 * caller who could edit that post anyway: nobody learns the type of an id they cannot touch.
+	 */
+	public function test_add_post_terms_on_a_type_that_is_not_exposed_says_so_only_to_a_caller_who_can_edit_it(): void {
+		register_post_type(
+			'aafm_unexposed',
+			array(
+				'public' => true,
+				'label'  => 'Unexposed',
+			)
+		);
+		$this->register_enabled( array( 'aafm/add-post-terms' ) );
+		$this->acting_as( 'administrator' );
+		$post_id = self::factory()->post->create( array( 'post_type' => 'aafm_unexposed' ) );
+		$args    = array(
+			'post_id'  => $post_id,
+			'taxonomy' => 'category',
+			'term_ids' => array( 1 ),
+		);
+
+		$admin = $this->wire_text( $this->wire_body( 'aafm/add-post-terms', $args ) );
+		$this->acting_as( 'subscriber' );
+		$sub = $this->wire_text( $this->wire_body( 'aafm/add-post-terms', $args ) );
+		unregister_post_type( 'aafm_unexposed' );
+
+		$this->assertNotSame( self::BARE_REFUSAL, $admin, 'An editor of the post is told why.' );
+		$this->assertStringContainsString( 'not exposed', $admin );
+		$this->assertStringNotContainsString( (string) $post_id, $admin, 'Nothing the caller sent is echoed.' );
+		$this->assertSame( self::BARE_REFUSAL, $sub, 'A caller who cannot edit the post learns nothing about its type.' );
+	}
+
+	/**
+	 * Every tool whose permission gate refuses an unexposed content type explains it the same way, and only
+	 * to a caller who could edit the post. A read tool is left alone.
+	 */
+	public function test_the_unexposed_type_explanation_covers_the_post_write_tools_only_for_an_editor(): void {
+		register_post_type(
+			'aafm_unexposed',
+			array(
+				'public' => true,
+				'label'  => 'Unexposed',
+			)
+		);
+		$this->acting_as( 'administrator' );
+		$post_id = self::factory()->post->create( array( 'post_type' => 'aafm_unexposed' ) );
+		$input   = array( 'post_id' => $post_id );
+
+		foreach ( array( 'aafm/add-post-terms', 'aafm/set-featured-image', 'aafm/update-post-meta', 'aafm/yoast-update-post', 'aafm/rankmath-update-post', 'aafm/rankmath-update-schema', 'aafm/aioseo-update-post', 'aafm/slim-seo-update-post' ) as $name ) {
+			$refusal = aafm_post_type_refusal_error( $name, $input );
+			$this->assertNotNull( $refusal, $name );
+			$this->assertSame( 'type_not_exposed', $refusal['code'], $name );
+			$this->assertStringContainsString( 'not exposed', $refusal['error']->get_error_message(), $name );
+		}
+		$this->assertNull( aafm_post_type_refusal_error( 'aafm/get-post', $input ), 'A read tool is not explained here.' );
+
+		$this->acting_as( 'subscriber' );
+		$this->assertNull( aafm_post_type_refusal_error( 'aafm/set-featured-image', $input ), 'A caller who cannot edit the post learns nothing.' );
+		unregister_post_type( 'aafm_unexposed' );
+	}
+
+	public function test_add_post_terms_on_a_product_points_at_the_product_tool(): void {
+		$this->force_integration( 'woocommerce' );
+		$this->unlock_high_risk_abilities();
+		$this->stub_woocommerce();
+		aafm_flush_registry_cache();
+		register_post_type(
+			'product',
+			array(
+				'public' => true,
+				'label'  => 'Products',
+			)
+		);
+		$this->register_enabled( array( 'aafm/add-post-terms', 'aafm/wc-update-product' ) );
+		$this->acting_as( 'administrator' );
+		$post_id = self::factory()->post->create( array( 'post_type' => 'product' ) );
+
+		$text = $this->wire_text(
+			$this->wire_body(
+				'aafm/add-post-terms',
+				array(
+					'post_id'  => $post_id,
+					'taxonomy' => 'category',
+					'term_ids' => array( 1 ),
+				)
+			)
+		);
+		unregister_post_type( 'product' );
+
+		$this->assertNotSame( self::BARE_REFUSAL, $text );
+		$this->assertStringContainsString( 'aafm-wc-update-product', $text, 'It names the tool that does the job.' );
+	}
+
+	/**
 	 * The same sentence for term and user meta, each naming its own place in the admin.
 	 */
 	public function test_term_and_user_meta_name_their_own_exposure_setting(): void {

@@ -19,6 +19,7 @@
 			<directory>tests/admin</directory>
 			<directory>tests/oauth</directory>
 			<directory>tests/coexistence</directory>
+			<directory>tests/undo</directory>
 			<file>tests/WireShapeTest.php</file>
 			<file>tests/BridgeObjectRefusalWireTest.php</file>
 			<file>tests/ServerToolsListExposureTest.php</file>

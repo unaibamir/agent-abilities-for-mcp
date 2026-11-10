@@ -3,7 +3,7 @@
  * Plugin Name:       Agent Abilities for MCP - Connect Claude and ChatGPT with Permission Controls and Audit Log
  * Plugin URI:        https://agentabilitieswp.com
  * Description:       WordPress MCP server for Claude and ChatGPT with limited access, a pause switch, read-only mode, drafts you approve, playbooks and an audit log.
- * Version:           1.11.1
+ * Version:           1.11.2
  * Requires at least: 6.9
  * Requires PHP:      7.4
  * Author:            Unaib Amir
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AAFM_VERSION', '1.11.1' );
+define( 'AAFM_VERSION', '1.11.2' );
 define( 'AAFM_PLUGIN_FILE', __FILE__ );
 define( 'AAFM_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AAFM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -64,6 +64,15 @@ require_once AAFM_PLUGIN_DIR . 'includes/audit/notifications.php';
 // here, after the option-cache, audit-log and detail files it calls and before any hook,
 // migration or activation callback runs, since activation runs without plugins_loaded.
 require_once AAFM_PLUGIN_DIR . 'includes/write-contract.php';
+// The change history store (undo). After the audit log, whose installer creates its table.
+require_once AAFM_PLUGIN_DIR . 'includes/undo/store.php';
+require_once AAFM_PLUGIN_DIR . 'includes/undo/surfaces.php';
+require_once AAFM_PLUGIN_DIR . 'includes/undo/fields.php';
+require_once AAFM_PLUGIN_DIR . 'includes/undo/engine.php';
+require_once AAFM_PLUGIN_DIR . 'includes/undo/agent.php';
+require_once AAFM_PLUGIN_DIR . 'includes/privacy.php';
+add_filter( 'wp_privacy_personal_data_exporters', 'aafm_privacy_register_exporters' );
+add_filter( 'wp_privacy_personal_data_erasers', 'aafm_privacy_register_erasers' );
 // The high-risk floor. Required at top level, not inside the bootstrap, because both the admin
 // screens and the registration walk read it, and neither should have to care which ran first.
 require_once AAFM_PLUGIN_DIR . 'includes/audit/high-risk.php';
@@ -113,6 +122,8 @@ register_deactivation_hook( AAFM_PLUGIN_FILE, 'aafm_unschedule_log_prune' );
 
 // The cron event fires this action; the handler prunes entries past the retention window.
 add_action( 'aafm_prune_activity_log_daily', 'aafm_prune_activity_log' );
+// Change history keeps its own 30 day window, whatever the log retention says.
+add_action( 'aafm_prune_activity_log_daily', 'aafm_undo_prune' );
 
 // OAuth storage schema is required early so the activation hook can install its tables.
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/schema.php';
@@ -415,6 +426,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/settings.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/plugins.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/activity-log.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/changes.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/blocks.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/playbooks.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/menus.php';
@@ -475,6 +487,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/components.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/dashboard.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/review-inbox.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/admin/changes.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/missing-tools.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/connection.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/connection-cards.php';
@@ -527,6 +540,10 @@ function aafm_bootstrap() {
 		add_action( 'wp_ajax_aafm_review_request', 'aafm_ajax_review_request' );
 		add_action( 'wp_ajax_aafm_review_publish', 'aafm_ajax_review_publish' );
 		add_action( 'wp_ajax_aafm_review_discard', 'aafm_ajax_review_discard' );
+		add_action( 'wp_ajax_aafm_undo_revert', 'aafm_ajax_undo_revert' );
+		add_action( 'wp_ajax_aafm_undo_revert_group', 'aafm_ajax_undo_revert_group' );
+		add_action( 'wp_ajax_aafm_undo_clear_history', 'aafm_ajax_undo_clear_history' );
+		add_action( 'wp_ajax_aafm_undo_dismiss_notice', 'aafm_ajax_undo_dismiss_notice' );
 		// The same answer, arriving as a plain link when the notice's footer script never ran.
 		add_action( 'admin_post_aafm_review_request', 'aafm_handle_review_request_post' );
 		add_action( 'wp_ajax_aafm_notify_test', 'aafm_ajax_notify_test' );

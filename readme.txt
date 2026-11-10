@@ -4,7 +4,7 @@ Tags: mcp-server, ai-agent, claude, mcp, abilities-api
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.11.1
+Stable tag: 1.11.2
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -25,7 +25,7 @@ Once connected, you can ask things like:
 * "Which WooCommerce orders are still on hold?"
 * "Write a post about the spring sale and save it as a draft."
 
-There are 184 abilities (the tools an AI client can call), 90 for WordPress itself and 94 for plugins such as WooCommerce, ACF and Yoast SEO. Every one starts switched off.
+There are 186 abilities (the tools an AI client can call), 92 for WordPress itself and 94 for plugins such as WooCommerce, ACF and Yoast SEO. Every one starts switched off.
 
 = What is a WordPress MCP server? =
 
@@ -119,7 +119,7 @@ A page builder owns its page's layout, so an edit to the post text can report su
 
 It fits if you want to decide tool by tool what an AI agent can do. Your AI client talks straight to your site: the plugin calls no AI provider, sends no telemetry and has no relay, account or API key of ours in the path.
 
-It's a poor fit if you want every tool on from day one, or an undo button in wp-admin. The Activity Log keeps no copy of what the AI changed, though WordPress revision history and the Trash can still bring content back.
+It's a poor fit if you want every tool on from day one, or an undo for every kind of change. The Changes tab can revert changes from 25 of this plugin's tools for 30 days. Changes from its other tools can't be undone, including permanent deletes, orders, refunds, user accounts and file uploads.
 
 = Compatible clients =
 
@@ -295,9 +295,17 @@ The MCP endpoint refuses requests sent from a web page on another site, as the M
 
 Under Settings, Notifications, pick an admin notice, an email right away or one email a day, then tick the events you care about, such as a new app being authorized or a burst of denied calls. Nothing is sent until you do. The [safety controls guide](https://agentabilitieswp.com/docs/safety-controls/?utm_source=wordpress.org&utm_medium=readme&utm_campaign=plugin-listing) lists every event and the sending limits, and the emails themselves link to the Activity Log and never include the content of a call, a user name or an IP address.
 
+= Can I undo what an AI agent changed? =
+
+Yes, for edits made with 25 of this plugin's tools: posts, pages and custom post types, creates, trashes, block edits, terms, custom fields (post and term meta), featured images and SEO fields. The Changes tab keeps up to 30 days and reverts a change if the item hasn't been edited since, and it refuses a revert that would overwrite a newer edit. It lists field names, never contents, though the earlier values are stored in a table in your site's database, and when the history is full the oldest values go first.
+
+No other tool of this plugin's can be undone, including permanent deletes, orders, refunds, user accounts, file uploads, WooCommerce products, ACF field values, menus, comments and events, and each of them says so in its response. Tools from other plugins aren't recorded either. Notifications, webhooks and anything already read are not recalled.
+
+Two optional tools, list-changes and undo-change, let an agent undo its own changes from the last 24 hours, and both start off. History records only while the plugin is active, can be switched off in Settings and is removed on uninstall. WordPress's export and erase personal data tools cover it.
+
 = Does uninstalling the plugin revoke my agent's access? =
 
-Not by itself. Deleting the plugin leaves the dedicated agent user and its Application Passwords in place because they're ordinary WordPress accounts, and by default it keeps your settings, activity log and OAuth data too, so a reinstall picks up where you left off. Switch on Delete data on uninstall in Settings first if you want that data removed, and to cut an agent off, revoke its OAuth connection on the Connection tab or delete its Application Password or user on the Users screen.
+Not by itself. Deleting the plugin leaves the dedicated agent user and its Application Passwords in place because they're ordinary WordPress accounts, and by default it keeps your settings, activity log and OAuth data too, so a reinstall picks up where you left off. Switch on Delete data on uninstall in Settings first if you want that data removed (change history is always removed, whatever that switch says), and to cut an agent off, revoke its OAuth connection on the Connection tab or delete its Application Password or user on the Users screen.
 
 = How do I report a security issue? =
 
@@ -323,6 +331,14 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 16. Application Passwords: the agent users' passwords with when each was created and last used, the address it was last used from, and a Revoke button.
 
 == Changelog ==
+
+= 1.11.2 =
+
+* **Feature:** A new Changes tab keeps 30 days of what agents changed with 25 tools and reverts a change if the item hasn't been edited since, and a site-wide find and replace reverts as one group. Every write tool now reports whether its change can be undone, with a reason when it can't (permanent deletes, orders, refunds).
+* **Feature:** Two new tools, list-changes and undo-change, let an agent see and undo its own changes from the last 24 hours, up to 30 undo calls an hour per connection. Both start off, and undo-change is destructive, so the Read only, Content editor and Shop manager presets leave it out.
+* **Fix:** wc-update-payment-gateway's order is now a zero-based position, as wc-get-payment-gateway reports it, and the write renumbers the stored gateway order, so a script that passed a stored sort value now gets a position. wc-get-order returns payment_method and payment_method_title, a variation's sale price can be cleared with an empty string, and WordPress's export and erase personal data tools now cover the activity log and the new change history.
+* **Fix:** A refund above the remaining amount, a user deleting their own account, deleting or demoting the last administrator, a missing reassign user, trashing an item already in the Trash and a tool aimed at a content type that isn't exposed now each return a named error instead of a generic one.
+* **Chore:** Change history is stored in its own table, which is dropped on every uninstall and emptied by Reset, and several tool descriptions and messages were reworded.
 
 = 1.11.1 =
 
@@ -429,6 +445,10 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 [Full release history](https://agentabilitieswp.com/changelog/?utm_source=wordpress.org&utm_medium=readme&utm_campaign=plugin-listing).
 
 == Upgrade Notice ==
+
+= 1.11.2 =
+
+Change history now records agent edits from this update, in a new table kept 30 days and dropped on uninstall. Turn it off under Settings. The two new agent undo tools start off. wc-update-payment-gateway's order is now a zero-based position.
 
 = 1.11.1 =
 

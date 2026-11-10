@@ -9,10 +9,10 @@ WordPress MCP server for Claude and ChatGPT with limited access, a pause switch,
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.1 |
 | **Requires PHP** | 7.4 |
-| **Stable tag** | 1.11.1 |
+| **Stable tag** | 1.11.2 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
-Agent Abilities for MCP is a free WordPress MCP server plugin. It adds an MCP endpoint to a site and exposes WordPress abilities to AI agents, so Claude, ChatGPT, Cursor and other MCP clients can work on it as a WordPress user you choose, with that user's role and no more. It ships 184 abilities (90 core, 94 for plugins such as WooCommerce, ACF and Yoast SEO) and every one starts switched off.
+Agent Abilities for MCP is a free WordPress MCP server plugin. It adds an MCP endpoint to a site and exposes WordPress abilities to AI agents, so Claude, ChatGPT, Cursor and other MCP clients can work on it as a WordPress user you choose, with that user's role and no more. It ships 186 abilities (92 core, 94 for plugins such as WooCommerce, ACF and Yoast SEO) and every one starts switched off.
 
 This is the GitHub home of the plugin. The listing for site owners lives on [WordPress.org](https://wordpress.org/plugins/agent-abilities-for-mcp/), and this page is for anyone who wants to read the code, wire the plugin into their own stack or send a patch.
 
@@ -24,10 +24,13 @@ Typical setups:
 * Give an AI agent read-only access: read-only mode unloads every write tool this plugin serves.
 * Let Claude or ChatGPT draft posts without publishing: Force draft on create saves the posts, pages and products an agent creates as drafts, and the Needs review card on the Dashboard lists them.
 * Pause one OAuth connection, give it an end date or a lower rate limit, or refuse every MCP request at once with Pause all access.
+* Revert what an agent changed from the Changes tab, which covers 25 of this plugin's tools and keeps 30 days.
 
 Abilities are registered on the WordPress 6.9 Abilities API and served through the official MCP Adapter, which is bundled, so if the standalone Adapter plugin is active too the plugin simply uses whichever copy loads first. Every call to its tools runs as the WordPress user the connection belongs to, over OAuth or an Application Password, and is checked against that user's capabilities.
 
 The admin screen has a switch for each ability, plus read-only mode, per-role and per-connection allowlists, a rate limit, an IP allowlist and Pause all access, and each OAuth connection gets its own pause, end date, rate limit and access preset. An Activity Log table in the site's own database records the acting user, the tool, the argument keys and an identifier-only note, and it never stores free-text content.
+
+The Changes tab keeps 30 days of what agents changed with 25 of the plugin's tools and reverts a change if the item hasn't been edited since. It shows field names, never contents, though the earlier values are stored in a table in the site's database, which uninstall always drops. Two optional tools, `aafm/list-changes` and `aafm/undo-change`, let an agent undo what its own connection changed in the last 24 hours. Both start off, and the Read only, Content editor and Shop manager presets leave `aafm/undo-change` out.
 
 Playbooks are step-by-step instructions the owner writes, and agents read the Active ones through two read tools, `aafm/list-playbooks` and `aafm/get-playbook`. Writes through the general content tools to pages owned by Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks or WPBakery are refused. An edit that only sets the excerpt goes through and leaves the stored content as it was, unless the plugin can't tell which builder owns the post. Avada's two dedicated tools are a second exception: they can change text and refuse changes to its shortcodes.
 
@@ -110,6 +113,7 @@ These are the main extension points. Every name starts with `aafm_`.
 | `aafm_rate_limit_per_min`, `aafm_ip_allowlist`, `aafm_max_title_len` | filters | Adjust the stored value. A filter cannot switch off a limit the site owner set in Settings. |
 | `aafm_page_builder_markers` | filter | Map of post meta key to builder name used by the page builder guard. |
 | `aafm_allowed_post_types` | filter | Custom post types exposed to the content tools. Types that fail the eligibility check stay refused. |
+| `aafm_undo_secret_key_patterns` | filter | Regular expressions for meta keys whose values change history must never keep. Receives the default pattern and can only add; the defaults always stay. |
 
 ### WP-CLI
 
@@ -153,6 +157,14 @@ The plugin calls no AI provider and sends no telemetry. It makes two kinds of re
 The Model Context Protocol is an open specification that Anthropic originally developed. Claude, ChatGPT, Cursor, VS Code, Gemini and other product names belong to their owners, and Agent Abilities for MCP is a third-party plugin that isn't affiliated with, endorsed by or sponsored by any of them.
 
 ## Changelog
+### 1.11.2
+
+* **Feature:** A new Changes tab keeps 30 days of what agents changed with 25 tools and reverts a change if the item hasn't been edited since, and a site-wide find and replace reverts as one group. Every write tool now reports whether its change can be undone, with a reason when it can't (permanent deletes, orders, refunds).
+* **Feature:** Two new tools, list-changes and undo-change, let an agent see and undo its own changes from the last 24 hours, up to 30 undo calls an hour per connection. Both start off, and undo-change is destructive, so the Read only, Content editor and Shop manager presets leave it out.
+* **Fix:** wc-update-payment-gateway's order is now a zero-based position, as wc-get-payment-gateway reports it, and the write renumbers the stored gateway order, so a script that passed a stored sort value now gets a position. wc-get-order returns payment_method and payment_method_title, a variation's sale price can be cleared with an empty string, and WordPress's export and erase personal data tools now cover the activity log and the new change history.
+* **Fix:** A refund above the remaining amount, a user deleting their own account, deleting or demoting the last administrator, a missing reassign user, trashing an item already in the Trash and a tool aimed at a content type that isn't exposed now each return a named error instead of a generic one.
+* **Chore:** Change history is stored in its own table, which is dropped on every uninstall and emptied by Reset, and several tool descriptions and messages were reworded.
+
 ### 1.11.1
 
 * **Fix:** The high-risk lock now holds wc-create-order, WooCommerce's own order status and order update tools, and the Secure Custom Fields tools that can store a callback name, and its filter accepts other plugins' slugs. Shop manager connections no longer reach wc-create-order, and post tools no longer reach a type whose own tool is off.

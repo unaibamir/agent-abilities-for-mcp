@@ -507,6 +507,9 @@ function aafm_exec_trash_page( array $input ) {
 	if ( ! $post instanceof WP_Post || 'page' !== $post->post_type ) {
 		return aafm_generic_error();
 	}
+	if ( 'trash' === $post->post_status ) {
+		return aafm_already_trashed_error( $post );
+	}
 	if ( ! wp_trash_post( $id ) ) {
 		return aafm_generic_error();
 	}

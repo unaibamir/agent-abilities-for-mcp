@@ -520,7 +520,7 @@ final class SiteSettingsTest extends TestCase {
 		remove_all_filters( 'pre_update_option_blogname' );
 		remove_all_filters( 'option_blogname' );
 
-		$this->assertSame( array( 'settings' => array( 'blogname' => 'Translated Name' ) ), $res );
+		$this->assertSame( array( 'settings' => array( 'blogname' => 'Translated Name' ) ), $this->without_undo( $res ) );
 		$this->assertSame( 'Old Name', $this->option_row( 'blogname' ) );
 		$rows = $this->write_outcome_rows();
 		$this->assertCount( 1, $rows );
@@ -623,7 +623,7 @@ final class SiteSettingsTest extends TestCase {
 
 		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
 
-		$this->assertSame( array( 'settings' => array( 'blogdescription' => 'A tagline' ) ), $res );
+		$this->assertSame( array( 'settings' => array( 'blogdescription' => 'A tagline' ) ), $this->without_undo( $res ) );
 		$this->assertSame( 'A tagline', $this->option_row( 'blogdescription' ) );
 		$rows = $this->write_outcome_rows();
 		$this->assertCount( 1, $rows );
@@ -783,7 +783,7 @@ final class SiteSettingsTest extends TestCase {
 
 		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
 
-		$this->assertSame( array( 'settings' => array( 'blogdescription' => 'A tagline' ) ), $res );
+		$this->assertSame( array( 'settings' => array( 'blogdescription' => 'A tagline' ) ), $this->without_undo( $res ) );
 		$this->assertSame( 'A tagline', $this->option_row( 'blogdescription' ) );
 		$rows = $this->write_outcome_rows();
 		$this->assertCount( 1, $rows );
@@ -947,7 +947,7 @@ final class SiteSettingsTest extends TestCase {
 			array( 'settings' => array( 'blogdescription' => 'Shop' ) )
 		);
 
-		$this->assertSame( array( 'settings' => array( 'blogdescription' => 'Shop' ) ), $res );
+		$this->assertSame( array( 'settings' => array( 'blogdescription' => 'Shop' ) ), $this->without_undo( $res ) );
 		$this->assertSame( 'Shop', $this->option_row( 'blogdescription' ) );
 	}
 

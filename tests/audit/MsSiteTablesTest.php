@@ -46,6 +46,15 @@ final class MsSiteTablesTest extends TestCase {
 		}
 	}
 
+	public function test_the_drop_filter_names_this_sites_changes_table(): void {
+		global $wpdb;
+		$blog_id = (int) self::factory()->blog->create();
+
+		$tables = aafm_filter_wpmu_drop_tables( array(), $blog_id );
+
+		$this->assertContains( $wpdb->get_blog_prefix( $blog_id ) . 'aafm_changes', $tables );
+	}
+
 	public function test_the_drop_filter_uses_the_deleted_sites_prefix_not_the_current_one(): void {
 		global $wpdb;
 		$blog_id = (int) self::factory()->blog->create();

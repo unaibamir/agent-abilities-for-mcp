@@ -1118,8 +1118,148 @@ final class WooReportsTest extends TestCase {
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$ordering = get_option( 'woocommerce_gateway_order' );
 		$this->assertIsArray( $ordering );
-		$this->assertSame( 4, (int) $ordering['paypal'] );
-		$this->assertSame( 4, $res['order'], 'The response order must reflect what was just requested (M13).' );
+		// A position past the end of the two stub gateways lands last, and every gateway is renumbered.
+		$this->assertSame( 1, (int) $ordering['paypal'] );
+		$this->assertSame( 0, (int) $ordering['stripe'] );
+		$this->assertSame( 1, $res['order'], 'The response order is the position that was stored (M13).' );
+	}
+
+	/**
+	 * Set the stored gateway map to the position of each loaded gateway plus an offset, the shape a store has
+	 * after a drag-sort in an older WooCommerce, then reload WooCommerce's own gateway list from it.
+	 *
+	 * @param int $offset Added to each position.
+	 * @return list<string> Gateway ids in their loaded order.
+	 */
+	private function seed_gateway_order( int $offset ): array {
+		\AAFM\Tests\WcGatewayStubStore::$gateways['cod'] = array(
+			'id'          => 'cod',
+			'title'       => 'Cash on delivery',
+			'description' => 'Pay on delivery.',
+			'enabled'     => 'no',
+			'settings'    => array( 'title' => 'Cash on delivery' ),
+		);
+		$ids = array_keys( \WC_Payment_Gateways::instance()->payment_gateways() );
+		$map = array();
+		foreach ( $ids as $index => $id ) {
+			$map[ $id ] = $index + $offset;
+		}
+		update_option( 'woocommerce_gateway_order', $map );
+		return array_keys( \WC_Payment_Gateways::instance()->payment_gateways() );
+	}
+
+	/**
+	 * The write takes the same thing the read reports: a zero-based position. The old write stored the number
+	 * as WooCommerce's raw sort key, so a position never read back as written.
+	 */
+	public function test_update_payment_gateway_order_is_a_position_that_reads_back_as_written(): void {
+		$this->acting_as( 'administrator' );
+		$ids = $this->seed_gateway_order( 3 );
+		$this->assertGreaterThan( 2, count( $ids ), 'Guard: three gateways or more.' );
+
+		$res = aafm_exec_wc_update_payment_gateway(
+			array(
+				'gateway_id' => $ids[0],
+				'order'      => 2,
+			)
+		);
+
+		$this->assertIsArray( $res );
+		$now = \WC_Payment_Gateways::instance()->payment_gateways();
+		$this->assertSame( 2, aafm_wc_gateway_order( $ids[0], $now ), 'The gateway sits at the position asked for.' );
+		$this->assertSame( 2, $res['order'], 'The response names the position that was stored.' );
+		$this->assertSame( count( $ids ), count( $now ), 'No gateway was dropped.' );
+	}
+
+	/**
+	 * A number another gateway already stored as its key made WooCommerce drop one of the two from its list,
+	 * and the dropped gateway then could not be found to put it back.
+	 */
+	public function test_update_payment_gateway_order_never_collides_with_another_gateway(): void {
+		$this->acting_as( 'administrator' );
+		$ids = $this->seed_gateway_order( 3 );
+		$this->assertGreaterThan( 2, count( $ids ), 'Guard: three gateways or more.' );
+		$last = count( $ids ) + 2; // The raw key the last gateway holds.
+
+		$res = aafm_exec_wc_update_payment_gateway(
+			array(
+				'gateway_id' => $ids[0],
+				'order'      => $last,
+			)
+		);
+
+		$this->assertIsArray( $res );
+		$now = \WC_Payment_Gateways::instance()->payment_gateways();
+		$this->assertSame( count( $ids ), count( $now ), 'Every gateway is still in WooCommerce\'s list.' );
+		$this->assertSame( count( $ids ) - 1, $res['order'], 'A position past the end lands last, and the response says where.' );
+		$stored = get_option( 'woocommerce_gateway_order' );
+		$this->assertSame( count( $ids ), count( array_unique( array_map( 'intval', array_intersect_key( $stored, array_flip( $ids ) ) ) ) ), 'No two gateways share a stored key.' );
+	}
+
+	/**
+	 * WooCommerce keeps placeholder entries in the same option (payment extension suggestions and the offline
+	 * group, keyed with a leading underscore). They are not gateways, so a reorder leaves their slots alone and
+	 * renumbers only among the gateways, inside the slots the gateways already held.
+	 */
+	public function test_update_payment_gateway_order_keeps_placeholder_entries_in_their_slots(): void {
+		$this->acting_as( 'administrator' );
+		update_option(
+			'woocommerce_gateway_order',
+			array(
+				'_wc_pes_woopayments'               => 0,
+				'_wc_pes_paypal_full_stack'         => 1,
+				'_wc_offline_payment_methods_group' => 2,
+				'paypal'                            => 3,
+				'stripe'                            => 4,
+			)
+		);
+		$this->assertSame( array( 'paypal', 'stripe' ), array_keys( \WC_Payment_Gateways::instance()->payment_gateways() ), 'Guard: paypal sits first.' );
+
+		$res = aafm_exec_wc_update_payment_gateway(
+			array(
+				'gateway_id' => 'paypal',
+				'order'      => 1,
+			)
+		);
+
+		$this->assertIsArray( $res );
+		$this->assertSame( 1, $res['order'] );
+		$map = get_option( 'woocommerce_gateway_order' );
+		$this->assertSame( 0, (int) $map['_wc_pes_woopayments'] );
+		$this->assertSame( 1, (int) $map['_wc_pes_paypal_full_stack'] );
+		$this->assertSame( 2, (int) $map['_wc_offline_payment_methods_group'] );
+		$this->assertSame( array( 'stripe', 'paypal' ), array_keys( \WC_Payment_Gateways::instance()->payment_gateways() ) );
+		$this->assertSame( 2, count( array_unique( array( (int) $map['paypal'], (int) $map['stripe'] ) ) ) );
+	}
+
+	/**
+	 * An entry for a gateway that is not loaded (its plugin is off) must not share a key with a loaded one, or
+	 * it would collide when the plugin comes back.
+	 */
+	public function test_update_payment_gateway_order_moves_a_stale_entry_off_a_key_a_gateway_now_holds(): void {
+		$this->acting_as( 'administrator' );
+		update_option(
+			'woocommerce_gateway_order',
+			array(
+				'ghost'  => 0,
+				'paypal' => 1,
+				'stripe' => 2,
+			)
+		);
+
+		$res = aafm_exec_wc_update_payment_gateway(
+			array(
+				'gateway_id' => 'stripe',
+				'order'      => 0,
+			)
+		);
+
+		$this->assertIsArray( $res );
+		$map    = get_option( 'woocommerce_gateway_order' );
+		$loaded = array( (int) $map['paypal'], (int) $map['stripe'] );
+		$this->assertSame( 2, count( array_unique( $loaded ) ), 'The loaded gateways have distinct keys.' );
+		$this->assertNotContains( (int) $map['ghost'], $loaded, 'The stale entry shares no key with a loaded gateway.' );
+		$this->assertSame( array( 'stripe', 'paypal' ), array_keys( \WC_Payment_Gateways::instance()->payment_gateways() ) );
 	}
 
 	/**
@@ -1469,7 +1609,7 @@ final class WooReportsTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$input = array(
 			'gateway_id' => 'paypal',
-			'order'      => 7,
+			'order'      => 1,
 		);
 
 		$this->assertIsArray( aafm_exec_wc_update_payment_gateway( $input ) );
@@ -1477,7 +1617,7 @@ final class WooReportsTest extends TestCase {
 
 		$filter = array( self::class, 'keep_old_value' );
 		add_filter( 'pre_update_option_woocommerce_gateway_order', $filter, 10, 2 );
-		$input['order'] = 8;
+		$input['order'] = 0;
 		$refused        = aafm_exec_wc_update_payment_gateway( $input );
 		remove_filter( 'pre_update_option_woocommerce_gateway_order', $filter, 10 );
 
@@ -1676,18 +1816,18 @@ final class WooReportsTest extends TestCase {
 		$res = aafm_exec_wc_update_payment_gateway(
 			array(
 				'gateway_id' => 'paypal',
-				'order'      => 3,
+				'order'      => 0,
 			)
 		);
 
 		$this->assertIsArray( $res );
-		$this->assertSame( 3, $res['order'] );
+		$this->assertSame( 0, $res['order'] );
 		$this->assertSame(
 			md5(
 				maybe_serialize(
 					array(
-						'paypal' => 3,
-						'stripe' => 0,
+						'paypal' => 0,
+						'stripe' => 1,
 					)
 				)
 			),
@@ -1766,7 +1906,7 @@ final class WooReportsTest extends TestCase {
 				maybe_serialize(
 					array(
 						'stripe' => 0,
-						'paypal' => 2,
+						'paypal' => 1,
 					)
 				)
 			),
@@ -1797,7 +1937,14 @@ final class WooReportsTest extends TestCase {
 		);
 		remove_filter( 'pre_update_option_woocommerce_gateway_order', $prime, 10 );
 
-		$this->assertSame( array( 'paypal' => 6 ), get_option( 'woocommerce_gateway_order' ), 'Guard: the cache shows the refused order.' );
+		$this->assertSame(
+			array(
+				'paypal' => 2,
+				'stripe' => 1,
+			),
+			get_option( 'woocommerce_gateway_order' ),
+			'Guard: the cache shows the refused order.'
+		);
 		$this->assertInstanceOf( WP_Error::class, $res );
 		$this->assertSame(
 			array(
@@ -1994,7 +2141,15 @@ final class WooReportsTest extends TestCase {
 	public function test_gateway_order_stored_as_a_numeric_string_confirms_the_equal_position(): void {
 		$this->acting_as( 'administrator' );
 		delete_option( 'woocommerce_gateway_order' );
-		add_option( 'woocommerce_gateway_order', array( 'paypal' => '3' ), '', false );
+		add_option(
+			'woocommerce_gateway_order',
+			array(
+				'paypal' => '1',
+				'stripe' => '0',
+			),
+			'',
+			false
+		);
 		wp_cache_delete( 'woocommerce_gateway_order', 'options' );
 		$filter = array( self::class, 'keep_old_value' );
 		add_filter( 'pre_update_option_woocommerce_gateway_order', $filter, 10, 2 );
@@ -2002,7 +2157,7 @@ final class WooReportsTest extends TestCase {
 			$res = aafm_exec_wc_update_payment_gateway(
 				array(
 					'gateway_id' => 'paypal',
-					'order'      => 3,
+					'order'      => 1,
 				)
 			);
 		} finally {
@@ -2010,7 +2165,7 @@ final class WooReportsTest extends TestCase {
 		}
 
 		$this->assertIsArray( $res );
-		$this->assertSame( 3, $res['order'] );
+		$this->assertSame( 1, $res['order'] );
 	}
 
 	/**

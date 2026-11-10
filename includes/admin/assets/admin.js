@@ -73,6 +73,7 @@
 			this.#bindTestConnection();
 			this.#bindDoctor();
 			this.#bindReviewInbox();
+			this.#bindChanges();
 			this.#bindClearLog();
 			this.#bindNotifyTest();
 			this.#bindLogPaginationAndFilters();
@@ -1907,6 +1908,7 @@
 				const highRiskUnlocked = form.querySelector(
 					'input[name="aafm_high_risk_abilities_unlocked"]'
 				);
+				const undoCapture = form.querySelector( 'input[name="aafm_undo_capture"]' );
 				const allowlist = form.querySelector( 'textarea[name="aafm_ip_allowlist"]' );
 				const siteBrief = form.querySelector( 'textarea[name="aafm_site_brief"]' );
 				const defaultServer = form.querySelector( 'select[name="aafm_default_server_mode"]' );
@@ -1941,6 +1943,13 @@
 				}
 				if ( highRiskUnlocked?.checked ) {
 					body.append( 'aafm_high_risk_abilities_unlocked', '1' );
+				}
+				// Change history: the marker says the control was on the page, because an unchecked box sends nothing.
+				if ( undoCapture ) {
+					body.append( 'aafm_undo_capture_shown', '1' );
+					if ( undoCapture.checked ) {
+						body.append( 'aafm_undo_capture', '1' );
+					}
 				}
 				body.append( 'aafm_ip_allowlist', allowlist?.value ?? '' );
 				if ( defaultServer ) {
@@ -2198,6 +2207,146 @@
 					json?.data?.message ?? this.#t( 'reviewFailed', 'That did not work. Reload the page and try again.' );
 				buttons.forEach( ( b ) => {
 					b.disabled = false;
+				} );
+			} );
+		}
+
+		/**
+		 * Changes tab: Revert, Revert all, Clear history and the upgrade notice's Dismiss. The server re-checks
+		 * everything at click time; every answer is set with textContent, and focus returns to the button.
+		 */
+		#bindChanges() {
+			const dismiss = document.querySelector( '#aafm-undo-notice-dismiss' );
+			dismiss?.addEventListener( 'click', async () => {
+				dismiss.disabled = true;
+				const json = await this.#post( 'aafm_undo_dismiss_notice' );
+				if ( json?.success ) {
+					document.querySelector( '#aafm-undo-notice' )?.remove();
+					// The button is gone, so focus goes to the page heading instead of dropping to the body.
+					const heading = document.querySelector( '.aafm-page-head h1' );
+					if ( heading ) {
+						heading.tabIndex = -1;
+						heading.focus();
+					}
+					return;
+				}
+				dismiss.disabled = false;
+				let note = document.querySelector( '#aafm-undo-notice-error' );
+				if ( ! note ) {
+					note = document.createElement( 'span' );
+					note.id = 'aafm-undo-notice-error';
+					note.setAttribute( 'role', 'alert' );
+					dismiss.after( note );
+				}
+				note.textContent = ` ${ json?.data?.message ?? this.#t( 'reviewFailed', 'That did not work. Reload the page and try again.' ) }`;
+				dismiss.focus();
+			} );
+
+			const card = document.querySelector( '#aafm-changes-card' );
+			if ( ! card ) {
+				return;
+			}
+			const show = ( cell, text ) => {
+				const line = cell?.querySelector( '.aafm-changes-status' );
+				if ( line ) {
+					line.textContent = text;
+				}
+			};
+			const run = async ( btn, action, data, onDone ) => {
+				const cell = btn.closest( 'td' ) ?? btn.parentElement;
+				btn.disabled = true;
+				show( cell, this.#t( 'undoWorking', 'Working...' ) );
+				const json = await this.#post( action, data );
+				btn.disabled = false;
+				if ( json?.success ) {
+					onDone( json.data, cell );
+				} else {
+					show( cell, json?.data?.message ?? this.#t( 'reviewFailed', 'That did not work. Reload the page and try again.' ) );
+				}
+				// Focus stays on the control; when the answer removed it, the status line takes it.
+				if ( btn.isConnected ) {
+					btn.focus();
+				} else {
+					const line = cell?.querySelector( '.aafm-changes-status' );
+					if ( line ) {
+						line.tabIndex = -1;
+						line.focus();
+					}
+				}
+			};
+
+			card.addEventListener( 'click', ( event ) => {
+				const revert = event.target.closest( '[data-undo-revert]' );
+				const group = event.target.closest( '[data-undo-revert-group]' );
+				if ( revert ) {
+					const fields = revert.dataset.undoFields ?? '';
+					if ( ! window.confirm( this.#format( this.#t( 'undoRevertConfirm', 'Revert this change? It will put back %s.' ), fields ) ) ) {
+						return;
+					}
+					run( revert, 'aafm_undo_revert', { change_id: revert.dataset.undoRevert }, ( data, cell ) => {
+						const differences = data.differences ?? [];
+						show(
+							cell,
+							differences.length
+								? `${ this.#t( 'undoRevertedWithDiff', 'Reverted. WordPress stored these a little differently:' ) } ${ differences.join( ', ' ) }`
+								: this.#t( 'undoReverted', 'Reverted.' )
+						);
+						const pill = cell?.closest( 'tr' )?.querySelector( '.aafm-pill' );
+						if ( pill ) {
+							pill.className = 'aafm-pill aafm-pill-neutral';
+							pill.textContent = this.#t( 'undoPillReverted', 'Reverted' );
+						}
+						revert.remove();
+					} );
+				} else if ( group ) {
+					if ( ! window.confirm( this.#t( 'undoRevertGroupConfirm', 'Revert every change in this group, newest first?' ) ) ) {
+						return;
+					}
+					run( group, 'aafm_undo_revert_group', { group_id: group.dataset.undoRevertGroup }, ( data, cell ) => {
+						const results = data.results ?? [];
+						const skipped = results.filter( ( r ) => 'refused' === r.outcome || 'failed' === r.outcome );
+						// Members that are done now read as reverted in the opened list.
+						results
+							.filter( ( r ) => ! skipped.includes( r ) )
+							.forEach( ( r ) => {
+								const pill = cell?.closest( 'tr' )?.querySelector( `li[data-change-id="${ r.change_id }"] .aafm-pill` );
+								if ( pill ) {
+									pill.className = 'aafm-pill aafm-pill-neutral';
+									pill.textContent = this.#t( 'undoPillReverted', 'Reverted' );
+								}
+							} );
+						if ( ! skipped.length ) {
+							show( cell, this.#t( 'undoGroupDone', 'Group reverted. Reload to see the new state.' ) );
+							group.remove();
+							return;
+						}
+						// A partial result keeps the button, so the skipped posts can be tried again.
+						show(
+							cell,
+							`${ this.#format( this.#t( 'undoGroupPartial', '%s of the changes were reverted. Not reverted:' ), String( results.length - skipped.length ) ) } ${ skipped.map( ( r ) => `${ r.item || `#${ r.change_id }` } (${ r.message ?? r.reason })` ).join( ' ' ) }`
+						);
+					} );
+				}
+			} );
+
+			const clear = card.querySelector( '#aafm-changes-clear' );
+			clear?.addEventListener( 'click', () => {
+				if ( ! window.confirm( this.#t( 'undoClearConfirm', 'Clear all change history?' ) ) ) {
+					return;
+				}
+				run( clear, 'aafm_undo_clear_history', {}, () => {
+					const line = card.querySelector( '#aafm-changes-clear-status' );
+					if ( line ) {
+						line.textContent = this.#t( 'undoCleared', 'History cleared.' );
+					}
+					card.querySelector( '.aafm-table-wrap' )?.remove();
+					card.querySelector( '.aafm-pager' )?.remove();
+					if ( ! card.querySelector( '.aafm-empty-state' ) ) {
+						const empty = document.createElement( 'div' );
+						empty.className = 'aafm-empty-state';
+						empty.textContent = this.#t( 'undoEmpty', 'No changes recorded yet. When an agent edits a post, a term, a custom field or SEO data, the change shows up here.' );
+						card.querySelector( '.aafm-changes-clear' )?.before( empty );
+					}
 				} );
 			} );
 		}

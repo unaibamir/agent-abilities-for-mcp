@@ -483,6 +483,8 @@ if ( ! class_exists( 'WC_Order' ) ) {
 		public function get_customer_id() { return 0; }
 		/** @return string */
 		public function get_customer_note() { return ''; }
+		public function get_payment_method() { return ''; }
+		public function get_payment_method_title() { return ''; }
 		/**
 		 * Real WooCommerce runs `array_filter( (array) $types )`, so a list of types is as valid as
 		 * a single one (abstract-wc-order.php:1068). The old string-only hint was a stub inaccuracy.

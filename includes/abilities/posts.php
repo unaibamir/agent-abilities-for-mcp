@@ -94,7 +94,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'label'        => __( 'Replace in post', 'agent-abilities-for-mcp' ),
 		'description'  => sprintf(
 			/* translators: %s: page builder names, for example Elementor and Divi. */
-			__( 'Literal find-and-replace inside a post\'s content. Sanitizes the replacement text and edits only the replaced spans of the body; untouched content is left byte-for-byte as it was, and status is never touched. Reaches a page, product, event, venue, organizer or listing only while that type\'s own tool is on. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
+			__( 'Literal find-and-replace inside a post\'s content. Sanitizes the replacement text and edits only the replaced spans of the body; untouched content is left byte-for-byte as it was, and status is never touched. Matches literal text only: markdown such as [text](url) is inserted as typed, not turned into a link, and text inside markup (an href, src or other attribute) is refused, so use replace-block or update-post for links, src and markup. Reaches a page, product, event, venue, organizer or listing only while that type\'s own tool is on. With WordPress revisions enabled, later edits can be compared and restored from revision history; a post with no earlier revisions has no earlier copy to restore, so keep the old text. While change history is on, undo-change or the Changes tab can also revert this change. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
 			aafm_page_builder_names()
 		),
 		'group'        => 'writes',
@@ -106,7 +106,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'label'        => __( 'Replace block', 'agent-abilities-for-mcp' ),
 		'description'  => sprintf(
 			/* translators: %s: page builder names, for example Elementor and Divi. */
-			__( 'Replace one whole block in a post or page with new block markup, without resending the rest of the content. The block is addressed by path: its index among the top-level blocks, then among that block\'s inner blocks, counting only real blocks (the blank lines between blocks are not counted), so [2, 0] is the first block inside the third top-level block. Reaches a page, product, event, venue, organizer or listing only while that type\'s own tool is on. Read the post with content_format raw to count them; classic HTML between blocks is not counted. Pass expect_block (for example core/group) to refuse the write if the block at that path has a different block name; it checks the name only, not the content, so two blocks of the same type cannot be told apart and the post should be read again just before writing if it may have changed. The plugin leaves other blocks\' parsed attributes and HTML unchanged; WordPress may sanitize the whole page on save for users who cannot post unfiltered HTML. Content warnings and strict-mode refusals cover the whole resulting page, not only the new block. Refuses when the post\'s existing block markup does not survive being re-serialized (for example a block with invalid attribute JSON); use aafm-update-post for those. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
+			__( 'Replace one whole block in a post or page with new block markup, without resending the rest of the content. The block is addressed by path: its index among the top-level blocks, then among that block\'s inner blocks, counting only real blocks (the blank lines between blocks are not counted), so [2, 0] is the first block inside the third top-level block. Reaches a page, product, event, venue, organizer or listing only while that type\'s own tool is on. Read the post with content_format raw to count them; classic HTML between blocks is not counted. Pass expect_block (for example core/group) to refuse the write if the block at that path has a different block name; it checks the name only, not the content, so two blocks of the same type cannot be told apart and the post should be read again just before writing if it may have changed. The plugin leaves other blocks\' parsed attributes and HTML unchanged; WordPress may sanitize the whole page on save for users who cannot post unfiltered HTML. Content warnings and strict-mode refusals cover the whole resulting page, not only the new block. Refuses when the post\'s existing block markup does not survive being re-serialized (for example a block with invalid attribute JSON); use aafm-update-post for those. With WordPress revisions enabled, later edits can be compared and restored from revision history; a post with no earlier revisions has no earlier copy to restore, so keep the old text. While change history is on, undo-change or the Changes tab can also revert this change. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
 			aafm_page_builder_names()
 		),
 		'group'        => 'writes',
@@ -457,8 +457,9 @@ function aafm_exec_count_posts( array $input ) {
 	$can_edit     = ( null !== $type_object ) && current_user_can( $type_object->cap->edit_posts );
 	$public_stati = get_post_stati( array( 'public' => true ) );
 
-	$by_status = array();
-	$total     = 0;
+	$core_stati = get_post_stati( array( '_builtin' => true ) );
+	$by_status  = array();
+	$total      = 0;
 	foreach ( $counts as $status => $n ) {
 		$status = (string) $status;
 		$n      = (int) $n;
@@ -466,6 +467,12 @@ function aafm_exec_count_posts( array $input ) {
 		// Hide non-public status counts from callers who cannot edit this post type.
 		if ( ! $can_edit && ! in_array( $status, $public_stati, true ) ) {
 			$n = 0;
+		}
+
+		// A status a plugin registered and no post uses is noise (a store can register thirty). Core's own
+		// statuses keep their bucket at zero so the breakdown keeps its shape.
+		if ( 0 === $n && ! in_array( $status, $core_stati, true ) ) {
+			continue;
 		}
 
 		$by_status[ $status ] = $n;
@@ -2370,31 +2377,38 @@ function aafm_exec_replace_sitewide( array $input ) {
 			continue;
 		}
 
-		$result = wp_update_post(
-			wp_slash(
-				array(
-					'ID'           => $post->ID,
-					'post_content' => $new,
-				)
-			),
-			true
-		);
-		if ( is_wp_error( $result ) ) {
-			++$failed;
-			continue;
+		// One change row per post, all sharing the call's group. Finished in the finally below, so the
+		// error, the confirm miss and the success all settle the row.
+		$undo_child = aafm_undo_begin_object( 'aafm/replace-sitewide', 'post', (int) $post->ID, array( 'post:post_content' ), array( 'post_id' => (int) $post->ID ) );
+		try {
+			$result = wp_update_post(
+				wp_slash(
+					array(
+						'ID'           => $post->ID,
+						'post_content' => $new,
+					)
+				),
+				true
+			);
+			if ( is_wp_error( $result ) ) {
+				++$failed;
+				continue;
+			}
+			// is_wp_error() alone does not catch a wp_insert_post_data filter
+			// that vetoes or reverts the content, which would count a post as updated when nothing
+			// actually changed. Confirm the exact intended content landed, matching the single-post
+			// replace-text fix above. Compare against the CANONICAL
+			// sanitize_post_field() form, not $new itself, so a legitimate normalization is not
+			// mistaken for a veto.
+			$after = aafm_exact_object( 'post', (int) $result );
+			if ( ! $after instanceof WP_Post || ! aafm_post_field_confirm_logged( $post->ID, 'post_content', $new, (string) $post->post_content ) ) {
+				++$failed;
+				continue;
+			}
+			++$updated;
+		} finally {
+			aafm_undo_finish_object( $undo_child );
 		}
-		// is_wp_error() alone does not catch a wp_insert_post_data filter
-		// that vetoes or reverts the content, which would count a post as updated when nothing
-		// actually changed. Confirm the exact intended content landed, matching the single-post
-		// replace-text fix above. Compare against the CANONICAL
-		// sanitize_post_field() form, not $new itself, so a legitimate normalization is not
-		// mistaken for a veto.
-		$after = aafm_exact_object( 'post', (int) $result );
-		if ( ! $after instanceof WP_Post || ! aafm_post_field_confirm_logged( $post->ID, 'post_content', $new, (string) $post->post_content ) ) {
-			++$failed;
-			continue;
-		}
-		++$updated;
 	}
 
 	return array(
@@ -2551,15 +2565,43 @@ function aafm_exec_trash_post( array $input ) {
 	if ( ! aafm_trash_is_enabled() ) {
 		return aafm_trash_disabled_error();
 	}
-	$id = absint( $input['post_id'] );
-	if ( ! aafm_exact_object_chain( 'post', $id ) instanceof WP_Post ) {
+	$id   = absint( $input['post_id'] );
+	$post = aafm_exact_object_chain( 'post', $id );
+	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
+	}
+	if ( 'trash' === $post->post_status ) {
+		return aafm_already_trashed_error( $post );
 	}
 	$ok = wp_trash_post( $id );
 	if ( ! $ok ) {
 		return aafm_generic_error();
 	}
 	return array( 'trashed' => true );
+}
+
+/**
+ * The refusal for trashing something already in the Trash. The status is only named to a caller who can read
+ * that post; anyone else gets the generic answer, so the message cannot confirm the state of a post they
+ * cannot see.
+ *
+ * The tools for content types that sit outside the generic post exposure list (reusable blocks, events)
+ * pass $own_gate: their permission callback already demanded a per-object delete capability on this very
+ * item, which is the stronger check, and the generic list would refuse a type those tools legitimately own.
+ *
+ * @param WP_Post $post     The post that is already in the Trash.
+ * @param bool    $own_gate True when the calling tool's own per-object permission already vouched for the caller.
+ * @return WP_Error
+ */
+function aafm_already_trashed_error( WP_Post $post, bool $own_gate = false ): WP_Error {
+	if ( ! $own_gate && ! aafm_can_read_post_object( $post ) ) {
+		return aafm_generic_error();
+	}
+	return new WP_Error(
+		'aafm_already_trashed',
+		__( 'That item is already in the Trash, so nothing was changed.', 'agent-abilities-for-mcp' ),
+		array( 'status' => 400 )
+	);
 }
 
 /**

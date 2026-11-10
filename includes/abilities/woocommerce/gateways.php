@@ -637,7 +637,7 @@ function aafm_args_wc_update_payment_gateway(): array {
 				'order'       => array(
 					'type'        => 'integer',
 					'minimum'     => 0,
-					'description' => __( 'This gateway\'s raw position in the store\'s checkout gateway ordering. Lower values sort earlier. Stored directly as given, not validated against other gateways\' order values, so two gateways can end up sharing the same position. Reading the gateway back afterwards does not return this number: the read reports the gateway\'s resolved zero-based rank among all gateways, so a value of 5 written here can come back as 2. Both are correct, they answer different questions.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'Where this gateway sits in the checkout gateway list, as a zero-based position: 0 is first. A position past the end puts it last. The other gateways keep their relative order and shift to make room. The response and a later read report the same position.', 'agent-abilities-for-mcp' ),
 				),
 			),
 		),
@@ -797,15 +797,51 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 		do_action( 'woocommerce_update_option', array( 'id' => $gateway->get_option_key() ) );
 	}
 
-	$order_val = null;
+	$order_ids   = null;
+	$order_slots = array();
 	if ( null !== $order_row ) {
 		// Display order is not a per-gateway setting, and WC_Payment_Gateway has no `order` property
 		// to set (M13) - WooCommerce keeps order in the woocommerce_gateway_order option (a
-		// gateway_id => position map). Persist it there so the change survives the next request,
-		// merged into the row read above rather than get_option(), whose filters can add entries.
-		$order_val               = (int) $input['order'];
-		$ordering                = is_array( $order_row['value'] ) ? $order_row['value'] : array();
-		$ordering[ $gateway_id ] = $order_val;
+		// gateway_id => sort key map) and files each gateway in an array under that key, so two gateways
+		// holding one key leave only one of them in payment_gateways(). The input is a position, the same
+		// thing the read reports: this gateway moves to that place in the current list. The loaded gateways
+		// are renumbered among the sort keys they already hold (a gateway with none gets a key above every
+		// existing one), so the map's other entries keep their slots: WooCommerce also keeps placeholder
+		// entries in this option (a leading underscore, for payment extension suggestions and the offline
+		// group) and they are not gateways. A stale entry for a gateway that is not loaded and shares a key
+		// with a loaded one is moved above them, so it cannot collide when its plugin comes back. The merge is
+		// into the row read above rather than get_option(), whose filters can add entries.
+		$order_ids = array_values( array_diff( array_map( 'strval', array_keys( $gateways ) ), array( $gateway_id ) ) );
+		array_splice( $order_ids, min( max( 0, (int) $input['order'] ), count( $order_ids ) ), 0, array( $gateway_id ) );
+		$ordering = is_array( $order_row['value'] ) ? $order_row['value'] : array();
+		$keys     = array();
+		foreach ( $ordering as $entry ) {
+			if ( is_numeric( $entry ) ) {
+				$keys[] = (int) $entry;
+			}
+		}
+		$fresh = array() === $keys ? 0 : max( $keys ) + 1;
+		$slots = array();
+		foreach ( $order_ids as $id ) {
+			if ( isset( $ordering[ $id ] ) && is_numeric( $ordering[ $id ] ) ) {
+				$slots[] = (int) $ordering[ $id ];
+			}
+		}
+		$slots = array_values( array_unique( $slots ) );
+		sort( $slots );
+		for ( $held = count( $slots ), $wanted = count( $order_ids ); $held < $wanted; ++$held ) {
+			$slots[] = $fresh++;
+		}
+		$order_slots = array();
+		foreach ( $order_ids as $position => $id ) {
+			$ordering[ $id ]    = $slots[ $position ];
+			$order_slots[ $id ] = $slots[ $position ];
+		}
+		foreach ( $ordering as $id => $entry ) {
+			if ( ! isset( $order_slots[ $id ] ) && 0 !== strpos( (string) $id, '_' ) && is_numeric( $entry ) && in_array( (int) $entry, $slots, true ) ) {
+				$ordering[ $id ] = $fresh++;
+			}
+		}
 		aafm_wc_write(
 			'option',
 			array(
@@ -841,12 +877,17 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 			}
 		}
 	}
-	if ( null !== $order_val ) {
+	if ( null !== $order_ids ) {
 		// Only the requested integer or its string form counts: a stored 3.9, '3e0' or ' 3' is not
-		// position 3, and 'abc' is not position 0.
+		// position 3, and 'abc' is not position 0. Every loaded gateway is checked, since the write
+		// renumbered them all.
 		$saved_order = aafm_option_row( 'woocommerce_gateway_order' );
-		$saved_pos   = $saved_order['found'] && is_array( $saved_order['value'] ) ? ( $saved_order['value'][ $gateway_id ] ?? null ) : null;
-		if ( aafm_stored_id_matches( $saved_pos, $order_val ) ) {
+		$saved_map   = $saved_order['found'] && is_array( $saved_order['value'] ) ? $saved_order['value'] : array();
+		$landed      = true;
+		foreach ( $order_slots as $id => $slot ) {
+			$landed = $landed && aafm_stored_id_matches( $saved_map[ $id ] ?? null, $slot );
+		}
+		if ( $landed ) {
 			$persisted_keys[] = 'order';
 		} else {
 			$failed_keys[] = 'order';
@@ -855,10 +896,10 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 	if ( array() !== $failed_keys ) {
 		return aafm_wc_gateway_write_failed_error( $persisted_keys, $failed_keys );
 	}
-	// The response order reflects what was just requested when the request set one (the
-	// woocommerce_gateway_order write above is confirmed, but WC only re-sorts payment_gateways() on
-	// its own object's next init(), not against $gateways already fetched above). Otherwise fall back
-	// to the gateway's real position in WooCommerce's own sorted list (M13).
-	$order = isset( $input['order'] ) ? (int) $input['order'] : aafm_wc_gateway_order( $gateway_id, $gateways );
+	// The response order is the position that was stored, which can differ from the one asked for when it
+	// was past the end of the list. WC only re-sorts payment_gateways() on its own object's next init(), not
+	// against $gateways already fetched above, so it is taken from the list this write built. Without an
+	// order in the request it is the gateway's real position in WooCommerce's own sorted list (M13).
+	$order = null !== $order_ids ? (int) array_search( $gateway_id, $order_ids, true ) : aafm_wc_gateway_order( $gateway_id, $gateways );
 	return aafm_wc_gateway_shape( $gateway, $order );
 }

@@ -649,15 +649,17 @@ PHP;
 		WcOrderStubStore::seed(
 			5001,
 			array(
-				'number'         => '5001',
-				'status'         => 'processing',
-				'total'          => '49.99',
-				'currency'       => 'USD',
-				'date_created'   => '2024-06-01T10:00:00',
-				'date_paid'      => '2024-06-01T10:01:00',
-				'customer_id'    => 42,
-				'customer_note'  => 'Please deliver before noon.',
-				'items'          => array(
+				'number'               => '5001',
+				'status'               => 'processing',
+				'total'                => '49.99',
+				'currency'             => 'USD',
+				'date_created'         => '2024-06-01T10:00:00',
+				'date_paid'            => '2024-06-01T10:01:00',
+				'customer_id'          => 42,
+				'customer_note'        => 'Please deliver before noon.',
+				'payment_method'       => 'bacs',
+				'payment_method_title' => 'Direct bank transfer',
+				'items'                => array(
 					array(
 						'id'         => 1,
 						'name'       => 'Test Widget',
@@ -667,7 +669,7 @@ PHP;
 						'total'      => '39.98',
 					),
 				),
-				'billing'        => array(
+				'billing'              => array(
 					'first_name' => 'Jane',
 					'last_name'  => 'Doe',
 					'company'    => 'Acme Corp',
@@ -680,7 +682,7 @@ PHP;
 					'email'      => 'billing@example.com',
 					'phone'      => '+1-555-0100',
 				),
-				'shipping'       => array(
+				'shipping'             => array(
 					'first_name' => 'Jane',
 					'last_name'  => 'Doe',
 					'company'    => '',
@@ -691,9 +693,9 @@ PHP;
 					'postcode'   => '62701',
 					'country'    => 'US',
 				),
-				'total_tax'      => '4.00',
-				'subtotal'       => '39.98',
-				'shipping_total' => '5.99',
+				'total_tax'            => '4.00',
+				'subtotal'             => '39.98',
+				'shipping_total'       => '5.99',
 			)
 		);
 	}
@@ -739,6 +741,8 @@ class WC_Order {
 	public function get_date_paid() { return apply_filters( 'woocommerce_order_get_date_paid', $this->data['date_paid'] ?? null, $this ); }
 	public function get_customer_id() { return (int) apply_filters( 'woocommerce_order_get_customer_id', $this->data['customer_id'] ?? 0, $this ); }
 	public function get_customer_note() { return (string) apply_filters( 'woocommerce_order_get_customer_note', $this->data['customer_note'] ?? '', $this ); }
+	public function get_payment_method() { return (string) apply_filters( 'woocommerce_order_get_payment_method', $this->data['payment_method'] ?? '', $this ); }
+	public function get_payment_method_title() { return (string) apply_filters( 'woocommerce_order_get_payment_method_title', $this->data['payment_method_title'] ?? '', $this ); }
 	public function get_items( $types = 'line_item' ) { return (array) apply_filters( 'woocommerce_order_get_items', $this->data['items'] ?? array(), $this, $types ); }
 	public function get_total_tax() { return (string) apply_filters( 'woocommerce_order_get_total_tax', $this->data['total_tax'] ?? '0.00', $this ); }
 	public function get_subtotal() { return (string) apply_filters( 'woocommerce_order_get_subtotal', $this->data['subtotal'] ?? '0.00', $this ); }
@@ -2215,13 +2219,30 @@ class WC_Payment_Gateways {
 		return new static();
 	}
 
-	/** @return array<string,\WC_Payment_Gateway> */
+	/**
+	 * Sorted the way WC_Payment_Gateways::init() sorts: each gateway is filed under the number the
+	 * woocommerce_gateway_order option holds for it (one with no number goes after 999), the list is
+	 * ksort()ed, and two gateways holding the same number leave only the later one.
+	 *
+	 * @return array<string,\WC_Payment_Gateway>
+	 */
 	public function payment_gateways() {
-		$out = array();
+		$ordering = (array) get_option( 'woocommerce_gateway_order' );
+		$end      = 999;
+		$keyed    = array();
 		foreach ( \AAFM\Tests\WcGatewayStubStore::all() as $id => $data ) {
-			$gw              = new \WC_Payment_Gateway( $data );
-			$gw->settings    = $data['settings'] ?? array();
-			$out[ (string) $id ] = $gw;
+			$gw           = new \WC_Payment_Gateway( $data );
+			$gw->settings = $data['settings'] ?? array();
+			if ( isset( $ordering[ $id ] ) && is_numeric( $ordering[ $id ] ) ) {
+				$keyed[ (int) $ordering[ $id ] ] = $gw;
+			} else {
+				$keyed[ $end++ ] = $gw;
+			}
+		}
+		ksort( $keyed );
+		$out = array();
+		foreach ( $keyed as $gw ) {
+			$out[ (string) $gw->id ] = $gw;
 		}
 		return $out;
 	}

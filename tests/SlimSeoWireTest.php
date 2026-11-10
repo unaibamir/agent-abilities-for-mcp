@@ -137,7 +137,7 @@ final class SlimSeoWireTest extends TestCase {
 			);
 			$text   = $result->getContent()[0]->getText();
 			$this->assertFalse( $result->getIsError(), $text );
-			$bodies[] = json_decode( $text, true );
+			$bodies[] = $this->without_undo( json_decode( $text, true ) );
 		}
 
 		$shape = array(

@@ -286,12 +286,25 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				// Needs review inbox.
 				'reviewDiscardConfirm'     => __( 'Move this item to the Trash?', 'agent-abilities-for-mcp' ),
 				'reviewFailed'             => __( 'That did not work. Reload the page and try again.', 'agent-abilities-for-mcp' ),
+				/* translators: %s: comma-separated field names. */
+				'undoRevertConfirm'        => __( 'Revert this change? It will put back %s. Notifications, webhooks and anything already read are not recalled.', 'agent-abilities-for-mcp' ),
+				'undoRevertGroupConfirm'   => __( 'Revert every change in this group, newest first? A post edited since is skipped and listed. Notifications, webhooks and anything already read are not recalled.', 'agent-abilities-for-mcp' ),
+				'undoClearConfirm'         => __( 'Clear all change history? Nothing can be reverted afterwards. This cannot be undone.', 'agent-abilities-for-mcp' ),
+				'undoWorking'              => __( 'Working...', 'agent-abilities-for-mcp' ),
+				'undoReverted'             => __( 'Reverted.', 'agent-abilities-for-mcp' ),
+				'undoRevertedWithDiff'     => __( 'Reverted. WordPress stored these a little differently:', 'agent-abilities-for-mcp' ),
+				'undoPillReverted'         => __( 'Reverted', 'agent-abilities-for-mcp' ),
+				'undoGroupDone'            => __( 'Group reverted. Reload to see the new state.', 'agent-abilities-for-mcp' ),
+				/* translators: %s: how many changes of the group were reverted. */
+				'undoGroupPartial'         => __( '%s of the changes were reverted. Not reverted:', 'agent-abilities-for-mcp' ),
+				'undoCleared'              => __( 'History cleared.', 'agent-abilities-for-mcp' ),
+				'undoEmpty'                => __( 'No changes recorded yet. When an agent edits a post, a term, a custom field or SEO data, the change shows up here.', 'agent-abilities-for-mcp' ),
 				/* translators: %s: error message returned by the server. */
 				'errorWithMessage'         => __( 'Error: %s', 'agent-abilities-for-mcp' ),
 				'errorUnknown'             => __( 'unknown', 'agent-abilities-for-mcp' ),
 				'copyCopied'               => __( 'Copied', 'agent-abilities-for-mcp' ),
 				'copyFallback'             => __( 'Press Ctrl+C', 'agent-abilities-for-mcp' ),
-				'resetConfirm'             => __( 'Reset the plugin to defaults? This clears every setting, your enabled abilities, the whole activity log, and every OAuth client, token, and consent. Your agent user and any content it created are kept. This cannot be undone.', 'agent-abilities-for-mcp' ),
+				'resetConfirm'             => __( 'Reset the plugin to defaults? This clears every setting, your enabled abilities, the whole activity log, the change history, and every OAuth client, token, and consent. Your agent user and any content it created are kept. This cannot be undone.', 'agent-abilities-for-mcp' ),
 				'resetWorking'             => __( 'Resetting…', 'agent-abilities-for-mcp' ),
 				'resetDone'                => __( 'Reset. Reloading…', 'agent-abilities-for-mcp' ),
 				'resetFailed'              => __( 'Reset failed.', 'agent-abilities-for-mcp' ),
@@ -1298,6 +1311,7 @@ function aafm_register_privacy_policy_content(): void {
 	$content = wp_kses_post(
 		'<p>' . __( 'When an administrator exposes a content type to AI agents through Agent Abilities for MCP, an authenticated agent can read that type\'s title, slug, excerpt, status, permalink, publish/modified dates, and author id. If an administrator also exposes specific meta keys, an agent can read and change those keys\' values on any post it is allowed to edit. Protected keys (those prefixed with an underscore) and authentication-related keys can never be exposed. Only expose content types and meta keys whose values do not hold personal data.', 'agent-abilities-for-mcp' ) . '</p>'
 		. '<p>' . __( 'If user abilities are enabled, an agent can read a user\'s display name, email, roles, and post count, plus any exposed user meta. If the WooCommerce integration is enabled, an agent can read and, depending on which abilities are turned on, write customer and order data - including full billing and shipping addresses, phone number, and order/purchase history. If the ACF (or SCF) integration is enabled, an agent can read and write ACF field values directly; ACF fields are a separate surface from the meta-key allowlist above and are not filtered by it.', 'agent-abilities-for-mcp' ) . '</p>'
+		. '<p>' . aafm_privacy_policy_change_history_text() . '</p>'
 	);
 	wp_add_privacy_policy_content( __( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ), $content );
 }
@@ -1634,6 +1648,7 @@ function aafm_admin_tabs(): array {
 		'bridge'       => __( 'Other plugins', 'agent-abilities-for-mcp' ),
 		'settings'     => __( 'Settings', 'agent-abilities-for-mcp' ),
 		'activity'     => __( 'Activity Log', 'agent-abilities-for-mcp' ),
+		'changes'      => __( 'Changes', 'agent-abilities-for-mcp' ),
 		'help'         => __( 'Help', 'agent-abilities-for-mcp' ),
 	);
 }
@@ -1702,6 +1717,8 @@ function aafm_render_admin_page(): void {
 	// Anchor for core's admin-notice relocation: the <h1> now sits inside
 	// .aafm-page-head, so mark where WordPress should drop notices.
 	echo '<hr class="wp-header-end">';
+
+	aafm_render_undo_notice();
 
 	echo '<nav class="nav-tab-wrapper">';
 	foreach ( $tabs as $slug => $label ) {
@@ -1793,6 +1810,9 @@ function aafm_render_admin_page(): void {
 			break;
 		case 'activity':
 			aafm_render_activity_tab();
+			break;
+		case 'changes':
+			aafm_render_changes_tab();
 			break;
 		case 'help':
 			aafm_render_help_tab();
@@ -3515,7 +3535,7 @@ function aafm_render_help_tab(): void {
 			. '<li><strong>' . esc_html__( 'No phoning home.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'It never contacts an AI provider or a telemetry service, and your credentials never leave the site - the AI client connects in to you, not the other way round. The one exception is the off-by-default "Upload media from URL" ability: turn it on and it will fetch the exact URL your AI client gives it so that file can be added to your media library.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'A dedicated low-privilege user.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'The agent authenticates as its own separate WordPress user via an Application Password - not as you, and not as an administrator. You choose that user\'s role, so you set its ceiling.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'Two locks on every ability.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'An ability works only if you explicitly enabled it on the Abilities tab AND the agent user\'s capabilities allow it. The default is nothing enabled - the agent starts with zero abilities until you turn them on.', 'agent-abilities-for-mcp' ) . '</li>'
-			. '<li><strong>' . esc_html__( 'Trash and permanent delete are different abilities.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'Trash abilities (trash a post or page) move content to the Trash, where you can restore it. Delete abilities erase for good and cannot be undone: deleting a post or page outright, and every media or user deletion, is permanent.', 'agent-abilities-for-mcp' ) . '</li>'
+			. '<li><strong>' . esc_html__( 'Trash and permanent delete are different abilities.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'Trash abilities (trash a post or page) move content to the Trash, where you can restore it, and the Changes tab lets you revert what agents edited in the last 30 days. Delete abilities erase for good and cannot be undone: deleting a post or page outright, and every media or user deletion, is permanent.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'Everything is logged, free text is not.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'Every call - including denied ones - is recorded on the Activity Log tab. The arguments column holds the argument KEYS only, never the values, and a separate short identifier-only note holds something like an object id or an error code. When another plugin\'s bridged ability fails, its error code is recorded behind a "foreign:" prefix, kept only when it is a short key-shaped string of letters, digits, underscore and hyphen, and never its message or error data. A plugin that builds that code from its own input can put a short fragment of that input there. You can see what was attempted without the log keeping free-text content.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'Optional extra guardrails.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'The Settings tab adds a per-minute rate limit, an IP allowlist, a force-to-draft switch, and a maximum title length. All four are off by default, so you turn on only the ones you want.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '</ul>',

@@ -113,7 +113,7 @@ final class SeoWriteWireTest extends TestCase {
 	private function body( $result ): array {
 		$text = $result->getContent()[0]->getText();
 		$this->assertFalse( $result->getIsError(), $text );
-		return (array) json_decode( $text, true );
+		return $this->without_undo( (array) json_decode( $text, true ) );
 	}
 
 	/**

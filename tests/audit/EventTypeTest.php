@@ -18,9 +18,9 @@ final class EventTypeTest extends TestCase {
 		aafm_install_activity_log();
 	}
 
-	public function test_event_type_vocabulary_is_the_documented_ten(): void {
+	public function test_event_type_vocabulary_is_the_documented_eleven(): void {
 		$this->assertSame(
-			array( 'ability_call', 'ability_enabled', 'ability_disabled', 'ability_enable_blocked', 'setting_changed', 'log_cleared', 'permission_check_crashed', 'ability_omitted', 'write_outcome', 'review_action' ),
+			array( 'ability_call', 'ability_enabled', 'ability_disabled', 'ability_enable_blocked', 'setting_changed', 'log_cleared', 'permission_check_crashed', 'ability_omitted', 'write_outcome', 'review_action', 'undo_action' ),
 			aafm_activity_event_types()
 		);
 	}
@@ -56,8 +56,8 @@ final class EventTypeTest extends TestCase {
 		$this->assertSame( 'ability_call', $types[0] );
 	}
 
-	public function test_schema_version_is_six(): void {
-		$this->assertSame( '6', AAFM_ACTIVITY_LOG_SCHEMA_VERSION );
+	public function test_schema_version_is_seven(): void {
+		$this->assertSame( '7', AAFM_ACTIVITY_LOG_SCHEMA_VERSION );
 	}
 
 	public function test_table_carries_both_new_columns(): void {

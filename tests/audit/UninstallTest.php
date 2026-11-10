@@ -39,6 +39,21 @@ final class UninstallTest extends TestCase {
 	}
 
 	/**
+	 * Before-values are content: the change table goes on every uninstall, even with the delete-data flag off.
+	 */
+	public function test_default_uninstall_drops_the_changes_table_with_the_delete_data_flag_off(): void {
+		aafm_install_activity_log();
+		delete_option( 'aafm_delete_data_on_uninstall' );
+		$this->assertTrue( aafm_activity_log_table_present( aafm_changes_table() ), 'precondition: the table exists.' );
+
+		aafm_uninstall_site_data();
+
+		$this->assertFalse( aafm_activity_log_table_present( aafm_changes_table() ) );
+		// Put the table back for later tests on this connection.
+		aafm_install_activity_log();
+	}
+
+	/**
 	 * Final review M1: the Connection Doctor's header-seen memo is removed with the site's data.
 	 */
 	public function test_uninstall_site_removes_the_doctor_header_seen_memo(): void {

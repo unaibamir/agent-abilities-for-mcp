@@ -21,6 +21,13 @@ spl_autoload_register(
 
 		$relative = substr( $class_name, strlen( $prefix ) );
 		$file     = __DIR__ . '/' . str_replace( '\\', '/', $relative ) . '.php';
+		if ( ! is_readable( $file ) ) {
+			// The namespaces are cased (AAFM\Tests\Undo) but their folders are lowercase (tests/undo). A
+			// case-insensitive disk finds the folder either way; Linux does not, which is how CI failed.
+			$parts = explode( '\\', $relative );
+			$name  = array_pop( $parts );
+			$file  = __DIR__ . '/' . strtolower( implode( '/', $parts ) ) . '/' . $name . '.php';
+		}
 		if ( is_readable( $file ) ) {
 			require_once $file;
 		}

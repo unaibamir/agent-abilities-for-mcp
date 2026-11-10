@@ -40,6 +40,7 @@ final class CatalogFixture {
 		'aafm/get-site-info',
 		'aafm/list-playbooks',
 		'aafm/get-playbook',
+		'aafm/list-changes',
 		'aafm/get-comments',
 		'aafm/get-pending-comments',
 		'aafm/get-comment',
@@ -151,6 +152,7 @@ final class CatalogFixture {
 		'aafm/update-post-meta',
 		'aafm/delete-post-meta',
 		'aafm/restore-revision',
+		'aafm/undo-change',
 		'aafm/delete-revision',
 		'aafm/create-cpt-item',
 		'aafm/update-cpt-item',
@@ -270,5 +272,6 @@ final class CatalogFixture {
 		'aafm/wc-delete-product',
 		'aafm/wc-delete-product-variation',
 		'aafm/tec-delete-event',
+		'aafm/undo-change',
 	);
 }

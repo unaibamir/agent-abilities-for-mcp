@@ -3704,3 +3704,85 @@
 	from { background-position: 100% 50%; }
 	to { background-position: 0 50%; }
 }
+
+/* The upgrade notice sits under the page head, inside the page wrapper. */
+.aafm-undo-notice-wrap {
+	margin-block: var(--aafm-space-3) 0;
+
+	.aafm-undo-notice-actions {
+		display: block;
+		margin-block-start: var(--aafm-space-2);
+	}
+}
+
+/* Changes tab: what agents changed, and the owner's Revert. */
+.aafm-changes-table {
+	table-layout: fixed;
+	inline-size: 100%;
+	min-inline-size: 960px;
+
+	th,
+	td {
+		box-sizing: border-box;
+		vertical-align: top;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	/* Status and Action carry a reason line and a result line, so they wrap. */
+	td:nth-child(6),
+	td:nth-child(7) {
+		white-space: normal;
+	}
+
+	th:nth-child(1) { inline-size: 125px; }
+	th:nth-child(2) { inline-size: 150px; }
+	th:nth-child(3) { inline-size: 120px; }
+	th:nth-child(5) { inline-size: 150px; }
+	th:nth-child(6) { inline-size: 200px; }
+	th:nth-child(7) { inline-size: 150px; }
+
+	.aafm-changes-reason {
+		margin-block-start: var(--aafm-space-1);
+		color: var(--aafm-text-subtle);
+		font-size: var(--aafm-fs-sm);
+	}
+
+	.aafm-changes-status {
+		display: block;
+		margin-block-start: var(--aafm-space-1);
+		color: var(--aafm-text-muted);
+		font-size: var(--aafm-fs-sm);
+
+		&:empty {
+			display: none;
+		}
+	}
+
+	.aafm-changes-group-list {
+		margin: var(--aafm-space-2) 0 0;
+		padding-inline-start: var(--aafm-space-4);
+		white-space: normal;
+	}
+}
+
+.aafm-changes-clear {
+	margin-block: var(--aafm-space-4) 0;
+
+	.aafm-changes-status {
+		display: inline-block;
+		margin-inline-start: var(--aafm-space-3);
+		color: var(--aafm-text-muted);
+		font-size: var(--aafm-fs-sm);
+
+		&:empty {
+			display: none;
+		}
+	}
+}
+
+/* The pager's Previous and Next are links on this tab. */
+.aafm-changes .aafm-pager a.aafm-btn {
+	text-decoration: none;
+}

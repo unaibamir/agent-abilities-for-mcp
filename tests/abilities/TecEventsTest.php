@@ -39,6 +39,14 @@ final class TecEventsTest extends TestCase {
 		);
 	}
 
+	public function test_update_event_says_a_venue_cannot_be_cleared_with_this_tool(): void {
+		$update = aafm_args_tec_update_event()['input_schema']['properties']['venue_id'];
+		$create = aafm_args_tec_create_event()['input_schema']['properties']['venue_id'];
+
+		$this->assertStringContainsString( 'cannot be cleared', $update['description'] );
+		$this->assertStringNotContainsString( 'cannot be cleared', $create['description'], 'A new event has no venue to clear.' );
+	}
+
 	public function test_create_event_requires_edit_tribe_events(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'subscriber' ) ) );
 		$this->assertFalse( aafm_tec_perm_create_event() );
@@ -487,6 +495,16 @@ final class TecEventsTest extends TestCase {
 			$out,
 			'A vetoed all-day-clear delete must return an error, not a success claiming it was cleared.'
 		);
+	}
+
+	public function test_delete_event_on_a_trashed_event_says_it_is_already_in_the_trash(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$event_id = $this->create_event( array( 'post_status' => 'trash' ) );
+
+		$out = aafm_exec_tec_delete_event( array( 'event_id' => $event_id ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_already_trashed', $out->get_error_code() );
 	}
 
 	public function test_delete_event_trashes_not_permanently_deletes(): void {

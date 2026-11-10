@@ -132,7 +132,7 @@ for ( const shot of SHOTS.filter( ( s ) => ! only || only.includes( s.n ) ) ) {
 if ( process.env.AAFM_SHOTS_OVERFLOW ) {
 	for ( const width of [ 390, 360 ] ) {
 		await page.setViewportSize( { width, height: 844 } );
-		for ( const tab of [ 'dashboard', 'abilities', 'integrations', 'bridge', 'connection', 'activity', 'settings' ] ) {
+		for ( const tab of [ 'dashboard', 'abilities', 'integrations', 'bridge', 'connection', 'activity', 'changes', 'settings' ] ) {
 			await page.goto( plugin( `tab=${ tab }` ), { waitUntil: 'networkidle' } );
 			const over = await page.evaluate( () => document.documentElement.scrollWidth - window.innerWidth );
 			process.stdout.write( `overflow ${ width } ${ tab }: ${ over }px\n` );

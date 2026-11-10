@@ -277,6 +277,8 @@ final class WooOrdersTest extends TestCase {
 		$this->assertArrayHasKey( 'date_paid', $res );
 		$this->assertArrayHasKey( 'customer_id', $res );
 		$this->assertArrayHasKey( 'customer_note', $res );
+		$this->assertSame( 'bacs', $res['payment_method'] );
+		$this->assertSame( 'Direct bank transfer', $res['payment_method_title'] );
 		$this->assertArrayHasKey( 'line_items', $res );
 		$this->assertArrayHasKey( 'billing', $res );
 		$this->assertArrayHasKey( 'shipping', $res );

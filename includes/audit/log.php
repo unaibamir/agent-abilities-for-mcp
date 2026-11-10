@@ -30,7 +30,10 @@ if ( ! defined( 'AAFM_ACTIVITY_LOG_SCHEMA_VERSION' ) ) {
 	// callback, NULL for a call that never executed or was never measured, so NULL is never a
 	// fabricated zero. Nullable with no default, so the ALTER is metadata-only on current engines
 	// and every existing row is unaffected.
-	define( 'AAFM_ACTIVITY_LOG_SCHEMA_VERSION', '6' );
+	// v7 adds the aafm_changes table next to the log (the undo history, includes/undo/store.php).
+	// It rides this installer, verify and stamp so a failed change table is retried like a failed
+	// log table, with nothing new to wire.
+	define( 'AAFM_ACTIVITY_LOG_SCHEMA_VERSION', '7' );
 }
 
 /**
@@ -63,12 +66,13 @@ function aafm_activity_statuses( bool $include_started = true ): array {
  * distinguishable only by type). The ninth, write_outcome, is the write-and-confirm contract's own
  * row (includes/write-contract.php): one per write or delete outcome, carrying identifiers only,
  * never the ability that triggered it. The tenth, review_action, is an owner's Publish or Discard
- * from the Needs review inbox (includes/admin/review-inbox.php). Mirrors aafm_activity_statuses().
+ * from the Needs review inbox (includes/admin/review-inbox.php). The eleventh, undo_action, is an owner's
+ * Revert, Revert all or Clear history from the Changes tab (includes/admin/changes.php). Mirrors aafm_activity_statuses().
  *
  * @return string[] The allowed event_type values.
  */
 function aafm_activity_event_types(): array {
-	return array( 'ability_call', 'ability_enabled', 'ability_disabled', 'ability_enable_blocked', 'setting_changed', 'log_cleared', 'permission_check_crashed', 'ability_omitted', 'write_outcome', 'review_action' );
+	return array( 'ability_call', 'ability_enabled', 'ability_disabled', 'ability_enable_blocked', 'setting_changed', 'log_cleared', 'permission_check_crashed', 'ability_omitted', 'write_outcome', 'review_action', 'undo_action' );
 }
 
 /**
@@ -82,6 +86,28 @@ function aafm_activity_log_table(): string {
 }
 
 /**
+ * The change history (undo) table name for the current blog.
+ *
+ * @return string
+ */
+function aafm_changes_table(): string {
+	global $wpdb;
+	return $wpdb->prefix . 'aafm_changes';
+}
+
+/**
+ * Drop the change history table for the current blog. Runs on every uninstall, whatever the
+ * delete-data flag says: before-values are content, and they are not kept on a plugin that is gone.
+ *
+ * @return void
+ */
+function aafm_drop_changes_table(): void {
+	global $wpdb;
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
+	$wpdb->query( $wpdb->prepare( 'DROP TABLE IF EXISTS %i', aafm_changes_table() ) );
+}
+
+/**
  * The plugin's own table names for one site, built from that site's prefix.
  *
  * @param int $blog_id Site id.
@@ -90,7 +116,7 @@ function aafm_activity_log_table(): string {
 function aafm_site_table_names( int $blog_id ): array {
 	global $wpdb;
 	$prefix = $wpdb->get_blog_prefix( $blog_id );
-	$tables = array( $prefix . 'aafm_activity_log' );
+	$tables = array( $prefix . 'aafm_activity_log', $prefix . 'aafm_changes' );
 	foreach ( aafm_oauth_table_suffixes() as $suffix ) {
 		$tables[] = $prefix . $suffix;
 	}
@@ -145,6 +171,44 @@ function aafm_install_activity_log(): bool {
 		KEY status_created (status, created_at),
 		KEY ability_created (ability, created_at),
 		KEY event_created (event_type, created_at)
+	) {$charset_collate};";
+
+	dbDelta( $sql );
+
+	// The change history table, same installer. before_values is the only large column; the
+	// snapshot_bytes and created_at indexes keep the caps pass cheap (a SUM and a range scan).
+	$changes = aafm_changes_table();
+	$sql     = "CREATE TABLE {$changes} (
+		id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+		log_row_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+		group_id CHAR(32) NOT NULL DEFAULT '',
+		ability VARCHAR(191) NOT NULL DEFAULT '',
+		source VARCHAR(10) NOT NULL DEFAULT 'agent',
+		principal_user_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+		client_id VARCHAR(191) NOT NULL DEFAULT '',
+		object_type VARCHAR(10) NOT NULL DEFAULT '',
+		object_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+		undo_op VARCHAR(10) NOT NULL DEFAULT '',
+		status VARCHAR(16) NOT NULL DEFAULT 'pending',
+		reason VARCHAR(40) NOT NULL DEFAULT '',
+		fields TEXT NULL,
+		perm_input TEXT NULL,
+		before_values LONGTEXT NULL,
+		before_sha256 CHAR(64) NOT NULL DEFAULT '',
+		after_hashes TEXT NULL,
+		reverts_change_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+		reverted_by_change_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+		snapshot_bytes INT UNSIGNED NOT NULL DEFAULT 0,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY  (id),
+		KEY object_lookup (object_type, object_id, id),
+		KEY status_created (status, created_at),
+		KEY principal_lookup (principal_user_id, id),
+		KEY connection_undo (principal_user_id, client_id, reverts_change_id, created_at),
+		KEY created_at (created_at),
+		KEY size_scan (snapshot_bytes),
+		KEY log_row (log_row_id),
+		KEY group_lookup (group_id)
 	) {$charset_collate};";
 
 	dbDelta( $sql );
@@ -205,6 +269,10 @@ function aafm_activity_log_schema_verify(): bool {
 	$table = aafm_activity_log_table();
 
 	if ( ! aafm_activity_log_table_present( $table ) ) {
+		return false;
+	}
+
+	if ( ! aafm_activity_log_table_present( aafm_changes_table() ) || ! aafm_activity_log_has_column( aafm_changes_table(), 'before_sha256' ) ) {
 		return false;
 	}
 
@@ -309,7 +377,7 @@ function aafm_activity_log_schema_admin_notice(): void {
 		return;
 	}
 	echo '<div class="notice notice-error"><p>';
-	echo esc_html__( 'Agent Abilities for MCP could not finish updating its activity-log table. New activity may not be recorded until the update completes; the plugin tries again on its own, at most once an hour.', 'agent-abilities-for-mcp' );
+	echo esc_html__( 'Agent Abilities for MCP could not finish updating its tables. New activity may not be recorded until the update completes; the plugin tries again on its own, at most once an hour.', 'agent-abilities-for-mcp' );
 	echo '</p></div>';
 }
 add_action( 'admin_notices', 'aafm_activity_log_schema_admin_notice' );
@@ -422,6 +490,7 @@ if ( ! defined( 'AAFM_FAILED_AUTH_LOG_WINDOW' ) ) {
  *                       'ssl' (an aafm_oat_ bearer presented over http where HTTPS is required),
  *                       'rv' (a refused Needs review Publish or Discard click),
  *                       'dsg' (a refused call naming this plugin's tool on the adapter default server),
+ *                       'ud' (a refused Changes tab Revert or Clear history click),
  *                       or 'ntf' (a notification email that could not be sent).
  * @return bool True when the caller may write its row (the slot is consumed), false when this
  *              IP has used up its cap for the current window.

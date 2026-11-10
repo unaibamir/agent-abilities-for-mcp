@@ -621,7 +621,40 @@ final class CoreObjectLoadLeakTest extends TestCase {
 				)
 			)
 		);
-		$this->assert_refused( $out, 'delete-user' );
+		$this->assert_refused( $out, 'delete-user', 'aafm_reassign_required' );
+		clean_user_cache( $victim );
+		$this->assertInstanceOf( \WP_User::class, get_userdata( $victim ) );
+	}
+
+	/**
+	 * A reassign user that exists but whose load failed is not a missing user: the refusal stays generic and the
+	 * victim stays, instead of saying the target must be an existing user.
+	 */
+	public function test_delete_user_whose_reassign_load_fails_keeps_the_generic_refusal(): void {
+		global $wpdb;
+		$this->acting_as( 'administrator' );
+		$victim   = self::factory()->user->create( array( 'role' => 'author' ) );
+		$reassign = self::factory()->user->create( array( 'role' => 'editor' ) );
+		clean_user_cache( $reassign );
+
+		QueryFaultInjector::reset_fired_count();
+		ob_start();
+		$out = QueryFaultInjector::break_query_with_real_error(
+			$wpdb->prepare( "SELECT * FROM {$wpdb->users} WHERE ID = %s LIMIT 1", $reassign ), // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- a table name and a placeholder.
+			static fn() => aafm_exec_delete_user(
+				array(
+					'user_id'     => $victim,
+					'reassign_to' => $reassign,
+				)
+			),
+			1,
+			true
+		);
+		ob_end_clean();
+
+		$this->assertGreaterThan( 0, QueryFaultInjector::fired_count(), 'Guard: the reassign load faulted.' );
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
 		clean_user_cache( $victim );
 		$this->assertInstanceOf( \WP_User::class, get_userdata( $victim ) );
 	}

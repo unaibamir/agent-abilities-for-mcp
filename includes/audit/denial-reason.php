@@ -37,6 +37,7 @@ function aafm_denial_reason_labels(): array {
 		'connection_paused'   => __( 'this connection is paused', 'agent-abilities-for-mcp' ),
 		'access_paused'       => __( 'all access is paused', 'agent-abilities-for-mcp' ),
 		'type_tool_off'       => __( 'this content type\'s own tool is off', 'agent-abilities-for-mcp' ),
+		'type_not_exposed'    => __( 'this content type is not exposed to agents', 'agent-abilities-for-mcp' ),
 	);
 }
 

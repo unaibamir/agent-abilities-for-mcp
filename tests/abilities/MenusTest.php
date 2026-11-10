@@ -44,6 +44,16 @@ final class MenusTest extends TestCase {
 		return is_wp_error( $id ) ? 0 : (int) $id;
 	}
 
+	public function test_the_order_property_says_which_kind_of_order_each_tool_returns(): void {
+		$list   = aafm_args_list_menu_items()['output_schema']['properties']['items']['items']['properties']['order']['description'];
+		$create = aafm_args_create_menu_item()['output_schema']['properties']['order']['description'];
+		$update = aafm_args_update_menu_item()['output_schema']['properties']['order']['description'];
+
+		$this->assertStringContainsString( '1 to N', $list );
+		$this->assertStringContainsString( 'stored position', $create );
+		$this->assertSame( $create, $update );
+	}
+
 	public function test_list_menus_requires_edit_theme_options(): void {
 		$this->register_menus();
 		$this->make_menu();

@@ -1115,7 +1115,7 @@ function aafm_acf_unknown_field_error( array $addresses ): WP_Error {
 	}
 	/* translators: %s: the field names the caller sent. */
 	$message  = sprintf( __( 'These are not ACF fields on this site, so nothing was written: %s.', 'agent-abilities-for-mcp' ), $names );
-	$message .= ' ' . __( 'Call acf-list-field-groups to see the field names you can use.', 'agent-abilities-for-mcp' );
+	$message .= ' ' . __( 'Send a field key from acf-list-field-groups (it starts with field_), or a field name as the acf-get-post-fields, acf-get-term-fields and acf-get-user-fields tools return it.', 'agent-abilities-for-mcp' );
 	return new WP_Error( 'aafm_acf_unknown_field', $message );
 }
 

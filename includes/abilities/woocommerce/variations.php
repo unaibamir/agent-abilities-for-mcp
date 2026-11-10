@@ -451,8 +451,9 @@ function aafm_wc_variation_write_properties(): array {
 		),
 		'sale_price'     => array(
 			'type'        => 'string',
-			'pattern'     => '^\\d+(\\.\\d{1,2})?$',
-			'description' => 'A decimal price as a string, e.g. "14.99". Must be at or below regular_price to take effect.',
+			// An empty string ends the sale, the same as on wc-update-product.
+			'pattern'     => '^$|^\\d+(\\.\\d{1,2})?$',
+			'description' => 'A decimal price as a string, e.g. "14.99" (must be at or below regular_price to take effect), or an empty string to clear the sale price.',
 		),
 		'stock_status'   => array(
 			'type'        => 'string',

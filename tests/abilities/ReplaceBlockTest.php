@@ -503,7 +503,7 @@ final class ReplaceBlockTest extends TestCase {
 		);
 
 		$this->assertNotInstanceOf( \AAFM\Tests\Support\McpProtocolError::class, $result );
-		$shape = $result->getStructuredContent();
+		$shape = $this->without_undo( $result->getStructuredContent() );
 		$this->assertSame( array( 'post', 'replaced' ), array_keys( $shape ) );
 		$this->assertSame(
 			array(

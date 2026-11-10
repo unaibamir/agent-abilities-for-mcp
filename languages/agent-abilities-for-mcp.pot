@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-10T14:40:39+05:00\n"
+"POT-Creation-Date: 2026-11-10T15:04:41+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -1587,11 +1587,11 @@ msgstr ""
 msgid "ID of the post to move to trash."
 msgstr ""
 
-#: includes/abilities/posts.php:2592
+#: includes/abilities/posts.php:2602
 msgid "That item is already in the Trash, so nothing was changed."
 msgstr ""
 
-#: includes/abilities/posts.php:2613
+#: includes/abilities/posts.php:2623
 msgid "ID of the post to permanently delete. This bypasses the Trash; there is no undo."
 msgstr ""
 
@@ -11728,34 +11728,34 @@ msgstr ""
 msgid "The %s value is not a valid URL, so nothing was changed. Use an https:// or http:// address, a mailto: or tel: link, a path starting with /, or an anchor starting with #."
 msgstr ""
 
-#: includes/undo/engine.php:1042
+#: includes/undo/engine.php:1044
 msgid "The undo did not finish, so check the item before trying again."
 msgstr ""
 
-#: includes/undo/engine.php:1170
+#: includes/undo/engine.php:1172
 msgid "The undo could not be confirmed, so check the item before trying again."
 msgstr ""
 
-#: includes/undo/engine.php:1194
+#: includes/undo/engine.php:1196
 msgid "The undo did not change anything: the field could not be restored exactly, possibly because a plugin altered the value as it was written, so it was left as it is."
 msgstr ""
 
-#: includes/undo/engine.php:1195
+#: includes/undo/engine.php:1197
 msgid "The undo did not change anything, so nothing was written."
 msgstr ""
 
-#: includes/undo/engine.php:1219
+#: includes/undo/engine.php:1221
 msgid "The undo was applied, but its history entry could not be saved. Check the item."
 msgstr ""
 
 #. translators: 1: comma-separated field names, 2: change id
-#: includes/undo/engine.php:1228
+#: includes/undo/engine.php:1230
 #, php-format
 msgid "The undo did not fully apply: %1$s did not match, so the value may have been changed as it was restored, possibly by a plugin. Change %2$d records the current state and can be reverted."
 msgstr ""
 
 #. translators: 1: comma-separated field names, 2: change id
-#: includes/undo/engine.php:1230
+#: includes/undo/engine.php:1232
 #, php-format
 msgid "The undo did not fully apply: %1$s did not match. Change %2$d records the current state and can be reverted."
 msgstr ""

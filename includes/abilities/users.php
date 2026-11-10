@@ -715,8 +715,9 @@ function aafm_exec_update_user( array $input ) {
 /**
  * The refusal for a change that would leave the site with no administrator.
  *
- * The caller already holds the capability to list administrators, so naming the reason shows it
- * nothing new and tells it what to do next.
+ * Reaching this means the caller already passed the delete_users gate (or edit_user on the target for a
+ * demote), so it can read the user list and the administrator count; naming the reason shows it nothing
+ * new and tells it what to do next.
  *
  * @param string $change 'role' for a demotion, 'delete' for a deletion.
  * @return WP_Error
@@ -839,7 +840,13 @@ function aafm_exec_delete_user( array $input ) {
 	}
 
 	// The reassign target is mandatory, must exist, and must not be the victim.
-	if ( ! $reassign || $reassign === $id || ! aafm_exact_object( 'user', $reassign ) instanceof WP_User ) {
+	$target = $reassign && $reassign !== $id ? aafm_exact_object( 'user', $reassign ) : null;
+	if ( ! $target instanceof WP_User ) {
+		// A target the database certainly does not hold is named; a load that failed for any other reason
+		// is not a statement about the user, so it keeps the generic refusal.
+		if ( $reassign && $reassign !== $id && ! aafm_object_absent( 'user', $reassign ) ) {
+			return aafm_generic_error();
+		}
 		return new WP_Error(
 			'aafm_reassign_required',
 			__( 'Pass reassign_to as the id of another existing user who takes over this user\'s content, so nothing was deleted.', 'agent-abilities-for-mcp' ),

@@ -189,9 +189,6 @@ function aafm_denial_reason_for_permission( string $name, array $input ): string
 	if ( aafm_post_tool_reach_refused( $name, $input ) ) {
 		return 'type_tool_off';
 	}
-	if ( 'aafm/add-post-terms' === $name && aafm_post_type_not_exposed_for_editor( $input ) ) {
-		return 'type_not_exposed';
-	}
 	return 'capability';
 }
 

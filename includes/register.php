@@ -940,7 +940,7 @@ function aafm_meta_key_refusal_error( string $name, array $input ): ?array {
 }
 
 /**
- * Say why add-post-terms was refused when the post's content type is not exposed to agents.
+ * Say why a post write was refused when the post's content type is not exposed to agents.
  *
  * The bare "Permission denied" read as a missing privilege, and an agent asked to categorise a
  * WooCommerce product gave up although aafm-wc-update-product sets its categories and tags. Whether a
@@ -954,15 +954,17 @@ function aafm_meta_key_refusal_error( string $name, array $input ): ?array {
  * @return array{error:\WP_Error,code:string}|null The refusal and its reason code, or null to leave the call alone.
  */
 function aafm_post_type_refusal_error( string $name, array $input ): ?array {
-	if ( 'aafm/add-post-terms' !== $name || ! aafm_post_type_not_exposed_for_editor( $input ) ) {
+	// The writers whose permission gate is aafm_can_edit_post_object(), which is where an unexposed type refuses.
+	$gated = array( 'aafm/add-post-terms', 'aafm/set-featured-image', 'aafm/update-post-meta', 'aafm/yoast-update-post', 'aafm/rankmath-update-post', 'aafm/rankmath-update-schema', 'aafm/aioseo-update-post', 'aafm/slim-seo-update-post' );
+	if ( ! in_array( $name, $gated, true ) || ! aafm_post_type_not_exposed_for_editor( $input ) ) {
 		return null;
 	}
 	$post    = aafm_exact_object( 'post', absint( $input['post_id'] ) );
-	$message = __( 'This content type is not exposed to agents, so its terms cannot be changed with this tool. A site administrator can expose it in the Content sub-tab of the Abilities tab.', 'agent-abilities-for-mcp' );
+	$message = __( 'This content type is not exposed to agents, so this tool cannot change it. A site administrator can expose it in the Content sub-tab of the Abilities tab.', 'agent-abilities-for-mcp' );
 	$own     = $post instanceof WP_Post ? aafm_type_own_tool( $post->post_type, 'update' ) : '';
 	if ( '' !== $own ) {
 		/* translators: %s: the tool that manages this content type. */
-		$message .= ' ' . sprintf( __( 'This type has its own tool, %s, which can change them.', 'agent-abilities-for-mcp' ), aafm_mcp_tool_name( $own ) );
+		$message .= ' ' . sprintf( __( 'This type has its own tool, %s, which can change it.', 'agent-abilities-for-mcp' ), aafm_mcp_tool_name( $own ) );
 	}
 	return array(
 		'error' => new WP_Error( 'aafm_post_type_not_exposed', $message ),

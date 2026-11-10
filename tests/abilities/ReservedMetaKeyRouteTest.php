@@ -494,6 +494,35 @@ final class ReservedMetaKeyRouteTest extends TestCase {
 		$this->assertSame( self::BARE_REFUSAL, $sub, 'A caller who cannot edit the post learns nothing about its type.' );
 	}
 
+	/**
+	 * Every tool whose permission gate refuses an unexposed content type explains it the same way, and only
+	 * to a caller who could edit the post. A read tool is left alone.
+	 */
+	public function test_the_unexposed_type_explanation_covers_the_post_write_tools_only_for_an_editor(): void {
+		register_post_type(
+			'aafm_unexposed',
+			array(
+				'public' => true,
+				'label'  => 'Unexposed',
+			)
+		);
+		$this->acting_as( 'administrator' );
+		$post_id = self::factory()->post->create( array( 'post_type' => 'aafm_unexposed' ) );
+		$input   = array( 'post_id' => $post_id );
+
+		foreach ( array( 'aafm/add-post-terms', 'aafm/set-featured-image', 'aafm/update-post-meta', 'aafm/yoast-update-post', 'aafm/rankmath-update-post', 'aafm/rankmath-update-schema', 'aafm/aioseo-update-post', 'aafm/slim-seo-update-post' ) as $name ) {
+			$refusal = aafm_post_type_refusal_error( $name, $input );
+			$this->assertNotNull( $refusal, $name );
+			$this->assertSame( 'type_not_exposed', $refusal['code'], $name );
+			$this->assertStringContainsString( 'not exposed', $refusal['error']->get_error_message(), $name );
+		}
+		$this->assertNull( aafm_post_type_refusal_error( 'aafm/get-post', $input ), 'A read tool is not explained here.' );
+
+		$this->acting_as( 'subscriber' );
+		$this->assertNull( aafm_post_type_refusal_error( 'aafm/set-featured-image', $input ), 'A caller who cannot edit the post learns nothing.' );
+		unregister_post_type( 'aafm_unexposed' );
+	}
+
 	public function test_add_post_terms_on_a_product_points_at_the_product_tool(): void {
 		$this->force_integration( 'woocommerce' );
 		$this->unlock_high_risk_abilities();

@@ -871,6 +871,65 @@ function aafm_oauth_user_has_active_tokens( int $user_id ): bool {
 }
 
 /**
+ * Count active token rows minted for another site address: the stored resource differs from
+ * aafm_endpoint_url() byte for byte. Bearer validation compares the two with hash_equals()
+ * (validator.php), so these rows can never authenticate again. The comparison is a binary one,
+ * so a case or trailing-space variant counts as different, as it does in validation; a text
+ * comparison under a case-insensitive collation would call two different URLs equal.
+ *
+ * Display only: a failed read counts as 0.
+ *
+ * @return int
+ */
+function aafm_oauth_stale_token_count(): int {
+	global $wpdb;
+	$suppressed = $wpdb->suppress_errors();
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$view = aafm_wpdb_scalar(
+		$wpdb->prepare(
+			'SELECT COUNT(*) FROM %i WHERE is_active = 1 AND CAST(resource AS BINARY) <> CAST(%s AS BINARY)',
+			$wpdb->prefix . 'aafm_oauth_access_tokens',
+			aafm_endpoint_url()
+		)
+	);
+	$wpdb->suppress_errors( $suppressed );
+	return $view['ok'] ? max( 0, (int) $view['value'] ) : 0;
+}
+
+/**
+ * Deactivate every active token row minted for another site address (the rows
+ * aafm_oauth_stale_token_count() counts). Tokens for the current address and consent rows are
+ * never touched, so a person who approved an app keeps the approval and only reconnects.
+ *
+ * @return int Rows deactivated, or -1 when the update failed or a checked recount still finds a
+ *             stale active row. A caller must not read -1 as "nothing to deactivate".
+ */
+function aafm_oauth_revoke_stale_tokens(): int {
+	global $wpdb;
+	$suppressed = $wpdb->suppress_errors();
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$result  = $wpdb->query(
+		$wpdb->prepare(
+			'UPDATE %i SET is_active = 0 WHERE is_active = 1 AND CAST(resource AS BINARY) <> CAST(%s AS BINARY)',
+			$wpdb->prefix . 'aafm_oauth_access_tokens',
+			aafm_endpoint_url()
+		)
+	);
+	$changed = (int) $wpdb->rows_affected;
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$left = aafm_wpdb_scalar(
+		$wpdb->prepare(
+			'SELECT COUNT(*) FROM %i WHERE is_active = 1 AND CAST(resource AS BINARY) <> CAST(%s AS BINARY)',
+			$wpdb->prefix . 'aafm_oauth_access_tokens',
+			aafm_endpoint_url()
+		)
+	);
+	$wpdb->suppress_errors( $suppressed );
+
+	return false === $result || ! $left['ok'] || 0 !== (int) $left['value'] ? -1 : $changed;
+}
+
+/**
  * Clean up a deleted WordPress user's OAuth grants: consents, tokens and codes.
  *
  * Hooked on 'deleted_user' rather than 'delete_user': it fires only once WordPress has

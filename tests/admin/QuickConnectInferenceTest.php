@@ -139,14 +139,11 @@ final class QuickConnectInferenceTest extends TestCase {
 	}
 
 	/**
-	 * Revoking an OAuth client deactivates the client row
-	 * and its tokens but deliberately leaves the consent row, and aafm_oauth_list_grants() does not
-	 * filter on the client being active -- that listing is shipped 1.6.3 behaviour and stays as it
-	 * is. What is new here is reading it as first-run evidence. The grant branch is only reached
-	 * once the active-client count is already zero, so every grant it can see belongs to a
-	 * deactivated or deleted client by construction: it can only ever suppress the wizard wrongly.
+	 * Revoking an OAuth client deactivates the client row and its tokens but deliberately leaves
+	 * the consent row. Since 1.11.3 aafm_oauth_list_grants() lists only grants on active clients,
+	 * so that leftover consent is no longer listed either. It must not count as first-run evidence:
 	 * 1.6.3 had no inference at all and always reopened the wizard, so an administrator who revoked
-	 * their only client could no longer get the first-run screen back.
+	 * their only client must still get the first-run screen back.
 	 */
 	public function test_a_revoked_clients_leftover_consent_is_not_first_run_evidence(): void {
 		if ( ! function_exists( 'aafm_oauth_register_client' ) || ! function_exists( 'aafm_install_oauth_tables' ) ) {
@@ -181,10 +178,10 @@ final class QuickConnectInferenceTest extends TestCase {
 
 		aafm_oauth_deactivate_client( $client_id );
 
-		$this->assertNotSame(
+		$this->assertSame(
 			array(),
 			aafm_oauth_list_grants(),
-			'The admin grant listing keeps showing the row -- that is 1.6.3 behaviour and is not what this fixes.'
+			'The admin grant listing shows only grants on active clients, so the revoked client\'s consent is not listed.'
 		);
 		$this->assertFalse(
 			aafm_quickconnect_site_looks_configured(),

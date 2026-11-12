@@ -532,13 +532,15 @@ function aafm_oauth_list_clients(): array {
 /**
  * List every active OAuth grant (consent) for the admin management table.
  *
- * Joins the consents table to the clients table for the client display name and
- * resolves each consent's WordPress user for its display name and login. A consent
- * is skipped only when its user is certainly gone, meaning a query that ran found no
- * row (a deleted account has nothing to show or revoke). A consent whose user fails
- * to load for any other reason stays in the list with its ids, blank names, no roles
- * and is_high_privilege and is_administrator true, so a live grant never drops out of the table.
- * Ordered newest first. Read-only, prepared query.
+ * Joins the consents table to the clients table for the client display name and keeps only
+ * consents whose client is still active: revoking a client leaves its consent rows in place, and
+ * listing them showed people under Active grants for an app that can no longer connect. Each
+ * row is built by aafm_oauth_build_grant_row(), which resolves the WordPress user. A consent is
+ * skipped only when its user is certainly gone, meaning a query that ran found no row (a deleted
+ * account has nothing to show or revoke). A consent whose user fails to load for any other reason
+ * stays in the list with its ids, blank names, no roles and is_high_privilege and
+ * is_administrator true, so a live grant never drops out of the table. Ordered newest first.
+ * Read-only, prepared query.
  *
  * Also reads each user's CURRENT role and privilege level, not a value stored at
  * consent time - the token table keeps no such snapshot, and none is added here. A
@@ -552,32 +554,26 @@ function aafm_oauth_list_clients(): array {
  *
  * Each row also carries the grant's per-connection state (aafm_oauth_grant_from_row()).
  *
+ * The admin card reads one page at a time through aafm_oauth_grants_page(); this full listing
+ * stays for the callers that need every row.
+ *
  * @return array<int,array{user_id:int,user_display:string,user_login:string,client_id:string,client_name:string,granted_at:string,user_roles:list<string>,is_high_privilege:bool,is_administrator:bool,paused:bool,expired:bool,expires_at:?string,preset:string,rate:int,last_used_at:?string,last_used_ip:string}>
  */
 function aafm_oauth_list_grants(): array {
 	global $wpdb;
-	$consents_table = $wpdb->prefix . 'aafm_oauth_consents';
-	$clients_table  = $wpdb->prefix . 'aafm_oauth_clients';
 
 	// Read-only listing for the admin table: tolerate a not-yet-installed table
 	// by returning an empty list instead of surfacing a DB error. Both table names are
-	// bound as %i identifiers; the LEFT JOIN keeps a consent whose client row was removed.
-	// Routed through aafm_wpdb_results() rather than a bare get_results() -
-	// see aafm_oauth_list_clients()'s docblock for why a failed query must not be allowed to
-	// return an earlier, unrelated query's rows here.
-	// In the update window, before the installer adds the v9 columns, list without them so the
-	// table never errors; the missing fields read as their defaults.
-	$columns    = aafm_oauth_grant_columns_absent() ? '' : ', c.paused_at, c.expires_at, c.last_used_at, c.last_used_ip, c.preset, c.rate_per_min';
+	// bound as %i identifiers. Routed through aafm_wpdb_results() rather than a bare
+	// get_results() - see aafm_oauth_list_clients()'s docblock for why a failed query must not
+	// be allowed to return an earlier, unrelated query's rows here.
 	$suppressed = $wpdb->suppress_errors();
 	$view       = aafm_wpdb_results(
 		$wpdb->prepare(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $columns is one of two fixed column lists.
-			"SELECT c.wp_user_id, c.client_id, c.granted_at, cl.client_name{$columns}
-			 FROM %i c
-			 LEFT JOIN %i cl ON cl.client_id = c.client_id
-			 ORDER BY c.granted_at DESC, c.id DESC",
-			$consents_table,
-			$clients_table
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- the column list is one of two fixed lists.
+			'SELECT ' . aafm_oauth_grant_select_columns() . ' FROM %i c INNER JOIN %i cl ON cl.client_id = c.client_id AND cl.is_active = 1 ORDER BY c.granted_at DESC, c.id DESC',
+			$wpdb->prefix . 'aafm_oauth_consents',
+			$wpdb->prefix . 'aafm_oauth_clients'
 		)
 	);
 	$wpdb->suppress_errors( $suppressed );
@@ -588,58 +584,210 @@ function aafm_oauth_list_grants(): array {
 
 	$out = array();
 	foreach ( $view['value'] as $row ) {
-		$user_id = (int) $row['wp_user_id'];
-		$state   = aafm_oauth_grant_from_row( $row );
-		// The user and their privilege are read inside the checked-read scope, so a caps load that
-		// fails shows the fallback row below instead of a real account with no role.
-		$loaded = aafm_with_checked_reads(
-			static function () use ( $user_id ): array {
-				$user = aafm_exact_object( 'user', $user_id );
-				if ( ! $user instanceof WP_User ) {
-					return array( 'user' => null );
-				}
-				return array(
-					'user'              => $user,
-					'user_roles'        => array_values( array_map( 'strval', $user->roles ) ),
-					'is_high_privilege' => function_exists( 'aafm_oauth_user_is_high_privilege' ) && aafm_oauth_user_is_high_privilege( $user ),
-					'is_administrator'  => function_exists( 'aafm_oauth_user_is_administrator' ) && aafm_oauth_user_is_administrator( $user ),
-				);
-			},
-			aafm_generic_error()
-		);
-		$user   = is_wp_error( $loaded ) ? null : $loaded['user'];
-		if ( ! $user instanceof WP_User ) {
-			if ( ! is_wp_error( $loaded ) && aafm_object_absent( 'user', $user_id ) ) {
-				continue; // The account is certainly gone; nothing to display or revoke.
-			}
-			$out[] = array(
-				'user_id'           => $user_id,
-				'user_display'      => '',
-				'user_login'        => '',
-				'client_id'         => (string) $row['client_id'],
-				'client_name'       => (string) $row['client_name'],
-				'granted_at'        => (string) $row['granted_at'],
-				'user_roles'        => array(),
-				'is_high_privilege' => true,
-				'is_administrator'  => true,
-			) + $state;
-			continue;
+		$grant = aafm_oauth_build_grant_row( $row );
+		if ( null !== $grant ) {
+			$out[] = $grant;
 		}
-
-		$out[] = array(
-			'user_id'           => $user_id,
-			'user_display'      => (string) $user->display_name,
-			'user_login'        => (string) $user->user_login,
-			'client_id'         => (string) $row['client_id'],
-			'client_name'       => (string) $row['client_name'],
-			'granted_at'        => (string) $row['granted_at'],
-			'user_roles'        => $loaded['user_roles'],
-			'is_high_privilege' => $loaded['is_high_privilege'],
-			'is_administrator'  => $loaded['is_administrator'],
-		) + $state;
 	}
 
 	return $out;
+}
+
+/**
+ * The columns every grant read selects. In the update window, before the installer adds the v9
+ * columns, the reads list without them so the table never errors; the missing fields read as
+ * their defaults.
+ *
+ * @return string Fixed SQL column list for a consents table aliased c and a clients table aliased cl.
+ */
+function aafm_oauth_grant_select_columns(): string {
+	$columns = 'c.wp_user_id, c.client_id, c.granted_at, cl.client_name';
+	return aafm_oauth_grant_columns_absent() ? $columns : $columns . ', c.paused_at, c.expires_at, c.last_used_at, c.last_used_ip, c.preset, c.rate_per_min';
+}
+
+/**
+ * One grant row for the admin table, built from a consents row joined to its client.
+ *
+ * The user and their privilege are read inside the checked-read scope, so a caps load that fails
+ * shows the fallback row (ids only, blank names, no roles, high privilege) instead of a real
+ * account with no role.
+ *
+ * @param array<string,mixed> $row Consents row with client_name and any of the v9 columns.
+ * @return array{user_id:int,user_display:string,user_login:string,client_id:string,client_name:string,granted_at:string,user_roles:list<string>,is_high_privilege:bool,is_administrator:bool,paused:bool,expired:bool,expires_at:?string,preset:string,rate:int,last_used_at:?string,last_used_ip:string}|null
+ *         Null only when the user is certainly gone.
+ */
+function aafm_oauth_build_grant_row( array $row ): ?array {
+	$user_id = (int) $row['wp_user_id'];
+	$state   = aafm_oauth_grant_from_row( $row );
+	$loaded  = aafm_with_checked_reads(
+		static function () use ( $user_id ): array {
+			$user = aafm_exact_object( 'user', $user_id );
+			if ( ! $user instanceof WP_User ) {
+				return array( 'user' => null );
+			}
+			return array(
+				'user'              => $user,
+				'user_roles'        => array_values( array_map( 'strval', $user->roles ) ),
+				'is_high_privilege' => function_exists( 'aafm_oauth_user_is_high_privilege' ) && aafm_oauth_user_is_high_privilege( $user ),
+				'is_administrator'  => function_exists( 'aafm_oauth_user_is_administrator' ) && aafm_oauth_user_is_administrator( $user ),
+			);
+		},
+		aafm_generic_error()
+	);
+	$user    = is_wp_error( $loaded ) ? null : $loaded['user'];
+	if ( ! $user instanceof WP_User ) {
+		if ( ! is_wp_error( $loaded ) && aafm_object_absent( 'user', $user_id ) ) {
+			return null; // The account is certainly gone; nothing to display or revoke.
+		}
+		return array(
+			'user_id'           => $user_id,
+			'user_display'      => '',
+			'user_login'        => '',
+			'client_id'         => (string) $row['client_id'],
+			'client_name'       => (string) $row['client_name'],
+			'granted_at'        => (string) $row['granted_at'],
+			'user_roles'        => array(),
+			'is_high_privilege' => true,
+			'is_administrator'  => true,
+		) + $state;
+	}
+
+	return array(
+		'user_id'           => $user_id,
+		'user_display'      => (string) $user->display_name,
+		'user_login'        => (string) $user->user_login,
+		'client_id'         => (string) $row['client_id'],
+		'client_name'       => (string) $row['client_name'],
+		'granted_at'        => (string) $row['granted_at'],
+		'user_roles'        => $loaded['user_roles'],
+		'is_high_privilege' => $loaded['is_high_privilege'],
+		'is_administrator'  => $loaded['is_administrator'],
+	) + $state;
+}
+
+/**
+ * The FROM clause the paged grant reads share: active clients only, existing users only. The count
+ * and the page rows run the same clause, so the total always matches what the pages hold. Both are
+ * INNER JOINs: a LEFT JOIN with the active condition in ON would keep revoked consents as rows
+ * with no client. The users join reads the global users table, so on multisite a user who is not
+ * a member of the current site is still listed (get_users() would drop them).
+ *
+ * @return string Prepared SQL fragment.
+ */
+function aafm_oauth_active_grants_from(): string {
+	global $wpdb;
+	return $wpdb->prepare(
+		'FROM %i c INNER JOIN %i cl ON cl.client_id = c.client_id AND cl.is_active = 1 INNER JOIN %i u ON u.ID = c.wp_user_id',
+		$wpdb->prefix . 'aafm_oauth_consents',
+		$wpdb->prefix . 'aafm_oauth_clients',
+		$wpdb->users
+	);
+}
+
+/**
+ * Whether any grant exists for an active client. A failed read answers false (display only).
+ *
+ * @return bool
+ */
+function aafm_oauth_has_active_grant(): bool {
+	global $wpdb;
+	$suppressed = $wpdb->suppress_errors();
+	// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- the fragment is prepared by aafm_oauth_active_grants_from().
+	$view = aafm_wpdb_scalar( 'SELECT 1 ' . aafm_oauth_active_grants_from() . ' LIMIT 1' );
+	$wpdb->suppress_errors( $suppressed );
+	return $view['ok'] && null !== $view['value'];
+}
+
+/**
+ * One page of grants for the Active grants card, newest first.
+ *
+ * $page is clamped to [1, pages]; zero grants is one empty page. The page's users are loaded in
+ * one batch inside the checked-read scope (a failed load caches nothing, and each row then loads
+ * its own user), and each row is built by aafm_oauth_build_grant_row(), so rows have the
+ * aafm_oauth_list_grants() shape. A failed read is an empty first page (display only).
+ *
+ * @param int $page     Requested page, 1-based. Any value is accepted and clamped.
+ * @param int $per_page Rows per page.
+ * @return array{rows:list<array<string,mixed>>,total:int,page:int,pages:int}
+ */
+function aafm_oauth_grants_page( int $page, int $per_page = 50 ): array {
+	global $wpdb;
+	$per_page = max( 1, $per_page );
+	$from     = aafm_oauth_active_grants_from();
+	$empty    = array(
+		'rows'  => array(),
+		'total' => 0,
+		'page'  => 1,
+		'pages' => 1,
+	);
+
+	$suppressed = $wpdb->suppress_errors();
+	// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- the fragment is prepared by aafm_oauth_active_grants_from().
+	$count = aafm_wpdb_scalar( 'SELECT COUNT(*) ' . $from );
+	$wpdb->suppress_errors( $suppressed );
+	if ( ! $count['ok'] || (int) $count['value'] <= 0 ) {
+		return $empty;
+	}
+
+	$total = (int) $count['value'];
+	$pages = (int) ceil( $total / $per_page );
+	$page  = min( max( 1, $page ), $pages );
+
+	$suppressed = $wpdb->suppress_errors();
+	$view       = aafm_wpdb_results(
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- fixed column list and a fragment prepared by aafm_oauth_active_grants_from(); LIMIT and OFFSET are bound here.
+		$wpdb->prepare( 'SELECT ' . aafm_oauth_grant_select_columns() . ' ' . $from . ' ORDER BY c.granted_at DESC, c.id DESC LIMIT %d OFFSET %d', $per_page, ( $page - 1 ) * $per_page )
+	);
+	$wpdb->suppress_errors( $suppressed );
+	if ( ! $view['ok'] || ! is_array( $view['value'] ) ) {
+		return $empty;
+	}
+
+	$ids = array_map( static fn( array $row ): int => (int) $row['wp_user_id'], $view['value'] );
+	aafm_with_checked_reads(
+		static function () use ( $ids ): array {
+			cache_users( $ids );
+			return array();
+		},
+		aafm_generic_error()
+	);
+
+	$rows = array();
+	foreach ( $view['value'] as $row ) {
+		$grant = aafm_oauth_build_grant_row( $row );
+		if ( null !== $grant ) {
+			$rows[] = $grant;
+		}
+	}
+
+	return array(
+		'rows'  => $rows,
+		'total' => $total,
+		'page'  => $page,
+		'pages' => $pages,
+	);
+}
+
+/**
+ * One grant, by user and client, from any page: the Connection tab's Save, Pause and Revoke act
+ * on a single grant without loading the listing. Same predicate and row shape as the paged read.
+ *
+ * @param string $client_id OAuth client id.
+ * @param int    $user_id   Approving user.
+ * @return array<string,mixed>|null Null when there is no such grant on an active client, or on a failed read.
+ */
+function aafm_oauth_get_grant( string $client_id, int $user_id ): ?array {
+	global $wpdb;
+	if ( '' === $client_id || $user_id <= 0 ) {
+		return null;
+	}
+	$suppressed = $wpdb->suppress_errors();
+	$view       = aafm_wpdb_row(
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- fixed column list and a fragment prepared by aafm_oauth_active_grants_from().
+		$wpdb->prepare( 'SELECT ' . aafm_oauth_grant_select_columns() . ' ' . aafm_oauth_active_grants_from() . ' WHERE c.client_id = %s AND c.wp_user_id = %d', $client_id, $user_id )
+	);
+	$wpdb->suppress_errors( $suppressed );
+	return $view['ok'] && is_array( $view['value'] ) ? aafm_oauth_build_grant_row( $view['value'] ) : null;
 }
 
 /**

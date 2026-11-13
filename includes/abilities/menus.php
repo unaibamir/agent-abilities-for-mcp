@@ -1612,7 +1612,8 @@ function aafm_navigation_items_checked( $items, int $level, int &$count ) {
 }
 
 /**
- * Canonical core/navigation-link blocks for a cleaned item tree; children are nested links.
+ * Canonical blocks for a cleaned item tree: a leaf is core/navigation-link and an item with children
+ * is core/navigation-submenu, the shape core writes when it converts a classic menu.
  *
  * @param array<int,array<string,mixed>> $items Cleaned items.
  * @return array<int,array{blockName:string,attrs:array<string,string>,innerBlocks:array<int,mixed>,innerHTML:string,innerContent:array<int,null>}> Block arrays for serialize_blocks().
@@ -1622,7 +1623,7 @@ function aafm_navigation_blocks( array $items ): array {
 	foreach ( $items as $item ) {
 		$inner    = aafm_navigation_blocks( $item['children'] );
 		$blocks[] = array(
-			'blockName'    => 'core/navigation-link',
+			'blockName'    => array() === $inner ? 'core/navigation-link' : 'core/navigation-submenu',
 			'attrs'        => array(
 				'label' => $item['label'],
 				'url'   => $item['url'],

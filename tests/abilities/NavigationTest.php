@@ -176,8 +176,10 @@ final class NavigationTest extends TestCase {
 		$this->assertSame( $stored, serialize_blocks( parse_blocks( $stored ) ), 'The stored markup is canonical.' );
 		$this->assertStringNotContainsString( 'page-list', $stored, 'The list replaces the whole navigation.' );
 		$blocks = array_values( array_filter( parse_blocks( $stored ), static fn( array $b ): bool => null !== $b['blockName'] ) );
-		$this->assertSame( array( 'core/navigation-link', 'core/navigation-link' ), array_column( $blocks, 'blockName' ) );
-		$this->assertSame( 'core/navigation-link', $blocks[1]['innerBlocks'][0]['blockName'], 'Children are nested navigation-link blocks.' );
+		$this->assertSame( array( 'core/navigation-link', 'core/navigation-submenu' ), array_column( $blocks, 'blockName' ), 'An item with children is a submenu, as core writes it.' );
+		$this->assertSame( 'core/navigation-submenu', $blocks[1]['innerBlocks'][0]['blockName'], 'A nested item with children is a submenu too.' );
+		$this->assertSame( 'core/navigation-link', $blocks[1]['innerBlocks'][0]['innerBlocks'][0]['blockName'], 'A leaf is a navigation-link.' );
+		$this->assertSame( 'custom', $blocks[1]['attrs']['kind'] );
 		$this->assertSame( 'custom', $blocks[0]['attrs']['kind'] );
 		$guard = aafm_block_guard_evaluate( $stored );
 		$this->assertNull( $guard['error'] );

@@ -12,7 +12,7 @@ WordPress MCP server for Claude and ChatGPT with limited access, a pause switch,
 | **Stable tag** | 1.11.3 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
-Agent Abilities for MCP is a free WordPress MCP server plugin. It adds an MCP endpoint to a site and exposes WordPress abilities to AI agents, so Claude, ChatGPT, Cursor and other MCP clients can work on it as a WordPress user you choose, with that user's role and no more. It ships 186 abilities (92 core, 94 for plugins such as WooCommerce, ACF and Yoast SEO) and every one starts switched off.
+Agent Abilities for MCP is a free WordPress MCP server plugin. It adds an MCP endpoint to a site and exposes WordPress abilities to AI agents, so Claude, ChatGPT, Cursor and other MCP clients can work on it as a WordPress user you choose, with that user's role and no more. It ships 191 abilities (94 core, 97 for plugins such as WooCommerce, ACF and Yoast SEO) and every one starts switched off.
 
 This is the GitHub home of the plugin. The listing for site owners lives on [WordPress.org](https://wordpress.org/plugins/agent-abilities-for-mcp/), and this page is for anyone who wants to read the code, wire the plugin into their own stack or send a patch.
 

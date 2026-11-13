@@ -448,13 +448,17 @@ function aafm_exec_count_media( array $input ) {
 	$author_id = aafm_media_scope_author_id();
 
 	if ( aafm_wpml_active() ) {
-		$build_counts = static function () use ( $author_id ): array {
+		$build_counts = static function () use ( $author_id ) {
 			return aafm_query_attachment_counts_by_mime( $author_id );
 		};
 		if ( 'all' === $lang ) {
 			$counts = array();
 			foreach ( aafm_wpml_all_language_codes_for_iteration() as $code ) {
-				foreach ( aafm_with_language( $code, $build_counts ) as $mime => $n ) {
+				$by_language = aafm_with_language( $code, $build_counts );
+				if ( is_wp_error( $by_language ) ) {
+					return $by_language;
+				}
+				foreach ( $by_language as $mime => $n ) {
 					$counts[ $mime ] = ( $counts[ $mime ] ?? 0 ) + (int) $n;
 				}
 			}
@@ -467,6 +471,9 @@ function aafm_exec_count_media( array $input ) {
 		$counts = aafm_query_attachment_counts_by_mime( $author_id );
 	} else {
 		$counts = (array) wp_count_attachments();
+	}
+	if ( is_wp_error( $counts ) ) {
+		return $counts;
 	}
 
 	$by_mime = array();
@@ -503,37 +510,62 @@ function aafm_exec_count_media( array $input ) {
  * wp_count_attachments()'s key shape but via WP_Query so WPML's language filters
  * apply. Called from inside aafm_with_language() and directly - see aafm_exec_count_media().
  *
+ * No row is loaded: one query reads the distinct mime types the library holds, then each type is
+ * counted through a WP_Query that fetches at most one id and reads found_posts. That WP_Query keeps
+ * suppress_filters false and the author argument, so WPML's language filter and the own-uploads
+ * scope apply exactly as they do to the media list. Attachments stored with an empty mime type are
+ * counted as the unfiltered total minus the typed ones, because an empty post_mime_type query var
+ * means no mime filter at all.
+ *
  * @param int|null $author_id Restrict to this author's attachments, or null for the
  *                            unscoped full library (aafm_media_scope_author_id()).
- * @return array<string,int> Mime type => count.
+ * @return array<string,int>|WP_Error Mime type => count, or an error when the type list cannot be read.
  */
-function aafm_query_attachment_counts_by_mime( ?int $author_id = null ): array {
-	$args = array(
-		'post_type'              => 'attachment',
-		'post_status'            => 'inherit',
-		'posts_per_page'         => -1,
-		'no_found_rows'          => true,
-		'suppress_filters'       => false,
-		// The loop reads only post_mime_type, a wp_posts column already on the hydrated
-		// WP_Post. Leaving these at WP_Query's defaults (both true) would fire a large
-		// postmeta and term IN-scan per invocation that nothing here ever reads, which on a
-		// big library is the dominant cost. suppress_filters stays false so WPML's language
-		// filter still applies and the tally is byte-identical.
-		'update_post_meta_cache' => false,
-		'update_post_term_cache' => false,
-	);
-	if ( null !== $author_id ) {
-		$args['author'] = $author_id;
+function aafm_query_attachment_counts_by_mime( ?int $author_id = null ) {
+	global $wpdb;
+
+	$mimes = aafm_wpdb_results( $wpdb->prepare( 'SELECT DISTINCT post_mime_type FROM %i WHERE post_type = %s AND post_status = %s', $wpdb->posts, 'attachment', 'inherit' ) );
+	if ( ! $mimes['ok'] ) {
+		return aafm_generic_error();
 	}
-	$query = new WP_Query( $args );
+
+	$count = static function ( string $mime ) use ( $author_id ): int {
+		$args = array(
+			'post_type'              => 'attachment',
+			'post_status'            => 'inherit',
+			'post_mime_type'         => $mime,
+			'posts_per_page'         => 1,
+			'fields'                 => 'ids',
+			'suppress_filters'       => false,
+			'update_post_meta_cache' => false,
+			'update_post_term_cache' => false,
+		);
+		if ( null !== $author_id ) {
+			$args['author'] = $author_id;
+		}
+		return (int) ( new WP_Query( $args ) )->found_posts;
+	};
 
 	$counts = array();
-	foreach ( $query->posts as $post ) {
-		if ( ! $post instanceof WP_Post ) {
+	$typed  = 0;
+	$blank  = false;
+	foreach ( (array) $mimes['value'] as $row ) {
+		$mime = (string) ( $row['post_mime_type'] ?? '' );
+		if ( '' === $mime ) {
+			$blank = true;
 			continue;
 		}
-		$mime            = (string) $post->post_mime_type;
-		$counts[ $mime ] = ( $counts[ $mime ] ?? 0 ) + 1;
+		$n = $count( $mime );
+		if ( $n > 0 ) {
+			$counts[ $mime ] = $n;
+			$typed          += $n;
+		}
+	}
+	if ( $blank ) {
+		$untyped = $count( '' ) - $typed;
+		if ( $untyped > 0 ) {
+			$counts[''] = $untyped;
+		}
 	}
 	return $counts;
 }

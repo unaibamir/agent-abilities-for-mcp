@@ -338,10 +338,12 @@ add_filter( 'rest_request_before_callbacks', 'aafm_oauth_confine_bearer_to_mcp_h
 // OAuth consent page (rendered on the front end, before aafm_bootstrap()).
 require_once AAFM_PLUGIN_DIR . 'includes/admin/kses.php';
 
-// Authorization endpoint + consent screen: served off init at ?aafm_oauth=authorize.
+// Authorization endpoint + consent screen: served at ?aafm_oauth=authorize on wp_loaded, after every
+// init callback, so the consent screen counts preset reach from the complete abilities registry (a
+// plugin can register abilities from a later init callback, as Yoast's read tools are).
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/authorize.php';
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/consent-template.php';
-add_action( 'init', 'aafm_oauth_handle_authorize' );
+add_action( 'wp_loaded', 'aafm_oauth_handle_authorize' );
 
 /**
  * Bootstraps the plugin once all plugins are loaded.

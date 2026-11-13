@@ -378,10 +378,21 @@ class ConnectionCardsTest extends TestCase {
 
 		$this->assertStringContainsString( 'Active grants (105)', $html );
 		$this->assertStringContainsString( 'Showing 51 to 100 of 105', $html );
-		$this->assertSame( 1, preg_match( '/<a [^>]*href="[^"]*grants_page=1[^"]*"[^>]*>Previous<\/a>/', $html ), 'Previous links to page 1.' );
-		$this->assertSame( 1, preg_match( '/<a [^>]*href="[^"]*grants_page=3[^"]*"[^>]*>Next<\/a>/', $html ), 'Next links to page 3.' );
+		$this->assertSame( 2, preg_match_all( '/<a [^>]*href="[^"]*grants_page=1[^"]*"[^>]*>Previous<\/a>/', $html ), 'Previous links to page 1, above and below the table.' );
+		$this->assertSame( 2, preg_match_all( '/<a [^>]*href="[^"]*grants_page=3[^"]*"[^>]*>Next<\/a>/', $html ), 'Next links to page 3, above and below the table.' );
 		preg_match( '/<tbody>(.*?)<\/tbody>/s', $html, $body );
 		$this->assertSame( 50, substr_count( $body[1], '<tr' ) );
+	}
+
+	public function test_grants_pager_is_reachable_before_the_rows(): void {
+		$this->seed_grants( 105 );
+		$_GET['grants_page'] = '2';
+		$html                = $this->grants_html();
+
+		$this->assertSame( 2, substr_count( $html, 'class="aafm-pager aafm-grants-pager"' ) );
+		$this->assertLessThan( strpos( $html, '<table' ), strpos( $html, 'aafm-grants-pager' ), 'A keyboard user reaches Next without tabbing through every row.' );
+		preg_match_all( '/<nav class="aafm-pager aafm-grants-pager" aria-label="([^"]+)"/', $html, $labels );
+		$this->assertCount( 2, array_unique( $labels[1] ), 'The two page navigations have different names.' );
 	}
 
 	public function test_grants_page_junk_renders_page_1(): void {

@@ -291,6 +291,34 @@ function aafm_render_grants_card( array $data ): void {
 			);
 		}
 
+		// The same pager above and below the table, so a keyboard user reaches Next before the rows.
+		$pager = static function ( string $label ) use ( $data ): string {
+			if ( $data['pages'] <= 1 ) {
+				return '';
+			}
+			$first = ( $data['page'] - 1 ) * $data['per_page'] + 1;
+			$html  = '<nav class="aafm-pager aafm-grants-pager" aria-label="' . esc_attr( $label ) . '">';
+			$html .= sprintf(
+				'<span class="aafm-pager-status">%s</span>',
+				esc_html(
+					sprintf(
+						/* translators: 1: first row shown, 2: last row shown, 3: total grants. */
+						__( 'Showing %1$s to %2$s of %3$s', 'agent-abilities-for-mcp' ),
+						number_format_i18n( $first ),
+						number_format_i18n( $first + count( $data['rows'] ) - 1 ),
+						number_format_i18n( $data['count'] )
+					)
+				)
+			);
+			if ( $data['page'] > 1 ) {
+				$html .= sprintf( '<a class="aafm-btn aafm-btn-secondary aafm-btn-sm" href="%1$s">%2$s</a>', esc_url( aafm_connection_grants_page_url( $data['page'] - 1 ) ), esc_html__( 'Previous', 'agent-abilities-for-mcp' ) );
+			}
+			if ( $data['page'] < $data['pages'] ) {
+				$html .= sprintf( '<a class="aafm-btn aafm-btn-secondary aafm-btn-sm" href="%1$s">%2$s</a>', esc_url( aafm_connection_grants_page_url( $data['page'] + 1 ) ), esc_html__( 'Next', 'agent-abilities-for-mcp' ) );
+			}
+			return $html . '</nav>';
+		};
+		echo $pager( __( 'Active grants pages', 'agent-abilities-for-mcp' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built from escaped parts above.
 		echo '<div class="aafm-table-wrap">';
 		// Paged on the server: admin.js leaves a data-aafm-server-paged table to the page links.
 		echo '<table class="widefat striped aafm-oauth-table aafm-grants-table" data-aafm-server-paged="1"><thead><tr>';
@@ -413,29 +441,7 @@ function aafm_render_grants_card( array $data ): void {
 		echo '</div>';
 		// One message line for the whole table: a refused save names its app here, so no row grows taller.
 		echo '<p class="aafm-grants-msg" role="status" aria-live="polite" hidden></p>';
-		if ( $data['pages'] > 1 ) {
-			$first = ( $data['page'] - 1 ) * $data['per_page'] + 1;
-			echo '<nav class="aafm-pager aafm-grants-pager" aria-label="' . esc_attr__( 'Active grants pages', 'agent-abilities-for-mcp' ) . '">';
-			printf(
-				'<span class="aafm-pager-status">%s</span>',
-				esc_html(
-					sprintf(
-						/* translators: 1: first row shown, 2: last row shown, 3: total grants. */
-						__( 'Showing %1$s to %2$s of %3$s', 'agent-abilities-for-mcp' ),
-						number_format_i18n( $first ),
-						number_format_i18n( $first + count( $data['rows'] ) - 1 ),
-						number_format_i18n( $data['count'] )
-					)
-				)
-			);
-			if ( $data['page'] > 1 ) {
-				printf( '<a class="aafm-btn aafm-btn-secondary aafm-btn-sm" href="%1$s">%2$s</a>', esc_url( aafm_connection_grants_page_url( $data['page'] - 1 ) ), esc_html__( 'Previous', 'agent-abilities-for-mcp' ) );
-			}
-			if ( $data['page'] < $data['pages'] ) {
-				printf( '<a class="aafm-btn aafm-btn-secondary aafm-btn-sm" href="%1$s">%2$s</a>', esc_url( aafm_connection_grants_page_url( $data['page'] + 1 ) ), esc_html__( 'Next', 'agent-abilities-for-mcp' ) );
-			}
-			echo '</nav>';
-		}
+		echo $pager( __( 'Active grants pages, below the table', 'agent-abilities-for-mcp' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built from escaped parts above.
 		echo '<p class="aafm-card-desc">' . esc_html__( 'Access presets only narrow what you have switched on under Abilities. They never add anything.', 'agent-abilities-for-mcp' );
 		if ( $site_limit > 0 ) {
 			/* translators: %d: the site-wide calls-a-minute limit. */

@@ -3399,10 +3399,9 @@
 		 * Wire the OAuth management tables' Revoke buttons (Registered clients +
 		 * Active grants). Clicks are delegated off the .aafm-oauth-manage container so
 		 * a single listener covers both tables. Each revoke confirms first, then POSTs
-		 * the nonce-checked AJAX action; on success the row is updated in place - the
-		 * client's Status pill flips to Revoked and its button is removed, and a grant
-		 * row is removed entirely. Every DOM change is textContent / class / attribute
-		 * only, never innerHTML, so the response is never an HTML sink.
+		 * the nonce-checked AJAX action; on success the page reloads, so both cards and
+		 * the grants count come from the server. On failure the button comes back with
+		 * focus and the server's message.
 		 */
 		#bindOauthRevoke() {
 			const root = document.querySelector( '.aafm-oauth-manage' );
@@ -3456,47 +3455,17 @@
 					return;
 				}
 
-				// A revoked client's people leave Active grants too, and that card is paged on the
-				// server, so a client revoke that lists any of them takes the same reload path.
-				const listsClient = ! isGrant && Array.from( root.querySelectorAll( '#aafm-card-grants tr[data-grant-row]' ) ).some( ( r ) => r.dataset.grantRow?.endsWith( `|${ clientId }` ) );
-				if ( isGrant || listsClient ) {
-					// The grants card is paged on the server, so its count and rows come from the
-					// server: reload the current page (an emptied last page clamps to the new last
-					// page there). Focus cannot be set from the departing document, so a one-use
-					// marker asks the next load to put it on the card (#focusGrantsAfterReload).
-					try {
-						window.sessionStorage.setItem( 'aafmFocusGrants', '1' );
-					} catch {
-						// Storage blocked: the page still reloads, focus starts at the top.
-					}
-					window.location.reload();
-					return;
+				// Both revokes reload. Active grants is paged on the server, so its count and rows
+				// come from the server (an emptied last page clamps to the new last page there), and
+				// a revoked client's people leave it, whether or not any of them are on this page.
+				// Focus cannot be set from the departing document, so a one-use marker asks the next
+				// load to put it on the grants card (#focusGrantsAfterReload).
+				try {
+					window.sessionStorage.setItem( 'aafmFocusGrants', '1' );
+				} catch {
+					// Storage blocked: the page still reloads, focus starts at the top.
 				}
-
-				const row = btn.closest( 'tr' );
-				if ( ! row ) {
-					return;
-				}
-				// The client and all its tokens are revoked: its active-token count is now 0.
-				const tokensCell = row.querySelector( '.aafm-client-tokens' );
-				if ( tokensCell ) {
-					tokensCell.textContent = '0';
-				}
-				// Flip the Status pill to Revoked and replace the button with plain text.
-				const pill = row.querySelector( '.aafm-status-cell .aafm-pill' );
-				if ( pill ) {
-					pill.classList.remove( 'aafm-pill-success' );
-					pill.classList.add( 'aafm-pill-neutral' );
-					pill.textContent = this.#t( 'statusRevoked', 'Revoked' );
-				}
-				const cell = btn.parentElement;
-				btn.remove();
-				if ( cell ) {
-					const note = document.createElement( 'span' );
-					note.className = 'aafm-muted';
-					note.textContent = this.#t( 'statusRevoked', 'Revoked' );
-					cell.append( note );
-				}
+				window.location.reload();
 			} );
 		}
 

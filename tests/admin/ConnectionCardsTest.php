@@ -554,12 +554,14 @@ class ConnectionCardsTest extends TestCase {
 		$this->assertSame( 'error', $status, 'A failed attempt leaves an error row.' );
 	}
 
-	public function test_client_revoke_reloads_when_the_grants_card_lists_that_client(): void {
+	public function test_client_revoke_always_reloads(): void {
 		$js     = $this->admin_js();
 		$at     = (int) strpos( $js, '#bindOauthRevoke() {' );
 		$revoke = substr( $js, $at, (int) strpos( $js, '#paginateTable(', $at ) - $at );
-		$this->assertStringContainsString( 'r.dataset.grantRow?.endsWith( `|${ clientId }` )', $revoke, 'A client revoke checks the grants card for that client\'s rows.' );
 		$this->assertSame( 1, substr_count( $revoke, 'window.location.reload()' ), 'One reload path serves both revokes.' );
+		$this->assertStringNotContainsString( 'if ( isGrant || ', $revoke, 'A client revoke reloads whether or not its people are on this page.' );
+		$this->assertStringNotContainsString( 'grantRow', $revoke );
+		$this->assertStringNotContainsString( "querySelector( '.aafm-status-cell .aafm-pill' )", $revoke, 'No in-place client row update is left to go stale.' );
 	}
 
 	public function test_stale_token_success_removes_the_warning(): void {

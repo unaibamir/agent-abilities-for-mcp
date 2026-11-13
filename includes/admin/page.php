@@ -314,7 +314,6 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'revokeGrantConfirm'       => __( 'Revoke this grant? The user will have to approve again to reconnect.', 'agent-abilities-for-mcp' ),
 				'revokeFailed'             => __( 'Could not revoke. Please try again.', 'agent-abilities-for-mcp' ),
 				'staleTokensConfirm'       => __( 'End every token issued for an old address of this site? Approvals stay; those apps reconnect.', 'agent-abilities-for-mcp' ),
-				'statusRevoked'            => __( 'Revoked', 'agent-abilities-for-mcp' ),
 				'agentToggleFailed'        => __( 'Could not save. Please try again.', 'agent-abilities-for-mcp' ),
 				/* translators: %s: number of abilities matching the current search. */
 				'abilitiesSearchCount'     => __( '%s abilities match.', 'agent-abilities-for-mcp' ),

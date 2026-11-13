@@ -38,8 +38,9 @@ function aafm_connection_clients_data(): array {
 /**
  * Data for the "Active grants" card: one server page of aafm_oauth_grants_page() rows, each plus
  * its status, and the total that page was counted against. The page comes from the read-only
- * grants_page query argument; anything that is not a whole number clamps to the first page and a
- * number past the end clamps to the last.
+ * grants_page query argument, read as an integer the way PHP casts it (so "2junk" opens page 2); a
+ * value with no leading positive whole number clamps to the first page and a number past the end
+ * clamps to the last.
  *
  * @return array{title:string,rule:string,count:int,rows:list<array<string,mixed>>,page:int,pages:int,per_page:int,stale_tokens:int,empty:array{title:string,hint:string}}
  */

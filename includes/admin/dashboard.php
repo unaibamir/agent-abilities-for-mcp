@@ -1,7 +1,8 @@
 <?php
 /**
- * Dashboard read-only data helpers: agent user candidates, ability counts,
- * activity total, and the MCP protocol version. No output, no state changes.
+ * Dashboard data helpers (agent user candidates, ability counts, activity total, the MCP
+ * protocol version, the setup steps) and the Dashboard tab. The only write is the first-call
+ * flag's backfill (aafm_first_call_recorded()).
  *
  * @package AgentAbilitiesForMCP
  */
@@ -192,14 +193,55 @@ function aafm_recent_agent_count(): int {
 }
 
 /**
- * Whether any user has approved an OAuth connection (a live grant exists).
+ * Whether any user has approved an OAuth connection for a client that is still active.
  *
- * Read-only; returns false when OAuth is disabled or nobody has approved yet.
+ * Read-only; false when OAuth is disabled, nobody has approved yet, or the only approvals belong
+ * to revoked clients.
  *
  * @return bool
  */
 function aafm_has_oauth_grant(): bool {
-	return ! empty( aafm_oauth_list_grants() );
+	return aafm_oauth_has_active_grant();
+}
+
+/**
+ * Whether an agent user this plugin created has an Application Password the site will accept.
+ * A created user with no password, or on a site where Application Passwords are unavailable, has
+ * not connected anything.
+ *
+ * @return bool
+ */
+function aafm_created_agent_user_has_app_password(): bool {
+	foreach ( aafm_created_agent_users() as $user_id ) {
+		$user = aafm_exact_object( 'user', $user_id );
+		if ( $user instanceof WP_User && wp_is_application_passwords_available_for_user( $user )
+			&& array() !== WP_Application_Passwords::get_user_application_passwords( $user_id ) ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * Whether an agent tool call has ever been recorded on this site.
+ *
+ * Reads the durable aafm_first_call_recorded flag, which the call log sets when a qualifying row
+ * lands (aafm_mark_first_call_recorded()), so retention pruning or Clear log never un-ticks the
+ * step. With no flag, any surviving call row backfills it; if that write fails the live count
+ * still answers, so nothing breaks.
+ *
+ * @return bool
+ */
+function aafm_first_call_recorded(): bool {
+	$stored = aafm_option_row( 'aafm_first_call_recorded' );
+	if ( $stored['ok'] && $stored['found'] ) {
+		return true;
+	}
+	if ( aafm_agent_call_count() <= 0 ) {
+		return false;
+	}
+	aafm_update_option_verified( 'aafm_first_call_recorded', '1', false );
+	return true;
 }
 
 /**
@@ -207,12 +249,14 @@ function aafm_has_oauth_grant(): bool {
  * faked "connected" signal. Step done-ness comes straight from the data helpers:
  *
  *   [0] abilities are enabled - aafm_enabled_ability_count() > 0
- *   [1] agent is connected    - aafm_has_oauth_grant() || aafm_has_created_agent_user()
- *   [2] a call has been made  - aafm_agent_call_count() > 0 (a logged agent tool call)
+ *   [1] agent is connected    - aafm_has_oauth_grant() || aafm_created_agent_user_has_app_password()
+ *   [2] a call has been made  - aafm_first_call_recorded() (a logged agent tool call, ever)
  *
- * Step [1] keys off a live OAuth grant or a user THIS plugin created as a dedicated agent
- * (the marker meta), never a bare application-password holder - app passwords are minted for
- * many unrelated reasons, so counting them here flagged "connected" before any agent had.
+ * Step [1] keys off an OAuth grant on an active client, or a user THIS plugin created as a
+ * dedicated agent (the marker meta) that holds a usable Application Password. A bare
+ * application-password holder never counts (app passwords are minted for many unrelated
+ * reasons), and neither does a created agent user nobody can sign in as yet. Using the
+ * connection is step [2].
  *
  * Step [2] gets the same discipline: it counts only rows recording an agent tool call, never
  * the log's other traffic. Which rows qualify, and the exclusions that keep that honest, are
@@ -249,13 +293,13 @@ function aafm_setup_steps(): array {
 		array(
 			'title' => __( 'Connect your agent', 'agent-abilities-for-mcp' ),
 			'desc'  => __( 'Approve it in the browser over OAuth, or set up an Application Password for a dedicated agent user. Either way its reach stays capped by what you turn on.', 'agent-abilities-for-mcp' ),
-			'done'  => aafm_has_oauth_grant() || aafm_has_created_agent_user(),
+			'done'  => aafm_has_oauth_grant() || aafm_created_agent_user_has_app_password(),
 			'href'  => $tab_url( 'connection' ),
 		),
 		array(
 			'title' => __( 'Make your first call', 'agent-abilities-for-mcp' ),
 			'desc'  => __( 'Point your MCP client at the endpoint and run one request. It shows up here once the activity log records it.', 'agent-abilities-for-mcp' ),
-			'done'  => aafm_agent_call_count() > 0,
+			'done'  => aafm_first_call_recorded(),
 			'href'  => $tab_url( 'connection' ),
 		),
 	);

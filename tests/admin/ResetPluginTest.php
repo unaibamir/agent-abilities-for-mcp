@@ -74,6 +74,22 @@ final class ResetPluginTest extends TestCase {
 	}
 
 	/**
+	 * The durable "first agent call happened" flag is configuration-adjacent state: a reset
+	 * returns the Dashboard checklist to first-run, the same as the rest of the onboarding state.
+	 */
+	public function test_reset_clears_first_call_option(): void {
+		aafm_install_activity_log();
+		aafm_install_oauth_tables();
+		$this->assertContains( 'aafm_first_call_recorded', aafm_config_option_names() );
+
+		update_option( 'aafm_first_call_recorded', '1' );
+		aafm_reset_plugin();
+
+		$this->assertFalse( get_option( 'aafm_first_call_recorded', false ) );
+		$this->assertFalse( aafm_setup_steps()[2]['done'] );
+	}
+
+	/**
 	 * Reset clears the three Slice C meta-governance options. They are covered automatically
 	 * by the config-list loop in aafm_reset_plugin(); this pins each of the new ones explicitly
 	 * so a future edit that drops one from aafm_config_option_names() is caught.

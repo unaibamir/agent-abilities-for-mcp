@@ -14,6 +14,64 @@ use WP_Application_Passwords;
 
 final class DashboardTest extends TestCase {
 
+	public function tear_down(): void {
+		remove_filter( 'wp_is_application_passwords_available', '__return_true' );
+		remove_all_filters( 'pre_update_option_aafm_first_call_recorded' );
+		parent::tear_down();
+	}
+
+	/**
+	 * Give the plugin-created agent user one Application Password, with Application Passwords
+	 * available on this (non-HTTPS) test site.
+	 *
+	 * @return int The agent user's id.
+	 */
+	private function give_agent_user_an_app_password(): int {
+		add_filter( 'wp_is_application_passwords_available', '__return_true' );
+		$ids = aafm_created_agent_users();
+		$this->assertNotEmpty( $ids );
+		WP_Application_Passwords::create_new_application_password( $ids[0], array( 'name' => 'agent' ) );
+		return $ids[0];
+	}
+
+	/**
+	 * Seed an OAuth client and one consent on it.
+	 *
+	 * @param int $is_active 1 active, 0 revoked.
+	 * @return void
+	 */
+	private function seed_oauth_grant( int $is_active ): void {
+		global $wpdb;
+		aafm_install_oauth_tables();
+		aafm_truncate_oauth_tables();
+		$wpdb->insert(
+			$wpdb->prefix . 'aafm_oauth_clients',
+			array(
+				'client_id'   => 'dash_app',
+				'client_name' => 'Dash',
+				'is_active'   => $is_active,
+			)
+		);
+		$wpdb->insert(
+			$wpdb->prefix . 'aafm_oauth_consents',
+			array(
+				'wp_user_id' => self::factory()->user->create(),
+				'client_id'  => 'dash_app',
+			)
+		);
+	}
+
+	/**
+	 * Delete every log row, the way retention pruning does. A DELETE, not Clear log's TRUNCATE: a
+	 * TRUNCATE commits the test transaction and would leak the first-call flag into later tests.
+	 *
+	 * @return void
+	 */
+	private function prune_log(): void {
+		global $wpdb;
+		$wpdb->query( $wpdb->prepare( 'DELETE FROM %i', aafm_activity_log_table() ) );
+	}
+
 	public function test_agent_user_candidates_flags_admins(): void {
 		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		$sub   = self::factory()->user->create( array( 'role' => 'subscriber' ) );
@@ -177,10 +235,11 @@ final class DashboardTest extends TestCase {
 
 	public function test_dashboard_setup_checklist_emits_styling_classes_when_incomplete(): void {
 		// Force a partial setup so the checklist (not the "all set" notice) renders
-		// with BOTH row states reachable: a plugin-created (marked) agent user makes
-		// the connect step "done", while no enabled abilities keeps the abilities step
+		// with BOTH row states reachable: a plugin-created (marked) agent user with an
+		// Application Password makes the connect step "done", while no enabled abilities keeps the abilities step
 		// "to do". The transaction fixture rolls every change back, so live state is untouched.
 		aafm_create_agent_user( 'mcp-agent' );
+		$this->give_agent_user_an_app_password();
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		update_option( 'aafm_enabled_abilities', array() );
 
@@ -201,9 +260,11 @@ final class DashboardTest extends TestCase {
 	}
 
 	public function test_dashboard_setup_collapses_when_every_step_is_complete(): void {
-		// Drive all three steps done: a plugin-created (marked) agent user, at least one
+		// Drive all three steps done: a plugin-created (marked) agent user with an Application
+		// Password, at least one
 		// enabled ability, and one logged call. The transaction fixture rolls it all back.
 		aafm_create_agent_user( 'mcp-agent' );
+		$this->give_agent_user_an_app_password();
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		update_option( 'aafm_enabled_abilities', array( 'aafm/get-post' ) );
 		aafm_log_activity(
@@ -253,13 +314,6 @@ final class DashboardTest extends TestCase {
 		$this->assertFalse( $steps[0]['done'] ); // Abilities - none enabled.
 		$this->assertFalse( $steps[1]['done'] ); // Connect - no grant, no agent user.
 		$this->assertFalse( $steps[2]['done'] ); // First call - no activity.
-	}
-
-	public function test_connect_step_done_via_created_agent_user(): void {
-		// A user THIS plugin created (carrying the marker) satisfies the connect step.
-		aafm_create_agent_user( 'mcp-agent' );
-		$steps = aafm_setup_steps();
-		$this->assertTrue( $steps[1]['done'] );
 	}
 
 	/**
@@ -584,5 +638,101 @@ final class DashboardTest extends TestCase {
 		$html = (string) ob_get_clean();
 
 		$this->assertStringContainsString( 'No agent user yet. Administrator accounts can still reach the API.', $html );
+	}
+
+	public function test_connect_step_done_for_active_oauth_grant(): void {
+		$this->seed_oauth_grant( 1 );
+		$this->assertTrue( aafm_setup_steps()[1]['done'] );
+	}
+
+	public function test_connect_step_ignores_revoked_client(): void {
+		$this->seed_oauth_grant( 0 );
+		$this->assertFalse( aafm_setup_steps()[1]['done'], 'A consent left behind by a revoked client is not a connection.' );
+	}
+
+	public function test_connect_step_not_done_for_agent_user_without_app_password(): void {
+		add_filter( 'wp_is_application_passwords_available', '__return_true' );
+		aafm_create_agent_user( 'mcp-agent' );
+		$this->assertTrue( aafm_has_created_agent_user() );
+		$this->assertFalse( aafm_setup_steps()[1]['done'], 'An agent user nobody can sign in as has not connected anything.' );
+	}
+
+	public function test_connect_step_done_for_created_agent_user_with_app_password(): void {
+		aafm_create_agent_user( 'mcp-agent' );
+		$this->give_agent_user_an_app_password();
+		$this->assertTrue( aafm_setup_steps()[1]['done'] );
+
+		remove_filter( 'wp_is_application_passwords_available', '__return_true' );
+		add_filter( 'wp_is_application_passwords_available', '__return_false' );
+		$this->assertFalse( aafm_setup_steps()[1]['done'], 'A password the site will not accept is not usable.' );
+		remove_filter( 'wp_is_application_passwords_available', '__return_false' );
+	}
+
+	public function test_first_call_step_stays_done_after_log_cleared(): void {
+		$this->assertTrue( aafm_mark_first_call_recorded( $this->log_row( 7 ) ) );
+		$this->prune_log();
+		$this->assertSame( 0, aafm_agent_call_count() );
+
+		$this->assertTrue( aafm_setup_steps()[2]['done'], 'Retention pruning or Clear log must not un-tick the first call.' );
+	}
+
+	/**
+	 * A call that short-circuits never reaches the decorated execute callback; the only row it
+	 * leaves is the one aafm_open_pending_invocation_row() opens (from wp_ability_invoked on 7.1+,
+	 * from the rate-limited subclass below that). Calling that function directly is the same path
+	 * on every core this suite runs on.
+	 */
+	public function test_short_circuited_first_call_latches_before_dashboard_read(): void {
+		$this->acting_as( 'administrator' );
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				aafm_register_ability_with_log(
+					'aafm-test/first-call-latch',
+					array(
+						'label'               => 'First-call latch fixture',
+						'description'         => 'Test fixture for the first-call latch.',
+						'category'            => 'aafm-reads',
+						'input_schema'        => array( 'type' => 'object' ),
+						'output_schema'       => array( 'type' => 'object' ),
+						'execute_callback'    => static fn() => array( 'ok' => true ),
+						'permission_callback' => '__return_true',
+					)
+				);
+			}
+		);
+
+		aafm_open_pending_invocation_row( 'aafm-test/first-call-latch', array() );
+		$this->assertSame( 1, aafm_agent_call_count(), 'The opened row is a qualifying call.' );
+		$this->assertSame( '1', get_option( 'aafm_first_call_recorded' ), 'Latched when the row was recorded.' );
+		$this->prune_log();
+
+		$this->assertTrue( aafm_setup_steps()[2]['done'], 'The step stays done with the row gone, before any Dashboard read.' );
+	}
+
+	public function test_admin_only_event_does_not_latch_first_call(): void {
+		$admin = $this->acting_as( 'administrator' );
+		$this->assertFalse( aafm_mark_first_call_recorded( $this->log_row( $admin, 'aafm/settings', 'setting_changed' ) ) );
+		$this->assertFalse( aafm_mark_first_call_recorded( $this->log_row( $admin, '(transport)' ) ) );
+		$this->assertFalse( aafm_mark_first_call_recorded( 0 ), 'A failed insert latches nothing.' );
+		$this->assertFalse( get_option( 'aafm_first_call_recorded', false ) );
+		$this->assertFalse( aafm_setup_steps()[2]['done'] );
+	}
+
+	public function test_first_call_option_backfills_from_surviving_rows(): void {
+		$this->log_row( 7 );
+		$this->assertFalse( get_option( 'aafm_first_call_recorded', false ) );
+
+		$this->assertTrue( aafm_first_call_recorded() );
+		$this->assertSame( '1', get_option( 'aafm_first_call_recorded' ), 'The Dashboard read backfills the durable flag.' );
+	}
+
+	public function test_first_call_state_write_failure_falls_back_to_live_count(): void {
+		add_filter( 'pre_update_option_aafm_first_call_recorded', static fn( $value, $old ) => $old, 10, 2 );
+		$row = $this->log_row( 7 );
+
+		$this->assertFalse( aafm_mark_first_call_recorded( $row ), 'A write that did not land reports false.' );
+		$this->assertFalse( get_option( 'aafm_first_call_recorded', false ) );
+		$this->assertTrue( aafm_setup_steps()[2]['done'], 'The step falls back to the live count.' );
 	}
 }

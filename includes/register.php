@@ -353,6 +353,42 @@ function aafm_open_pending_invocation_row( string $ability_name, $input ): void 
 	);
 
 	aafm_tag_current_invocation_row( $ability_name, $row_id );
+	aafm_mark_first_call_recorded( $row_id );
+}
+
+/**
+ * Latch the durable "first agent call happened" flag once a qualifying call row is recorded.
+ *
+ * Called by every insert in this file that writes a tool-call row: the pending row opened for each
+ * call (including a call that short-circuits before finalization), the aborted-call row and the
+ * two denial rows (a denied call counts, see aafm_agent_call_count()). The row must exist and match
+ * aafm_agent_call_clause(), checked by id in one query, so an admin-only event, a front-door
+ * refusal or a failed insert latches nothing. The flag goes through the verified option writer and
+ * the Dashboard's third setup step reads it (aafm_first_call_recorded()), so retention pruning
+ * cannot un-tick the step. Once the flag is set, each later call costs one options-row read.
+ *
+ * @param int $row_id Row id aafm_log_activity() returned; 0 when the insert failed.
+ * @return bool True when the flag is set after this call; false when the row does not qualify or
+ *              the write did not land (the Dashboard then falls back to the live count).
+ */
+function aafm_mark_first_call_recorded( int $row_id ): bool {
+	if ( $row_id <= 0 ) {
+		return false;
+	}
+	$stored = aafm_option_row( 'aafm_first_call_recorded' );
+	if ( $stored['ok'] && $stored['found'] ) {
+		return true;
+	}
+
+	global $wpdb;
+	$clause = aafm_agent_call_clause();
+	// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- the clause holds only fixed text and placeholders; every value is bound here, as one array.
+	$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE id = %d AND ' . $clause['sql'], array_merge( array( aafm_activity_log_table(), $row_id ), $clause['params'] ) ) );
+	if ( ! $view['ok'] || 1 !== (int) $view['value'] ) {
+		return false;
+	}
+
+	return aafm_update_option_verified( 'aafm_first_call_recorded', '1', false );
 }
 
 /**
@@ -562,6 +598,7 @@ function aafm_log_aborted_tool_call( string $ability, WP_Error $error ): void {
 		)
 	);
 
+	aafm_mark_first_call_recorded( $row_id );
 	aafm_announce_ability_resolved( $row_id > 0 ? $row_id : null, 'error', null, $detail );
 }
 
@@ -1113,6 +1150,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 						)
 					)
 				);
+			aafm_mark_first_call_recorded( (int) $rate_row_id );
 			// A refused call is a call that finished, so it announces like any other resolve. A
 			// landed row (inserted or resolved above) announces its real id, and a failed insert
 			// announces null: same treatment as the execute tail, because a denial a monitor cannot
@@ -1294,6 +1332,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 						)
 					)
 				);
+			aafm_mark_first_call_recorded( (int) $denied_row_id );
 			// Announce, for the same reason the execute side does: a refused call has finished, and
 			// a permission callback that exploded is the failure an operator most wants paged
 			// about - it is the very class of crash the discovery guard in includes/server.php
@@ -1342,6 +1381,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 					)
 				)
 			);
+			aafm_mark_first_call_recorded( (int) $row_id );
 		}
 
 		// Null on a clean call; the crash's class and throw site once the catch below has written it.

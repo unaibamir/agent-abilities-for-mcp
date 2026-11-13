@@ -696,6 +696,9 @@ function aafm_config_option_names(): array {
 		// rather than orphaning it. The marker USER META is intentionally NOT touched here - uninstall
 		// keeps the agent user, so its marker travels with the account.
 		'aafm_agent_user_marker_backfilled',
+		// The durable "first agent call happened" flag behind the Dashboard's third setup step.
+		// Cleared so a reset returns the checklist to first-run; uninstall-with-delete-data removes it.
+		'aafm_first_call_recorded',
 		// The high-risk unlock switch. Locked is the safe default, so a reset must land the
 		// money-moving abilities back behind the floor rather than leave them reachable because
 		// someone unlocked the category once; uninstall-with-delete-data removes the row outright.

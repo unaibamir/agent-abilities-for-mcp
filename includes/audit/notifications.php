@@ -1124,9 +1124,7 @@ function aafm_notify_unschedule( bool $network_wide = false ): void {
 		);
 		foreach ( $site_ids as $site_id ) {
 			switch_to_blog( (int) $site_id );
-			wp_clear_scheduled_hook( 'aafm_notifications_digest' );
-			wp_unschedule_hook( 'aafm_notify_send_scheduled' );
-			delete_transient( 'aafm_ntf_overdue_seen' );
+			aafm_notify_unschedule();
 			restore_current_blog();
 		}
 		return;

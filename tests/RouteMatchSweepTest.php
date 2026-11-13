@@ -36,8 +36,6 @@ final class RouteMatchSweepTest extends TestCase {
 		'includes/bootstrap.php|aafm_mcp_rest_route'      => 1,
 		'includes/admin/connection.php|aafm_endpoint_url' => 1,
 		'includes/admin/connection.php|aafm_diagnostic_checks' => 1,
-		// Builds the path BuddyBoss's bb_is_allowed_endpoint() checks; it decides nothing about routing.
-		'includes/admin/doctor.php|aafm_doctor_buddyboss_private_rest' => 1,
 	);
 
 	/**

@@ -640,24 +640,29 @@ function aafm_doctor_known_blockers(): array {
 }
 
 /**
- * Whether BuddyBoss Platform refuses this plugin's REST routes to anyone not signed in. The same
- * conditions its own bb_restricate_rest_api_callback() and bb_restricate_rest_api() check: Private
- * REST APIs on, and, when BuddyBoss App is active, its private app on too; and the MCP route or the
- * OAuth token route missing from Public Rest APIs (bb_is_allowed_endpoint() returns true for an
- * allowed route and null otherwise). All three functions are BuddyBoss's own, so a site without it
- * reads false.
+ * Whether BuddyBoss Platform refuses this plugin's OAuth routes. Its bb_restricate_rest_api_callback()
+ * refuses a request only when no user is signed in, so an Application Password or a valid bearer
+ * token passes; what it stops is the unauthenticated OAuth flow: client registration and the token
+ * exchange. So this reads false with OAuth off, and otherwise checks the same conditions BuddyBoss
+ * does: Private REST APIs on, and, when BuddyBoss App is active, its private app on too; and the
+ * register or token route missing from Public Rest APIs (bb_is_allowed_endpoint() returns true for
+ * an allowed route and null otherwise). All three functions are BuddyBoss's own, so a site without
+ * it reads false.
  *
  * @return bool
  */
 function aafm_doctor_buddyboss_private_rest(): bool {
+	if ( ! aafm_oauth_enabled() ) {
+		return false;
+	}
 	if ( ! function_exists( 'bp_enable_private_rest_apis' ) || true !== (bool) bp_enable_private_rest_apis() ) {
 		return false;
 	}
 	if ( function_exists( 'bbapp_is_private_app_enabled' ) && true !== (bool) bbapp_is_private_app_enabled() ) {
 		return false;
 	}
-	foreach ( array( aafm_mcp_rest_route(), '/' . aafm_oauth_rest_namespace() . '/token' ) as $route ) {
-		if ( ! function_exists( 'bb_is_allowed_endpoint' ) || ! bb_is_allowed_endpoint( $route ) ) {
+	foreach ( array( '/register', '/token' ) as $path ) {
+		if ( ! function_exists( 'bb_is_allowed_endpoint' ) || ! bb_is_allowed_endpoint( '/' . aafm_oauth_rest_namespace() . $path ) ) {
 			return true;
 		}
 	}
@@ -687,7 +692,7 @@ function aafm_doctor_check_security_plugins(): array {
 		$details[] = sprintf( __( '%s can restrict the REST API or Application Passwords. If a connection fails, check its REST API and login settings first.', 'agent-abilities-for-mcp' ), implode( ', ', $active ) );
 	}
 	if ( aafm_doctor_buddyboss_private_rest() ) {
-		$details[] = __( 'BuddyBoss has Private Rest APIs switched on, so it answers anyone it does not see as signed in with "Only authenticated users can access the REST API." That stops an AI client finishing OAuth, and it can refuse even a correct Application Password. In the BuddyBoss Privacy settings, add wp-json/agent-abilities-for-mcp/ to Public Rest APIs, or switch Private Rest APIs off.', 'agent-abilities-for-mcp' );
+		$details[] = __( 'BuddyBoss has Private Rest APIs switched on, so it answers anyone it does not see as signed in with "Only authenticated users can access the REST API." That stops an AI client finishing OAuth. In the BuddyBoss Privacy settings, add wp-json/agent-abilities-for-mcp/ to Public Rest APIs, or switch Private Rest APIs off.', 'agent-abilities-for-mcp' );
 	}
 	if ( array() === $details ) {
 		return aafm_doctor_row( 'security_plugins', $label, 'pass', '', __( 'None of the security plugins this check knows about is active.', 'agent-abilities-for-mcp' ) );

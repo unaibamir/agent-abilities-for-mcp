@@ -936,6 +936,7 @@ final class ConnectionDoctorTest extends TestCase {
 
 	public function test_doctor_flags_buddyboss_private_rest_with_a_specific_line(): void {
 		$this->respond( $this->endpoint_ok() );
+		update_option( 'aafm_oauth_enabled', '1' );
 		$this->buddyboss_private_rest( false );
 		$this->assertSame( 'pass', $this->row( aafm_doctor_run_checks(), 'security_plugins' )['status'], 'BuddyBoss with private REST off is no warning.' );
 
@@ -948,6 +949,19 @@ final class ConnectionDoctorTest extends TestCase {
 		$this->assertStringContainsString( 'Only authenticated users can access the REST API.', $row['detail'], 'The owner can match the error they saw.' );
 		$this->assertStringContainsString( 'wp-json/agent-abilities-for-mcp/', $row['detail'] );
 		$this->assertStringContainsString( 'Public Rest APIs', $row['detail'] );
+		$this->assertStringNotContainsString( 'Application Password', $row['detail'], 'BuddyBoss lets a signed-in Application Password through.' );
+	}
+
+	public function test_doctor_buddyboss_line_is_silent_with_oauth_off(): void {
+		$this->respond( $this->endpoint_ok() );
+		$this->buddyboss_private_rest( true );
+		$this->assertFalse( aafm_oauth_enabled(), 'precondition: OAuth is off.' );
+
+		$this->assertFalse( aafm_doctor_buddyboss_private_rest(), 'Every call carries an Application Password, which BuddyBoss lets through.' );
+		$this->assertSame( 'pass', $this->row( aafm_doctor_run_checks(), 'security_plugins' )['status'] );
+
+		update_option( 'aafm_oauth_enabled', '1' );
+		$this->assertTrue( aafm_doctor_buddyboss_private_rest(), 'With OAuth on, the unauthenticated OAuth routes are refused.' );
 	}
 
 	public function test_doctor_generic_rest_login_line_is_not_duplicated(): void {
@@ -959,6 +973,7 @@ final class ConnectionDoctorTest extends TestCase {
 			}
 		);
 		update_option( 'active_plugins', array( 'fake-firewall/fake-firewall.php' ) );
+		update_option( 'aafm_oauth_enabled', '1' );
 		$this->buddyboss_private_rest( true );
 		// On a real BuddyBoss site with private REST on, the probe gets BuddyBoss's 401.
 		$this->respond( fn() => $this->http( 401 ) );
@@ -1007,13 +1022,15 @@ final class ConnectionDoctorTest extends TestCase {
 
 	public function test_doctor_buddyboss_line_clears_once_both_routes_are_public(): void {
 		$this->respond( $this->endpoint_ok() );
+		update_option( 'aafm_oauth_enabled', '1' );
 		$this->buddyboss_private_rest( true );
+		$oauth = '/' . aafm_oauth_rest_namespace();
 
-		$this->buddyboss_allows( array( aafm_mcp_rest_route() ) );
-		$this->assertSame( 'warn', $this->row( aafm_doctor_run_checks(), 'security_plugins' )['status'], 'The token route is still blocked.' );
+		$this->buddyboss_allows( array( aafm_mcp_rest_route(), $oauth . '/token' ) );
+		$this->assertSame( 'warn', $this->row( aafm_doctor_run_checks(), 'security_plugins' )['status'], 'Client registration is still blocked, and it is the first call an AI client makes.' );
 
 		remove_all_filters( 'aafm_test_bb_allowed_endpoint' );
-		$this->buddyboss_allows( array( aafm_mcp_rest_route(), '/' . aafm_oauth_rest_namespace() . '/token' ) );
+		$this->buddyboss_allows( array( $oauth . '/register', $oauth . '/token' ) );
 		$this->assertSame( 'pass', $this->row( aafm_doctor_run_checks(), 'security_plugins' )['status'], 'The owner followed the advice, so the line is gone.' );
 	}
 

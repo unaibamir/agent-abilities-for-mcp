@@ -98,7 +98,7 @@ function aafm_register_menus_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-menu-item']  = array(
 		'label'        => __( 'Update menu item', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Updates a menu item's title or URL by id. Requires the edit-theme-options capability.", 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Updates a menu item by id: its title, URL, parent item (to nest it, or 0 for the top level) or stored position. A parent must be another item of the same menu and cannot be the item itself or one of its own descendants. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'site',
@@ -931,7 +931,8 @@ function aafm_menu_item_target_checked( string $type, string $object_name, int $
 /**
  * Args for aafm/update-menu-item.
  *
- * Closed schema: the menu id and item id (both required) plus optional title/url to change.
+ * Closed schema: the menu id and item id (both required) plus optional title, url, parent_id and
+ * position to change.
  *
  * @return array<string,mixed>
  */
@@ -943,21 +944,31 @@ function aafm_args_update_menu_item(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'menu_id' => array(
+				'menu_id'   => array(
 					'type'        => 'integer',
 					'description' => __( 'ID of the navigation menu the item belongs to. The item must genuinely belong to this menu or the update is refused.', 'agent-abilities-for-mcp' ),
 				),
-				'item_id' => array(
+				'item_id'   => array(
 					'type'        => 'integer',
-					'description' => __( 'ID of the menu item to update. Every field you do not send here (link target, order, CSS classes, and so on) is preserved from its current stored value; only title and url actually change.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'ID of the menu item to update. Every field you do not send here (link target, parent, order, CSS classes, and so on) is preserved from its current stored value.', 'agent-abilities-for-mcp' ),
 				),
-				'title'   => array(
+				'title'     => array(
 					'type'        => 'string',
 					'description' => __( 'New link text for the item. Sanitized as plain text. Omit to leave the current title unchanged.', 'agent-abilities-for-mcp' ),
 				),
-				'url'     => array(
+				'url'       => array(
 					'type'        => 'string',
 					'description' => __( 'New destination URL for the item. An invalid or unsafe URL is refused and the current URL stays. Omit to leave the current URL unchanged.', 'agent-abilities-for-mcp' ),
+				),
+				'parent_id' => array(
+					'type'        => 'integer',
+					'minimum'     => 0,
+					'description' => __( 'ID of another item in the same menu to nest this one under, or 0 to move it to the top level. The item itself or one of its own descendants is refused. Omit to keep the current parent.', 'agent-abilities-for-mcp' ),
+				),
+				'position'  => array(
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'The item\'s stored position (its menu order). Items sort by this value; other items keep theirs, so two items can share a value. Omit to keep the current position.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'menu_id', 'item_id' ),
@@ -982,7 +993,7 @@ function aafm_args_update_menu_item(): array {
  * Execute aafm/update-menu-item.
  *
  * Resolves both the menu and the item by id (an unknown menu, or an item that is not in that
- * menu, returns a generic error), then applies the title/url edit through the core API. The
+ * menu, returns a generic error), then applies the title/url/parent/position edit through the core API. The
  * updated item is returned in the redacted shape. The title is sanitized as plain text and the
  * url through aafm_checked_url.
  *
@@ -1054,6 +1065,16 @@ function aafm_exec_update_menu_item( array $input ) {
 		}
 		$args['menu-item-url'] = $url;
 	}
+	if ( isset( $input['parent_id'] ) ) {
+		$parent = aafm_menu_item_parent_checked( $menu_id, $item_id, (int) $input['parent_id'] );
+		if ( is_wp_error( $parent ) ) {
+			return $parent;
+		}
+		$args['menu-item-parent-id'] = $parent;
+	}
+	if ( isset( $input['position'] ) ) {
+		$args['menu-item-position'] = max( 1, (int) $input['position'] );
+	}
 	if ( ! aafm_menu_item_target_checked( $args['menu-item-type'], $args['menu-item-object'], $args['menu-item-object-id'] ) ) {
 		return aafm_generic_error();
 	}
@@ -1068,7 +1089,7 @@ function aafm_exec_update_menu_item( array $input ) {
 	// and 0 is exactly what the FIRST item in a menu stores - our own create path leaves it there,
 	// because core does. So a title-only edit of the first item silently moved it last, which is
 	// the opposite of what this ability promises. Put the saved order back when core changed it.
-	if ( 0 === $original_order ) {
+	if ( 0 === $original_order && ! isset( $input['position'] ) ) {
 		$after = aafm_exact_object( 'post', $item_id );
 		if ( ! $after instanceof WP_Post ) {
 			return aafm_generic_error();
@@ -1089,7 +1110,50 @@ function aafm_exec_update_menu_item( array $input ) {
 	if ( null === $saved ) {
 		return aafm_generic_error();
 	}
-	return aafm_redact_menu_item( $saved );
+	// A requested parent or position is read back from the item itself: a hook that rewrote either
+	// must not be reported as the change the caller asked for.
+	$shape = aafm_redact_menu_item( $saved );
+	if ( ( isset( $input['parent_id'] ) && $shape['parent'] !== $args['menu-item-parent-id'] )
+		|| ( isset( $input['position'] ) && $shape['order'] !== $args['menu-item-position'] ) ) {
+		return aafm_generic_error();
+	}
+	return $shape;
+}
+
+/**
+ * Check a requested menu item parent: 0 (top level), or another item of the same menu that is not
+ * the item itself and not one of its descendants. A loop would leave items the menu never renders.
+ *
+ * @param int $menu_id   Menu id.
+ * @param int $item_id   The item being moved.
+ * @param int $parent_id Requested parent item id.
+ * @return int|WP_Error The parent id, or the refusal.
+ */
+function aafm_menu_item_parent_checked( int $menu_id, int $item_id, int $parent_id ) {
+	if ( $parent_id <= 0 ) {
+		return 0;
+	}
+	if ( ! aafm_menu_item_post( $menu_id, $parent_id ) instanceof WP_Post ) {
+		return new WP_Error(
+			'aafm_invalid_menu_item_parent',
+			__( 'The parent must be an existing menu item in this same menu, so nothing was changed.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
+	}
+	// Walk up from the requested parent. Reaching the item means the item would sit under itself. The
+	// walk is bounded by the menu's own size, so a loop already stored cannot hang it.
+	$seen = array();
+	for ( $ancestor = $parent_id; $ancestor > 0 && ! isset( $seen[ $ancestor ] ); $ancestor = (int) aafm_meta_get( 'post', $ancestor, '_menu_item_menu_item_parent', true ) ) {
+		if ( $ancestor === $item_id ) {
+			return new WP_Error(
+				'aafm_menu_item_parent_loop',
+				__( 'A menu item cannot be nested under itself or under one of its own sub-items, so nothing was changed.', 'agent-abilities-for-mcp' ),
+				array( 'status' => 400 )
+			);
+		}
+		$seen[ $ancestor ] = true;
+	}
+	return $parent_id;
 }
 
 /**

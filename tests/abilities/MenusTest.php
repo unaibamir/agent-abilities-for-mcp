@@ -876,4 +876,184 @@ final class MenusTest extends TestCase {
 		$this->acting_as( 'editor' ); // Editor lacks edit_theme_options.
 		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/create-menu' ) );
 	}
+
+	/**
+	 * A custom link item in a menu, for the parent and position tests.
+	 *
+	 * @param int    $menu_id Menu id.
+	 * @param string $title   Item title.
+	 * @param int    $parent_id Parent item id, 0 for top level.
+	 * @return int Item id.
+	 */
+	private function make_item( int $menu_id, string $title, int $parent_id = 0 ): int {
+		return (int) wp_update_nav_menu_item(
+			$menu_id,
+			0,
+			array(
+				'menu-item-title'     => $title,
+				'menu-item-url'       => home_url( '/' . sanitize_title( $title ) ),
+				'menu-item-parent-id' => $parent_id,
+				'menu-item-status'    => 'publish',
+			)
+		);
+	}
+
+	private function stored_parent( int $item_id ): int {
+		wp_cache_delete( $item_id, 'post_meta' );
+		return (int) get_post_meta( $item_id, '_menu_item_menu_item_parent', true );
+	}
+
+	public function test_schema_lists_parent_id_and_position(): void {
+		$schema = aafm_args_update_menu_item()['input_schema'];
+		$this->assertSame( 'integer', $schema['properties']['parent_id']['type'] );
+		$this->assertSame( 0, $schema['properties']['parent_id']['minimum'] );
+		$this->assertSame( 'integer', $schema['properties']['position']['type'] );
+		$this->assertSame( 1, $schema['properties']['position']['minimum'] );
+		$this->assertFalse( $schema['additionalProperties'] );
+	}
+
+	public function test_update_menu_item_disclosure_names_parent_and_position(): void {
+		foreach ( array( aafm_ability_disclosures()['aafm/update-menu-item'], aafm_ability_description( 'aafm/update-menu-item' ) ) as $text ) {
+			$this->assertStringContainsString( 'parent', $text );
+			$this->assertStringContainsString( 'position', $text );
+		}
+	}
+
+	public function test_item_can_be_nested_under_another_item_in_the_same_menu(): void {
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_id = $this->make_menu( 'Nest' );
+		$parent  = $this->make_item( $menu_id, 'Parent' );
+		$child   = $this->make_item( $menu_id, 'Child' );
+
+		$res = wp_get_ability( 'aafm/update-menu-item' )->execute(
+			array(
+				'menu_id'   => $menu_id,
+				'item_id'   => $child,
+				'parent_id' => $parent,
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( $parent, $res['parent'] );
+		$this->assertSame( $parent, $this->stored_parent( $child ) );
+		$this->assertSame( 'Child', $res['title'], 'The rest of the item is kept.' );
+
+		$top = wp_get_ability( 'aafm/update-menu-item' )->execute(
+			array(
+				'menu_id'   => $menu_id,
+				'item_id'   => $child,
+				'parent_id' => 0,
+			)
+		);
+		$this->assertSame( 0, $top['parent'], 'parent_id 0 moves it back to the top level.' );
+		$this->assertSame( 0, $this->stored_parent( $child ) );
+	}
+
+	public function test_item_can_be_moved_to_a_position(): void {
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_id = $this->make_menu( 'Order' );
+		$first   = $this->make_item( $menu_id, 'First' );
+		$this->make_item( $menu_id, 'Second' );
+
+		$res = wp_get_ability( 'aafm/update-menu-item' )->execute(
+			array(
+				'menu_id'  => $menu_id,
+				'item_id'  => $first,
+				'position' => 7,
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 7, $res['order'] );
+		clean_post_cache( $first );
+		$this->assertSame( 7, (int) get_post( $first )->menu_order );
+		$listed = wp_get_ability( 'aafm/list-menu-items' )->execute( array( 'menu_id' => $menu_id ) );
+		$this->assertSame( array( 'Second', 'First' ), array_column( $listed['items'], 'title' ), 'The item now sorts after the other one.' );
+	}
+
+	public function test_parent_in_another_menu_is_refused(): void {
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_id = $this->make_menu( 'Here' );
+		$other   = $this->make_menu( 'There' );
+		$item    = $this->make_item( $menu_id, 'Item' );
+		$foreign = $this->make_item( $other, 'Foreign' );
+
+		$res = wp_get_ability( 'aafm/update-menu-item' )->execute(
+			array(
+				'menu_id'   => $menu_id,
+				'item_id'   => $item,
+				'parent_id' => $foreign,
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_invalid_menu_item_parent', $res->get_error_code() );
+		$this->assertSame( 0, $this->stored_parent( $item ) );
+	}
+
+	public function test_item_cannot_be_its_own_parent(): void {
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_id = $this->make_menu( 'Self' );
+		$item    = $this->make_item( $menu_id, 'Item' );
+
+		$res = wp_get_ability( 'aafm/update-menu-item' )->execute(
+			array(
+				'menu_id'   => $menu_id,
+				'item_id'   => $item,
+				'parent_id' => $item,
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_menu_item_parent_loop', $res->get_error_code() );
+		$this->assertSame( 0, $this->stored_parent( $item ) );
+	}
+
+	public function test_item_cannot_be_moved_under_its_own_descendant(): void {
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_id    = $this->make_menu( 'Loop' );
+		$top        = $this->make_item( $menu_id, 'Top' );
+		$child      = $this->make_item( $menu_id, 'Child', $top );
+		$grandchild = $this->make_item( $menu_id, 'Grandchild', $child );
+
+		$res = wp_get_ability( 'aafm/update-menu-item' )->execute(
+			array(
+				'menu_id'   => $menu_id,
+				'item_id'   => $top,
+				'parent_id' => $grandchild,
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_menu_item_parent_loop', $res->get_error_code() );
+		$this->assertSame( 0, $this->stored_parent( $top ) );
+	}
+
+	public function test_title_only_update_unchanged(): void {
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_id = $this->make_menu( 'Keep' );
+		$parent  = $this->make_item( $menu_id, 'Parent' );
+		$item    = $this->make_item( $menu_id, 'Item', $parent );
+		clean_post_cache( $item );
+		$order = (int) get_post( $item )->menu_order;
+
+		$res = wp_get_ability( 'aafm/update-menu-item' )->execute(
+			array(
+				'menu_id' => $menu_id,
+				'item_id' => $item,
+				'title'   => 'Renamed',
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'Renamed', $res['title'] );
+		$this->assertSame( $parent, $res['parent'] );
+		$this->assertSame( $order, $res['order'] );
+	}
 }

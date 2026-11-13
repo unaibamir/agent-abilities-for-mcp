@@ -58,7 +58,6 @@ final class DashboardTest extends TestCase {
 	public function test_enabled_count_and_protocol(): void {
 		$this->assertIsInt( aafm_enabled_ability_count() );
 		$this->assertIsInt( aafm_total_ability_count() );
-		$this->assertNotEmpty( aafm_mcp_protocol_version() );
 	}
 
 	public function test_activity_count_reflects_rows(): void {
@@ -560,5 +559,22 @@ final class DashboardTest extends TestCase {
 		$this->log_row( 12 );
 
 		$this->assertSame( 2, aafm_recent_agent_count() );
+	}
+
+	public function test_protocol_row_matches_adapter_or_is_absent(): void {
+		ob_start();
+		aafm_render_dashboard_tab();
+		$html = (string) ob_get_clean();
+
+		$class = 'WP\MCP\Core\McpVersionNegotiator';
+		if ( defined( $class . '::SUPPORTED_PROTOCOL_VERSIONS' ) ) {
+			$latest = max( constant( $class . '::SUPPORTED_PROTOCOL_VERSIONS' ) );
+			$this->assertSame( $latest, aafm_mcp_protocol_version() );
+			$this->assertStringContainsString( '<dt>MCP protocol</dt><dd>' . $latest . '</dd>', $html );
+		} else {
+			$this->assertNull( aafm_mcp_protocol_version() );
+			$this->assertStringNotContainsString( 'MCP protocol', $html );
+		}
+		$this->assertStringNotContainsString( '2025-06-18', $html, 'The old hard-coded literal is gone.' );
 	}
 }

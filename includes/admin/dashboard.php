@@ -142,13 +142,20 @@ function aafm_total_ability_count(): int {
 }
 
 /**
- * The MCP protocol version this plugin speaks. Single source of truth so other
- * code (help tab, connection configs) can reference it rather than re-literal it.
+ * The newest MCP protocol version the loaded adapter supports, read from the adapter's own list,
+ * or null when the adapter is not loaded or does not publish one. Display only: Doctor and Help
+ * send their own protocol header literals.
  *
- * @return string
+ * @return string|null
  */
-function aafm_mcp_protocol_version(): string {
-	return '2025-06-18';
+function aafm_mcp_protocol_version(): ?string {
+	$constant = 'WP\\MCP\\Core\\McpVersionNegotiator::SUPPORTED_PROTOCOL_VERSIONS';
+	$versions = defined( $constant ) ? constant( $constant ) : null;
+	if ( ! is_array( $versions ) || array() === $versions ) {
+		return null;
+	}
+	// 'YYYY-MM-DD' strings compare correctly as text.
+	return (string) max( array_map( 'strval', $versions ) );
 }
 
 /**
@@ -536,11 +543,14 @@ function aafm_render_dashboard_tab(): void {
 		esc_html__( 'PHP', 'agent-abilities-for-mcp' ),
 		esc_html( PHP_VERSION )
 	);
-	printf(
-		'<dt>%1$s</dt><dd>%2$s</dd>',
-		esc_html__( 'MCP protocol', 'agent-abilities-for-mcp' ),
-		esc_html( aafm_mcp_protocol_version() )
-	);
+	$protocol = aafm_mcp_protocol_version();
+	if ( null !== $protocol ) {
+		printf(
+			'<dt>%1$s</dt><dd>%2$s</dd>',
+			esc_html__( 'MCP protocol', 'agent-abilities-for-mcp' ),
+			esc_html( $protocol )
+		);
+	}
 	printf(
 		'<dt>%1$s</dt><dd>%2$s</dd>',
 		esc_html__( 'Bundled adapter', 'agent-abilities-for-mcp' ),

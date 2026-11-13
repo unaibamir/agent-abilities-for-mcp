@@ -91,6 +91,24 @@ final class AvadaWireTest extends TestCase {
 		);
 		$this->assertNotInstanceOf( \AAFM\Tests\Support\McpProtocolError::class, $get_result );
 		$this->assertTrue( $get_result->getStructuredContent()['is_avada_owned'] ?? false );
+		$this->assertArrayNotHasKey( 'structure', $get_result->getStructuredContent(), 'No outline unless asked for.' );
+		$this->assertArrayNotHasKey( 'structure_status', $get_result->getStructuredContent() );
+
+		$outline = $handler->call_tool(
+			array(
+				'name'      => aafm_mcp_tool_name( 'aafm/avada-get-page-content' ),
+				'arguments' => array(
+					'post_id'           => $post->ID,
+					'include_structure' => true,
+				),
+			),
+			'req-avada-get-2'
+		);
+		$this->assertNotInstanceOf( \AAFM\Tests\Support\McpProtocolError::class, $outline );
+		$wire = json_decode( (string) wp_json_encode( $outline->getStructuredContent() ), true );
+		$this->assertSame( 'ok', $wire['structure_status'] );
+		$this->assertSame( 'fusion_builder_container', $wire['structure'][0]['tag'] );
+		$this->assertStringContainsString( '"atts":{}', $outline->getContent()[0]->getText(), 'Attributes travel as a JSON object, even when empty.' );
 
 		$replace_result = $handler->call_tool(
 			array(

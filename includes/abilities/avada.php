@@ -50,7 +50,7 @@ function aafm_register_avada_full_definitions( array $registry ): array {
 }
 
 /**
- * The two Avada ability rows, shared by the guarded and full registries.
+ * The Avada ability rows, shared by the guarded and full registries.
  *
  * @return array<string,array<string,mixed>>
  */
@@ -58,7 +58,7 @@ function aafm_avada_registry_definitions(): array {
 	return array(
 		'aafm/avada-get-page-content' => array(
 			'label'        => __( 'Get Avada page content', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads the raw post content of an Avada/Fusion Builder page, unchanged. Fusion Builder shortcodes are returned exactly as stored, never rendered or stripped. Also returns is_avada_owned, true when Avada owns the content. Requires edit access to the post.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Reads the raw post content of an Avada/Fusion Builder page, unchanged. Fusion Builder shortcodes are returned exactly as stored, never rendered or stripped. Also returns is_avada_owned, true when Avada owns the content. With include_structure it also returns an outline of the Fusion Builder elements (tag, nesting depth, attributes, and the library item id of a global element) to find the element that holds the text before calling avada-replace-text. Requires edit access to the post.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'avada',
@@ -102,10 +102,15 @@ function aafm_args_avada_get_page_content(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'post_id' => array(
+				'post_id'           => array(
 					'type'        => 'integer',
 					'minimum'     => 1,
 					'description' => __( 'ID of the post/page to read. The current user must have edit access to it.', 'agent-abilities-for-mcp' ),
+				),
+				'include_structure' => array(
+					'type'        => 'boolean',
+					'default'     => false,
+					'description' => __( 'When true, also returns structure: the Fusion Builder elements in document order with their nesting depth and attributes, and structure_status. Use it to find the element that holds the text you want to change before calling avada-replace-text.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id' ),
@@ -114,9 +119,30 @@ function aafm_args_avada_get_page_content(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'post_id'        => array( 'type' => 'integer' ),
-				'content'        => array( 'type' => 'string' ),
-				'is_avada_owned' => array( 'type' => 'boolean' ),
+				'post_id'          => array( 'type' => 'integer' ),
+				'content'          => array( 'type' => 'string' ),
+				'is_avada_owned'   => array( 'type' => 'boolean' ),
+				'structure_status' => array(
+					'type'        => 'string',
+					'enum'        => array( 'ok', 'unparseable', 'truncated' ),
+					'description' => __( 'Only with include_structure. ok: the outline is complete. unparseable: the shortcodes could not be read safely (avada-replace-text refuses this page too) and no structure is returned. truncated: only the first 2,000 elements are listed.', 'agent-abilities-for-mcp' ),
+				),
+				'structure'        => array(
+					'type'        => 'array',
+					'description' => __( 'Only with include_structure, when structure_status is ok or truncated. A global_id means the element shows a library item: its text lives in that item, not on this page.', 'agent-abilities-for-mcp' ),
+					'items'       => array(
+						'type'       => 'object',
+						'properties' => array(
+							'index'        => array( 'type' => 'integer' ),
+							'depth'        => array( 'type' => 'integer' ),
+							'tag'          => array( 'type' => 'string' ),
+							'self_closing' => array( 'type' => 'boolean' ),
+							'has_closer'   => array( 'type' => 'boolean' ),
+							'atts'         => array( 'type' => 'object' ),
+							'global_id'    => array( 'type' => 'integer' ),
+						),
+					),
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_avada_get_page_content',
@@ -146,11 +172,65 @@ function aafm_exec_avada_get_page_content( array $input ) {
 		return aafm_generic_error();
 	}
 
-	return array(
+	$out = array(
 		'post_id'        => $id,
 		'content'        => (string) $post->post_content,
 		'is_avada_owned' => 'avada' === aafm_post_has_foreign_builder_ownership( $id, true ),
 	);
+	if ( ! empty( $input['include_structure'] ) ) {
+		$out = array_merge( $out, aafm_avada_structure( (string) $post->post_content ) );
+	}
+	return $out;
+}
+
+/**
+ * The element outline for include_structure, built from aafm_fusion_shortcode_walk() itself so it
+ * sees exactly what avada-replace-text guards. The walker's tuples are left as they are (the
+ * structure check compares them for equality); index and global_id are added here.
+ *
+ * @param string $content Post content.
+ * @return array{structure_status:string,structure?:list<array<string,mixed>>}
+ */
+function aafm_avada_structure( string $content ): array {
+	$walk = aafm_fusion_shortcode_walk( $content, 0 );
+	if ( null === $walk ) {
+		return array( 'structure_status' => 'unparseable' );
+	}
+	$max   = 2000;
+	$items = array();
+	foreach ( array_slice( $walk, 0, $max ) as $index => $element ) {
+		$item      = array(
+			'index'        => $index,
+			'depth'        => $element['depth'],
+			'tag'          => $element['tag'],
+			'self_closing' => $element['self_closing'],
+			'has_closer'   => $element['has_closer'],
+			'atts'         => (object) $element['atts'],
+		);
+		$global_id = aafm_avada_global_id( $element['tag'], $element['atts'] );
+		if ( null !== $global_id ) {
+			$item['global_id'] = $global_id;
+		}
+		$items[] = $item;
+	}
+	return array(
+		'structure_status' => count( $walk ) > $max ? 'truncated' : 'ok',
+		'structure'        => $items,
+	);
+}
+
+/**
+ * The library item an element shows, the two ways Avada writes it: a [fusion_global id="12"]
+ * element, or an element that carries a fusion_global="12" attribute (fusion-builder
+ * shortcodes/fusion-global.php, recursively_add_global_elements()).
+ *
+ * @param string              $tag  Shortcode tag.
+ * @param array<string,mixed> $atts Parsed attributes.
+ * @return int|null The item's post id, or null when the element is not global.
+ */
+function aafm_avada_global_id( string $tag, array $atts ): ?int {
+	$raw = 'fusion_global' === $tag ? ( $atts['id'] ?? null ) : ( $atts['fusion_global'] ?? null );
+	return is_string( $raw ) && 1 === preg_match( '/^[1-9][0-9]*$/', $raw ) ? (int) $raw : null;
 }
 
 /**

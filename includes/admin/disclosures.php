@@ -232,7 +232,7 @@ function aafm_ability_disclosures(): array {
 		'aafm/slim-seo-update-post'        => __( "Writes a post's Slim SEO fields. A field omitted from the call is left untouched. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
 
 		// Avada / Fusion Builder.
-		'aafm/avada-get-page-content'      => __( 'Reads the raw post content of an Avada/Fusion Builder page, unchanged. Fusion Builder shortcodes are returned exactly as stored, never rendered or stripped. Requires edit access to the post.', 'agent-abilities-for-mcp' ),
+		'aafm/avada-get-page-content'      => __( 'Reads the raw post content of an Avada/Fusion Builder page, unchanged. Fusion Builder shortcodes are returned exactly as stored, never rendered or stripped. With include_structure it also lists the Fusion Builder elements and their attributes, and marks an element whose text lives in a global library item. Requires edit access to the post.', 'agent-abilities-for-mcp' ),
 		// shortcode_parse_atts() (what the guard actually compares) discards
 		// quoting style and whitespace inside a tag, so a change limited to those is not caught
 		// even though the tree it builds otherwise stays equal. Worded to the real guarantee

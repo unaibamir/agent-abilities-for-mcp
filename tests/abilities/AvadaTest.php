@@ -27,6 +27,7 @@ final class AvadaTest extends TestCase {
 
 	public function tear_down(): void {
 		remove_filter( 'aafm_integration_active_avada', '__return_true' );
+		remove_shortcode( 'fusion_global' );
 		parent::tear_down();
 	}
 
@@ -335,5 +336,95 @@ final class AvadaTest extends TestCase {
 
 		$this->assertIsArray( $out );
 		$this->assertSame( 0, $out['replacements'] );
+	}
+
+	/**
+	 * Read a page as an editor, with or without the element outline.
+	 *
+	 * @param int       $id      Post id.
+	 * @param bool|null $outline include_structure, or null to leave it out.
+	 * @return array<string,mixed>
+	 */
+	private function read_page( int $id, ?bool $outline ): array {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		$input = array( 'post_id' => $id );
+		if ( null !== $outline ) {
+			$input['include_structure'] = $outline;
+		}
+		$out = aafm_exec_avada_get_page_content( $input );
+		$this->assertIsArray( $out );
+		return $out;
+	}
+
+	public function test_structure_lists_the_elements_in_document_order_with_their_depth(): void {
+		$out = $this->read_page( $this->make_avada_post( self::NESTED_COLUMNS ), true );
+
+		$this->assertSame( 'ok', $out['structure_status'] );
+		$this->assertSame( range( 0, 7 ), array_column( $out['structure'], 'index' ) );
+		$this->assertSame(
+			array( 'fusion_builder_container', 'fusion_builder_row', 'fusion_builder_column', 'fusion_builder_row_inner', 'fusion_builder_column_inner', 'fusion_text', 'fusion_builder_column_inner', 'fusion_text' ),
+			array_column( $out['structure'], 'tag' )
+		);
+		$this->assertSame( array( 0, 1, 2, 3, 4, 5, 4, 5 ), array_column( $out['structure'], 'depth' ) );
+		$this->assertSame( array( 'type' => '1/2' ), (array) $out['structure'][2]['atts'] );
+		$this->assertFalse( $out['structure'][5]['self_closing'] );
+		$this->assertTrue( $out['structure'][5]['has_closer'] );
+		$this->assertArrayNotHasKey( 'global_id', $out['structure'][0] );
+		$this->assertSame( self::NESTED_COLUMNS, $out['content'], 'The raw content is still returned.' );
+	}
+
+	public function test_structure_keys_are_absent_unless_asked_for(): void {
+		$id = $this->make_avada_post( self::NESTED_COLUMNS );
+		foreach ( array( null, false ) as $flag ) {
+			$out = $this->read_page( $id, $flag );
+			$this->assertArrayNotHasKey( 'structure', $out );
+			$this->assertArrayNotHasKey( 'structure_status', $out );
+		}
+	}
+
+	public function test_structure_is_unparseable_with_no_structure_key_when_the_walk_fails(): void {
+		$out = $this->read_page( $this->make_avada_post( '[fusion_text content="a[1]"]Some other plain text[/fusion_text]' ), true );
+
+		$this->assertSame( 'unparseable', $out['structure_status'] );
+		$this->assertArrayNotHasKey( 'structure', $out, 'No empty list standing in for a failed parse.' );
+	}
+
+	public function test_structure_is_truncated_at_two_thousand_elements(): void {
+		$out = $this->read_page( $this->make_avada_post( str_repeat( '[fusion_separator /]', 2001 ) ), true );
+
+		$this->assertSame( 'truncated', $out['structure_status'] );
+		$this->assertCount( 2000, $out['structure'] );
+		$this->assertSame( 1999, $out['structure'][1999]['index'] );
+		$this->assertTrue( $out['structure'][0]['self_closing'] );
+	}
+
+	public function test_structure_names_the_library_item_behind_a_global_element(): void {
+		// Avada registers fusion_global itself (fusion-builder/shortcodes/fusion-global.php); PHPUnit does not load Avada.
+		add_shortcode( 'fusion_global', '__return_empty_string' );
+		$content = '[fusion_global id="12"][/fusion_global][fusion_builder_container fusion_global="34"][fusion_text]Shared[/fusion_text][/fusion_builder_container]';
+
+		$out = $this->read_page( $this->make_avada_post( $content ), true );
+
+		$this->assertSame( 'ok', $out['structure_status'] );
+		$this->assertSame( 12, $out['structure'][0]['global_id'] );
+		$this->assertSame( 34, $out['structure'][1]['global_id'] );
+		$this->assertArrayNotHasKey( 'global_id', $out['structure'][2] );
+	}
+
+	public function test_structure_of_a_page_without_fusion_elements_is_an_empty_ok_list(): void {
+		$id  = self::factory()->post->create( array( 'post_content' => 'ordinary text' ) );
+		$out = $this->read_page( $id, true );
+
+		$this->assertSame( 'ok', $out['structure_status'] );
+		$this->assertSame( array(), $out['structure'] );
+		$this->assertFalse( $out['is_avada_owned'] );
+	}
+
+	public function test_get_page_content_schema_declares_include_structure(): void {
+		$args = aafm_args_avada_get_page_content();
+		$this->assertSame( 'boolean', $args['input_schema']['properties']['include_structure']['type'] );
+		$this->assertFalse( $args['input_schema']['additionalProperties'] );
+		$this->assertSame( array( 'ok', 'unparseable', 'truncated' ), $args['output_schema']['properties']['structure_status']['enum'] );
+		$this->assertSame( 'array', $args['output_schema']['properties']['structure']['type'] );
 	}
 }

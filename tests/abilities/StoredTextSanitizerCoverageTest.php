@@ -65,6 +65,12 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 			),
 			'reason' => 'The list-blocks search term. It becomes WP_Query\'s `s` argument and is never written back, so nothing about it reaches storage.',
 		),
+		'includes/abilities/avada.php::aafm_exec_avada_list_library::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( (string) $input[\'search\'] )',
+			),
+			'reason' => 'The avada-list-library search term. It becomes WP_Query\'s `s` argument and is never written back, so nothing about it reaches storage.',
+		),
 		'includes/abilities/blocks.php::aafm_exec_list_block_types::sanitize_text_field' => array(
 			'calls'  => array(
 				'sanitize_text_field( (string) $input[\'namespace\'] )',

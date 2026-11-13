@@ -28,6 +28,8 @@ final class ReplaceSitewideScanSweepTest extends TestCase {
 		'includes/wpml.php|aafm_wpml_count_posts_by_status|1'           => 'READ',
 		'includes/helpers.php|aafm_with_seo_render_scope|1'             => 'READ',
 		'includes/abilities/blocks.php|aafm_exec_list_blocks|1'         => 'READ',
+		'includes/abilities/avada.php|aafm_exec_avada_list_layouts|1'   => 'READ',
+		'includes/abilities/avada.php|aafm_exec_avada_list_library|1'   => 'READ',
 		'includes/abilities/search.php|aafm_exec_search_content|1'      => 'READ',
 		'includes/abilities/geodirectory.php|aafm_exec_geodirectory_get_listings|1' => 'READ',
 		'includes/abilities/geodirectory.php|aafm_exec_geodirectory_get_listings|2' => 'READ',

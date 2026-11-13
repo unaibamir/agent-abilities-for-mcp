@@ -266,6 +266,44 @@ final class NavigationTest extends TestCase {
 		$this->assert_refused_and_unchanged( $res, 'aafm_invalid_url', $id, '<!-- wp:page-list /-->' );
 	}
 
+	/**
+	 * A scheme with no slashes and a numeric tail parses as host and port in wp_parse_url().
+	 *
+	 * @dataProvider provide_schemes_that_parse_as_a_port
+	 *
+	 * @param string $url A link whose scheme is outside http, https, mailto and tel.
+	 */
+	public function test_a_scheme_that_parses_as_a_port_is_refused( string $url ): void {
+		$this->acting_as( 'administrator' );
+		$id = $this->make_navigation( '<!-- wp:page-list /-->' );
+
+		$res = aafm_exec_update_navigation(
+			array(
+				'id'    => $id,
+				'items' => array(
+					array(
+						'label' => 'Contact',
+						'url'   => $url,
+					),
+				),
+			)
+		);
+
+		$this->assert_refused_and_unchanged( $res, 'aafm_invalid_url', $id, '<!-- wp:page-list /-->' );
+	}
+
+	/**
+	 * Links with a scheme wp_parse_url() misreads as a host and port.
+	 *
+	 * @return array<string,array{0:string}>
+	 */
+	public function provide_schemes_that_parse_as_a_port(): array {
+		return array(
+			'sms' => array( 'sms:123' ),
+			'fax' => array( 'fax:12345' ),
+		);
+	}
+
 	public function test_label_over_200_characters_is_refused(): void {
 		$this->acting_as( 'administrator' );
 		$id = $this->make_navigation( '<!-- wp:page-list /-->' );

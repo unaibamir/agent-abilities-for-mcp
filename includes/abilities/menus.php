@@ -1579,8 +1579,9 @@ function aafm_navigation_items_checked( $items, int $level, int &$count ) {
 				array( 'status' => 400 )
 			);
 		}
+		// Read the scheme the way aafm_checked_url() does: wp_parse_url() takes fax:12345 for a host and port.
 		$url    = aafm_checked_url( is_string( $item['url'] ?? null ) ? $item['url'] : '', 'url' );
-		$scheme = is_string( $url ) ? strtolower( (string) wp_parse_url( $url, PHP_URL_SCHEME ) ) : '';
+		$scheme = is_string( $url ) && 1 === preg_match( '/^([a-z][a-z0-9+\-]*):/i', $url, $found ) ? strtolower( $found[1] ) : '';
 		if ( is_wp_error( $url ) || '' === $url || ( '' !== $scheme && ! in_array( $scheme, array( 'http', 'https', 'mailto', 'tel' ), true ) ) ) {
 			return new WP_Error(
 				'aafm_invalid_url',

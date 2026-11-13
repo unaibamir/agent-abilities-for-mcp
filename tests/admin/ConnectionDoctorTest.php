@@ -724,6 +724,8 @@ final class ConnectionDoctorTest extends TestCase {
 		$this->assertSame( 'warn', $row['status'] );
 		$this->assertSame( 'you', $row['who'] );
 		$this->assertStringContainsString( 'every OAuth connection ends', $row['detail'], 'The advice says what switching costs.' );
+		$this->assertStringContainsString( 'the MCP endpoint card at the top of this tab', $row['detail'], 'The passing row shows no address, so the advice points where the new one is.' );
+		$this->assertStringNotContainsString( 'this row shows', $row['detail'] );
 		update_option( 'permalink_structure', '/%postname%/' );
 		$this->assertSame( 'pass', $this->row( aafm_doctor_run_checks(), 'permalinks' )['status'] );
 	}

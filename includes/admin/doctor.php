@@ -613,7 +613,7 @@ function aafm_doctor_check_https(): array {
 function aafm_doctor_check_permalinks(): array {
 	$label = __( 'Permalinks', 'agent-abilities-for-mcp' );
 	if ( '' === (string) get_option( 'permalink_structure', '' ) ) {
-		return aafm_doctor_row( 'permalinks', $label, 'warn', 'you', __( 'Permalinks are set to Plain. The endpoint address then carries ?rest_route= and some clients and discovery documents fail. Pick any other structure under Settings, Permalinks. Switching changes the endpoint address, so every OAuth connection ends and each app has to be removed and added again with the new address this row shows after you save. Use this exact endpoint address in your agent until you switch:', 'agent-abilities-for-mcp' ), aafm_endpoint_url() );
+		return aafm_doctor_row( 'permalinks', $label, 'warn', 'you', __( 'Permalinks are set to Plain. The endpoint address then carries ?rest_route= and some clients and discovery documents fail. Pick any other structure under Settings, Permalinks. Switching changes the endpoint address, so every OAuth connection ends and each app has to be removed and added again with the new address, which the MCP endpoint card at the top of this tab shows once you save. Use this exact endpoint address in your agent until you switch:', 'agent-abilities-for-mcp' ), aafm_endpoint_url() );
 	}
 
 	return aafm_doctor_row( 'permalinks', $label, 'pass', '', __( 'Pretty permalinks are on.', 'agent-abilities-for-mcp' ) );

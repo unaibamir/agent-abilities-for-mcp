@@ -275,8 +275,11 @@ function aafm_bridge_apply_read_only_starter( string $group_key, array $shown_sl
 	}
 
 	$stored = aafm_bridge_normalize_stored_slugs( $row['value'] );
-	$owned  = aafm_bridge_group_slugs( $stored )[ $group_key ] ?? array();
-	$reads  = array_values(
+	// ponytail: every stored tool of the group is switched off unless it is a shown read, including one
+	// whose plugin registered it again after the page loaded. That is the safe direction ("its other
+	// tools are off"), and it is what removes the group's Unavailable selections too.
+	$owned = aafm_bridge_group_slugs( $stored )[ $group_key ] ?? array();
+	$reads = array_values(
 		array_filter(
 			$shown,
 			static function ( string $slug ): bool {
@@ -284,7 +287,7 @@ function aafm_bridge_apply_read_only_starter( string $group_key, array $shown_sl
 			}
 		)
 	);
-	$new    = array_values( array_unique( array_merge( array_diff( $stored, $owned ), $reads ) ) );
+	$new   = array_values( array_unique( array_merge( array_diff( $stored, $owned ), $reads ) ) );
 
 	if ( ! aafm_update_option_verified( 'aafm_enabled_bridged_abilities', $new ) ) {
 		aafm_log_ability_persist_failure( 'aafm_enabled_bridged_abilities', $label );

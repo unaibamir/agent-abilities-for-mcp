@@ -1463,8 +1463,9 @@
 					const unavailable = Number( groupCard.dataset.bridgeUnavailable ?? 0 );
 					status.textContent = this.#t( 'bridgeWorking', 'Working…' );
 					btn.disabled = true;
-					// The tools this card shows; the server acts on these only and leaves later arrivals alone.
-					const slugs = Array.from( groupCard.querySelectorAll( '.aafm-ability-row input[name="bridged_abilities[]"]' ), ( box ) => box.value );
+					// The tools this card shows, locked rows included (they have no input); the server acts on
+					// these only and leaves later arrivals alone.
+					const slugs = Array.from( groupCard.querySelectorAll( '.aafm-ability-row[data-slug]' ), ( row ) => row.dataset.slug );
 					const json = await this.#post( 'aafm_bridge_read_only_starter', { plugin: key, 'slugs[]': slugs } );
 					btn.disabled = false;
 					if ( ! json?.success ) {

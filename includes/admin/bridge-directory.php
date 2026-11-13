@@ -798,12 +798,13 @@ function aafm_render_bridge_ability_row( array $ability, array $enabled, bool $d
 	// A locked row has no switch, so this is how the starter's confirm counts a stored tool it would turn off.
 	$high_risk = aafm_ability_is_high_risk( $slug );
 	printf(
-		'<div class="aafm-ability-row%1$s" data-risk="%2$s"%3$s%4$s%5$s>',
+		'<div class="aafm-ability-row%1$s" data-risk="%2$s"%3$s%4$s%5$s data-slug="%6$s">',
 		$destructive ? ' is-destructive' : '',
 		esc_attr( $risk ),
 		null !== $lock_reason && in_array( $slug, $enabled, true ) ? ' data-aafm-stored-on="1"' : '',
 		$disabled ? ' aria-disabled="true"' : '',
-		$high_risk ? ' data-high-risk="1"' : ''
+		$high_risk ? ' data-high-risk="1"' : '',
+		esc_attr( $slug )
 	);
 
 	// Read-only mode reaches bridged abilities too, classified by the foreign ability's own

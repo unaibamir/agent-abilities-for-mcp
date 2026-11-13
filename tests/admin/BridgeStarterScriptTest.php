@@ -156,7 +156,7 @@ final class BridgeStarterScriptTest extends TestCase {
 		$review  = $this->method( '#bindBridgeReview() {' );
 
 		$this->assertMatchesRegularExpression( "/this\\.#post\\( 'aafm_bridge_read_only_starter', \\{ plugin: key, 'slugs\\[\\]': [^}]+\\} \\)/", $starter );
-		$this->assertStringContainsString( 'input[name="bridged_abilities[]"]', $starter );
+		$this->assertMatchesRegularExpression( '/const slugs = Array\\.from\\( groupCard\\.querySelectorAll\\( \'\\.aafm-ability-row\\[data-slug\\]\' \\), \\( row \\) => row\\.dataset\\.slug \\);/', $starter, 'Rows, so a locked row with no input is posted too.' );
 		$this->assertMatchesRegularExpression( "/this\\.#post\\( 'aafm_bridge_mark_reviewed', \\{ plugin: key, 'slugs\\[\\]': [^}]+\\} \\)/", $review );
 		$this->assertStringContainsString( 'li > code', $review );
 		$post = $this->method( 'async #post( action, data = {} ) {' );

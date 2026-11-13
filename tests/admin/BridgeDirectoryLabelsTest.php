@@ -248,4 +248,22 @@ final class BridgeDirectoryLabelsTest extends TestCase {
 
 		$this->assertStringContainsString( '<h2>' . esc_html__( 'Unavailable (plugin inactive)', 'agent-abilities-for-mcp' ) . '</h2>', $html );
 	}
+
+	public function test_every_row_carries_its_slug_including_a_locked_one(): void {
+		$this->register_foreign_abilities(
+			'demo',
+			array(
+				'reader' => array( 'readonly' => true ),
+				'writer' => array(),
+			)
+		);
+		add_filter( 'aafm_high_risk_abilities', static fn( array $e ): array => array_merge( $e, array( 'demo/writer' ) ) );
+
+		$html = $this->render();
+		remove_all_filters( 'aafm_high_risk_abilities' );
+
+		$this->assertStringNotContainsString( 'value="demo/writer"', $html, 'Precondition: the writer row is locked and has no input.' );
+		$this->assertStringContainsString( 'data-slug="demo/writer"', $html );
+		$this->assertStringContainsString( 'data-slug="demo/reader"', $html );
+	}
 }

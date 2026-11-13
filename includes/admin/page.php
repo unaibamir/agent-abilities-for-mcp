@@ -1684,7 +1684,7 @@ function aafm_render_admin_page(): void {
 
 	echo '<div class="wrap aafm-wrap">';
 
-	// Header: title + lede on the left, the status pill on the right (moved out of the h1).
+	// Header: title + lede on the left; the status pills and the support links on the right.
 	echo '<div class="aafm-page-head"><div class="title-wrap">';
 	echo '<h1>' . esc_html__( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ) . '</h1>';
 	echo '<p class="aafm-page-lede">' . esc_html__( 'Give an AI agent scoped, audited access to this site. Nothing is exposed until you turn it on, and every call is logged.', 'agent-abilities-for-mcp' ) . '</p>';
@@ -1697,6 +1697,7 @@ function aafm_render_admin_page(): void {
 	// scoped to that list, which is the exact mismatch that produced the 1.5.0 lock bug. This band
 	// is the one element on the page whose scope is unambiguously everything.
 	$posture = aafm_exposure_posture();
+	echo '<div class="aafm-page-head-side">';
 	echo '<span class="aafm-page-head-pills">';
 	printf(
 		'<span class="aafm-status-pill aafm-pill aafm-pill-warn" data-posture="paused"%1$s>%2$s</span>',
@@ -1715,7 +1716,53 @@ function aafm_render_admin_page(): void {
 		esc_html( $pill_label )
 	);
 	echo '</span>';
+
+	// Support links: quiet and permanent, no admin-wide nag. They sit in the page head under the
+	// pills, so the ten tabs below get the whole row (option A, 2026-11-13). Website is the
+	// plugin's own home and leads, which keeps the two wordpress.org destinations next to each
+	// other rather than split by it. A review helps the plugin's wordpress.org standing; Get Help
+	// routes to the support forum. All three open in a new tab.
+	//
+	// Website reuses the existing chain-link glyph rather than adding an SVG - it is the standard
+	// mark for "this goes somewhere else on the web", and the icon set has no globe.
+	$ext_links = array(
+		array(
+			'href'  => 'https://agentabilitieswp.com',
+			'icon'  => 'endpoint',
+			'label' => __( 'Website', 'agent-abilities-for-mcp' ),
+		),
+		array(
+			'href'  => 'https://wordpress.org/support/plugin/agent-abilities-for-mcp/reviews/#new-post',
+			'icon'  => 'star',
+			'label' => __( 'Review', 'agent-abilities-for-mcp' ),
+		),
+		array(
+			'href'  => 'https://wordpress.org/support/plugin/agent-abilities-for-mcp/',
+			'icon'  => 'lifebuoy',
+			'label' => __( 'Get Help', 'agent-abilities-for-mcp' ),
+		),
+		array(
+			'href'  => 'https://www.youtube.com/watch?v=Raih7X4QgP0',
+			'icon'  => 'play',
+			'label' => __( 'Watch the demo', 'agent-abilities-for-mcp' ),
+		),
+	);
+	echo '<div class="aafm-nav-ext-group">';
+	foreach ( $ext_links as $ext ) {
+		echo wp_kses(
+			sprintf(
+				'<a href="%1$s" class="aafm-nav-ext" target="_blank" rel="noopener noreferrer">%2$s %3$s<span class="screen-reader-text">%4$s</span></a>',
+				esc_url( $ext['href'] ),
+				aafm_icon( $ext['icon'] ),
+				esc_html( $ext['label'] ),
+				esc_html__( '(opens in a new tab)', 'agent-abilities-for-mcp' )
+			),
+			aafm_admin_allowed_html()
+		);
+	}
 	echo '</div>';
+	echo '</div>'; // .aafm-page-head-side
+	echo '</div>'; // .aafm-page-head
 
 	// Anchor for core's admin-notice relocation: the <h1> now sits inside
 	// .aafm-page-head, so mark where WordPress should drop notices.
@@ -1746,50 +1793,6 @@ function aafm_render_admin_page(): void {
 			aafm_admin_allowed_html()
 		);
 	}
-
-	// Right-aligned support links: quiet and permanent, no admin-wide nag. Website is the
-	// plugin's own home and leads, which keeps the two wordpress.org destinations next to each
-	// other rather than split by it. A review helps the plugin's wordpress.org standing; Get Help
-	// routes to the support forum. All three open in a new tab.
-	//
-	// Website reuses the existing chain-link glyph rather than adding an SVG - it is the standard
-	// mark for "this goes somewhere else on the web", and the icon set has no globe.
-	$ext_links = array(
-		array(
-			'href'  => 'https://agentabilitieswp.com',
-			'icon'  => 'endpoint',
-			'label' => __( 'Website', 'agent-abilities-for-mcp' ),
-		),
-		array(
-			'href'  => 'https://wordpress.org/support/plugin/agent-abilities-for-mcp/reviews/#new-post',
-			'icon'  => 'star',
-			'label' => __( 'Review', 'agent-abilities-for-mcp' ),
-		),
-		array(
-			'href'  => 'https://wordpress.org/support/plugin/agent-abilities-for-mcp/',
-			'icon'  => 'lifebuoy',
-			'label' => __( 'Get Help', 'agent-abilities-for-mcp' ),
-		),
-		array(
-			'href'  => 'https://www.youtube.com/watch?v=Raih7X4QgP0',
-			'icon'  => 'play',
-			'label' => __( 'Watch the demo', 'agent-abilities-for-mcp' ),
-		),
-	);
-	echo '<span class="aafm-nav-ext-group">';
-	foreach ( $ext_links as $ext ) {
-		echo wp_kses(
-			sprintf(
-				'<a href="%1$s" class="aafm-nav-ext" target="_blank" rel="noopener noreferrer">%2$s %3$s<span class="screen-reader-text">%4$s</span></a>',
-				esc_url( $ext['href'] ),
-				aafm_icon( $ext['icon'] ),
-				esc_html( $ext['label'] ),
-				esc_html__( '(opens in a new tab)', 'agent-abilities-for-mcp' )
-			),
-			aafm_admin_allowed_html()
-		);
-	}
-	echo '</span>';
 	echo '</nav>';
 
 	switch ( $active ) {

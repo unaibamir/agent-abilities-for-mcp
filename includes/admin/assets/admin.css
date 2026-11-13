@@ -100,9 +100,10 @@
 		flex: 0 0 auto;
 	}
 
-	/* ---------- Page head (title + lede left, status pill right) ----------
-	   Ported from app.css .page-head. The status pill moves out of <h1> to the
-	   right edge of this flex row. */
+	/* ---------- Page head (title + lede left; pills and support links right) ----------
+	   The support links sit under the pills, so the tab strip below holds only the tabs. The
+	   title takes the spare width; when the row runs short the links wrap before the title
+	   does, because the side column shrinks first and its link row wraps. */
 	.aafm-page-head {
 		display: flex;
 		align-items: flex-start;
@@ -110,7 +111,7 @@
 		margin-block-end: 4px;
 
 		.title-wrap {
-			flex: 1;
+			flex: 1 1 20rem;
 			min-inline-size: 0;
 		}
 
@@ -132,6 +133,15 @@
 			flex: 0 0 auto;
 		}
 
+		.aafm-page-head-side {
+			display: flex;
+			flex-direction: column;
+			align-items: flex-end;
+			gap: var(--aafm-space-2);
+			flex: 0 1 auto;
+			min-inline-size: 0;
+		}
+
 		/* Posture pill + endpoint pill share the right edge. Their own tighter gap, so the
 		   pair reads as one status group rather than two unrelated head items. */
 		.aafm-page-head-pills {
@@ -141,6 +151,48 @@
 			flex: 0 0 auto;
 			flex-wrap: wrap;
 			gap: 8px;
+		}
+
+		/* Website / Review / Get Help / Watch the demo: quiet links, never a second tab row.
+		   A long translated label wraps inside its link rather than widening the page. */
+		.aafm-nav-ext-group {
+			display: flex;
+			flex-wrap: wrap;
+			justify-content: flex-end;
+			gap: var(--aafm-space-1) var(--aafm-space-3);
+			max-inline-size: 100%;
+		}
+
+		.aafm-nav-ext {
+			display: inline-flex;
+			align-items: center;
+			gap: 6px;
+			max-inline-size: 100%;
+			padding-block: var(--aafm-space-1);
+			color: var(--aafm-text-muted);
+			text-decoration: none;
+			font-weight: 500;
+			font-size: var(--aafm-fs-base);
+			line-height: 1.4;
+			transition: color 0.15s ease;
+
+			svg {
+				flex: 0 0 auto;
+				inline-size: 16px;
+				block-size: 16px;
+				opacity: 0.85;
+			}
+
+			&:hover,
+			&:focus {
+				color: var(--aafm-accent);
+			}
+
+			&:focus-visible {
+				box-shadow: var(--aafm-ring);
+				border-radius: var(--aafm-radius-sm);
+				outline: none;
+			}
 		}
 	}
 
@@ -737,20 +789,33 @@
 		}
 	}
 
-	/* ---------- Tabs (top nav - restyle core .nav-tab to underline-active) ---------- */
+	/* ---------- Tabs (top nav - restyle core .nav-tab to underline-active) ----------
+	   One row at every width. When the tabs do not fit (a narrow window, a long translation)
+	   the strip scrolls sideways inside itself and #revealActiveNavTab() brings the current tab
+	   into view; it never wraps onto a second row and never scrolls the page. The bottom rule is
+	   an inset shadow, not a border: overflow clips anything outside the padding box, so a tab
+	   pulled over a border with a negative margin would lose its active underline. */
 	.nav-tab-wrapper {
 		display: flex;
-		flex-wrap: wrap;
+		flex-wrap: nowrap;
+		overflow-x: auto;
+		overflow-y: hidden;
+		scrollbar-width: thin;
+		/* Contains the tabs' absolutely positioned screen-reader text, which would otherwise
+		   escape the scroller and widen the page. */
+		position: relative;
 		gap: 2px;
-		border-block-end: 1px solid var(--aafm-border-strong);
+		border-block-end: 0;
+		box-shadow: inset 0 -1px 0 var(--aafm-border-strong);
 		margin: 18px 0 22px;
 		padding: 0;
 
 		.nav-tab {
 			display: inline-flex;
+			flex: 0 0 auto;
 			align-items: center;
 			gap: 7px;
-			margin: 0 0 -1px;
+			margin: 0;
 			padding: 10px 14px;
 			border: 0;
 			border-block-end: 2px solid transparent;
@@ -778,9 +843,10 @@
 			}
 
 			/* A keyboard focus ring that is visibly distinct from the hover tint, so a
-			   keyboard user can tell which tab actually holds focus. */
+			   keyboard user can tell which tab actually holds focus. Inset: the strip scrolls,
+			   so it clips anything drawn outside a tab, which would cut the outer ring. */
 			&:focus-visible {
-				box-shadow: var(--aafm-ring);
+				box-shadow: inset 0 0 0 2px var(--aafm-accent);
 				border-radius: var(--aafm-radius-sm);
 				outline: none;
 			}
@@ -804,49 +870,6 @@
 			border-block-end-color: var(--aafm-accent);
 			font-weight: 600;
 			background: transparent;
-		}
-
-		/* Right-aligned external links (Review / Get Help), styled like muted tabs
-		   without the active underline; pushed to the right edge of the flex nav. */
-		.aafm-nav-ext-group {
-			margin-inline-start: auto;
-			display: inline-flex;
-			flex-wrap: wrap;
-			align-items: center;
-			gap: 2px;
-		}
-
-		.aafm-nav-ext {
-			display: inline-flex;
-			align-items: center;
-			gap: 6px;
-			margin: 0 0 -1px;
-			padding: 10px 12px;
-			border-block-end: 2px solid transparent;
-			color: var(--aafm-text-muted);
-			text-decoration: none;
-			font-weight: 500;
-			font-size: 13.5px;
-			line-height: 1.4;
-			transition: color 0.15s ease;
-
-			svg {
-				inline-size: 16px;
-				block-size: 16px;
-				opacity: 0.85;
-			}
-
-			&:hover,
-			&:focus {
-				color: var(--aafm-accent);
-				background: transparent;
-			}
-
-			&:focus-visible {
-				box-shadow: var(--aafm-ring);
-				border-radius: var(--aafm-radius-sm);
-				outline: none;
-			}
 		}
 	}
 
@@ -2535,12 +2558,18 @@
 			gap: 10px;
 		}
 
-		/* Phones: the status pills go under the title instead of squeezing it, and the tab strip
-		   stays one row that scrolls sideways inside itself. */
+		/* Phones: the head becomes a column (title, pills, links), so the pills and links go
+		   under the title instead of squeezing it. The tab strip needs nothing here: it is one
+		   scrolling row at every width. */
 		.aafm-page-head {
 			flex-direction: column;
 
-			.aafm-page-head-pills { justify-content: flex-start; }
+			.title-wrap { flex-basis: auto; }
+
+			.aafm-page-head-side { align-items: flex-start; }
+
+			.aafm-page-head-pills,
+			.aafm-nav-ext-group { justify-content: flex-start; }
 		}
 
 		/* Integration and Other plugins cards: the ability count drops under the title so the
@@ -2555,20 +2584,6 @@
 				flex-basis: 100%;
 				margin-inline-start: 0;
 			}
-		}
-
-		.nav-tab-wrapper {
-			flex-wrap: nowrap;
-			overflow-x: auto;
-			overflow-y: hidden;
-			scrollbar-width: thin;
-			/* Contains the tabs' absolutely positioned screen-reader text, which would otherwise
-			   escape the scroller and widen the page. */
-			position: relative;
-
-			.nav-tab { flex: 0 0 auto; }
-
-			.aafm-nav-ext-group { flex-wrap: nowrap; }
 		}
 
 		.aafm-stat-grid {

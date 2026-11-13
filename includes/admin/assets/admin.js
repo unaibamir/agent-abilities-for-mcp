@@ -110,7 +110,7 @@
 
 		/**
 		 * Show a dot on the current tab while one of its saved controls differs from what was
-		 * last loaded or saved. Integrations, Other plugins, Settings, Connection and Playbooks only.
+		 * last loaded or saved. Integrations, Plugins' own tools, Settings, Connection and Playbooks only.
 		 * Controls whose value no Save on the tab stores are left out.
 		 */
 		#bindDirtyDots() {
@@ -1186,7 +1186,7 @@
 		}
 
 		/**
-		 * Save the "Other plugins" toggles. Posts to its OWN action
+		 * Save the "Plugins' own tools" toggles. Posts to its OWN action
 		 * (aafm_save_bridged_abilities) with its own bridged_abilities[] field, so it never
 		 * touches the native enabled-abilities option.
 		 */
@@ -1388,7 +1388,7 @@
 		}
 
 		/**
-		 * Mark as reviewed and Mark all as reviewed on the Other plugins review card. They record what
+		 * Mark as reviewed and Mark all as reviewed on the Plugins' own tools review card. They record what
 		 * the owner has seen and touch no form control, so no saved baseline changes.
 		 */
 		#bindBridgeReview() {

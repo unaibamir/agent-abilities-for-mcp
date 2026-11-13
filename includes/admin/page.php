@@ -248,7 +248,7 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'doctorWhoPlugin'          => __( 'A security plugin may be the cause', 'agent-abilities-for-mcp' ),
 				'doctorCopySnippet'        => __( 'Copy snippet', 'agent-abilities-for-mcp' ),
 				'doctorError'              => __( 'The check could not run. Reload the page and try again.', 'agent-abilities-for-mcp' ),
-				// Other plugins: review card and read-only starter.
+				// Plugins' own tools: review card and read-only starter.
 				'bridgeWorking'            => __( 'Working…', 'agent-abilities-for-mcp' ),
 				/* translators: 1: how many read tools, 2: plugin name. */
 				'bridgeStarterOn'          => __( 'This turns on %1$s read tools from %2$s.', 'agent-abilities-for-mcp' ),
@@ -1644,11 +1644,10 @@ function aafm_admin_tabs(): array {
 		'abilities'    => __( 'Abilities', 'agent-abilities-for-mcp' ),
 		'playbooks'    => __( 'Playbooks', 'agent-abilities-for-mcp' ),
 		'integrations' => __( 'Integrations', 'agent-abilities-for-mcp' ),
-		// Short on purpose. This label renders twice, in the on-page tab strip and in the wp-admin
-		// submenu, and every other entry is one or two words. The page lede carries the explanation
-		// that these are abilities the other plugins registered themselves, rather than ones we
-		// ship for them, which is what separates this tab from Integrations.
-		'bridge'       => __( 'Other plugins', 'agent-abilities-for-mcp' ),
+		// Says who made these tools: the other plugins registered them themselves, while the
+		// Integrations tab holds tools this plugin ships for them. The label renders twice, in the
+		// on-page tab strip and in the wp-admin submenu, so it stays short.
+		'bridge'       => __( 'Plugins\' own tools', 'agent-abilities-for-mcp' ),
 		'settings'     => __( 'Settings', 'agent-abilities-for-mcp' ),
 		'activity'     => __( 'Activity Log', 'agent-abilities-for-mcp' ),
 		'changes'      => __( 'Changes', 'agent-abilities-for-mcp' ),
@@ -1927,7 +1926,7 @@ function aafm_site_subgroups(): array {
 			),
 		),
 		'search'        => array(
-			'label'     => __( 'Search', 'agent-abilities-for-mcp' ),
+			'label'     => __( 'Site search', 'agent-abilities-for-mcp' ),
 			'abilities' => array(
 				'aafm/search-content',
 			),

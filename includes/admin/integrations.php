@@ -611,7 +611,7 @@ function aafm_render_integration_ability_row( array $ability, array $enabled, ar
 	// here: all ten native built-in high-risk abilities are WooCommerce writes and render on this
 	// tab, so this is the attribute that keeps a write-scoped bulk control off refunds, orders,
 	// coupons and tax rates once the operator unlocks the category. See the fuller note in
-	// aafm_render_ability_row(). Held bridge rows carry the same attribute on the Other plugins tab.
+	// aafm_render_ability_row(). Held bridge rows carry the same attribute on the Plugins' own tools tab.
 	printf(
 		'<div class="aafm-ability-row" data-risk="%1$s"%2$s%3$s>',
 		esc_attr( $risk ),

@@ -1215,7 +1215,8 @@ final class ReviewRequestTest extends TestCase {
 		$state['snooze_until'] = time() - 10;
 		aafm_review_request_save_state( $state );
 		$html = $this->render_on( 'plugins' );
-		$this->assertStringContainsString( 'data-msg-later="Okay. We will not ask about a review again."', $html );
+		// The verdict POST is fire-and-forget, so the message says what the owner can see, not a promise.
+		$this->assertStringContainsString( 'data-msg-later="Okay. The review request is closed."', $html );
 
 		$state['snooze_count'] = 1;
 		aafm_review_request_save_state( $state );

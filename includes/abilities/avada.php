@@ -56,7 +56,7 @@ function aafm_register_avada_full_definitions( array $registry ): array {
  */
 function aafm_avada_registry_definitions(): array {
 	return array(
-		'aafm/avada-get-page-content' => array(
+		'aafm/avada-get-page-content'   => array(
 			'label'        => __( 'Get Avada page content', 'agent-abilities-for-mcp' ),
 			'description'  => __( 'Reads the raw post content of an Avada/Fusion Builder page, unchanged. Fusion Builder shortcodes are returned exactly as stored, never rendered or stripped. Also returns is_avada_owned, true when Avada owns the content. With include_structure it also returns an outline of the Fusion Builder elements (tag, nesting depth, attributes, and the library item id of a global element) to find the element that holds the text before calling avada-replace-text. Requires edit access to the post.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
@@ -64,7 +64,7 @@ function aafm_avada_registry_definitions(): array {
 			'subject'      => 'avada',
 			'args_builder' => 'aafm_args_avada_get_page_content',
 		),
-		'aafm/avada-replace-text'     => array(
+		'aafm/avada-replace-text'       => array(
 			'label'        => __( 'Replace text in an Avada page', 'agent-abilities-for-mcp' ),
 			'description'  => __( 'Replaces literal text within an Avada/Fusion Builder page while requiring the Fusion shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee). A replacement that would touch a shortcode tag, its self-closing form, or an attribute is refused rather than risk breaking the layout. Requires edit access to the post.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
@@ -72,13 +72,21 @@ function aafm_avada_registry_definitions(): array {
 			'subject'      => 'avada',
 			'args_builder' => 'aafm_args_avada_replace_text',
 		),
-		'aafm/avada-list-layouts'     => array(
+		'aafm/avada-list-layouts'       => array(
 			'label'        => __( 'List Avada layouts', 'agent-abilities-for-mcp' ),
 			'description'  => __( 'Lists Avada Layouts in the order Avada checks them, with the Global Layout last. Each layout has its sections (header, page title bar, content, footer) with each section\'s id, title, status and whether it exists, and its conditions exactly as Avada stores them. Conditions are not evaluated, so this does not say which layout a given page gets. A section that is not published is not used. A layout whose stored data Avada itself cannot read is marked unparseable. global_stored is false when no Global Layout was ever saved, and more than 200 layouts are cut to the first 200. Requires the manage_options capability, even where Avada\'s Role Manager opens Layouts to other roles. Only while Avada is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'avada',
 			'args_builder' => 'aafm_args_avada_list_layouts',
+		),
+		'aafm/avada-get-global-options' => array(
+			'label'        => __( 'Get Avada global options', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Reads a fixed list of Avada Global Options exactly as stored: site width, layout, the primary, palette and link colors, body and heading typography, header position and layout, logo, page title bar, footer widgets, copyright and footer text, responsive and maintenance mode. Nothing outside that list is ever returned, so API keys, passwords and custom code stay out. A requested key in not_set has no stored value, so Avada\'s built-in default applies, which this tool does not report. option_name is the option that was read, which differs per language on a multilingual site. Requires the manage_options capability, even where Avada\'s Role Manager opens Global Options to other roles. Only while Avada is active.', 'agent-abilities-for-mcp' ),
+			'group'        => 'reads',
+			'risk'         => 'read',
+			'subject'      => 'avada',
+			'args_builder' => 'aafm_args_avada_get_global_options',
 		),
 	);
 }
@@ -757,4 +765,114 @@ function aafm_avada_layout_detail( $data, bool $with_conditions ): array {
 		$out['conditions'] = isset( $data['conditions'] ) && is_array( $data['conditions'] ) ? array_values( $data['conditions'] ) : array();
 	}
 	return $out;
+}
+
+/**
+ * The Avada Global Options this plugin may return. A fixed allowlist, never a denylist: the same
+ * option holds SMTP, Turnstile, Mailchimp, HubSpot and Google Maps credentials and free head and
+ * CSS code. Each key is a registered option id in themes/Avada/includes/options/*.php (7.16.1).
+ *
+ * @return list<string>
+ */
+function aafm_avada_global_option_keys(): array {
+	return array( 'site_width', 'layout', 'primary_color', 'color_palette', 'link_color', 'body_typography', 'h1_typography', 'h2_typography', 'h3_typography', 'h4_typography', 'h5_typography', 'h6_typography', 'header_position', 'header_layout', 'logo', 'page_title_bar', 'footer_widgets', 'footer_copyright', 'footer_text', 'responsive', 'maintenance_mode' );
+}
+
+/**
+ * Args for aafm/avada-get-global-options.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_avada_get_global_options(): array {
+	return array(
+		'label'               => aafm_ability_label( 'aafm/avada-get-global-options' ),
+		'description'         => aafm_ability_description( 'aafm/avada-get-global-options' ),
+		'category'            => 'aafm-reads',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'keys' => array(
+					'type'        => 'array',
+					'items'       => array(
+						'type' => 'string',
+						'enum' => aafm_avada_global_option_keys(),
+					),
+					'uniqueItems' => true,
+					'maxItems'    => 30,
+					'description' => __( 'Only these options. Omit for the whole list.', 'agent-abilities-for-mcp' ),
+				),
+			),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'option_name' => array( 'type' => 'string' ),
+				'options'     => array(
+					'type'        => 'object',
+					'description' => __( 'Option key to its stored value, unchanged.', 'agent-abilities-for-mcp' ),
+				),
+				'not_set'     => array(
+					'type'        => 'array',
+					'items'       => array( 'type' => 'string' ),
+					'description' => __( 'Requested keys with no stored value. Avada\'s built-in default applies to them.', 'agent-abilities-for-mcp' ),
+				),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_avada_get_global_options',
+		'permission_callback' => 'aafm_perm_manage_options',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => true,
+				'destructive' => false,
+				'idempotent'  => true,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/avada-get-global-options. Reads the stored row with get_option() and nothing else:
+ * fusion_get_option() and the Fusion_Settings getters apply page and term overrides, and the post
+ * meta reader can write while it reads.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_avada_get_global_options( array $input ) {
+	// Avada Builder can run on another theme; then there is no Avada option to read, and guessing
+	// fusion_options would answer for a theme that is not running.
+	if ( ! class_exists( 'Avada' ) || ! is_callable( array( 'Avada', 'get_option_name' ) ) ) {
+		return new WP_Error(
+			'aafm_avada_theme_inactive',
+			__( 'The Avada theme is not active, so there are no Avada Global Options to read.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 409 )
+		);
+	}
+	$name   = (string) call_user_func( array( 'Avada', 'get_option_name' ) );
+	$stored = '' !== $name ? get_option( $name ) : false;
+	if ( ! is_array( $stored ) ) {
+		return new WP_Error(
+			'aafm_avada_options_unreadable',
+			__( 'The Avada Global Options could not be read.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 500 )
+		);
+	}
+
+	$allowed   = aafm_avada_global_option_keys();
+	$requested = isset( $input['keys'] ) && is_array( $input['keys'] ) ? array_values( array_intersect( $allowed, $input['keys'] ) ) : $allowed;
+	$options   = array();
+	$not_set   = array();
+	foreach ( $requested as $key ) {
+		if ( array_key_exists( $key, $stored ) ) {
+			$options[ $key ] = $stored[ $key ];
+		} else {
+			$not_set[] = $key;
+		}
+	}
+	return array(
+		'option_name' => $name,
+		'options'     => (object) $options,
+		'not_set'     => $not_set,
+	);
 }

@@ -239,6 +239,7 @@ function aafm_ability_disclosures(): array {
 		// (structure and attribute values) rather than the "byte-identical" claim that didn't hold.
 		'aafm/avada-replace-text'          => __( 'Replaces literal text within an Avada/Fusion Builder page while requiring the Fusion shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee). A replacement that would touch a shortcode tag or its attributes is refused rather than risk breaking the layout. Requires edit access to the post.', 'agent-abilities-for-mcp' ),
 		'aafm/avada-list-layouts'          => __( 'Lists Avada Layouts in the order Avada checks them, with each one\'s header, page title bar, content and footer sections and its stored conditions. It does not work out which layout a page gets. Admins only.', 'agent-abilities-for-mcp' ),
+		'aafm/avada-get-global-options'    => __( 'Reads a fixed list of Avada Global Options: colors, typography, header, logo, footer text and maintenance mode. API keys, passwords and custom code are never returned. Admins only.', 'agent-abilities-for-mcp' ),
 
 		// GeoDirectory (default-off).
 		'aafm/geodirectory-get-listings'   => __( 'Lists GeoDirectory business/place listings (title, status, link).', 'agent-abilities-for-mcp' ),

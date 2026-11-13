@@ -119,6 +119,7 @@ final class CatalogFixture {
 		'aafm/tec-get-attendees',
 		'aafm/avada-get-page-content',
 		'aafm/avada-list-layouts',
+		'aafm/avada-get-global-options',
 		'aafm/geodirectory-get-listings',
 		'aafm/geodirectory-get-listing',
 	);

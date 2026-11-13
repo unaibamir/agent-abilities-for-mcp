@@ -539,7 +539,7 @@ class ConnectionCardsTest extends TestCase {
 		$this->assertStringContainsString( 'Ended 1 token issued for an old site address', (string) $detail );
 
 		$this->seed_token( 'https://old.example/wp-json/aafm/v1/mcp' );
-		$fail       = static fn( $query ) => false !== strpos( $query, 'SET is_active = 0' ) && false !== strpos( $query, 'CAST(resource AS BINARY)' ) ? 'SELECT broken FROM nowhere' : $query;
+		$fail       = static fn( $query ) => false !== strpos( $query, 'SET is_active = 0 WHERE is_active = 1 AND id IN (' ) ? 'SELECT broken FROM nowhere' : $query;
 		add_filter( 'query', $fail );
 		$suppressed = $wpdb->suppress_errors( true );
 		try {

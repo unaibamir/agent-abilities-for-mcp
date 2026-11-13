@@ -71,6 +71,7 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/helpers.php|aafm_scoped_deny_option_raw|1' => 'G',
 		'includes/helpers.php|aafm_scoped_meta_has_star|1' => 'G',
 		'includes/oauth/discovery.php|aafm_oauth_option_is_on|1' => 'G',
+		'includes/oauth/tokens.php|aafm_oauth_accepted_audiences|1' => 'N',
 		'includes/oauth/tokens.php|aafm_oauth_mint_tokens|1' => 'G',
 		'includes/option-cache.php|aafm_persist_operator_switch|1' => 'N',
 		'includes/option-cache.php|aafm_update_option_verified|1' => 'N',
@@ -356,7 +357,7 @@ final class OptionReadSweepTest extends TestCase {
 			array(
 				'G' => 21,
 				'L' => 3,
-				'N' => 33,
+				'N' => 34,
 			),
 			array(
 				'G' => count( array_keys( self::GET_OPTION, 'G', true ) ),

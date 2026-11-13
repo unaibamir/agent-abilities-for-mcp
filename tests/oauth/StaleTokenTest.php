@@ -120,20 +120,48 @@ final class StaleTokenTest extends TestCase {
 		$this->assertSame( 1, (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $consents ) ) );
 	}
 
+	public function tear_down(): void {
+		unset( $_SERVER['HTTPS'] );
+		parent::tear_down();
+	}
+
 	/**
-	 * In wp-admin on an http site with FORCE_SSL_ADMIN the endpoint computes as https, while a
-	 * REST request computes it as http. A token minted for the other scheme of the same address
-	 * still works there, so it is not "old" and the button must not end it.
+	 * After the site moves from http to https, a REST request expects the https endpoint, so a
+	 * token minted for the http address is rejected by validation and must count as old.
 	 */
-	public function test_other_scheme_of_the_current_address_is_not_stale(): void {
-		$current = aafm_endpoint_url();
-		$other   = 0 === strpos( $current, 'https:' ) ? set_url_scheme( $current, 'http' ) : set_url_scheme( $current, 'https' );
-		$this->assertNotSame( $current, $other );
-		$kept = $this->seed_token( $other );
-		$this->seed_token( 'https://old.example/wp-json/aafm/v1/mcp' );
+	public function test_http_token_after_an_https_move_is_stale(): void {
+		$http = set_url_scheme( aafm_endpoint_url(), 'http' );
+		update_option( 'home', set_url_scheme( (string) get_option( 'home' ), 'https' ) );
+		update_option( 'siteurl', set_url_scheme( (string) get_option( 'siteurl' ), 'https' ) );
+		$this->assertStringStartsWith( 'https:', aafm_endpoint_url() );
+		$old  = $this->seed_token( $http );
+		$kept = $this->seed_token( aafm_endpoint_url() );
 
 		$this->assertSame( 1, aafm_oauth_stale_token_count() );
 		$this->assertSame( 1, aafm_oauth_revoke_stale_tokens() );
+		$this->assertFalse( $this->is_active( $old ) );
 		$this->assertTrue( $this->is_active( $kept ) );
+	}
+
+	/**
+	 * Every audience validation accepts on an http site (the endpoint a plain REST request builds
+	 * and the one an https REST request builds) is never counted, and each passes the validator's
+	 * own comparison, hash_equals() against aafm_endpoint_url() in that request's context.
+	 */
+	public function test_a_token_the_validator_accepts_is_never_stale(): void {
+		$this->assertStringStartsWith( 'http:', (string) get_option( 'home' ), 'Fixture: an http site.' );
+		$plain            = aafm_endpoint_url();
+		$_SERVER['HTTPS'] = 'on';
+		$secure           = aafm_endpoint_url();
+		unset( $_SERVER['HTTPS'] );
+		$this->assertNotSame( $plain, $secure, 'Core builds a different endpoint for an https request.' );
+
+		foreach ( array( $plain, $secure ) as $audience ) {
+			$this->seed_token( $audience );
+			$this->assertTrue( aafm_oauth_audience_accepted( $audience ) );
+		}
+		$this->assertTrue( hash_equals( $plain, $plain ) && hash_equals( $secure, $secure ) );
+		$this->assertSame( 0, aafm_oauth_stale_token_count() );
+		$this->assertSame( 0, aafm_oauth_revoke_stale_tokens() );
 	}
 }

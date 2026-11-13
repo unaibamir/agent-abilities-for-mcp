@@ -302,6 +302,7 @@ final class NotifyCronHandoffTest extends TestCase {
 		$html = (string) ob_get_clean();
 
 		$this->assertSame( 'Email alerts as they happen', $label, 'Short enough for the closed select on a phone.' );
+		$this->assertSame( 'One email a day', aafm_notify_modes()['digest'], 'The digest label fits the phone select too.' );
 		$this->assertStringContainsString( 'Both email modes also show the admin notice.', $html, 'The help says the notice comes with it.' );
 		$this->assertStringNotContainsString( 'do not depend on cron', $html );
 		$this->assertStringContainsString( esc_html( $label ), $html );

@@ -84,7 +84,7 @@ function aafm_wc_products_registry_definitions(): array {
 
 		'aafm/wc-update-product' => array(
 			'label'        => __( 'Update WooCommerce product', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Updates a WooCommerce product by id, changing only the fields you send. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Updates a WooCommerce product by id, changing only the fields you send. remove_attributes takes attributes off the product, refusing any that a variation uses. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -775,8 +775,9 @@ function aafm_wc_apply_product_input( \WC_Product $product, array $input ): ?\WP
 	if ( array_key_exists( 'images', $input ) ) {
 		$product->set_gallery_image_ids( array_map( 'absint', (array) $input['images'] ) );
 	}
-	if ( array_key_exists( 'attributes', $input ) ) {
-		$sanitized = aafm_wc_sanitize_attributes( (array) $input['attributes'] );
+	$remove = array_key_exists( 'remove_attributes', $input ) ? (array) $input['remove_attributes'] : array();
+	if ( array_key_exists( 'attributes', $input ) || array() !== $remove ) {
+		$sanitized = aafm_wc_sanitize_attributes( (array) ( $input['attributes'] ?? array() ) );
 
 		// TWO collections, and the difference between them is the entire fix.
 		//
@@ -807,9 +808,85 @@ function aafm_wc_apply_product_input( \WC_Product $product, array $input ): ?\WP
 		if ( null !== $attribute_error ) {
 			return $attribute_error;
 		}
+		if ( array() !== $remove ) {
+			$stored = aafm_wc_attributes_without( $product, $stored, $remove, $sanitized );
+			if ( is_wp_error( $stored ) ) {
+				return $stored;
+			}
+		}
 		$product->set_attributes( aafm_wc_build_product_attributes( $sanitized, $stored ) );
 	}
 	return null;
+}
+
+/**
+ * The stored attributes minus the ones a remove_attributes request names, by name or slug (a global
+ * attribute also by its name without the pa_ prefix). Refuses an unknown name, a name the same call
+ * also sends in attributes, and an attribute any variation of the product uses, naming the variations.
+ *
+ * @param \WC_Product                    $product   The product.
+ * @param array<int|string,mixed>        $stored    Its stored attributes (edit context).
+ * @param array<int|string,mixed>        $names     The names or slugs to remove.
+ * @param array<int,array<string,mixed>> $sanitized The attributes the same call sends.
+ * @return array<int,\WC_Product_Attribute>|\WP_Error What stays.
+ */
+function aafm_wc_attributes_without( \WC_Product $product, array $stored, array $names, array $sanitized ) {
+	$by_slug = aafm_wc_attributes_by_slug( $stored );
+	$remove  = array();
+	$unknown = array();
+	foreach ( $names as $name ) {
+		$name = aafm_sanitize_plain_text( is_scalar( $name ) ? (string) $name : '' );
+		$slug = sanitize_title( $name );
+		if ( ! isset( $by_slug[ $slug ] ) && isset( $by_slug[ 'pa_' . $slug ] ) ) {
+			$slug = 'pa_' . $slug;
+		}
+		if ( '' === $slug || ! isset( $by_slug[ $slug ] ) ) {
+			$unknown[] = $name;
+			continue;
+		}
+		$remove[ $slug ] = true;
+	}
+	if ( array() !== $unknown ) {
+		return new \WP_Error(
+			'aafm_wc_unknown_attribute',
+			/* translators: %s: comma-separated attribute names the product does not have. */
+			sprintf( __( 'This product has no attribute named %s, so nothing was saved.', 'agent-abilities-for-mcp' ), implode( ', ', $unknown ) ),
+			array( 'status' => 400 )
+		);
+	}
+	foreach ( $sanitized as $item ) {
+		if ( isset( $remove[ sanitize_title( (string) ( $item['name'] ?? '' ) ) ] ) ) {
+			return new \WP_Error( 'aafm_wc_attribute_remove_and_update', __( 'The same attribute cannot be removed and sent in one call, so nothing was saved.', 'agent-abilities-for-mcp' ), array( 'status' => 400 ) );
+		}
+	}
+
+	// A variation keys its chosen values by attribute slug. A variation that cannot be loaded counts
+	// as using every attribute, so a failed read never strands one.
+	$in_use = array();
+	if ( 'variable' === $product->get_type() ) {
+		foreach ( array_map( 'intval', (array) $product->get_children() ) as $child_id ) {
+			$variation = aafm_wc_get_variation( $child_id );
+			$chosen    = null === $variation ? null : (array) $variation->get_attributes();
+			foreach ( array_keys( $remove ) as $slug ) {
+				if ( null === $chosen || array_key_exists( $slug, $chosen ) ) {
+					$in_use[ $slug ][] = $child_id;
+				}
+			}
+		}
+	}
+	if ( array() !== $in_use ) {
+		$parts = array();
+		foreach ( $in_use as $slug => $ids ) {
+			$parts[] = $slug . ' (' . implode( ', ', $ids ) . ')';
+		}
+		return new \WP_Error(
+			'aafm_wc_attribute_in_use',
+			/* translators: %s: attribute slugs, each with the ids of the variations that use it. */
+			sprintf( __( 'Variations use these attributes, so nothing was saved: %s. Delete or change those variations first.', 'agent-abilities-for-mcp' ), implode( '; ', $parts ) ),
+			array( 'status' => 409 )
+		);
+	}
+	return array_values( array_diff_key( $by_slug, $remove ) );
 }
 
 /**
@@ -1208,16 +1285,24 @@ function aafm_exec_wc_create_product( array $input ) {
  * @return array<string,mixed>
  */
 function aafm_args_wc_update_product(): array {
-	$properties               = aafm_wc_product_write_properties();
-	$properties['product_id'] = array(
+	$properties                      = aafm_wc_product_write_properties();
+	$properties['product_id']        = array(
 		'type'        => 'integer',
 		'minimum'     => 1,
 		'description' => __( 'The WooCommerce product id to update.', 'agent-abilities-for-mcp' ),
 	);
-	$properties['name']       = array(
+	$properties['name']              = array(
 		'type'        => 'string',
 		'minLength'   => 1,
 		'description' => __( "The product's title. Omit to leave the existing title unchanged.", 'agent-abilities-for-mcp' ),
+	);
+	$properties['remove_attributes'] = array(
+		'type'        => 'array',
+		'description' => __( 'Names or slugs of attributes to remove from this product, for example ["Color"] or ["pa_color"]. An attribute any variation of the product uses is refused, naming those variations, and so is a name the product does not have. Do not send the same attribute in attributes too.', 'agent-abilities-for-mcp' ),
+		'items'       => array(
+			'type'      => 'string',
+			'minLength' => 1,
+		),
 	);
 	// A product's type cannot be changed once created (converting between simple/grouped/
 	// external/variable is a non-trivial operation this ability does not implement -- see

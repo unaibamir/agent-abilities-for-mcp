@@ -1441,4 +1441,153 @@ final class WooProductsTest extends TestCase {
 		$this->assertTrue( \AAFM\Tests\WcStubStore::exists( 101 ) );
 		$this->assertSame( array( $this->wc_row( 'product', 101, 'refused' ) ), $this->outcome_details() );
 	}
+
+	/**
+	 * A variable product with Color and Size attributes, created through the ability so both are real
+	 * attribute objects, plus a variation that uses Size when asked.
+	 *
+	 * @param bool $with_variation Whether to add a variation that uses Size.
+	 * @return array{0:int,1:int} Product id and variation id (0 when none).
+	 */
+	private function product_with_attributes( bool $with_variation ): array {
+		$this->acting_as( 'administrator' );
+		$created = wp_get_ability( 'aafm/wc-create-product' )->execute(
+			array(
+				'name'       => 'Shirt',
+				'attributes' => array(
+					array(
+						'name'    => 'Color',
+						'options' => array( 'Red', 'Blue' ),
+					),
+					array(
+						'name'    => 'Size',
+						'options' => array( 'S', 'M' ),
+					),
+				),
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $created, is_wp_error( $created ) ? $created->get_error_message() : '' );
+		$id          = (int) $created['id'];
+		$row         = \AAFM\Tests\WcStubStore::get( $id );
+		$row['type'] = 'variable'; // The create schema only takes simple; the stub row is turned variable.
+		\AAFM\Tests\WcStubStore::seed( $id, $row );
+		$variation = 0;
+		if ( $with_variation ) {
+			$variation = 9301;
+			\AAFM\Tests\WcStubStore::seed(
+				$variation,
+				array(
+					'parent_id'  => $id,
+					'type'       => 'variation',
+					'status'     => 'publish',
+					'attributes' => array( 'size' => 'M' ),
+				)
+			);
+		}
+		return array( $id, $variation );
+	}
+
+	/**
+	 * Attribute names a product reads back with.
+	 *
+	 * @param int $id Product id.
+	 * @return string[]
+	 */
+	private function attribute_names( int $id ): array {
+		$read = wp_get_ability( 'aafm/wc-get-product' )->execute( array( 'product_id' => $id ) );
+		return array_column( (array) $read['attributes'], 'name' );
+	}
+
+	public function test_remove_attributes_removes_a_named_attribute(): void {
+		list( $id ) = $this->product_with_attributes( false );
+
+		$res = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id'        => $id,
+				'remove_attributes' => array( 'Color' ),
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( array( 'Size' ), $this->attribute_names( $id ) );
+	}
+
+	public function test_remove_attribute_used_by_a_variation_is_refused_naming_variations(): void {
+		list( $id, $variation ) = $this->product_with_attributes( true );
+
+		$res = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id'        => $id,
+				'remove_attributes' => array( 'size' ),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_attribute_in_use', $res->get_error_code() );
+		$this->assertStringContainsString( (string) $variation, $res->get_error_message() );
+		$this->assertSame( array( 'Color', 'Size' ), $this->attribute_names( $id ) );
+
+		$other = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id'        => $id,
+				'remove_attributes' => array( 'Color' ),
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $other, 'An attribute no variation uses can still go.' );
+		$this->assertSame( array( 'Size' ), $this->attribute_names( $id ) );
+	}
+
+	public function test_unknown_attribute_name_is_a_named_error(): void {
+		list( $id ) = $this->product_with_attributes( false );
+
+		$res = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id'        => $id,
+				'name'              => 'Renamed',
+				'remove_attributes' => array( 'Material' ),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_unknown_attribute', $res->get_error_code() );
+		$this->assertStringContainsString( 'Material', $res->get_error_message() );
+		$this->assertSame( array( 'Color', 'Size' ), $this->attribute_names( $id ) );
+		$this->assertSame( 'Shirt', \AAFM\Tests\WcStubStore::get( $id )['name'], 'Nothing else was saved.' );
+	}
+
+	public function test_remove_and_update_in_one_call(): void {
+		list( $id ) = $this->product_with_attributes( false );
+
+		$res = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id'        => $id,
+				'remove_attributes' => array( 'Color' ),
+				'attributes'        => array(
+					array(
+						'name'    => 'Material',
+						'options' => array( 'Cotton' ),
+					),
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$names = $this->attribute_names( $id );
+		sort( $names );
+		$this->assertSame( array( 'Material', 'Size' ), $names );
+
+		$both = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id'        => $id,
+				'remove_attributes' => array( 'Size' ),
+				'attributes'        => array(
+					array(
+						'name'    => 'Size',
+						'options' => array( 'L' ),
+					),
+				),
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $both, 'Removing and sending one attribute in one call is ambiguous and refused.' );
+	}
 }

@@ -503,7 +503,7 @@ function aafm_quickconnect_render(): void {
 						</div>
 
 						<div class="aafm-qc-altauth" data-qc-altauth>
-							<button type="button" class="aafm-qc-alttrigger" data-qc-alttrigger aria-expanded="false" aria-disabled="true">
+							<button type="button" class="aafm-qc-alttrigger" data-qc-alttrigger aria-expanded="false">
 								<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
 								<span><?php echo wp_kses( __( 'Not using ChatGPT or Claude? <b>Connect with a username and application password instead</b>', 'agent-abilities-for-mcp' ), array( 'b' => array() ) ); ?></span>
 							</button>

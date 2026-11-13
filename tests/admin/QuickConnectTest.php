@@ -649,6 +649,10 @@ final class QuickConnectTest extends TestCase {
 		$this->assertSame( 3, preg_match_all( '#<h2 class="aafm-qc-job-heading"><button type="button" class="aafm-qc-job-head" aria-expanded="(true|false)" aria-disabled="true">#', $html, $m ) );
 		$this->assertSame( array( 'true', 'false', 'false' ), $m[1], 'Only the first step starts expanded.' );
 		$this->assertStringNotContainsString( '<h3 class="aafm-qc-job-heading">', $html );
+		// Only step heads that cannot act are aria-disabled; the app-password disclosure always works.
+		$this->assertSame( 1, preg_match( '#<button type="button" class="aafm-qc-alttrigger"[^>]*>#', $html, $alt ) );
+		$this->assertStringNotContainsString( 'aria-disabled', $alt[0] );
+		$this->assertSame( 3, substr_count( $html, 'aria-disabled="true"' ), 'Exactly the three step heads.' );
 		$this->assertStringNotContainsString( '<div class="aafm-qc-job-head"', $html );
 	}
 

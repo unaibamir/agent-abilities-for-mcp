@@ -434,7 +434,7 @@ function aafm_page_write_fields( array $input, string $type, ?WP_Post $page ) {
 		$fields['post_parent'] = $parent;
 	}
 	if ( isset( $input['template'] ) ) {
-		$template = sanitize_text_field( (string) $input['template'] );
+		$template = aafm_sanitize_plain_text( (string) $input['template'] );
 		if ( ! aafm_page_template_available( $template, $page ) ) {
 			return new WP_Error( 'aafm_invalid_page_template', __( 'That page template is not one the active theme offers, so nothing was changed. Use "default" or a template the theme lists for pages.', 'agent-abilities-for-mcp' ), array( 'status' => 400 ) );
 		}

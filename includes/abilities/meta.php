@@ -38,7 +38,7 @@ function aafm_register_meta_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-post-meta']  = array(
 		'label'        => __( 'Update post meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Write a single allowlisted scalar meta value to a post the agent can edit. The response returns the old value when it is plain text or a number. Keys are opt-in: an administrator exposes each one under Exposed meta keys in the Content sub-tab of the Abilities tab.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Write a single allowlisted scalar meta value to a post the agent can edit. The value is stored as plain text: line breaks and tabs become single spaces, so multi-line text is saved on one line. The response returns the old value when it is plain text or a number. Keys are opt-in: an administrator exposes each one under Exposed meta keys in the Content sub-tab of the Abilities tab.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -297,7 +297,7 @@ function aafm_args_update_post_meta(): array {
 				),
 				'value'    => array(
 					'type'        => array( 'string', 'number', 'boolean', 'integer' ),
-					'description' => __( 'The scalar value to store. Only text, number, or boolean values are accepted; the value is plain-text sanitized (meta is not rendered as post content, so no markup is preserved) and then run through any registered sanitize_post_meta_{key} callback.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'The scalar value to store. Only text, number, or boolean values are accepted; the value is plain-text sanitized (meta is not rendered as post content, so no markup is preserved) and then run through any registered sanitize_post_meta_{key} callback. Line breaks and tabs become single spaces, so send multi-line text knowing it is saved on one line.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id', 'meta_key', 'value' ),

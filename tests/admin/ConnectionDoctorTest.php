@@ -997,7 +997,8 @@ final class ConnectionDoctorTest extends TestCase {
 
 		$this->assertStringContainsString( 'requires a login for the whole REST API', $read['detail'] );
 		$this->assertStringContainsString( 'membership', $read['detail'] );
-		$this->assertStringContainsString( 'correct Application Password', $read['detail'] );
+		$this->assertStringNotContainsString( 'even a correct Application Password', $read['detail'], 'A signed-in Application Password request gets through, as on the Connection tab.' );
+		$this->assertStringContainsString( 'OAuth', $read['detail'] );
 	}
 
 	/**

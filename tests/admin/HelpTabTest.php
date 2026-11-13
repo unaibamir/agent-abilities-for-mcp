@@ -283,7 +283,7 @@ final class HelpTabTest extends TestCase {
 		$line = substr( $html, (int) $start, (int) strpos( $html, '</li>', (int) $start ) - (int) $start );
 		$this->assertStringContainsString( 'wrong or expired Application Password', $line );
 		$this->assertStringContainsString( 'membership', $line );
-		$this->assertStringContainsString( 'correct password', $line );
+		$this->assertStringContainsString( 'stops OAuth sign-in, not a correct Application Password', $line, 'Same as the Connection tab and the Doctor: a signed-in request gets through.' );
 		$this->assertStringContainsString( 'Connection Doctor', $line );
 		$this->assertStringContainsString( 'names the plugins it recognises', $line, 'No promise to name a plugin the Doctor does not know.' );
 		$this->assertStringNotContainsString( 'to see which plugin', $line );

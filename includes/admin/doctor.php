@@ -77,7 +77,7 @@ function aafm_doctor_interpret_http_status( int $code, bool $oauth_on ): array {
 		return array(
 			'status' => $oauth_on ? 'fail' : 'warn',
 			'who'    => 'plugin',
-			'detail' => __( 'WordPress answered 401 before this plugin could reply, so something requires a login for the whole REST API. Agents cannot finish connecting while that is on. A membership or security plugin is the usual cause, and on such a site even a correct Application Password gets this 401.', 'agent-abilities-for-mcp' ),
+			'detail' => __( 'WordPress answered 401 before this plugin could reply, so something requires a login for the whole REST API. AI apps that sign in with OAuth cannot finish connecting while that is on. A membership or security plugin is the usual cause. A request with a correct Application Password is signed in, so it is not refused this way.', 'agent-abilities-for-mcp' ),
 		);
 	}
 	if ( 403 === $code ) {

@@ -448,4 +448,39 @@ final class BridgeReviewTest extends TestCase {
 		$this->assertSame( 'switch_flip', $left[0]['trigger'] );
 		$this->assertSame( array( 'read_only_on' ), wp_list_pluck( aafm_option_row( 'aafm_notify_pending' )['value'], 'subtype' ), 'The database row keeps the switch flip.' );
 	}
+
+	public function test_two_batches_within_throttle_window_are_both_counted_in_email(): void {
+		aafm_bridge_review_sync();
+		update_option(
+			'aafm_notifications',
+			array(
+				'mode'     => 'digest',
+				'email'    => 'owner@example.com',
+				'triggers' => array( 'new_tools' => true ),
+			)
+		);
+		delete_option( 'aafm_notify_pending' );
+		delete_option( 'aafm_notify_queue' );
+		$this->register_foreign_abilities( 'demo', array( 'one' => array() ) );
+		aafm_bridge_review_sync();
+		$this->register_foreign_abilities(
+			'other',
+			array(
+				'two'   => array(),
+				'three' => array(),
+			)
+		);
+		aafm_bridge_review_sync();
+
+		$message = aafm_notify_build_message( aafm_notify_queue_list(), true );
+		$this->assertStringContainsString(
+			aafm_notify_event_label(
+				array(
+					'trigger' => 'new_tools',
+					'subtype' => 'detected',
+				)
+			) . ': 3',
+			$message['body']
+		);
+	}
 }

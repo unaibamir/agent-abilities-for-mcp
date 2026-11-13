@@ -344,6 +344,14 @@ function aafm_notify_event( string $trigger, string $subtype, array $facts = arr
 			aafm_notify_log_failure( __( 'A notification could not be saved for the admin notice', 'agent-abilities-for-mcp' ) );
 			return;
 		}
+		// The daily email counts new tools by tool, so every batch is queued. The throttle only limits
+		// how often mail goes out, and the summary goes out once a day whatever it holds.
+		if ( 'new_tools' === $trigger && 'digest' === $settings['mode'] ) {
+			if ( ! aafm_notify_queue_push( $event ) ) {
+				aafm_notify_log_failure( __( 'A notification could not be queued for the daily email', 'agent-abilities-for-mcp' ) );
+			}
+			return;
+		}
 		$bucket = '';
 		try {
 			$bucket = $trigger . ':' . $subtype . ( '' !== $client_id ? ':' . $client_id : '' );

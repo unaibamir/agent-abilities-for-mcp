@@ -1592,6 +1592,39 @@ final class WooProductsTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $both, 'Removing and sending one attribute in one call is ambiguous and refused.' );
 	}
 
+	public function test_remove_attribute_used_by_a_draft_variation_is_refused(): void {
+		list( $id ) = $this->product_with_attributes( false );
+		$variation  = (int) self::factory()->post->create(
+			array(
+				'post_type'   => 'product_variation',
+				'post_status' => 'draft',
+				'post_parent' => $id,
+			)
+		);
+		\AAFM\Tests\WcStubStore::seed(
+			$variation,
+			array(
+				'parent_id'  => $id,
+				'type'       => 'variation',
+				'status'     => 'draft',
+				'attributes' => array( 'size' => 'M' ),
+			)
+		);
+		$this->assertNotContains( $variation, wc_get_product( $id )->get_children(), 'precondition: WooCommerce lists only published and private variations.' );
+
+		$res = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id'        => $id,
+				'remove_attributes' => array( 'Size' ),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_attribute_in_use', $res->get_error_code() );
+		$this->assertStringContainsString( (string) $variation, $res->get_error_message() );
+		$this->assertSame( array( 'Color', 'Size' ), $this->attribute_names( $id ) );
+	}
+
 	public function test_remove_attribute_used_by_a_variable_subscription_variation_is_refused(): void {
 		list( $id, $variation ) = $this->product_with_attributes( true, 'variable-subscription' );
 

@@ -37,6 +37,8 @@ final class ReplaceSitewideScanSweepTest extends TestCase {
 		'includes/abilities/menus.php|aafm_exec_list_navigations|1'     => 'READ',
 		'includes/abilities/posts.php|aafm_exec_get_posts|1'            => 'READ',
 		'includes/abilities/woocommerce/coupons.php|aafm_exec_wc_list_coupons|1' => 'READ',
+		// Draft and pending variation ids, read only to refuse removing an attribute a variation uses.
+		'includes/abilities/woocommerce/products.php|aafm_wc_attributes_without|1' => 'READ',
 		'includes/abilities/posts.php|aafm_exec_replace_sitewide|1'     => 'READ',
 		'includes/abilities/posts.php|aafm_exec_replace_sitewide|2'     => 'WRITE-FEED',
 		'includes/admin/review-inbox.php|aafm_review_inbox_ids|1'       => 'READ',

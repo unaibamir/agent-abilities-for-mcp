@@ -723,6 +723,7 @@ final class ConnectionDoctorTest extends TestCase {
 		$row = $this->row( aafm_doctor_run_checks(), 'permalinks' );
 		$this->assertSame( 'warn', $row['status'] );
 		$this->assertSame( 'you', $row['who'] );
+		$this->assertStringContainsString( 'every OAuth connection ends', $row['detail'], 'The advice says what switching costs.' );
 		update_option( 'permalink_structure', '/%postname%/' );
 		$this->assertSame( 'pass', $this->row( aafm_doctor_run_checks(), 'permalinks' )['status'] );
 	}

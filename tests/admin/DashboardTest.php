@@ -14,6 +14,16 @@ use WP_Application_Passwords;
 
 final class DashboardTest extends TestCase {
 
+	/**
+	 * Start every test with no first-call flag. Another suite's real tool call followed by a
+	 * statement that commits (DDL, TRUNCATE) can leave the flag behind in the shared test database;
+	 * deleting it here, inside this test's transaction, hides it for this test only.
+	 */
+	public function set_up(): void {
+		parent::set_up();
+		delete_option( 'aafm_first_call_recorded' );
+	}
+
 	public function tear_down(): void {
 		remove_filter( 'wp_is_application_passwords_available', '__return_true' );
 		remove_all_filters( 'pre_update_option_aafm_first_call_recorded' );

@@ -810,7 +810,11 @@
 		 * @return {Promise<Object>} The decoded JSON response.
 		 */
 		async #post( action, data = {} ) {
-			const body = new URLSearchParams( { action, nonce: this.#nonce, ...data } );
+			const body = new URLSearchParams( { action, nonce: this.#nonce } );
+			// An array value goes out as one field per item (name it with [] for PHP to read a list).
+			for ( const [ name, value ] of Object.entries( data ) ) {
+				( Array.isArray( value ) ? value : [ value ] ).forEach( ( item ) => body.append( name, item ) );
+			}
 			return ( await this.#postBody( body ) ) ?? {
 				success: false,
 				data: { message: this.#t( 'requestFailed', 'Request failed.' ) },
@@ -1402,9 +1406,13 @@
 					const key = btn.dataset.bridgePlugin ?? '';
 					const name = btn.dataset.bridgeName ?? '';
 					const tools = card.querySelectorAll( `.aafm-bridge-review-block[data-bridge-plugin="${ CSS.escape( key ) }"] li` ).length;
+					// The slugs this card listed: the server marks only these, so a tool added since the page
+					// loaded stays new.
+					const blocks = 'AAFM-ALL:' === key ? '.aafm-bridge-review-block' : `.aafm-bridge-review-block[data-bridge-plugin="${ CSS.escape( key ) }"]`;
+					const slugs = Array.from( card.querySelectorAll( `${ blocks } li > code` ), ( code ) => code.textContent );
 					status.textContent = this.#t( 'bridgeWorking', 'Working…' );
 					btn.disabled = true;
-					const json = await this.#post( 'aafm_bridge_mark_reviewed', { plugin: key } );
+					const json = await this.#post( 'aafm_bridge_mark_reviewed', { plugin: key, 'slugs[]': slugs } );
 					btn.disabled = false;
 					if ( ! json?.success ) {
 						status.textContent = json?.data?.message ?? this.#t( 'errorSaving', 'Error saving' );
@@ -1455,7 +1463,9 @@
 					const unavailable = Number( groupCard.dataset.bridgeUnavailable ?? 0 );
 					status.textContent = this.#t( 'bridgeWorking', 'Working…' );
 					btn.disabled = true;
-					const json = await this.#post( 'aafm_bridge_read_only_starter', { plugin: key } );
+					// The tools this card shows; the server acts on these only and leaves later arrivals alone.
+					const slugs = Array.from( groupCard.querySelectorAll( '.aafm-ability-row input[name="bridged_abilities[]"]' ), ( box ) => box.value );
+					const json = await this.#post( 'aafm_bridge_read_only_starter', { plugin: key, 'slugs[]': slugs } );
 					btn.disabled = false;
 					if ( ! json?.success ) {
 						status.textContent = json?.data?.message ?? this.#t( 'errorSaving', 'Error saving' );

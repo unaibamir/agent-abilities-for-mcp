@@ -987,8 +987,8 @@ function aafm_ajax_save_bridged_abilities(): void {
 }
 
 /**
- * AJAX: set one plugin's tools to its reads. Nonce + manage_options gated; the group key is checked
- * against the computed groups inside aafm_bridge_apply_read_only_starter().
+ * AJAX: set one plugin's tools to its reads. Nonce + manage_options gated; the group key and the shown
+ * slugs are checked against the computed groups inside aafm_bridge_apply_read_only_starter().
  *
  * @return void
  */
@@ -999,8 +999,11 @@ function aafm_ajax_bridge_read_only_starter(): void {
 	}
 
 	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-	$key    = isset( $_POST['plugin'] ) ? sanitize_text_field( wp_unslash( $_POST['plugin'] ) ) : '';
-	$result = aafm_bridge_apply_read_only_starter( (string) $key );
+	$key = isset( $_POST['plugin'] ) ? sanitize_text_field( wp_unslash( $_POST['plugin'] ) ) : '';
+	// The slugs the screen showed; intersected with the group's registered slugs, never stored as given.
+	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+	$shown  = isset( $_POST['slugs'] ) ? array_map( 'sanitize_text_field', wp_unslash( (array) $_POST['slugs'] ) ) : array();
+	$result = aafm_bridge_apply_read_only_starter( (string) $key, $shown );
 	if ( ! $result['ok'] ) {
 		wp_send_json_error( array( 'message' => $result['message'] ) );
 	}
@@ -1009,8 +1012,9 @@ function aafm_ajax_bridge_read_only_starter(): void {
 }
 
 /**
- * AJAX: mark one plugin's tools, or every new tool, as reviewed. Enables nothing. Nonce +
- * manage_options gated; the group key is checked against the computed groups.
+ * AJAX: mark the tools the owner was shown, for one plugin or every new tool, as reviewed. Enables
+ * nothing. Nonce + manage_options gated; the group key and the shown slugs are checked against the
+ * computed groups.
  *
  * @return void
  */
@@ -1021,13 +1025,15 @@ function aafm_ajax_bridge_mark_reviewed(): void {
 	}
 
 	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-	$key    = isset( $_POST['plugin'] ) ? sanitize_text_field( wp_unslash( $_POST['plugin'] ) ) : '';
+	$key = isset( $_POST['plugin'] ) ? sanitize_text_field( wp_unslash( $_POST['plugin'] ) ) : '';
+	// The slugs the screen showed. Only those that are registered now, and in the named group, are
+	// marked, so a tool added after the page loaded stays new.
+	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+	$shown  = isset( $_POST['slugs'] ) ? array_map( 'sanitize_text_field', wp_unslash( (array) $_POST['slugs'] ) ) : array();
 	$groups = aafm_bridge_group_slugs( aafm_bridge_foreign_slugs() );
-	if ( aafm_bridge_review_all_key() === $key ) {
-		$slugs = aafm_bridge_foreign_slugs();
-	} elseif ( isset( $groups[ $key ] ) ) {
-		$slugs = $groups[ $key ];
-	} else {
+	$scope  = aafm_bridge_review_all_key() === $key ? aafm_bridge_foreign_slugs() : ( $groups[ $key ] ?? array() );
+	$slugs  = array_values( array_intersect( $scope, $shown ) );
+	if ( array() === $slugs ) {
 		wp_send_json_error( array( 'message' => __( 'That plugin has no tools registered right now.', 'agent-abilities-for-mcp' ) ) );
 	}
 

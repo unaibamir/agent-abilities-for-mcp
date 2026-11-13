@@ -102,7 +102,8 @@ final class BridgeStarterScriptTest extends TestCase {
 	public function test_the_script_uses_the_reserved_key_the_server_takes(): void {
 		$js = $this->method( '#bindBridgeReview() {' ) . $this->method( '#bridgeReviewBlockDone( key, card ) {' );
 
-		$this->assertSame( 2, substr_count( $js, "'" . aafm_bridge_review_all_key() . "'" ) );
+		// The success message, the posted slugs and the block bookkeeping each compare against it.
+		$this->assertSame( 3, substr_count( $js, "'" . aafm_bridge_review_all_key() . "'" ) );
 		$this->assertStringNotContainsString( "'all'", $js );
 	}
 
@@ -148,5 +149,17 @@ final class BridgeStarterScriptTest extends TestCase {
 		$body = $this->method( '#bindBridgeBulk() {' );
 		$this->assertMatchesRegularExpression( "/if \\( enable && row\\?\\.hasAttribute\\( 'data-high-risk' \\) \\) \\{\\s*return;\\s*\\}/", $body );
 		$this->assertLessThan( (int) strpos( $body, 'box.checked = enable;' ), (int) strpos( $body, "hasAttribute( 'data-high-risk' )" ) );
+	}
+
+	public function test_script_posts_rendered_slugs(): void {
+		$starter = $this->method( '#bindBridgeStarter() {' );
+		$review  = $this->method( '#bindBridgeReview() {' );
+
+		$this->assertMatchesRegularExpression( "/this\\.#post\\( 'aafm_bridge_read_only_starter', \\{ plugin: key, 'slugs\\[\\]': [^}]+\\} \\)/", $starter );
+		$this->assertStringContainsString( 'input[name="bridged_abilities[]"]', $starter );
+		$this->assertMatchesRegularExpression( "/this\\.#post\\( 'aafm_bridge_mark_reviewed', \\{ plugin: key, 'slugs\\[\\]': [^}]+\\} \\)/", $review );
+		$this->assertStringContainsString( 'li > code', $review );
+		$post = $this->method( 'async #post( action, data = {} ) {' );
+		$this->assertMatchesRegularExpression( '/Array\\.isArray\\( value \\)/', $post, 'An array value is sent as repeated fields, not one comma-joined string.' );
 	}
 }

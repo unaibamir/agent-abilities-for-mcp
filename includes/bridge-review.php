@@ -227,10 +227,15 @@ function aafm_bridge_review_sync(): void {
  * accessor intersects with the cache copy, which is right for a read and would drop another plugin's
  * selections from this write.
  *
- * @param string $group_key A key of aafm_bridge_group_slugs().
+ * Only the tools the owner saw count: $shown_slugs is what the screen listed, intersected here with
+ * the group's slugs registered right now. A tool registered after the page loaded is neither switched
+ * on nor marked reviewed, and a posted slug of another plugin refuses the whole request.
+ *
+ * @param string            $group_key   A key of aafm_bridge_group_slugs().
+ * @param array<int,string> $shown_slugs The slugs the owner was shown for this plugin.
  * @return array{ok:bool,enabled:list<string>,disabled:list<string>,reads:int,reviewed:bool,message:string}
  */
-function aafm_bridge_apply_read_only_starter( string $group_key ): array {
+function aafm_bridge_apply_read_only_starter( string $group_key, array $shown_slugs ): array {
 	$result = array(
 		'ok'       => false,
 		'enabled'  => array(),
@@ -241,7 +246,14 @@ function aafm_bridge_apply_read_only_starter( string $group_key ): array {
 	);
 
 	$groups = aafm_bridge_group_slugs( aafm_bridge_foreign_slugs() );
-	if ( ! isset( $groups[ $group_key ] ) ) {
+	foreach ( $groups as $key => $slugs ) {
+		if ( (string) $key !== $group_key && array() !== array_intersect( $slugs, $shown_slugs ) ) {
+			$result['message'] = __( 'Some of these tools belong to another plugin. Reload the page and try again.', 'agent-abilities-for-mcp' );
+			return $result;
+		}
+	}
+	$shown = array_values( array_intersect( $groups[ $group_key ] ?? array(), $shown_slugs ) );
+	if ( array() === $shown ) {
 		$result['message'] = __( 'That plugin has no tools registered right now.', 'agent-abilities-for-mcp' );
 		return $result;
 	}
@@ -257,7 +269,7 @@ function aafm_bridge_apply_read_only_starter( string $group_key ): array {
 	$owned  = aafm_bridge_group_slugs( $stored )[ $group_key ] ?? array();
 	$reads  = array_values(
 		array_filter(
-			$groups[ $group_key ],
+			$shown,
 			static function ( string $slug ): bool {
 				return aafm_preset_permits( 'read_only', $slug );
 			}
@@ -284,7 +296,7 @@ function aafm_bridge_apply_read_only_starter( string $group_key ): array {
 			count( $reads )
 		);
 
-	$result['reviewed'] = aafm_bridge_mark_reviewed( $groups[ $group_key ] );
+	$result['reviewed'] = aafm_bridge_mark_reviewed( $shown );
 	if ( ! $result['reviewed'] ) {
 		aafm_bridge_review_log_failure();
 		$result['message'] .= ' ' . __( 'These tools could not be marked as reviewed.', 'agent-abilities-for-mcp' );

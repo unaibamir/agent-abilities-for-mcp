@@ -194,14 +194,16 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 		'includes/admin/bridge-directory.php::aafm_ajax_bridge_read_only_starter::sanitize_text_field' => array(
 			'calls'  => array(
 				'sanitize_text_field( wp_unslash( $_POST[\'plugin\'] ) )',
+				'array_map( \'sanitize_text_field\', wp_unslash( (array) $_POST[\'slugs\'] ) )',
 			),
-			'reason' => 'A group key, only ever looked up in the computed plugin groups inside aafm_bridge_apply_read_only_starter(). An unknown key is refused and the value is never stored.',
+			'reason' => 'A group key, only ever looked up in the computed plugin groups inside aafm_bridge_apply_read_only_starter(). An unknown key is refused and the value is never stored. The shown slugs are intersected with the group\'s, or all, registered foreign slugs; never stored as given.',
 		),
 		'includes/admin/bridge-directory.php::aafm_ajax_bridge_mark_reviewed::sanitize_text_field' => array(
 			'calls'  => array(
 				'sanitize_text_field( wp_unslash( $_POST[\'plugin\'] ) )',
+				'array_map( \'sanitize_text_field\', wp_unslash( (array) $_POST[\'slugs\'] ) )',
 			),
-			'reason' => 'A group key, compared with the reserved all-tools key and looked up in the computed plugin groups. An unknown key is refused and the value is never stored.',
+			'reason' => 'A group key, compared with the reserved all-tools key and looked up in the computed plugin groups. An unknown key is refused and the value is never stored. The shown slugs are intersected with the group\'s, or all, registered foreign slugs; never stored as given.',
 		),
 		'includes/admin/connection.php::aafm_ajax_oauth_revoke_client::sanitize_text_field' => array(
 			'calls'  => array(

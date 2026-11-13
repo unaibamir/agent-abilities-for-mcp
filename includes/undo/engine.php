@@ -952,6 +952,21 @@ function aafm_undo_object_checks( array $row, array $d ): ?string {
 		}
 	}
 
+	// A page's recorded parent and template go through the checks the page writer runs: the parent
+	// must still be a page outside the Trash that would not create a loop, and the template must
+	// still be offered by the theme. Checked here, before any write, for the owner and the agent.
+	$parent = $d['before']['post:post_parent'] ?? null;
+	if ( ! $term && null !== $parent ) {
+		$checked = aafm_page_parent_checked( $id, (int) $parent );
+		if ( is_wp_error( $checked ) ) {
+			return 'aafm_page_parent_loop' === $checked->get_error_code() ? 'not_allowed' : 'dependency_gone';
+		}
+	}
+	$template = $d['before']['meta:_wp_page_template'][0] ?? '';
+	if ( ! $term && $object instanceof \WP_Post && is_string( $template ) && '' !== $template && ! aafm_page_template_available( $template, $object ) ) {
+		return 'dependency_gone';
+	}
+
 	// Anything the before-values point at must still exist.
 	$ids = array();
 	foreach ( $d['before'] as $field => $value ) {

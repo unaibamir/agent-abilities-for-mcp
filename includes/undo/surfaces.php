@@ -59,6 +59,24 @@ function aafm_undo_fields_post_write( array $input ): array {
 }
 
 /**
+ * Fields touched by update-page: the post write fields, plus the parent and the page template meta
+ * when the call sends them. Pages only; update-post and update-cpt-item never record these.
+ *
+ * @param array<string,mixed> $input Tool input.
+ * @return string[]
+ */
+function aafm_undo_fields_page_write( array $input ): array {
+	$ids = aafm_undo_fields_post_write( $input );
+	if ( isset( $input['parent_id'] ) ) {
+		$ids[] = 'post:post_parent';
+	}
+	if ( isset( $input['template'] ) ) {
+		$ids[] = 'meta:_wp_page_template';
+	}
+	return $ids;
+}
+
+/**
  * Surface factory for the families with a fixed field list.
  *
  * @param string              $family  Family name.
@@ -108,13 +126,13 @@ function aafm_undo_surfaces(): array {
 
 	$surfaces = array(
 		'aafm/update-post'            => aafm_undo_surface( 'post_write', 'post', 'post_id', array_merge( $write, array( 'post_id' ) ), 'aafm_undo_fields_post_write' ),
-		'aafm/update-page'            => aafm_undo_surface( 'post_write', 'post', 'page_id', array_merge( $write, array( 'page_id', 'parent_id', 'template' ) ), 'aafm_undo_fields_post_write' ),
+		'aafm/update-page'            => aafm_undo_surface( 'post_write', 'post', 'page_id', array_merge( $write, array( 'page_id', 'parent_id', 'template' ) ), 'aafm_undo_fields_page_write' ),
 		'aafm/update-cpt-item'        => aafm_undo_surface( 'post_write', 'post', 'post_id', array_merge( $write, array( 'post_id' ) ), 'aafm_undo_fields_post_write' ),
 		'aafm/replace-in-post'        => aafm_undo_surface( 'post_content', 'post', 'post_id', array( 'post_id', 'search', 'replace' ), $post_cols ),
 		'aafm/replace-block'          => aafm_undo_surface( 'post_content', 'post', 'post_id', array( 'post_id', 'path', 'markup', 'expect_block' ), $post_cols ),
 		'aafm/create-draft'           => aafm_undo_surface( 'post_create', 'post', '', $write, 'aafm_undo_fields_none', $create( 'aafm/trash-post', 'post_id', 'post' ) ),
 		'aafm/create-post'            => aafm_undo_surface( 'post_create', 'post', '', $write, 'aafm_undo_fields_none', $create( 'aafm/trash-post', 'post_id', 'post' ) ),
-		'aafm/create-page'            => aafm_undo_surface( 'post_create', 'post', '', array_merge( $write, array( 'parent_id', 'template' ) ),'aafm_undo_fields_none', $create( 'aafm/trash-page', 'page_id', 'page' ) ),
+		'aafm/create-page'            => aafm_undo_surface( 'post_create', 'post', '', array_merge( $write, array( 'parent_id', 'template' ) ), 'aafm_undo_fields_none', $create( 'aafm/trash-page', 'page_id', 'page' ) ),
 		'aafm/create-cpt-item'        => aafm_undo_surface( 'post_create', 'post', '', array_merge( $write, array( 'post_type' ) ), 'aafm_undo_fields_none', $create( 'aafm/trash-post', 'post_id', '@input' ) ),
 		'aafm/trash-post'             => aafm_undo_surface( 'post_trash', 'post', 'post_id', array( 'post_id' ), 'aafm_undo_fields_trash', array( 'undo_op' => 'untrash' ) ),
 		'aafm/trash-page'             => aafm_undo_surface( 'post_trash', 'post', 'page_id', array( 'page_id' ), 'aafm_undo_fields_trash', array( 'undo_op' => 'untrash' ) ),

@@ -254,4 +254,18 @@ final class HelpTabTest extends TestCase {
 		$this->assertStringContainsString( 'aafm-dashboard', $html );
 		$this->assertStringNotContainsString( 'aafm-help-entry', $html );
 	}
+
+	/**
+	 * Settings holds more guardrails than the four the Help entry once listed, so the entry names
+	 * no count.
+	 */
+	public function test_help_guardrails_sentence_does_not_say_four(): void {
+		ob_start();
+		aafm_render_help_tab();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'Optional extra guardrails.', $html );
+		$this->assertStringNotContainsString( 'All four', $html );
+		$this->assertStringNotContainsString( 'four guardrails', $html );
+	}
 }

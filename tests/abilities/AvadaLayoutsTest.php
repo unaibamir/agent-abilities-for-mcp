@@ -314,4 +314,16 @@ final class AvadaLayoutsTest extends TestCase {
 		$this->assertTrue( $args['meta']['annotations']['idempotent'] );
 		$this->assertSame( 'aafm-reads', $args['category'] );
 	}
+
+	/**
+	 * Avada's get_override() loops over every layout with no break, so the last match wins
+	 * (fusion-builder/inc/class-fusion-template-builder.php, get_override() and get_search_override()).
+	 */
+	public function test_the_descriptions_say_the_last_matching_layout_wins(): void {
+		$order = aafm_args_avada_list_layouts()['output_schema']['properties']['layouts']['items']['properties']['order']['description'];
+		$this->assertStringContainsString( 'last layout whose conditions match', $order );
+		$this->assertStringNotContainsString( 'first layout', $order );
+		$this->assertStringContainsString( 'last layout whose conditions match', aafm_ability_description( 'aafm/avada-list-layouts' ) );
+		$this->assertStringContainsString( 'last match', aafm_ability_disclosures()['aafm/avada-list-layouts'] );
+	}
 }

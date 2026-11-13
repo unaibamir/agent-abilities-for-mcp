@@ -74,7 +74,7 @@ function aafm_avada_registry_definitions(): array {
 		),
 		'aafm/avada-list-layouts'       => array(
 			'label'        => __( 'List Avada layouts', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists Avada Layouts in the order Avada checks them, with the Global Layout last. Each layout has its sections (header, page title bar, content, footer) with each section\'s id, title, status and whether it exists, and its conditions exactly as Avada stores them. Conditions are not evaluated, so this does not say which layout a given page gets. A section that is not published is not used. A layout whose stored data Avada itself cannot read is marked unparseable. global_stored is false when no Global Layout was ever saved, and more than 200 layouts are cut to the first 200. Requires the manage_options capability, even where Avada\'s Role Manager opens Layouts to other roles. Only while Avada is active.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Lists Avada Layouts in the order Avada checks them, with the Global Layout last. Avada checks every layout and uses the last layout whose conditions match; the Global Layout applies only when none match. Each layout has its sections (header, page title bar, content, footer) with each section\'s id, title, status and whether it exists, and its conditions exactly as Avada stores them. Conditions are not evaluated, so this does not say which layout a given page gets. A section that is not published is not used. A layout whose stored data Avada itself cannot read is marked unparseable. global_stored is false when no Global Layout was ever saved, and more than 200 layouts are cut to the first 200. Requires the manage_options capability, even where Avada\'s Role Manager opens Layouts to other roles. Only while Avada is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'avada',
@@ -624,7 +624,7 @@ function aafm_args_avada_list_layouts(): array {
 							'status'       => array( 'type' => 'string' ),
 							'order'        => array(
 								'type'        => 'integer',
-								'description' => __( 'Position in the order Avada checks layouts, from 0. The first layout whose conditions match is used.', 'agent-abilities-for-mcp' ),
+								'description' => __( 'Position in the order Avada checks layouts, from 0. Avada checks them all and uses the last layout whose conditions match; the Global Layout applies only when none match.', 'agent-abilities-for-mcp' ),
 							),
 							'parse_status' => array(
 								'type'        => 'string',

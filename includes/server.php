@@ -1930,10 +1930,12 @@ function aafm_mcp_explain_transport_refusal( $response, $server, $request ) {
 }
 
 /**
- * Give the server/discover response the same instructions addendum initialize carries.
+ * Give the server/discover response the same capabilities and instructions addendum initialize carries.
  *
  * Clients such as claude.ai and ChatGPT open with server/discover, and the adapter answers it
- * without running the initialize filter, so the playbook index would never reach them. The adapter has no discover filter, so this rewrites the response after dispatch:
+ * without running the initialize filter, so the playbook index would never reach them and the
+ * resources and prompts capabilities aafm_filter_initialize_capabilities() strips would still be
+ * advertised. The adapter has no discover filter, so this rewrites the response after dispatch:
  * our MCP route only, a single server/discover request, a successful result.
  *
  * @param mixed $response The response.
@@ -1959,12 +1961,15 @@ function aafm_mcp_add_discover_instructions( $response, $server, $request ) {
 	if ( ! $data instanceof \stdClass || ! isset( $data->result ) || ! $data->result instanceof \stdClass ) {
 		return $response;
 	}
-	$addendum = aafm_server_instructions_addendum();
-	if ( '' === $addendum ) {
-		return $response;
+	// Only tools are served, as initialize says.
+	if ( isset( $data->result->capabilities ) && $data->result->capabilities instanceof \stdClass ) {
+		unset( $data->result->capabilities->resources, $data->result->capabilities->prompts );
 	}
-	$instructions               = isset( $data->result->instructions ) && is_string( $data->result->instructions ) ? $data->result->instructions : '';
-	$data->result->instructions = '' !== $instructions ? $instructions . "\n\n" . $addendum : $addendum;
+	$addendum = aafm_server_instructions_addendum();
+	if ( '' !== $addendum ) {
+		$instructions               = isset( $data->result->instructions ) && is_string( $data->result->instructions ) ? $data->result->instructions : '';
+		$data->result->instructions = '' !== $instructions ? $instructions . "\n\n" . $addendum : $addendum;
+	}
 	$response->set_data( $data );
 	return $response;
 }

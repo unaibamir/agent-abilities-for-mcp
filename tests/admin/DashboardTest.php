@@ -522,4 +522,43 @@ final class DashboardTest extends TestCase {
 		$this->assertSame( array(), $row['roles'] );
 		$this->assertTrue( $row['is_admin'] );
 	}
+
+	/**
+	 * Write one activity row as a principal, the way the call log does.
+	 *
+	 * @param int    $user_id    Principal.
+	 * @param string $ability    Ability name.
+	 * @param string $event_type Event type.
+	 * @return int Row id.
+	 */
+	private function log_row( int $user_id, string $ability = 'aafm/get-post', string $event_type = 'ability_call' ): int {
+		return aafm_log_activity(
+			array(
+				'ability'           => $ability,
+				'principal_user_id' => $user_id,
+				'principal_login'   => 'p' . $user_id,
+				'status'            => 'success',
+				'event_type'        => $event_type,
+			)
+		);
+	}
+
+	public function test_recent_agents_ignores_admin_only_events(): void {
+		$admin = $this->acting_as( 'administrator' );
+		$this->log_row( $admin, 'aafm/settings', 'setting_changed' );
+		$this->log_row( $admin, 'aafm/get-post', 'ability_enabled' );
+		$this->log_row( $admin, '(transport)' );
+		$this->log_row( $admin, 'oauth:token' );
+
+		$this->assertSame( 0, aafm_recent_agent_count() );
+	}
+
+	public function test_recent_agents_counts_one_agent_with_many_calls_once(): void {
+		$this->log_row( 11 );
+		$this->log_row( 11, 'aafm/get-posts' );
+		$this->log_row( 11, 'aafm/update-post' );
+		$this->log_row( 12 );
+
+		$this->assertSame( 2, aafm_recent_agent_count() );
+	}
 }

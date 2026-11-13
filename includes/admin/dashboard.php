@@ -161,33 +161,25 @@ function aafm_activity_count(): int {
 }
 
 /**
- * Exact count of distinct agent principals seen in the activity log over the last
- * 24 hours (UTC), computed in one bounded query against the plugin's own audit table.
+ * Exact count of distinct agent principals that made a tool call in the last 24 hours (UTC),
+ * computed in one bounded query against the plugin's own audit table.
  *
  * This is recent-principal activity read back from the audit log, NOT a live socket or
- * connection count. created_at is stored as a UTC ('mysql', true) datetime string, so the
- * cutoff is computed with gmdate() and the query counts every distinct principal at once -
- * no page cap, so it never undercounts on a busy site.
+ * connection count. It counts people, not rows (COUNT(DISTINCT principal_user_id)), and only rows
+ * that are agent tool calls by the one shared rule, aafm_agent_call_clause(): an administrator
+ * saving settings, toggling abilities, a front-door refusal or an OAuth ceremony row is not an
+ * agent. created_at is stored as a UTC ('mysql', true) datetime string, so the cutoff is computed
+ * with gmdate(); no page cap, so it never undercounts on a busy site.
  *
- * @return int Number of distinct principals active in the last 24 hours.
+ * @return int Number of distinct principals that called a tool in the last 24 hours.
  */
 function aafm_recent_agent_count(): int {
 	global $wpdb;
-	$table  = aafm_activity_log_table();
-	$cutoff = gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS );
-
-	// Routed through aafm_wpdb_scalar() rather than a bare get_var() - the
-	// dashboard renders several counts back to back, so a failed query could otherwise inherit the
-	// previous count's value and display a plausible but wrong number.
-	//
-	// event_type <> 'write_outcome' excludes the write-and-confirm contract's own rows: a
-	// write_outcome row carries the same principal as the ability_call row for the same request,
-	// so excluding it drops no agent from the count, and including it would inflate this number
-	// for an admin save (a write_outcome row with the admin's own principal) exactly as it already
-	// would for the schema-stamp row's principal 0 (audit/log.php:136). 'ability_call' is not
-	// excluded here: unlike aafm_agent_call_count(), this count already includes admin-only event
-	// types such as setting_changed in 1.7.5, and narrowing it further would change today's number.
-	$view = aafm_wpdb_scalar( $wpdb->prepare( "SELECT COUNT(DISTINCT principal_user_id) FROM %i WHERE created_at >= %s AND event_type <> 'write_outcome'", $table, $cutoff ) );
+	$clause = aafm_agent_call_clause();
+	// Routed through aafm_wpdb_scalar() rather than a bare get_var(): the dashboard renders several
+	// counts back to back, so a failed query could otherwise inherit the previous count's value.
+	// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- the clause holds only fixed text and placeholders; every value is bound here, as one array.
+	$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(DISTINCT principal_user_id) FROM %i WHERE created_at >= %s AND ' . $clause['sql'], array_merge( array( aafm_activity_log_table(), gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS ) ), $clause['params'] ) ) );
 
 	return $view['ok'] ? max( 0, (int) $view['value'] ) : 0;
 }

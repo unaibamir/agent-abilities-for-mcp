@@ -3634,7 +3634,7 @@
 				return;
 			}
 			btn.addEventListener( 'click', async () => {
-				if ( ! window.confirm( this.#t( 'staleTokensConfirm', 'End every token issued for an old address of this site? Approvals stay; those apps reconnect.' ) ) ) {
+				if ( ! window.confirm( this.#t( 'staleTokensConfirm', 'End every token issued for an old address of this site? Approvals stay, but each app has to be removed and added again with the new address.' ) ) ) {
 					return;
 				}
 				btn.disabled = true;

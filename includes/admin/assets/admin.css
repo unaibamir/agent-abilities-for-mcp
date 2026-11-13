@@ -639,6 +639,20 @@
 		font-family: var(--aafm-mono);
 	}
 
+	/* A copyable one-line code snippet: the Help tab's commands and the old-token notice's address. */
+	.aafm-help-copy-line {
+		display: flex;
+		gap: 8px;
+		align-items: center;
+		margin-block: 6px;
+
+		code {
+			flex: 1 1 auto;
+			overflow-x: auto;
+			white-space: nowrap;
+		}
+	}
+
 	.aafm-field-mono {
 		display: flex;
 		align-items: center;
@@ -2425,18 +2439,6 @@
 			}
 		}
 
-		.aafm-help-copy-line {
-			display: flex;
-			gap: 8px;
-			align-items: center;
-			margin-block: 6px;
-
-			code {
-				flex: 1 1 auto;
-				overflow-x: auto;
-				white-space: nowrap;
-			}
-		}
 	}
 
 	/* ---------- Detected meta-key chips ---------- */

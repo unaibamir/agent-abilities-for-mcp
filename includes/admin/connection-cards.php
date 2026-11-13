@@ -258,17 +258,17 @@ function aafm_render_grants_card( array $data ): void {
 		aafm_render_notice(
 			'warning',
 			sprintf(
-				/* translators: 1: number of token rows, 2: this site's MCP endpoint address. */
+				/* translators: %s: number of token rows. */
 				_n(
-					'%1$s token was issued for an old address of this site, so it can no longer connect. To connect again, each person who approved that app has to remove the connector and add it again with this address: %2$s. Ending old tokens removes no one\'s approval.',
-					'%1$s tokens were issued for an old address of this site, so they can no longer connect. To connect again, each person who approved those apps has to remove the connector and add it again with this address: %2$s. Ending old tokens removes no one\'s approval.',
+					'%s token was issued for an old address of this site, so it can no longer connect. To connect again, each person who approved that app has to remove the connector and add it again with the address below. Ending old tokens removes no one\'s approval.',
+					'%s tokens were issued for an old address of this site, so they can no longer connect. To connect again, each person who approved those apps has to remove the connector and add it again with the address below. Ending old tokens removes no one\'s approval.',
 					$data['stale_tokens'],
 					'agent-abilities-for-mcp'
 				),
-				number_format_i18n( $data['stale_tokens'] ),
-				aafm_endpoint_url()
+				number_format_i18n( $data['stale_tokens'] )
 			)
 		);
+		echo wp_kses( aafm_help_copy_line( aafm_endpoint_url() ), aafm_admin_allowed_html() );
 		printf(
 			'<p><button type="button" class="aafm-btn aafm-btn-secondary aafm-revoke-stale-tokens">%1$s</button> <span class="aafm-stale-tokens-status" role="status" tabindex="-1"></span></p>',
 			esc_html__( 'End old tokens', 'agent-abilities-for-mcp' )

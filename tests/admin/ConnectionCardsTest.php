@@ -441,8 +441,22 @@ class ConnectionCardsTest extends TestCase {
 		$this->assertMatchesRegularExpression( '/<button type="button" class="[^"]*aafm-revoke-stale-tokens[^"]*"/', $html );
 		// Authorization refuses the old address, so a plain reconnect fails: the connector has to be added again.
 		$this->assertStringNotContainsString( 'reconnect from their client', $html );
-		$this->assertStringContainsString( 'remove the connector and add it again with this address', $html );
-		$this->assertStringContainsString( esc_html( aafm_endpoint_url() ), $html, 'The new address is printed.' );
+		$this->assertStringContainsString( 'remove the connector and add it again with', $html );
+		// The address is its own copyable line, so no sentence punctuation sticks to it.
+		$url = aafm_endpoint_url();
+		$this->assertStringContainsString( '<code>' . esc_html( $url ) . '</code>', $html );
+		$this->assertStringContainsString( 'data-copy="' . esc_attr( $url ) . '"', $html );
+		$this->assertStringNotContainsString( esc_html( $url ) . '.', $html );
+	}
+
+	public function test_stale_token_confirm_matches_the_notice(): void {
+		$js = $this->admin_js();
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a plugin source file in a test.
+		$page = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/page.php' );
+		foreach ( array( $js, $page ) as $source ) {
+			$this->assertStringNotContainsString( 'those apps reconnect', $source );
+			$this->assertStringContainsString( 'Approvals stay, but each app has to be removed and added again with the new address.', $source );
+		}
 	}
 
 	public function test_stale_token_action_requires_nonce_and_capability(): void {

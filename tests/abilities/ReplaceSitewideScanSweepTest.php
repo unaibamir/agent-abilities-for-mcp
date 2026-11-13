@@ -34,6 +34,7 @@ final class ReplaceSitewideScanSweepTest extends TestCase {
 		'includes/abilities/media.php|aafm_exec_get_media|1'            => 'READ',
 		'includes/abilities/media.php|aafm_exec_get_media|2'            => 'READ',
 		'includes/abilities/media.php|aafm_query_attachment_counts_by_mime|1' => 'READ',
+		'includes/abilities/menus.php|aafm_exec_list_navigations|1'     => 'READ',
 		'includes/abilities/posts.php|aafm_exec_get_posts|1'            => 'READ',
 		'includes/abilities/woocommerce/coupons.php|aafm_exec_wc_list_coupons|1' => 'READ',
 		'includes/abilities/posts.php|aafm_exec_replace_sitewide|1'     => 'READ',

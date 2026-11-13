@@ -257,14 +257,15 @@ function aafm_render_grants_card( array $data ): void {
 		aafm_render_notice(
 			'warning',
 			sprintf(
-				/* translators: %s: number of token rows. */
+				/* translators: 1: number of token rows, 2: this site's MCP endpoint address. */
 				_n(
-					'%s token was issued for an old address of this site, so it can no longer connect. The people who approved that app reconnect from their client. Ending old tokens removes no one\'s approval.',
-					'%s tokens were issued for an old address of this site, so they can no longer connect. The people who approved those apps reconnect from their client. Ending old tokens removes no one\'s approval.',
+					'%1$s token was issued for an old address of this site, so it can no longer connect. To connect again, each person who approved that app has to remove the connector and add it again with this address: %2$s. Ending old tokens removes no one\'s approval.',
+					'%1$s tokens were issued for an old address of this site, so they can no longer connect. To connect again, each person who approved those apps has to remove the connector and add it again with this address: %2$s. Ending old tokens removes no one\'s approval.',
 					$data['stale_tokens'],
 					'agent-abilities-for-mcp'
 				),
-				number_format_i18n( $data['stale_tokens'] )
+				number_format_i18n( $data['stale_tokens'] ),
+				aafm_endpoint_url()
 			)
 		);
 		printf(

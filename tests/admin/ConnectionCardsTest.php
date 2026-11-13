@@ -439,6 +439,10 @@ class ConnectionCardsTest extends TestCase {
 		$html = $this->grants_html();
 		$this->assertStringContainsString( '2 tokens were issued for an old address of this site', $html );
 		$this->assertMatchesRegularExpression( '/<button type="button" class="[^"]*aafm-revoke-stale-tokens[^"]*"/', $html );
+		// Authorization refuses the old address, so a plain reconnect fails: the connector has to be added again.
+		$this->assertStringNotContainsString( 'reconnect from their client', $html );
+		$this->assertStringContainsString( 'remove the connector and add it again with this address', $html );
+		$this->assertStringContainsString( esc_html( aafm_endpoint_url() ), $html, 'The new address is printed.' );
 	}
 
 	public function test_stale_token_action_requires_nonce_and_capability(): void {

@@ -2397,7 +2397,7 @@
 			const whoLabel = {
 				you: this.#t( 'doctorWhoYou', 'You can fix this' ),
 				host: this.#t( 'doctorWhoHost', 'Your host can fix this' ),
-				plugin: this.#t( 'doctorWhoPlugin', 'A security plugin may be the cause' ),
+				plugin: this.#t( 'doctorWhoPlugin', 'A security or membership plugin may be the cause' ),
 			};
 
 			const applyFilter = () => {

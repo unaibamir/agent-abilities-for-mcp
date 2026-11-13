@@ -245,7 +245,7 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'doctorSkip'               => __( 'Could not test', 'agent-abilities-for-mcp' ),
 				'doctorWhoYou'             => __( 'You can fix this', 'agent-abilities-for-mcp' ),
 				'doctorWhoHost'            => __( 'Your host can fix this', 'agent-abilities-for-mcp' ),
-				'doctorWhoPlugin'          => __( 'A security plugin may be the cause', 'agent-abilities-for-mcp' ),
+				'doctorWhoPlugin'          => __( 'A security or membership plugin may be the cause', 'agent-abilities-for-mcp' ),
 				'doctorCopySnippet'        => __( 'Copy snippet', 'agent-abilities-for-mcp' ),
 				'doctorError'              => __( 'The check could not run. Reload the page and try again.', 'agent-abilities-for-mcp' ),
 				// Plugins' own tools: review card and read-only starter.
@@ -3354,7 +3354,7 @@ function aafm_render_help_tab(): void {
 				. '<p><strong>' . esc_html__( 'How to read the result (the HTTP status on the first line):', 'agent-abilities-for-mcp' ) . '</strong></p>'
 				. '<ul>'
 				. '<li><strong>' . esc_html__( '200', 'agent-abilities-for-mcp' ) . '</strong> - ' . esc_html__( 'reachable and authenticated; the body is a JSON-RPC result. Everything is working - if the AI client still fails, the block is on its side (see the 403/406/429 entry above).', 'agent-abilities-for-mcp' ) . '</li>'
-				. '<li><strong>' . esc_html__( '401', 'agent-abilities-for-mcp' ) . '</strong> - ' . esc_html__( 'reached WordPress but auth failed: wrong or expired Application Password, or the Authorization header is being stripped (see the Authentication section). On a site whose membership or security plugin keeps the REST API to signed-in members, even a correct password gets 401; run the Connection Doctor on the Connection tab to see which plugin.', 'agent-abilities-for-mcp' ) . '</li>'
+				. '<li><strong>' . esc_html__( '401', 'agent-abilities-for-mcp' ) . '</strong> - ' . esc_html__( 'reached WordPress but auth failed: wrong or expired Application Password, or the Authorization header is being stripped (see the Authentication section). On a site whose membership or security plugin keeps the REST API to signed-in members, even a correct password gets 401; run the Connection Doctor on the Connection tab, which names the plugins it recognises.', 'agent-abilities-for-mcp' ) . '</li>'
 				. '<li><strong>' . esc_html__( '403 / 406 / 429', 'agent-abilities-for-mcp' ) . '</strong> - ' . esc_html__( 'a WAF, CDN, or host security rule is blocking the request before WordPress (see the 403/406/429 entry above).', 'agent-abilities-for-mcp' ) . '</li>'
 				. '<li><strong>' . esc_html__( '404', 'agent-abilities-for-mcp' ) . '</strong> - ' . esc_html__( 'the route is not registered for this URL: flush permalinks (Settings → Permalinks → Save) and confirm you copied the endpoint exactly from the Connection tab.', 'agent-abilities-for-mcp' ) . '</li>'
 				. '<li><strong>' . esc_html__( '5xx', 'agent-abilities-for-mcp' ) . '</strong> - ' . esc_html__( 'a server-side error: check your PHP error log and the host status.', 'agent-abilities-for-mcp' ) . '</li>'

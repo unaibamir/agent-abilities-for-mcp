@@ -640,15 +640,28 @@ function aafm_doctor_known_blockers(): array {
 }
 
 /**
- * Whether BuddyBoss Platform refuses REST requests from anyone not signed in. The same condition its
- * own bb_restricate_rest_api_callback() checks: Private REST APIs on, and, when BuddyBoss App is
- * active, its private app on too. Both functions are BuddyBoss's own, so a site without it reads false.
+ * Whether BuddyBoss Platform refuses this plugin's REST routes to anyone not signed in. The same
+ * conditions its own bb_restricate_rest_api_callback() and bb_restricate_rest_api() check: Private
+ * REST APIs on, and, when BuddyBoss App is active, its private app on too; and the MCP route or the
+ * OAuth token route missing from Public Rest APIs (bb_is_allowed_endpoint() returns true for an
+ * allowed route and null otherwise). All three functions are BuddyBoss's own, so a site without it
+ * reads false.
  *
  * @return bool
  */
 function aafm_doctor_buddyboss_private_rest(): bool {
-	return function_exists( 'bp_enable_private_rest_apis' ) && true === (bool) bp_enable_private_rest_apis()
-		&& ( ! function_exists( 'bbapp_is_private_app_enabled' ) || true === (bool) bbapp_is_private_app_enabled() );
+	if ( ! function_exists( 'bp_enable_private_rest_apis' ) || true !== (bool) bp_enable_private_rest_apis() ) {
+		return false;
+	}
+	if ( function_exists( 'bbapp_is_private_app_enabled' ) && true !== (bool) bbapp_is_private_app_enabled() ) {
+		return false;
+	}
+	foreach ( array( aafm_mcp_rest_route(), '/' . aafm_oauth_rest_namespace() . '/token' ) as $route ) {
+		if ( ! function_exists( 'bb_is_allowed_endpoint' ) || ! bb_is_allowed_endpoint( $route ) ) {
+			return true;
+		}
+	}
+	return false;
 }
 
 /**

@@ -78,6 +78,7 @@ final class ConnectionDoctorTest extends TestCase {
 		remove_all_filters( 'wp_is_application_passwords_available' );
 		remove_all_filters( 'aafm_doctor_known_blockers' );
 		remove_all_filters( 'bp_enable_private_rest_apis' );
+		remove_all_filters( 'aafm_test_bb_allowed_endpoint' );
 		foreach ( $this->slots_seen as $slot ) {
 			delete_transient( $slot );
 		}
@@ -959,17 +960,21 @@ final class ConnectionDoctorTest extends TestCase {
 		);
 		update_option( 'active_plugins', array( 'fake-firewall/fake-firewall.php' ) );
 		$this->buddyboss_private_rest( true );
-		$this->respond( $this->endpoint_ok() );
+		// On a real BuddyBoss site with private REST on, the probe gets BuddyBoss's 401.
+		$this->respond( fn() => $this->http( 401 ) );
 
 		$rows   = aafm_doctor_run_checks();
 		$detail = $this->row( $rows, 'security_plugins' )['detail'];
 		$all    = implode( "\n", array_column( $rows, 'detail' ) );
+		$probe  = $this->row( $rows, 'endpoint' )['detail'];
 
 		$this->assertStringContainsString( 'Fake Firewall can restrict the REST API', $detail, 'The generic line names only the known plugins.' );
 		$this->assertSame( 1, substr_count( $all, 'BuddyBoss has Private Rest APIs switched on' ), 'The BuddyBoss line appears once.' );
 		$this->assertStringNotContainsString( 'BuddyBoss can restrict', $all, 'BuddyBoss is not also folded into the generic line.' );
 		$this->assertSame( 1, substr_count( $all, 'can restrict the REST API' ) );
-		$this->assertStringNotContainsString( 'requires a login for the whole REST API', $all, 'The generic 401 diagnosis is not repeated beside it.' );
+		$this->assertSame( 1, substr_count( $all, 'requires a login for the whole REST API' ), 'The generic 401 diagnosis appears once, on the endpoint row.' );
+		$this->assertStringContainsString( 'A membership or security plugin is the usual cause', $probe, 'The endpoint row names the symptom.' );
+		$this->assertStringNotContainsString( 'BuddyBoss', $probe, 'The cause is named once, on the plugins row.' );
 	}
 
 	public function test_doctor_401_diagnosis_names_membership_lockdown(): void {
@@ -978,5 +983,46 @@ final class ConnectionDoctorTest extends TestCase {
 		$this->assertStringContainsString( 'requires a login for the whole REST API', $read['detail'] );
 		$this->assertStringContainsString( 'membership', $read['detail'] );
 		$this->assertStringContainsString( 'correct Application Password', $read['detail'] );
+	}
+
+	/**
+	 * Make BuddyBoss's own endpoint check answer for this test. The stub mirrors the real
+	 * bb_is_allowed_endpoint() (bp-core/bp-core-functions.php): true for an allowed route, null otherwise.
+	 *
+	 * @param array<int,string> $allowed Routes to allow.
+	 * @return void
+	 */
+	private function buddyboss_allows( array $allowed ): void {
+		if ( ! function_exists( 'bb_is_allowed_endpoint' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a global vendor function cannot be declared inside this namespaced file.
+			eval( 'function bb_is_allowed_endpoint( $current_endpoint ) { return apply_filters( \'aafm_test_bb_allowed_endpoint\', null, $current_endpoint ); }' );
+		}
+		add_filter(
+			'aafm_test_bb_allowed_endpoint',
+			static fn( $verdict, string $route ) => in_array( $route, $allowed, true ) ? true : null,
+			10,
+			2
+		);
+	}
+
+	public function test_doctor_buddyboss_line_clears_once_both_routes_are_public(): void {
+		$this->respond( $this->endpoint_ok() );
+		$this->buddyboss_private_rest( true );
+
+		$this->buddyboss_allows( array( aafm_mcp_rest_route() ) );
+		$this->assertSame( 'warn', $this->row( aafm_doctor_run_checks(), 'security_plugins' )['status'], 'The token route is still blocked.' );
+
+		remove_all_filters( 'aafm_test_bb_allowed_endpoint' );
+		$this->buddyboss_allows( array( aafm_mcp_rest_route(), '/' . aafm_oauth_rest_namespace() . '/token' ) );
+		$this->assertSame( 'pass', $this->row( aafm_doctor_run_checks(), 'security_plugins' )['status'], 'The owner followed the advice, so the line is gone.' );
+	}
+
+	public function test_the_plugin_who_line_names_membership_plugins_too(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a plugin source file in a test.
+		$js = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a plugin source file in a test.
+		$page = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/page.php' );
+		$this->assertStringContainsString( "'doctorWhoPlugin', 'A security or membership plugin may be the cause'", $js );
+		$this->assertStringContainsString( "'doctorWhoPlugin'          => __( 'A security or membership plugin may be the cause'", $page );
 	}
 }

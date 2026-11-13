@@ -283,5 +283,7 @@ final class HelpTabTest extends TestCase {
 		$this->assertStringContainsString( 'membership', $line );
 		$this->assertStringContainsString( 'correct password', $line );
 		$this->assertStringContainsString( 'Connection Doctor', $line );
+		$this->assertStringContainsString( 'names the plugins it recognises', $line, 'No promise to name a plugin the Doctor does not know.' );
+		$this->assertStringNotContainsString( 'to see which plugin', $line );
 	}
 }

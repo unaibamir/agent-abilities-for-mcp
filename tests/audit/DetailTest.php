@@ -51,6 +51,7 @@ final class DetailTest extends TestCase {
 			'numeric string id' => array( 'id', '482', '482' ),
 			'meta key'          => array( 'key', '_yoast_wpseo_metadesc', '_yoast_wpseo_metadesc' ),
 			'hyphen key'        => array( 'key', 'bacs', 'bacs' ),
+			'role as stored'    => array( 'role', ' Shop_Manager', 'shop_manager' ),
 			'ability slug'      => array( 'slug', 'aafm/wc-create-refund', 'aafm/wc-create-refund' ),
 			'zero count'        => array( 'count', 0, '0' ),
 			'template id'       => array( 'template', 'twentytwentyfive//single', 'twentytwentyfive//single' ),
@@ -83,6 +84,7 @@ final class DetailTest extends TestCase {
 			'key with markup'    => array( 'key', '<b>k</b>' ),
 			'key with quote'     => array( 'key', "k'x" ),
 			'over long key'      => array( 'key', str_repeat( 'a', 65 ) ),
+			'role with no chars' => array( 'role', '<> !?' ),
 			'sentence as key'    => array( 'key', 'The quick brown fox jumped' ),
 			'slug without slash' => array( 'slug', 'wc-create-refund' ),
 			'negative count'     => array( 'count', -3 ),
@@ -242,7 +244,7 @@ final class DetailTest extends TestCase {
 			foreach ( $entry['args'] ?? array() as $field ) {
 				$this->assertContains(
 					$field['type'],
-					array( 'id', 'key', 'slug', 'template', 'enum', 'count', 'keys' ),
+					array( 'id', 'key', 'role', 'slug', 'template', 'enum', 'count', 'keys' ),
 					"{$ability} declares field type '{$field['type']}', which is not identifier-safe."
 				);
 			}
@@ -1701,17 +1703,31 @@ final class DetailTest extends TestCase {
 				)
 			)
 		);
-		// A role that is not an identifier never reaches the row; the user is still named.
+		// A role with no identifier characters never reaches the row; the user is still named.
 		$this->assertSame(
 			'Updated user #5',
 			aafm_build_activity_detail(
 				'aafm/update-user',
 				array(
 					'user_id' => 5,
-					'role'    => '<b>admin</b> x',
+					'role'    => '<> !?',
 				)
 			)
 		);
+		// The row names the role the ability stores, sanitize_key() of the caller's value.
+		foreach ( array( 'Editor', ' editor' ) as $sent ) {
+			$this->assertSame(
+				'Updated user #5, role set to editor',
+				aafm_build_activity_detail(
+					'aafm/update-user',
+					array(
+						'user_id' => 5,
+						'role'    => $sent,
+					)
+				),
+				"Sent as '{$sent}'."
+			);
+		}
 		$this->assertSame(
 			'Attempted: Updated user #5, role set to administrator',
 			aafm_build_activity_detail(

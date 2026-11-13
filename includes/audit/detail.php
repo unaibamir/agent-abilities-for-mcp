@@ -41,7 +41,7 @@ defined( 'ABSPATH' ) || exit;
  * A rejected field is dropped silently: detail is observability, never control flow, so a value
  * that fails its check must never turn into an error an agent sees.
  *
- * @param string            $type    One of id|key|slug|template|enum|count|keys.
+ * @param string            $type    One of id|key|role|slug|template|enum|count|keys.
  * @param mixed             $value   The candidate value.
  * @param array<int,string> $allowed Allowed members, for the enum and keys types only.
  * @return string|null The rendered value, or null when it fails its check.
@@ -81,6 +81,12 @@ function aafm_activity_detail_field( string $type, $value, array $allowed = arra
 		case 'key':
 			$key = (string) $value;
 			return preg_match( '/^[A-Za-z0-9_\-]{1,64}\z/', $key ) ? $key : null;
+
+		case 'role':
+			// A role as aafm/update-user stores it: sanitize_key() of the caller's value, so "Editor" logs
+			// "editor". The result is always within the `key` character class.
+			$role = sanitize_key( (string) $value );
+			return preg_match( '/^[a-z0-9_\-]{1,64}\z/', $role ) ? $role : null;
 
 		case 'slug':
 			$slug = (string) $value;
@@ -411,11 +417,11 @@ function aafm_activity_detail_map(): array {
 					'key'  => 'user_id',
 					'type' => 'id',
 				),
-				// The role slug, an identifier like any other key. Optional: a call that changes no role,
-				// or one whose role fails the check, gets the fallback template naming the user only.
+				// The role slug as the ability stores it (sanitize_key()). Optional: a call that changes no
+				// role, or one whose role has no identifier characters, gets the fallback template.
 				array(
 					'key'      => 'role',
-					'type'     => 'key',
+					'type'     => 'role',
 					'optional' => true,
 				),
 			),

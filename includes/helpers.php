@@ -1450,10 +1450,13 @@ function aafm_user_meta_deny_has_star(): bool {
  * filter cannot widen the list to ANY option outside the base - not just the takeover-class
  * keys the old array_diff() stripped, but template, active_plugins, or anything else.
  *
+ * The last three (1.11.3) set the static homepage. The write validates them as one state; see
+ * aafm_static_homepage_checked().
+ *
  * @return list<string>
  */
 function aafm_allowed_site_settings(): array {
-	$base = array( 'blogname', 'blogdescription', 'timezone_string', 'date_format', 'time_format', 'start_of_week', 'posts_per_page' );
+	$base = array( 'blogname', 'blogdescription', 'timezone_string', 'date_format', 'time_format', 'start_of_week', 'posts_per_page', 'show_on_front', 'page_on_front', 'page_for_posts' );
 
 	/**
 	 * Filters the site settings exposed to AI agents. The set can only be NARROWED - the

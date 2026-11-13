@@ -33,7 +33,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_settings_definitions' );
 function aafm_register_settings_definitions( array $registry ): array {
 	$registry['aafm/get-site-settings']    = array(
 		'label'        => __( 'Get site settings', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Read a small allowlist of site settings: name, tagline, timezone, date and time formats, week start, and posts per page. Requires the manage-options capability. Never the site URL or admin email.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Read a small allowlist of site settings: name, tagline, timezone, date and time formats, week start, posts per page, and the static homepage (show_on_front, page_on_front, page_for_posts). Requires the manage-options capability. Never the site URL or admin email.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
@@ -41,7 +41,7 @@ function aafm_register_settings_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-site-settings'] = array(
 		'label'        => __( 'Update site settings', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Write a small allowlist of site settings, passed as a settings object whose keys are the setting names and values the new values. Accepted keys: blogname (site name), blogdescription (tagline), timezone_string, date_format, time_format, start_of_week (0-6), posts_per_page (1-100). String values are sanitized; the two integer settings are clamped into their legal ranges. Any unrecognized key rejects the entire call with nothing written. It can never change the site URL, admin email, default role, or open registration. Requires manage-options. Off by default.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Write a small allowlist of site settings, passed as a settings object whose keys are the setting names and values the new values. Accepted keys: blogname (site name), blogdescription (tagline), timezone_string, date_format, time_format, start_of_week (0-6), posts_per_page (1-100), and the static homepage: show_on_front (posts or page), page_on_front and page_for_posts (a published page id, or 0 for none). String values are sanitized; the two integer settings are clamped into their legal ranges. Any unrecognized key rejects the entire call with nothing written. The homepage keys are checked together before anything is written (the front page and posts page must differ, and show_on_front page needs a front page), then written in the order page_on_front, page_for_posts, show_on_front; if one does not land, the call returns an error listing the keys that landed, were unchanged and failed. It can never change the site URL, admin email, default role, or open registration. Requires manage-options. Off by default.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'site',
@@ -137,7 +137,7 @@ function aafm_args_update_site_settings(): array {
 			'properties'           => array(
 				'settings' => array(
 					'type'        => 'object',
-					'description' => __( 'A map of setting name to new value. Allowed keys: blogname, blogdescription, timezone_string, date_format, time_format, start_of_week, posts_per_page. Any other key rejects the whole call.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'A map of setting name to new value. Allowed keys: blogname, blogdescription, timezone_string, date_format, time_format, start_of_week, posts_per_page, show_on_front, page_on_front, page_for_posts. Any other key rejects the whole call.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'settings' ),
@@ -197,6 +197,18 @@ function aafm_exec_update_site_settings( array $input ) {
 				)
 			);
 		}
+	}
+
+	// The static homepage keys are one state: validate them together against the stored values,
+	// then move them to the end in the fixed write order, so show_on_front is written last and the
+	// site never shows a static page that was not saved first.
+	$homepage = array_values( array_intersect( aafm_static_homepage_keys(), array_map( 'strval', array_keys( $settings ) ) ) );
+	if ( array() !== $homepage ) {
+		$checked = aafm_static_homepage_checked( $settings );
+		if ( is_wp_error( $checked ) ) {
+			return $checked;
+		}
+		$settings = array_merge( array_diff_key( $settings, $checked ), $checked );
 	}
 
 	// Scalar-only with a string-type guard: a non-scalar value (array/object) is refused outright,
@@ -271,9 +283,32 @@ function aafm_exec_update_site_settings( array $input ) {
 	}
 
 	$updated = array();
+	$report  = array(
+		'landed'    => array(),
+		'unchanged' => array(),
+		'failed'    => array(),
+	);
 	foreach ( $settings as $key => $value ) {
 		$key = (string) $key;
-		aafm_option_write( $key, aafm_sanitize_site_setting( $key, $value ) );
+		if ( array() !== $report['failed'] && in_array( $key, $homepage, true ) ) {
+			// A homepage key did not land: the ones after it are not written.
+			$report['failed'][] = $key;
+			continue;
+		}
+		$intended = aafm_sanitize_site_setting( $key, $value );
+		$outcome  = aafm_option_write( $key, $intended );
+		if ( array() !== $homepage ) {
+			// Read back from the row, never the cache or the option filters, so the report is what is stored.
+			$row    = aafm_option_row( $key );
+			$stored = $row['ok'] && $row['found'] && aafm_option_value_matches( $row['value'], $intended );
+			if ( $stored && AAFM_WRITE_WRITTEN === $outcome['status'] ) {
+				$report['landed'][] = $key;
+			} elseif ( $stored && AAFM_WRITE_UNCHANGED === $outcome['status'] ) {
+				$report['unchanged'][] = $key;
+			} else {
+				$report['failed'][] = $key;
+			}
+		}
 		// Report the value the option layer gives back right after the write, rather than echoing
 		// the submission. That is what makes the clamp, the sanitize, and core's own escaping of a
 		// stored value visible to the agent, which is why the read-back is here.
@@ -300,7 +335,96 @@ function aafm_exec_update_site_settings( array $input ) {
 		$updated[ $key ] = get_option( $key );
 	}
 
-	return array( 'settings' => $updated );
+	if ( array() === $homepage ) {
+		return array( 'settings' => $updated );
+	}
+	if ( array() !== $report['failed'] ) {
+		return new WP_Error(
+			'aafm_settings_partial',
+			sprintf(
+				/* translators: 1: keys that were saved, 2: keys that already held the value, 3: keys that were not saved. "none" when a list is empty. */
+				__( 'Not every setting was saved. Saved: %1$s. Already set: %2$s. Not saved: %3$s. Check the homepage settings before trying again.', 'agent-abilities-for-mcp' ),
+				array() === $report['landed'] ? __( 'none', 'agent-abilities-for-mcp' ) : implode( ', ', $report['landed'] ),
+				array() === $report['unchanged'] ? __( 'none', 'agent-abilities-for-mcp' ) : implode( ', ', $report['unchanged'] ),
+				implode( ', ', $report['failed'] )
+			),
+			array_merge( array( 'status' => 500 ), $report )
+		);
+	}
+	return array_merge( array( 'settings' => $updated ), $report );
+}
+
+/**
+ * The static homepage settings, in the order they are written: show_on_front goes last.
+ *
+ * @return list<string>
+ */
+function aafm_static_homepage_keys(): array {
+	return array( 'page_on_front', 'page_for_posts', 'show_on_front' );
+}
+
+/**
+ * Validate the requested static homepage settings as one state, against the stored values for the
+ * keys the request leaves out. A page id must be 0 or a published page; the front page and the posts
+ * page must differ; and show_on_front page needs a front page.
+ *
+ * @param array<string,mixed> $settings The request's settings map.
+ * @return array<string,int|string>|WP_Error The requested homepage keys, cleaned, in write order.
+ */
+function aafm_static_homepage_checked( array $settings ) {
+	$clean = array();
+	foreach ( aafm_static_homepage_keys() as $key ) {
+		if ( ! array_key_exists( $key, $settings ) ) {
+			continue;
+		}
+		$value = $settings[ $key ];
+		if ( 'show_on_front' === $key ) {
+			if ( ! in_array( $value, array( 'posts', 'page' ), true ) ) {
+				return new WP_Error( 'aafm_setting_bad_type', __( 'show_on_front must be "posts" or "page", so nothing was changed.', 'agent-abilities-for-mcp' ), array( 'status' => 400 ) );
+			}
+			$clean[ $key ] = $value;
+			continue;
+		}
+		if ( ! is_int( $value ) && ! ( is_string( $value ) && 1 === preg_match( '/^\d+$/', $value ) ) ) {
+			return new WP_Error(
+				'aafm_setting_bad_type',
+				/* translators: %s: the setting key. */
+				sprintf( __( 'The setting "%s" takes a page id, or 0 for none, so nothing was changed.', 'agent-abilities-for-mcp' ), $key ),
+				array( 'status' => 400 )
+			);
+		}
+		$id   = (int) $value;
+		$page = $id > 0 ? aafm_exact_object( 'post', $id ) : null;
+		if ( $id > 0 && ! ( $page instanceof WP_Post && 'page' === $page->post_type && 'publish' === $page->post_status ) ) {
+			return new WP_Error(
+				'aafm_homepage_not_a_published_page',
+				/* translators: %s: the setting key. */
+				sprintf( __( 'The setting "%s" must name a published page, or 0 for none, so nothing was changed.', 'agent-abilities-for-mcp' ), $key ),
+				array( 'status' => 400 )
+			);
+		}
+		$clean[ $key ] = $id;
+	}
+
+	// The stored values come from their rows, so a stale cache copy cannot decide this.
+	$stored = array();
+	foreach ( aafm_static_homepage_keys() as $key ) {
+		$row = aafm_option_row( $key );
+		if ( ! $row['ok'] ) {
+			return aafm_generic_error();
+		}
+		$stored[ $key ] = $row['found'] && is_scalar( $row['value'] ) ? (string) $row['value'] : '';
+	}
+	$front = $clean['page_on_front'] ?? (int) $stored['page_on_front'];
+	$posts = $clean['page_for_posts'] ?? (int) $stored['page_for_posts'];
+	$show  = $clean['show_on_front'] ?? $stored['show_on_front'];
+	if ( $front > 0 && $front === $posts ) {
+		return new WP_Error( 'aafm_homepage_same_page', __( 'The front page and the posts page must be different pages, so nothing was changed.', 'agent-abilities-for-mcp' ), array( 'status' => 400 ) );
+	}
+	if ( 'page' === $show && 0 === $front && ( isset( $clean['show_on_front'] ) || isset( $clean['page_on_front'] ) ) ) {
+		return new WP_Error( 'aafm_homepage_no_front_page', __( 'Showing a static front page needs page_on_front set to a published page, so nothing was changed.', 'agent-abilities-for-mcp' ), array( 'status' => 400 ) );
+	}
+	return $clean;
 }
 
 /**
@@ -323,6 +447,9 @@ function aafm_sanitize_site_setting( string $key, $value ) {
 	if ( 'start_of_week' === $key ) {
 		// WordPress stores 0 (Sunday) .. 6 (Saturday); clamp so a 99 can never be persisted.
 		return min( 6, max( 0, (int) $value ) );
+	}
+	if ( 'page_on_front' === $key || 'page_for_posts' === $key ) {
+		return (int) $value; // Already proven a page id by aafm_static_homepage_checked().
 	}
 	// The site identity is the most feed-visible text on the whole site: blogname and
 	// blogdescription go straight into the RSS and Atom headers, so a raw NUL here breaks every

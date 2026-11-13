@@ -88,6 +88,14 @@ function aafm_avada_registry_definitions(): array {
 			'subject'      => 'avada',
 			'args_builder' => 'aafm_args_avada_get_global_options',
 		),
+		'aafm/avada-list-library'       => array(
+			'label'        => __( 'List the Avada library', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Lists Avada Library items: saved elements, columns, sections and post cards, and full-page templates. Returns id, title, status, kind (the library category, template for a template, or uncategorized), is_global and modified date, plus content, the raw Fusion Builder markup, only with include_content. A global item is shared, so editing it changes every page that shows it, and its text is edited in Avada\'s Library, not on the page (avada-get-page-content with include_structure gives the global_id of such an element). Response includes total (the query-wide count of matching items; each page omits items you lack edit access to, so total can exceed the rows returned). Requires the edit_posts capability. Only while Avada is active.', 'agent-abilities-for-mcp' ),
+			'group'        => 'reads',
+			'risk'         => 'read',
+			'subject'      => 'avada',
+			'args_builder' => 'aafm_args_avada_list_library',
+		),
 	);
 }
 
@@ -884,5 +892,175 @@ function aafm_exec_avada_get_global_options( array $input ) {
 		'option_name' => $name,
 		'options'     => (object) $options,
 		'not_set'     => $not_set,
+	);
+}
+
+/**
+ * Args for aafm/avada-list-library.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_avada_list_library(): array {
+	return array(
+		'label'               => aafm_ability_label( 'aafm/avada-list-library' ),
+		'description'         => aafm_ability_description( 'aafm/avada-list-library' ),
+		'category'            => 'aafm-reads',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array_merge(
+				aafm_pagination_schema_props(
+					100,
+					__( 'Number of items per page, clamped to the 1-100 range regardless of the value requested. Defaults to 20 when omitted.', 'agent-abilities-for-mcp' ),
+					__( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' )
+				),
+				array(
+					'kind'            => array(
+						'type'        => 'string',
+						'enum'        => array( 'all', 'elements', 'columns', 'sections', 'post_cards', 'templates' ),
+						'default'     => 'all',
+						'description' => __( 'Only one library category, or templates for full-page templates. Defaults to all.', 'agent-abilities-for-mcp' ),
+					),
+					'search'          => array(
+						'type'        => 'string',
+						'description' => __( 'Free-text search using WordPress\'s normal post search, matched against the item\'s title and content.', 'agent-abilities-for-mcp' ),
+					),
+					'include_content' => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => __( 'When true, each item also carries content, its raw Fusion Builder markup, unrendered.', 'agent-abilities-for-mcp' ),
+					),
+				)
+			),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'items' => array(
+					'type'  => 'array',
+					'items' => array(
+						'type'       => 'object',
+						'properties' => array(
+							'id'           => array( 'type' => 'integer' ),
+							'title'        => array( 'type' => 'string' ),
+							'status'       => array( 'type' => 'string' ),
+							'kind'         => array( 'type' => 'string' ),
+							'is_global'    => array( 'type' => 'boolean' ),
+							'modified_gmt' => array( 'type' => 'string' ),
+							'content'      => array( 'type' => 'string' ),
+						),
+					),
+				),
+				'total' => array( 'type' => 'integer' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_avada_list_library',
+		'permission_callback' => 'aafm_perm_blocks_floor',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => true,
+				'destructive' => false,
+				'idempotent'  => true,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/avada-list-library, the way aafm_exec_list_blocks() lists reusable blocks: paged,
+ * rows filtered to items the caller can edit, total as the query-wide count. Library items are
+ * fusion_element posts in an element_category term and fusion_template posts; a global item has
+ * _fusion_is_global = yes (Fusion_Builder_Library::create_layout()), read in a checked scope so a
+ * failed meta load is an error, never "not global".
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_avada_list_library( array $input ) {
+	$paging = aafm_paginate_args( $input + array( 'per_page' => 20 ), AAFM_TERMS_PER_PAGE_MAX );
+	$kind   = isset( $input['kind'] ) ? (string) $input['kind'] : 'all';
+
+	$query_args = array(
+		'post_type'              => array( 'fusion_element', 'fusion_template' ),
+		// pending too: create_layout() saves an item as pending for a user without publish_posts.
+		'post_status'            => array( 'publish', 'draft', 'pending', 'private' ),
+		'posts_per_page'         => $paging['per_page'],
+		'paged'                  => $paging['page'],
+		'no_found_rows'          => false,
+		// Core's own priming caches empty meta when its query fails; the checked primer below does not.
+		'update_post_meta_cache' => false,
+	);
+	if ( 'templates' === $kind ) {
+		$query_args['post_type'] = 'fusion_template';
+	} elseif ( in_array( $kind, array( 'elements', 'columns', 'sections', 'post_cards' ), true ) ) {
+		$query_args['post_type'] = 'fusion_element';
+		// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query -- one term on a small post type.
+		$query_args['tax_query'] = array(
+			array(
+				'taxonomy' => 'element_category',
+				'field'    => 'slug',
+				'terms'    => $kind,
+			),
+		);
+	}
+	$search = isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '';
+	if ( '' !== $search ) {
+		$query_args['s'] = $search;
+	}
+
+	$query = new WP_Query( $query_args );
+	aafm_prime_post_meta_checked( wp_list_pluck( (array) $query->posts, 'ID' ) );
+	$visible = array();
+	foreach ( (array) $query->posts as $row ) {
+		if ( ! $row instanceof WP_Post ) {
+			return aafm_generic_error();
+		}
+		$post = aafm_exact_object_chain( 'post', $row->ID );
+		if ( ! $post instanceof WP_Post ) {
+			return aafm_generic_error();
+		}
+		if ( ! aafm_user_can_checked( 'edit_post', $post->ID ) ) {
+			continue;
+		}
+		$kind_of = 'template';
+		if ( 'fusion_element' === $post->post_type ) {
+			$terms = get_the_terms( $post, 'element_category' );
+			if ( is_wp_error( $terms ) ) {
+				return aafm_generic_error();
+			}
+			$kind_of = is_array( $terms ) && isset( $terms[0] ) ? $terms[0]->slug : 'uncategorized';
+		}
+		$visible[] = array( $post, $kind_of );
+	}
+
+	$with_content = ! empty( $input['include_content'] );
+	$items        = aafm_with_checked_reads(
+		static function () use ( $visible, $with_content ): array {
+			$rows = array();
+			foreach ( $visible as list( $post, $kind_of ) ) {
+				$row = array(
+					'id'           => $post->ID,
+					'title'        => $post->post_title,
+					'status'       => $post->post_status,
+					'kind'         => $kind_of,
+					'is_global'    => 'yes' === aafm_meta_get( 'post', $post->ID, '_fusion_is_global', true ),
+					'modified_gmt' => $post->post_modified_gmt,
+				);
+				if ( $with_content ) {
+					$row['content'] = $post->post_content;
+				}
+				$rows[] = $row;
+			}
+			return $rows;
+		},
+		aafm_generic_error()
+	);
+	if ( is_wp_error( $items ) ) {
+		return $items;
+	}
+
+	return array(
+		'items' => $items,
+		'total' => (int) $query->found_posts,
 	);
 }

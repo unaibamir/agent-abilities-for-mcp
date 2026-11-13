@@ -423,6 +423,10 @@ function aafm_integration_ability_order(): array {
 				'name' => 'aafm/avada-get-global-options',
 				'risk' => 'read',
 			),
+			array(
+				'name' => 'aafm/avada-list-library',
+				'risk' => 'read',
+			),
 		),
 		'geodirectory'  => array(
 			array(

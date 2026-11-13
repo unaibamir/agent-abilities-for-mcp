@@ -120,6 +120,7 @@ final class CatalogFixture {
 		'aafm/avada-get-page-content',
 		'aafm/avada-list-layouts',
 		'aafm/avada-get-global-options',
+		'aafm/avada-list-library',
 		'aafm/geodirectory-get-listings',
 		'aafm/geodirectory-get-listing',
 	);

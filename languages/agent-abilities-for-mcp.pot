@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-13T16:40:23+05:00\n"
+"POT-Creation-Date: 2026-11-13T18:42:03+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -1170,28 +1170,28 @@ msgstr ""
 msgid "Navigation items can nest at most %d levels deep, so nothing was changed."
 msgstr ""
 
-#: includes/abilities/menus.php:1667
+#: includes/abilities/menus.php:1668
 msgid "ID of the navigation to replace, from list-navigations."
 msgstr ""
 
-#: includes/abilities/menus.php:1673
+#: includes/abilities/menus.php:1674
 msgid "The complete new list of links, in order. It replaces everything in the navigation, and each link is saved as a plain custom link without per-link settings such as open in a new tab. At least 1 and at most 100 items in all, counting nested ones; an empty list is refused."
 msgstr ""
 
-#: includes/abilities/menus.php:1678
+#: includes/abilities/menus.php:1679
 msgid "New name for the navigation. Sanitized as plain text. Omit to keep the current name."
 msgstr ""
 
-#: includes/abilities/menus.php:1723
+#: includes/abilities/menus.php:1724
 msgid "An empty list would remove every link from this navigation and cannot be undone here, so nothing was changed. Send at least one item."
 msgstr ""
 
-#: includes/abilities/menus.php:1730
-#: includes/abilities/menus.php:1739
+#: includes/abilities/menus.php:1731
+#: includes/abilities/menus.php:1740
 msgid "The navigation markup did not pass block validation, so nothing was changed."
 msgstr ""
 
-#: includes/abilities/menus.php:1769
+#: includes/abilities/menus.php:1770
 msgid "The navigation was saved, but what WordPress stored is not the list that was sent. Read it with list-navigations before trying again."
 msgstr ""
 
@@ -4366,7 +4366,7 @@ msgid "Filter the activity log"
 msgstr ""
 
 #: includes/admin/activity-log.php:154
-#: includes/admin/connection-cards.php:325
+#: includes/admin/connection-cards.php:327
 msgid "User"
 msgstr ""
 
@@ -4445,15 +4445,15 @@ msgstr ""
 #: includes/admin/bridge-directory.php:1026
 #: includes/admin/changes.php:338
 #: includes/admin/changes.php:551
-#: includes/admin/connection-cards.php:646
-#: includes/admin/connection-cards.php:724
-#: includes/admin/connection-cards.php:757
-#: includes/admin/connection-cards.php:962
-#: includes/admin/connection-cards.php:1029
+#: includes/admin/connection-cards.php:648
+#: includes/admin/connection-cards.php:726
+#: includes/admin/connection-cards.php:759
+#: includes/admin/connection-cards.php:964
+#: includes/admin/connection-cards.php:1031
 #: includes/admin/connection.php:614
-#: includes/admin/connection.php:656
-#: includes/admin/connection.php:691
-#: includes/admin/connection.php:750
+#: includes/admin/connection.php:659
+#: includes/admin/connection.php:694
+#: includes/admin/connection.php:757
 #: includes/admin/doctor.php:919
 #: includes/admin/notifications.php:312
 #: includes/admin/notifications.php:382
@@ -4570,8 +4570,8 @@ msgid "Choose a connection…"
 msgstr ""
 
 #: includes/admin/allowlist.php:367
-#: includes/admin/connection-cards.php:150
-#: includes/admin/connection-cards.php:337
+#: includes/admin/connection-cards.php:151
+#: includes/admin/connection-cards.php:339
 msgid "(unnamed client)"
 msgstr ""
 
@@ -4807,7 +4807,7 @@ msgid "Reverted"
 msgstr ""
 
 #: includes/admin/changes.php:44
-#: includes/admin/connection-cards.php:238
+#: includes/admin/connection-cards.php:239
 #: includes/admin/page.php:201
 msgid "Expired"
 msgstr ""
@@ -4918,8 +4918,8 @@ msgid "By"
 msgstr ""
 
 #: includes/admin/changes.php:262
-#: includes/admin/connection-cards.php:138
-#: includes/admin/connection-cards.php:331
+#: includes/admin/connection-cards.php:139
+#: includes/admin/connection-cards.php:333
 #: includes/admin/page.php:1603
 #: includes/admin/playbooks.php:196
 #: includes/privacy.php:181
@@ -4927,20 +4927,20 @@ msgid "Status"
 msgstr ""
 
 #: includes/admin/changes.php:263
-#: includes/admin/connection-cards.php:144
-#: includes/admin/connection-cards.php:914
+#: includes/admin/connection-cards.php:145
+#: includes/admin/connection-cards.php:916
 msgid "Action"
 msgstr ""
 
 #: includes/admin/changes.php:271
-#: includes/admin/connection-cards.php:314
+#: includes/admin/connection-cards.php:316
 #: includes/admin/page.php:335
 #: includes/admin/page.php:2861
 msgid "Previous"
 msgstr ""
 
 #: includes/admin/changes.php:272
-#: includes/admin/connection-cards.php:317
+#: includes/admin/connection-cards.php:319
 #: includes/admin/page.php:336
 #: includes/admin/page.php:2876
 msgid "Next"
@@ -5086,71 +5086,71 @@ msgstr ""
 msgid "When an AI app registers over OAuth, it shows up here."
 msgstr ""
 
-#: includes/admin/connection-cards.php:53
+#: includes/admin/connection-cards.php:54
 msgid "Active grants"
 msgstr ""
 
-#: includes/admin/connection-cards.php:54
+#: includes/admin/connection-cards.php:55
 msgid "Each row is one person who approved one app. Revoking signs that app out for that person at once."
 msgstr ""
 
-#: includes/admin/connection-cards.php:62
+#: includes/admin/connection-cards.php:63
 msgid "No active grants yet"
 msgstr ""
 
-#: includes/admin/connection-cards.php:63
+#: includes/admin/connection-cards.php:64
 msgid "When someone approves an AI app, the approval shows up here."
 msgstr ""
 
-#: includes/admin/connection-cards.php:133
+#: includes/admin/connection-cards.php:134
 msgid "Client"
 msgstr ""
 
-#: includes/admin/connection-cards.php:134
+#: includes/admin/connection-cards.php:135
 msgid "Client ID"
 msgstr ""
 
-#: includes/admin/connection-cards.php:135
+#: includes/admin/connection-cards.php:136
 msgid "Redirect URIs"
 msgstr ""
 
-#: includes/admin/connection-cards.php:136
-#: includes/admin/connection-cards.php:914
+#: includes/admin/connection-cards.php:137
+#: includes/admin/connection-cards.php:916
 msgid "Created"
 msgstr ""
 
-#: includes/admin/connection-cards.php:137
+#: includes/admin/connection-cards.php:138
 msgid "Active tokens"
 msgstr ""
 
-#: includes/admin/connection-cards.php:141
+#: includes/admin/connection-cards.php:142
 msgid "Marks this client as an AI agent connection rather than an ordinary human client, surfaced on the activity log."
 msgstr ""
 
-#: includes/admin/connection-cards.php:142
+#: includes/admin/connection-cards.php:143
 msgid "Agent"
 msgstr ""
 
-#: includes/admin/connection-cards.php:163
-#: includes/admin/connection.php:933
-#: includes/admin/connection.php:973
-#: includes/admin/connection.php:1035
+#: includes/admin/connection-cards.php:164
+#: includes/admin/connection.php:940
+#: includes/admin/connection.php:980
+#: includes/admin/connection.php:1042
 #: includes/admin/dashboard.php:559
 #: includes/admin/page.php:3238
 #: includes/admin/quickconnect.php:496
 msgid "Copy"
 msgstr ""
 
-#: includes/admin/connection-cards.php:164
+#: includes/admin/connection-cards.php:165
 msgid "Copy the full client ID"
 msgstr ""
 
-#: includes/admin/connection-cards.php:172
+#: includes/admin/connection-cards.php:173
 msgid "None"
 msgstr ""
 
-#: includes/admin/connection-cards.php:187
-#: includes/admin/connection-cards.php:236
+#: includes/admin/connection-cards.php:188
+#: includes/admin/connection-cards.php:237
 #: includes/admin/integrations.php:450
 #: includes/admin/page.php:165
 #: includes/admin/page.php:199
@@ -5159,295 +5159,295 @@ msgstr ""
 msgid "Active"
 msgstr ""
 
-#: includes/admin/connection-cards.php:189
-#: includes/admin/connection-cards.php:208
+#: includes/admin/connection-cards.php:190
+#: includes/admin/connection-cards.php:209
 msgid "Revoked"
 msgstr ""
 
-#: includes/admin/connection-cards.php:197
+#: includes/admin/connection-cards.php:198
 msgid "Agent identity"
 msgstr ""
 
-#: includes/admin/connection-cards.php:205
-#: includes/admin/connection-cards.php:434
-#: includes/admin/connection-cards.php:930
+#: includes/admin/connection-cards.php:206
+#: includes/admin/connection-cards.php:436
+#: includes/admin/connection-cards.php:932
 msgid "Revoke"
 msgstr ""
 
-#: includes/admin/connection-cards.php:237
+#: includes/admin/connection-cards.php:238
 #: includes/admin/page.php:200
 msgid "Paused"
 msgstr ""
 
-#. translators: %s: number of token rows.
-#: includes/admin/connection-cards.php:261
+#. translators: 1: number of token rows, 2: this site's MCP endpoint address.
+#: includes/admin/connection-cards.php:262
 #, php-format
-msgid "%s token was issued for an old address of this site, so it can no longer connect. The people who approved that app reconnect from their client. Ending old tokens removes no one's approval."
-msgid_plural "%s tokens were issued for an old address of this site, so they can no longer connect. The people who approved those apps reconnect from their client. Ending old tokens removes no one's approval."
+msgid "%1$s token was issued for an old address of this site, so it can no longer connect. To connect again, each person who approved that app has to remove the connector and add it again with this address: %2$s. Ending old tokens removes no one's approval."
+msgid_plural "%1$s tokens were issued for an old address of this site, so they can no longer connect. To connect again, each person who approved those apps has to remove the connector and add it again with this address: %2$s. Ending old tokens removes no one's approval."
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/admin/connection-cards.php:272
+#: includes/admin/connection-cards.php:274
 msgid "End old tokens"
 msgstr ""
 
 #. translators: 1: preset name, 2: abilities it reaches, 3: abilities switched on.
-#: includes/admin/connection-cards.php:287
+#: includes/admin/connection-cards.php:289
 #, php-format
 msgid "%1$s (up to %2$d of %3$d)"
 msgstr ""
 
 #. translators: 1: first row shown, 2: last row shown, 3: total grants.
-#: includes/admin/connection-cards.php:306
+#: includes/admin/connection-cards.php:308
 #, php-format
 msgid "Showing %1$s to %2$s of %3$s"
 msgstr ""
 
-#: includes/admin/connection-cards.php:321
+#: includes/admin/connection-cards.php:323
 msgid "Active grants pages"
 msgstr ""
 
-#: includes/admin/connection-cards.php:328
+#: includes/admin/connection-cards.php:330
 msgid "The user's role right now, not necessarily what it was when they approved this connection. A token always acts with whatever this identity can currently do."
 msgstr ""
 
-#: includes/admin/connection-cards.php:329
+#: includes/admin/connection-cards.php:331
 msgid "Current role"
 msgstr ""
 
-#: includes/admin/connection-cards.php:331
+#: includes/admin/connection-cards.php:333
 msgid "App"
 msgstr ""
 
-#: includes/admin/connection-cards.php:331
+#: includes/admin/connection-cards.php:333
 msgid "Access"
 msgstr ""
 
-#: includes/admin/connection-cards.php:331
-#: includes/admin/connection-cards.php:914
+#: includes/admin/connection-cards.php:333
+#: includes/admin/connection-cards.php:916
 msgid "Last used"
 msgstr ""
 
-#: includes/admin/connection-cards.php:331
+#: includes/admin/connection-cards.php:333
 msgid "Ends"
 msgstr ""
 
-#: includes/admin/connection-cards.php:331
+#: includes/admin/connection-cards.php:333
 msgid "Limit"
 msgstr ""
 
-#: includes/admin/connection-cards.php:331
+#: includes/admin/connection-cards.php:333
 #: includes/admin/playbooks.php:196
 msgid "Actions"
 msgstr ""
 
 #. translators: 1: user login, 2: app name.
-#: includes/admin/connection-cards.php:339
+#: includes/admin/connection-cards.php:341
 #, php-format
 msgctxt "OAuth grant: user login, app name"
 msgid "%1$s, %2$s"
 msgstr ""
 
-#: includes/admin/connection-cards.php:362
+#: includes/admin/connection-cards.php:364
 msgid "No role"
 msgstr ""
 
-#: includes/admin/connection-cards.php:368
+#: includes/admin/connection-cards.php:370
 msgid "This connection currently acts with full administrator access."
 msgstr ""
 
-#: includes/admin/connection-cards.php:369
+#: includes/admin/connection-cards.php:371
 msgid "This connection acts with elevated permissions."
 msgstr ""
 
 #. translators: %s: user login and app name.
-#: includes/admin/connection-cards.php:381
+#: includes/admin/connection-cards.php:383
 #, php-format
 msgid "Access for %s"
 msgstr ""
 
-#: includes/admin/connection-cards.php:388
-#: includes/admin/connection-cards.php:919
+#: includes/admin/connection-cards.php:390
+#: includes/admin/connection-cards.php:921
 msgid "Never"
 msgstr ""
 
 #. translators: %s: user login and app name.
-#: includes/admin/connection-cards.php:398
+#: includes/admin/connection-cards.php:400
 #, php-format
 msgid "End date for %s"
 msgstr ""
 
-#: includes/admin/connection-cards.php:402
+#: includes/admin/connection-cards.php:404
 msgid "inherit"
 msgstr ""
 
 #. translators: %s: user login and app name.
-#: includes/admin/connection-cards.php:405
+#: includes/admin/connection-cards.php:407
 #, php-format
 msgid "Calls a minute for %s"
 msgstr ""
 
 #. translators: %s: user login and app name.
-#: includes/admin/connection-cards.php:415
+#: includes/admin/connection-cards.php:417
 #, php-format
 msgid "Save changes for %s"
 msgstr ""
 
-#: includes/admin/connection-cards.php:416
-#: includes/admin/connection-cards.php:620
+#: includes/admin/connection-cards.php:418
+#: includes/admin/connection-cards.php:622
 msgid "Save"
 msgstr ""
 
 #. translators: %s: user login and app name.
-#: includes/admin/connection-cards.php:424
+#: includes/admin/connection-cards.php:426
 #: includes/admin/page.php:207
 #, php-format
 msgid "Resume %s"
 msgstr ""
 
 #. translators: %s: user login and app name.
-#: includes/admin/connection-cards.php:424
+#: includes/admin/connection-cards.php:426
 #: includes/admin/page.php:205
 #, php-format
 msgid "Pause %s"
 msgstr ""
 
-#: includes/admin/connection-cards.php:425
+#: includes/admin/connection-cards.php:427
 #: includes/admin/page.php:203
 msgid "Resume"
 msgstr ""
 
-#: includes/admin/connection-cards.php:425
+#: includes/admin/connection-cards.php:427
 #: includes/admin/page.php:202
 msgid "Pause"
 msgstr ""
 
 #. translators: %s: user login and app name.
-#: includes/admin/connection-cards.php:433
+#: includes/admin/connection-cards.php:435
 #, php-format
 msgctxt "OAuth grant button label"
 msgid "Revoke %s"
 msgstr ""
 
-#: includes/admin/connection-cards.php:444
+#: includes/admin/connection-cards.php:446
 msgid "Active grants pages, below the table"
 msgstr ""
 
-#: includes/admin/connection-cards.php:445
+#: includes/admin/connection-cards.php:447
 msgid "Access presets only narrow what you have switched on under Abilities. They never add anything."
 msgstr ""
 
 #. translators: %d: the site-wide calls-a-minute limit.
-#: includes/admin/connection-cards.php:448
+#: includes/admin/connection-cards.php:450
 #, php-format
 msgid "A connection limit cannot go above the site limit (%d)."
 msgstr ""
 
-#: includes/admin/connection-cards.php:472
+#: includes/admin/connection-cards.php:474
 #: includes/admin/page.php:347
 #: includes/admin/quickconnect.php:711
 #: includes/admin/settings.php:1051
 msgid "OAuth"
 msgstr ""
 
-#: includes/admin/connection-cards.php:473
-#: includes/admin/connection-cards.php:883
+#: includes/admin/connection-cards.php:475
+#: includes/admin/connection-cards.php:885
 #: includes/admin/doctor.php:569
 msgid "Application Passwords"
 msgstr ""
 
-#: includes/admin/connection-cards.php:477
+#: includes/admin/connection-cards.php:479
 msgid "How agents connect"
 msgstr ""
 
-#: includes/admin/connection-cards.php:569
+#: includes/admin/connection-cards.php:571
 msgid "days"
 msgstr ""
 
-#: includes/admin/connection-cards.php:570
+#: includes/admin/connection-cards.php:572
 msgid "hours"
 msgstr ""
 
-#: includes/admin/connection-cards.php:571
+#: includes/admin/connection-cards.php:573
 msgid "minutes"
 msgstr ""
 
 #. translators: %s: which lifetime, for example "Access token lifetime".
-#: includes/admin/connection-cards.php:594
+#: includes/admin/connection-cards.php:596
 #, php-format
 msgid "%s unit"
 msgstr ""
 
 #. translators: %s: the default lifetime, for example "1 hour".
-#: includes/admin/connection-cards.php:597
+#: includes/admin/connection-cards.php:599
 #, php-format
 msgid "Default: %s"
 msgstr ""
 
-#: includes/admin/connection-cards.php:608
-#: includes/admin/connection-cards.php:670
+#: includes/admin/connection-cards.php:610
+#: includes/admin/connection-cards.php:672
 msgid "Access token lifetime"
 msgstr ""
 
-#: includes/admin/connection-cards.php:609
-#: includes/admin/connection-cards.php:671
+#: includes/admin/connection-cards.php:611
+#: includes/admin/connection-cards.php:673
 msgid "Refresh token lifetime"
 msgstr ""
 
-#: includes/admin/connection-cards.php:612
-#: includes/admin/connection-cards.php:665
-#: includes/admin/connection-cards.php:695
+#: includes/admin/connection-cards.php:614
+#: includes/admin/connection-cards.php:667
+#: includes/admin/connection-cards.php:697
 msgid "Dynamic client registration"
 msgstr ""
 
-#: includes/admin/connection-cards.php:615
+#: includes/admin/connection-cards.php:617
 msgid "Let agents register themselves. ChatGPT and Claude need this to connect."
 msgstr ""
 
-#: includes/admin/connection-cards.php:616
+#: includes/admin/connection-cards.php:618
 msgid "Turning this off closes a public endpoint that anyone can reach without logging in. New connections from apps that register themselves fail until you turn it back on."
 msgstr ""
 
-#: includes/admin/connection-cards.php:628
+#: includes/admin/connection-cards.php:630
 msgid "Token lifetimes and client registration"
 msgstr ""
 
-#: includes/admin/connection-cards.php:629
+#: includes/admin/connection-cards.php:631
 msgid "Applies to tokens issued from now on. Lowering a lifetime does not shorten tokens already issued; Revoke on the grants card below ends a connection at once."
 msgstr ""
 
-#: includes/admin/connection-cards.php:659
+#: includes/admin/connection-cards.php:661
 msgid "Use whole numbers. The access token lifetime runs from 5 minutes to 24 hours, the refresh token lifetime from 1 hour to 90 days, and the access token must be shorter than the refresh token."
 msgstr ""
 
-#: includes/admin/connection-cards.php:667
+#: includes/admin/connection-cards.php:669
 msgid "Dynamic client registration turned off"
 msgstr ""
 
 #. translators: 1: which lifetime, 2: old value, 3: new value.
-#: includes/admin/connection-cards.php:686
+#: includes/admin/connection-cards.php:688
 #, php-format
 msgid "%1$s changed from %2$s to %3$s"
 msgstr ""
 
-#: includes/admin/connection-cards.php:695
+#: includes/admin/connection-cards.php:697
 msgid "The token lifetimes"
 msgstr ""
 
-#: includes/admin/connection-cards.php:697
+#: includes/admin/connection-cards.php:699
 msgid "Dynamic client registration turned on"
 msgstr ""
 
-#: includes/admin/connection-cards.php:728
+#: includes/admin/connection-cards.php:730
 msgid "Could not end the tokens issued for an old site address"
 msgstr ""
 
-#: includes/admin/connection-cards.php:729
+#: includes/admin/connection-cards.php:731
 msgid "Could not end the old tokens. Please try again."
 msgstr ""
 
 #. translators: %d: number of token rows.
-#: includes/admin/connection-cards.php:732
+#: includes/admin/connection-cards.php:734
 #, php-format
 msgid "Ended %d token issued for an old site address"
 msgid_plural "Ended %d tokens issued for an old site address"
@@ -5455,157 +5455,157 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %s: number of token rows.
-#: includes/admin/connection-cards.php:738
+#: includes/admin/connection-cards.php:740
 #, php-format
 msgid "Ended %s token issued for an old address of this site."
 msgid_plural "Ended %s tokens issued for an old address of this site."
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/admin/connection-cards.php:740
+#: includes/admin/connection-cards.php:742
 msgid "Reload the page to update the Active tokens counts."
 msgstr ""
 
-#: includes/admin/connection-cards.php:769
-#: includes/admin/connection.php:698
+#: includes/admin/connection-cards.php:771
+#: includes/admin/connection.php:701
 msgid "Missing grant."
 msgstr ""
 
-#: includes/admin/connection-cards.php:771
-#: includes/admin/connection-cards.php:1034
+#: includes/admin/connection-cards.php:773
+#: includes/admin/connection-cards.php:1036
 msgid "That value is not allowed."
 msgstr ""
 
-#: includes/admin/connection-cards.php:781
+#: includes/admin/connection-cards.php:783
 msgid "Connection paused"
 msgstr ""
 
-#: includes/admin/connection-cards.php:781
+#: includes/admin/connection-cards.php:783
 msgid "Connection resumed"
 msgstr ""
 
-#: includes/admin/connection-cards.php:789
+#: includes/admin/connection-cards.php:791
 msgid "This connection was changed in another tab or by another admin. Reload the page to see the current settings."
 msgstr ""
 
 #. translators: %s: access preset name, for example "Read only".
-#: includes/admin/connection-cards.php:805
+#: includes/admin/connection-cards.php:807
 #, php-format
 msgid "Access preset changed to %s"
 msgstr ""
 
-#: includes/admin/connection-cards.php:813
+#: includes/admin/connection-cards.php:815
 msgid "End date removed"
 msgstr ""
 
-#: includes/admin/connection-cards.php:818
+#: includes/admin/connection-cards.php:820
 msgid "Pick a date in the future. To stop a connection now, pause or revoke it."
 msgstr ""
 
 #. translators: %s: the end date, Y-m-d.
-#: includes/admin/connection-cards.php:822
+#: includes/admin/connection-cards.php:824
 #, php-format
 msgid "End date set to %s"
 msgstr ""
 
-#: includes/admin/connection-cards.php:831
+#: includes/admin/connection-cards.php:833
 msgid "Rate limit override removed"
 msgstr ""
 
 #. translators: %d: calls per minute.
-#: includes/admin/connection-cards.php:835
+#: includes/admin/connection-cards.php:837
 #, php-format
 msgid "Rate limit set to %d a minute"
 msgstr ""
 
-#: includes/admin/connection-cards.php:837
+#: includes/admin/connection-cards.php:839
 msgid "Use a whole number from 1 to 10,000 calls a minute, or leave it empty to use the site limit."
 msgstr ""
 
-#: includes/admin/connection-cards.php:842
+#: includes/admin/connection-cards.php:844
 msgid "Nothing to change."
 msgstr ""
 
-#: includes/admin/connection-cards.php:845
+#: includes/admin/connection-cards.php:847
 msgid "The change did not take. Reload the page and try again."
 msgstr ""
 
-#: includes/admin/connection-cards.php:884
+#: includes/admin/connection-cards.php:886
 msgid "Application Passwords on the agent users this plugin created. Revoke any you no longer use."
 msgstr ""
 
-#: includes/admin/connection-cards.php:889
+#: includes/admin/connection-cards.php:891
 msgid "No Application Passwords yet"
 msgstr ""
 
-#: includes/admin/connection-cards.php:890
+#: includes/admin/connection-cards.php:892
 msgid "Create the agent user in Step 1 below, then add an Application Password on its profile (Users, Profile, Application Passwords)."
 msgstr ""
 
-#: includes/admin/connection-cards.php:914
+#: includes/admin/connection-cards.php:916
 msgid "Name"
 msgstr ""
 
-#: includes/admin/connection-cards.php:914
+#: includes/admin/connection-cards.php:916
 #: includes/admin/page.php:1605
 msgid "IP"
 msgstr ""
 
 #. translators: %s: Application Password name.
-#: includes/admin/connection-cards.php:929
+#: includes/admin/connection-cards.php:931
 #, php-format
 msgctxt "Application Password button label"
 msgid "Revoke %s"
 msgstr ""
 
-#: includes/admin/connection-cards.php:938
+#: includes/admin/connection-cards.php:940
 msgid "Passwords on other accounts are managed on each user's profile."
 msgstr ""
 
-#: includes/admin/connection-cards.php:940
+#: includes/admin/connection-cards.php:942
 #: includes/admin/page.php:1852
 msgid "Users"
 msgstr ""
 
-#: includes/admin/connection-cards.php:970
+#: includes/admin/connection-cards.php:972
 msgid "That Application Password cannot be revoked here."
 msgstr ""
 
-#: includes/admin/connection-cards.php:974
+#: includes/admin/connection-cards.php:976
 msgid "Could not revoke the Application Password. Please try again."
 msgstr ""
 
 #. translators: %d: user ID.
-#: includes/admin/connection-cards.php:977
+#: includes/admin/connection-cards.php:979
 #, php-format
 msgid "Application Password revoked (user ID %d)"
 msgstr ""
 
-#: includes/admin/connection-cards.php:994
+#: includes/admin/connection-cards.php:996
 msgid "All MCP access through this site is paused. Agents get a refusal until you resume it below."
 msgstr ""
 
-#: includes/admin/connection-cards.php:1009
-#: includes/admin/connection-cards.php:1015
-#: includes/admin/connection-cards.php:1039
+#: includes/admin/connection-cards.php:1011
+#: includes/admin/connection-cards.php:1017
+#: includes/admin/connection-cards.php:1041
 #: includes/admin/page.php:210
 msgid "Pause all access"
 msgstr ""
 
-#: includes/admin/connection-cards.php:1010
+#: includes/admin/connection-cards.php:1012
 msgid "Stops all MCP access through this site at once: this plugin's endpoint and the MCP adapter's default server, for OAuth apps and Application Passwords alike. Nothing is deleted; resume to carry on. Application Passwords still work with the rest of the WordPress REST API; this switch does not close that."
 msgstr ""
 
-#: includes/admin/connection-cards.php:1015
+#: includes/admin/connection-cards.php:1017
 #: includes/admin/page.php:211
 msgid "Resume all access"
 msgstr ""
 
-#: includes/admin/connection-cards.php:1042
+#: includes/admin/connection-cards.php:1044
 msgid "All access paused"
 msgstr ""
 
-#: includes/admin/connection-cards.php:1042
+#: includes/admin/connection-cards.php:1044
 msgid "All access resumed"
 msgstr ""
 
@@ -5716,11 +5716,11 @@ msgid "For any client that speaks MCP over the mcp-wordpress-remote proxy, use t
 msgstr ""
 
 #: includes/admin/connection.php:547
-msgid "Turn on Developer mode in ChatGPT settings, then add a custom connector: give it a name, paste the endpoint URL as the MCP server URL, create it, and approve the sign-in. Developer mode needs a paid ChatGPT plan."
+msgid "On ChatGPT web, open Plugins, select the plus button, then Add custom MCP server. Name it, paste the endpoint URL under Connection, choose OAuth, tick the risk acknowledgment, select Create as a plugin, and approve the sign-in. You don't need to turn on Developer Mode first."
 msgstr ""
 
 #: includes/admin/connection.php:549
-msgid "Open Settings, then Connectors, add a custom connector, paste the endpoint URL, and approve the sign-in. The claude.ai web app and Claude Desktop use the same flow."
+msgid "Open Customize, then Connectors, choose + Add, then Add custom connector, paste the endpoint URL, and approve the sign-in. The claude.ai web app and Claude Desktop use the same flow."
 msgstr ""
 
 #: includes/admin/connection.php:551
@@ -5756,167 +5756,183 @@ msgid "You are not allowed to create users."
 msgstr ""
 
 #: includes/admin/connection.php:619
-#: includes/admin/connection.php:661
+#: includes/admin/connection.php:664
 msgid "Missing client."
 msgstr ""
 
-#: includes/admin/connection.php:638
+#: includes/admin/connection.php:639
+msgid "Could not revoke the app"
+msgstr ""
+
+#: includes/admin/connection.php:640
 msgid "Could not fully revoke the client. Please try again."
 msgstr ""
 
-#: includes/admin/connection.php:668
+#: includes/admin/connection.php:643
+msgid "App revoked"
+msgstr ""
+
+#: includes/admin/connection.php:671
 msgid "Client not found."
 msgstr ""
 
-#: includes/admin/connection.php:717
+#: includes/admin/connection.php:721
+msgid "Could not revoke the grant"
+msgstr ""
+
+#: includes/admin/connection.php:722
 msgid "Could not fully revoke the grant. Please try again."
 msgstr ""
 
-#: includes/admin/connection.php:753
+#: includes/admin/connection.php:725
+msgid "Grant revoked"
+msgstr ""
+
+#: includes/admin/connection.php:760
 msgid "Access to this site is paused. Resume it on this tab, then check again."
 msgstr ""
 
-#: includes/admin/connection.php:871
+#: includes/admin/connection.php:878
 msgid "Your operating system"
 msgstr ""
 
-#: includes/admin/connection.php:878
+#: includes/admin/connection.php:885
 msgid "macOS / Linux"
 msgstr ""
 
-#: includes/admin/connection.php:882
-#: includes/admin/connection.php:1249
+#: includes/admin/connection.php:889
+#: includes/admin/connection.php:1256
 msgid "Windows"
 msgstr ""
 
-#: includes/admin/connection.php:888
+#: includes/admin/connection.php:895
 msgid "Your client"
 msgstr ""
 
-#: includes/admin/connection.php:964
+#: includes/admin/connection.php:971
 #: includes/admin/dashboard.php:550
 msgid "MCP endpoint"
 msgstr ""
 
-#: includes/admin/connection.php:974
-#: includes/admin/connection.php:1036
+#: includes/admin/connection.php:981
+#: includes/admin/connection.php:1043
 msgid "Copy the MCP endpoint URL"
 msgstr ""
 
-#: includes/admin/connection.php:986
+#: includes/admin/connection.php:993
 msgid "Connect with OAuth"
 msgstr ""
 
-#: includes/admin/connection.php:986
+#: includes/admin/connection.php:993
 msgid "Recommended"
 msgstr ""
 
-#: includes/admin/connection.php:990
+#: includes/admin/connection.php:997
 msgid "Paste your site's MCP endpoint URL into your agent. It opens a browser tab for approval - no secret to put in your config file."
 msgstr ""
 
-#: includes/admin/connection.php:1000
+#: includes/admin/connection.php:1007
 msgid "If a security or membership plugin on this site restricts the WordPress REST API to logged-in users, OAuth connections will fail: an agent has to reach the sign-in and token steps before it is logged in. Application Passwords are not affected. If a connection never completes, check your REST API restrictions first."
 msgstr ""
 
-#: includes/admin/connection.php:1055
+#: includes/admin/connection.php:1062
 msgid "Your site looks local. If the client throws a certificate error, use the bridge snippet below and point NODE_EXTRA_CA_CERTS at your mkcert root CA."
 msgstr ""
 
-#: includes/admin/connection.php:1059
+#: includes/admin/connection.php:1066
 msgid "Need a local server instead? Use the mcp-remote bridge."
 msgstr ""
 
-#: includes/admin/connection.php:1084
+#: includes/admin/connection.php:1091
 msgid "OAuth is turned off. Enable it under Settings to use the browser-approval flow, or connect with an Application Password below."
 msgstr ""
 
 #. translators: %s: comma-separated list of hosted client names, e.g. "ChatGPT, Claude, and Manus".
-#: includes/admin/connection.php:1104
+#: includes/admin/connection.php:1111
 #, php-format
 msgid "%s connect over OAuth only, so they need OAuth turned on - the Application Password path below will not work for them."
 msgstr ""
 
-#: includes/admin/connection.php:1135
+#: includes/admin/connection.php:1142
 msgid "Connect with an Application Password"
 msgstr ""
 
-#: includes/admin/connection.php:1144
+#: includes/admin/connection.php:1151
 msgid "An Application Password is a whole-site WordPress credential, not something this plugin can scope down. It authenticates the connected user across all of WordPress, including the REST API and XML-RPC, with everything that user's role allows, not only the abilities you turn on below. The allowlist, the high-risk floor, and the activity log on this plugin's tabs all apply to calls made through this MCP endpoint only, never to anything done with the same password elsewhere. OAuth above does not have this limit: a token this plugin issues only ever authenticates this one endpoint."
 msgstr ""
 
-#: includes/admin/connection.php:1176
+#: includes/admin/connection.php:1183
 #: includes/admin/quickconnect.php:516
 msgid "Create a dedicated agent user"
 msgstr ""
 
-#: includes/admin/connection.php:1177
+#: includes/admin/connection.php:1184
 msgid "Give the agent its own user with the least privilege it needs. It can only do what that user's role allows, and every ability is off until you turn it on."
 msgstr ""
 
-#: includes/admin/connection.php:1184
+#: includes/admin/connection.php:1191
 #: includes/admin/dashboard.php:388
 msgid "Done"
 msgstr ""
 
 #. translators: %s: the agent user's login.
-#: includes/admin/connection.php:1188
+#: includes/admin/connection.php:1195
 #, php-format
 msgid "The %s user already exists, so you can move straight to connecting your client."
 msgstr ""
 
-#: includes/admin/connection.php:1197
+#: includes/admin/connection.php:1204
 #: includes/admin/page.php:220
 msgid "Edit user"
 msgstr ""
 
-#: includes/admin/connection.php:1204
+#: includes/admin/connection.php:1211
 #: includes/admin/quickconnect.php:519
 msgid "Agent username"
 msgstr ""
 
-#: includes/admin/connection.php:1204
+#: includes/admin/connection.php:1211
 #: includes/admin/quickconnect.php:520
 msgid "Create agent user"
 msgstr ""
 
-#: includes/admin/connection.php:1212
+#: includes/admin/connection.php:1219
 msgid "Connect your client"
 msgstr ""
 
-#: includes/admin/connection.php:1213
+#: includes/admin/connection.php:1220
 msgid "Generate an Application Password for the agent user (Users → Profile → Application Passwords), pick your client, then copy the config."
 msgstr ""
 
-#: includes/admin/connection.php:1237
+#: includes/admin/connection.php:1244
 msgid "On Windows the launcher is wrapped in <code>cmd /c</code> so the <code>npx</code> command resolves - use the Windows tab above."
 msgstr ""
 
-#: includes/admin/connection.php:1239
+#: includes/admin/connection.php:1246
 msgid "If your site uses a self-signed or locally-trusted certificate (DDEV, Local, Valet), Node rejects it by default; add <code>\"NODE_TLS_REJECT_UNAUTHORIZED\": \"0\"</code> to <code>env</code> for local testing only, never on a production site."
 msgstr ""
 
-#: includes/admin/connection.php:1241
+#: includes/admin/connection.php:1248
 msgid "This site looks local, so that line is already included above."
 msgstr ""
 
-#: includes/admin/connection.php:1254
+#: includes/admin/connection.php:1261
 msgid "Certificate"
 msgstr ""
 
-#: includes/admin/connection.php:1269
+#: includes/admin/connection.php:1276
 msgid "Show config for a specific client"
 msgstr ""
 
-#: includes/admin/connection.php:1291
+#: includes/admin/connection.php:1298
 msgid "Check the endpoint is reachable"
 msgstr ""
 
-#: includes/admin/connection.php:1292
+#: includes/admin/connection.php:1299
 msgid "This confirms the endpoint answers from your server. It checks as the current admin, so the tool count shown is your view - your agent connects as the low-privilege user above and will usually see fewer tools."
 msgstr ""
 
-#: includes/admin/connection.php:1299
+#: includes/admin/connection.php:1306
 msgid "Check endpoint"
 msgstr ""
 
@@ -6746,7 +6762,7 @@ msgid "Updates an existing GeoDirectory listing's title, content, or address/coo
 msgstr ""
 
 #: includes/admin/doctor.php:80
-msgid "WordPress answered 401 before this plugin could reply, so something requires a login for the whole REST API. Agents cannot finish connecting while that is on. A membership or security plugin is the usual cause, and on such a site even a correct Application Password gets this 401."
+msgid "WordPress answered 401 before this plugin could reply, so something requires a login for the whole REST API. AI apps that sign in with OAuth cannot finish connecting while that is on. A membership or security plugin is the usual cause. A request with a correct Application Password is signed in, so it is not refused this way."
 msgstr ""
 
 #: includes/admin/doctor.php:87
@@ -6931,7 +6947,7 @@ msgid "Permalinks"
 msgstr ""
 
 #: includes/admin/doctor.php:616
-msgid "Permalinks are set to Plain. The endpoint address then carries ?rest_route= and some clients and discovery documents fail. Pick any other structure under Settings, Permalinks. Use this exact endpoint address in your agent:"
+msgid "Permalinks are set to Plain. The endpoint address then carries ?rest_route= and some clients and discovery documents fail. Pick any other structure under Settings, Permalinks. Switching changes the endpoint address, so every OAuth connection ends and each app has to be removed and added again with the new address this row shows after you save. Use this exact endpoint address in your agent until you switch:"
 msgstr ""
 
 #: includes/admin/doctor.php:619
@@ -8487,7 +8503,7 @@ msgid "401"
 msgstr ""
 
 #: includes/admin/page.php:3360
-msgid "reached WordPress but auth failed: wrong or expired Application Password, or the Authorization header is being stripped (see the Authentication section). On a site whose membership or security plugin keeps the REST API to signed-in members, even a correct password gets 401; run the Connection Doctor on the Connection tab, which names the plugins it recognises."
+msgid "reached WordPress but auth failed: wrong or expired Application Password, or the Authorization header is being stripped (see the Authentication section). A membership or security plugin that keeps the REST API to signed-in members stops OAuth sign-in, not a correct Application Password; the Connection Doctor on the Connection tab names the plugins it recognises."
 msgstr ""
 
 #: includes/admin/page.php:3361
@@ -8695,7 +8711,7 @@ msgid "Which AI clients work, and how do I set each one up?"
 msgstr ""
 
 #: includes/admin/page.php:3521
-msgid "Clients connect in one of two ways. Browser and hosted apps (ChatGPT, Claude, and Manus) connect over OAuth: you paste the site's MCP endpoint URL into the app as a custom connector and approve the sign-in, with no config file to edit. Editors and command-line clients (Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI) connect through the @automattic/mcp-wordpress-remote proxy, the package the Connection tab puts in the generated config. The proxy reads your endpoint URL and the agent user's Application Password and builds the auth itself."
+msgid "Clients connect in one of two ways. Browser and hosted apps (ChatGPT, Claude, and Manus) connect over OAuth: you paste the site's MCP endpoint URL into the app (a custom MCP server in ChatGPT, a custom connector in Claude) and approve the sign-in, with no config file to edit. Editors and command-line clients (Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI) connect through the @automattic/mcp-wordpress-remote proxy, the package the Connection tab puts in the generated config. The proxy reads your endpoint URL and the agent user's Application Password and builds the auth itself."
 msgstr ""
 
 #: includes/admin/page.php:3523
@@ -8703,7 +8719,7 @@ msgid "ChatGPT:"
 msgstr ""
 
 #: includes/admin/page.php:3523
-msgid "turn on Developer mode (it needs a paid plan), add a custom connector, paste the endpoint URL, and approve the sign-in. ChatGPT calls this a connector rather than MCP."
+msgid "on ChatGPT web, open Plugins, select the plus button, then Add custom MCP server, paste the endpoint URL under Connection, choose OAuth, and approve the sign-in. You don't need to turn on Developer Mode first."
 msgstr ""
 
 #: includes/admin/page.php:3524
@@ -8711,7 +8727,7 @@ msgid "Claude:"
 msgstr ""
 
 #: includes/admin/page.php:3524
-msgid "in Settings → Connectors, add a custom connector, paste the endpoint URL, and approve the sign-in. The claude.ai web app and Claude Desktop use the same flow."
+msgid "open Customize, then Connectors, choose + Add, then Add custom connector, paste the endpoint URL, and approve the sign-in. The claude.ai web app and Claude Desktop use the same flow."
 msgstr ""
 
 #: includes/admin/page.php:3525
@@ -9066,7 +9082,7 @@ msgid "Copy MCP endpoint URL"
 msgstr ""
 
 #: includes/admin/quickconnect.php:501
-msgid "Paste into <b>ChatGPT &rarr; add a custom connector</b>, or <b>Claude &rarr; Settings &rarr; Connectors</b>, then approve in the browser tab that opens."
+msgid "Paste into <b>ChatGPT &rarr; Plugins &rarr; Add custom MCP server</b>, or <b>Claude &rarr; Customize &rarr; Connectors</b>, then approve in the browser tab that opens."
 msgstr ""
 
 #: includes/admin/quickconnect.php:508
@@ -11462,7 +11478,7 @@ msgid "The refresh token could not be looked up."
 msgstr ""
 
 #: includes/oauth/tokens.php:264
-#: includes/oauth/tokens.php:409
+#: includes/oauth/tokens.php:419
 msgid "The refresh token is invalid."
 msgstr ""
 
@@ -11499,10 +11515,14 @@ msgid "This account can no longer connect apps."
 msgstr ""
 
 #: includes/oauth/tokens.php:332
+msgid "The refresh token was issued for an address this site no longer uses. Add the connector again with the current address."
+msgstr ""
+
+#: includes/oauth/tokens.php:342
 msgid "The refresh token has expired."
 msgstr ""
 
-#: includes/oauth/tokens.php:403
+#: includes/oauth/tokens.php:413
 msgid "The refresh token could not be consumed."
 msgstr ""
 
@@ -11510,7 +11530,7 @@ msgstr ""
 msgid "Bearer token presented over insecure HTTP"
 msgstr ""
 
-#: includes/oauth/validator.php:520
+#: includes/oauth/validator.php:532
 msgid "Authentication required."
 msgstr ""
 

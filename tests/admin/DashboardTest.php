@@ -340,7 +340,7 @@ final class DashboardTest extends TestCase {
 		$candidate_ids = wp_list_pluck( aafm_agent_user_candidates(), 'id' );
 		$this->assertContains( $holder, $candidate_ids );
 		// ...but it carries no marker, so it is not a created agent user...
-		$this->assertFalse( aafm_has_created_agent_user() );
+		$this->assertSame( array(), aafm_created_agent_users() );
 		// ...and the connect step stays "To do".
 		$steps = aafm_setup_steps();
 		$this->assertFalse( $steps[1]['done'] );
@@ -474,13 +474,13 @@ final class DashboardTest extends TestCase {
 	}
 
 	public function test_created_agent_user_helpers_track_the_marker(): void {
-		$this->assertFalse( aafm_has_created_agent_user() );
+		$this->assertSame( array(), aafm_created_agent_users() );
 		$this->assertSame( array(), aafm_created_agent_users() );
 
 		$result = aafm_create_agent_user( 'mcp-agent' );
 		$this->assertIsArray( $result );
 
-		$this->assertTrue( aafm_has_created_agent_user() );
+		$this->assertNotSame( array(), aafm_created_agent_users() );
 		$this->assertContains( (int) $result['user_id'], aafm_created_agent_users() );
 	}
 
@@ -663,7 +663,7 @@ final class DashboardTest extends TestCase {
 	public function test_connect_step_not_done_for_agent_user_without_app_password(): void {
 		add_filter( 'wp_is_application_passwords_available', '__return_true' );
 		aafm_create_agent_user( 'mcp-agent' );
-		$this->assertTrue( aafm_has_created_agent_user() );
+		$this->assertNotSame( array(), aafm_created_agent_users() );
 		$this->assertFalse( aafm_setup_steps()[1]['done'], 'An agent user nobody can sign in as has not connected anything.' );
 	}
 

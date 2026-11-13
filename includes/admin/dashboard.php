@@ -116,15 +116,6 @@ function aafm_created_agent_users(): array {
 }
 
 /**
- * Whether the plugin has created at least one dedicated agent user.
- *
- * @return bool
- */
-function aafm_has_created_agent_user(): bool {
-	return array() !== aafm_created_agent_users();
-}
-
-/**
  * Count of abilities the operator has enabled.
  *
  * @return int

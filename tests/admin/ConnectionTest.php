@@ -166,7 +166,7 @@ final class ConnectionTest extends TestCase {
 
 		$this->assertSame( '1', (string) get_user_meta( $uid, aafm_agent_user_marker_meta_key(), true ) );
 		$this->assertNotEmpty( get_user_meta( $uid, 'aafm_agent_user_created', true ) );
-		$this->assertTrue( aafm_has_created_agent_user() );
+		$this->assertNotSame( array(), aafm_created_agent_users() );
 		$this->assertContains( $uid, aafm_created_agent_users() );
 	}
 
@@ -245,7 +245,7 @@ final class ConnectionTest extends TestCase {
 		aafm_backfill_agent_user_marker();
 
 		$this->assertSame( '', (string) get_user_meta( $impostor, aafm_agent_user_marker_meta_key(), true ) );
-		$this->assertFalse( aafm_has_created_agent_user() );
+		$this->assertSame( array(), aafm_created_agent_users() );
 	}
 
 	/**
@@ -269,7 +269,7 @@ final class ConnectionTest extends TestCase {
 		aafm_backfill_agent_user_marker();
 
 		$this->assertSame( '', (string) get_user_meta( $multi, aafm_agent_user_marker_meta_key(), true ), 'A subscriber+editor account must not be backfilled as the agent user.' );
-		$this->assertFalse( aafm_has_created_agent_user() );
+		$this->assertSame( array(), aafm_created_agent_users() );
 	}
 
 	/**
@@ -357,7 +357,7 @@ final class ConnectionTest extends TestCase {
 		// ...but the marker is now healed onto the existing account.
 		$this->assertSame( '1', (string) get_user_meta( $existing, aafm_agent_user_marker_meta_key(), true ) );
 		$this->assertContains( $existing, aafm_created_agent_users() );
-		$this->assertTrue( aafm_has_created_agent_user() );
+		$this->assertNotSame( array(), aafm_created_agent_users() );
 	}
 
 	/**

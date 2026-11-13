@@ -590,7 +590,7 @@ final class QuickConnectTest extends TestCase {
 		$this->assertIsArray( $result );
 		$user_id = (int) $result['user_id'];
 		$this->assertSame( 1, (int) get_user_meta( $user_id, aafm_agent_user_marker_meta_key(), true ) );
-		$this->assertTrue( aafm_has_created_agent_user() );
+		$this->assertNotSame( array(), aafm_created_agent_users() );
 	}
 
 	/**

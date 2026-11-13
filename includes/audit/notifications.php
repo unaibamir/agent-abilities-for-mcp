@@ -784,6 +784,22 @@ function aafm_notify_pending_clear(): bool {
 }
 
 /**
+ * Drop every admin-notice entry of one trigger and keep the rest. The row is deleted only when
+ * nothing else is left in it, so another alert waiting in the notice is never lost.
+ *
+ * @param string $trigger A key of aafm_notify_triggers().
+ * @return bool Whether the list now holds no entry of that trigger (true without a write when it had none).
+ */
+function aafm_notify_pending_forget( string $trigger ): bool {
+	$list = aafm_notify_pending_list();
+	$left = array_values( wp_list_filter( $list, array( 'trigger' => $trigger ), 'NOT' ) );
+	if ( count( $left ) === count( $list ) ) {
+		return true;
+	}
+	return array() === $left ? aafm_notify_pending_clear() : aafm_update_option_verified( 'aafm_notify_pending', $left, false );
+}
+
+/**
  * The digest queue, oldest first.
  *
  * @return array<int,array<string,mixed>>

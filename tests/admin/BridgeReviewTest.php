@@ -383,4 +383,69 @@ final class BridgeReviewTest extends TestCase {
 		$main = (string) file_get_contents( AAFM_PLUGIN_DIR . 'agent-abilities-for-mcp.php' );
 		$this->assertStringContainsString( "add_action( 'admin_init', 'aafm_bridge_review_sync', 20 );", $main );
 	}
+
+	/**
+	 * Seed a real new-tools notice: a baseline, then one tool from a new plugin.
+	 *
+	 * @return void
+	 */
+	private function seed_new_tools_notice(): void {
+		aafm_bridge_review_sync();
+		$this->notify_on();
+		$this->register_foreign_abilities(
+			'demo',
+			array(
+				'one' => array(),
+				'two' => array(),
+			)
+		);
+		aafm_bridge_review_sync();
+		$this->assertSame( 1, $this->announcements(), 'The notice is there to clear.' );
+	}
+
+	public function test_marking_reviewed_clears_the_pending_notice(): void {
+		$this->seed_new_tools_notice();
+
+		$this->assertTrue( aafm_bridge_mark_reviewed( array( 'demo/one', 'demo/two' ) ) );
+
+		$this->assertSame( 0, $this->announcements() );
+		$this->assertFalse( aafm_option_row( 'aafm_notify_pending' )['found'], 'With nothing else pending, the row is gone.' );
+		$this->assertSame( array(), aafm_query_activity( array( 'ability' => 'aafm_notify_pending' ) ), 'Clearing the notice is not logged as an agent write.' );
+	}
+
+	public function test_partial_review_keeps_the_notice(): void {
+		$this->seed_new_tools_notice();
+		$before = aafm_notify_pending_list();
+
+		$this->assertTrue( aafm_bridge_mark_reviewed( array( 'demo/one' ) ) );
+
+		$this->assertSame( $before, aafm_notify_pending_list() );
+	}
+
+	public function test_clearing_new_tools_keeps_other_pending_alerts(): void {
+		aafm_bridge_review_sync();
+		update_option(
+			'aafm_notifications',
+			array(
+				'mode'     => 'notice',
+				'email'    => '',
+				'triggers' => array(
+					'new_tools'   => true,
+					'switch_flip' => true,
+				),
+			)
+		);
+		delete_option( 'aafm_notify_pending' );
+		aafm_notify_event( 'switch_flip', 'read_only_on' );
+		$this->register_foreign_abilities( 'demo', array( 'one' => array() ) );
+		aafm_bridge_review_sync();
+		$this->assertCount( 2, aafm_notify_pending_list() );
+
+		$this->assertTrue( aafm_bridge_mark_reviewed( array( 'demo/one' ) ) );
+
+		$left = aafm_notify_pending_list();
+		$this->assertCount( 1, $left );
+		$this->assertSame( 'switch_flip', $left[0]['trigger'] );
+		$this->assertSame( array( 'read_only_on' ), wp_list_pluck( aafm_option_row( 'aafm_notify_pending' )['value'], 'subtype' ), 'The database row keeps the switch flip.' );
+	}
 }

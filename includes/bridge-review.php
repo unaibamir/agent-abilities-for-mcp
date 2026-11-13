@@ -142,7 +142,8 @@ function aafm_bridge_review_baseline_slugs(): array {
  * Record slugs as reviewed. Enables nothing.
  *
  * With no row yet everything already listed counts as reviewed too, or the first mark would turn it
- * into "new".
+ * into "new". Once nothing new is left, the "Other plugins added new tools" admin notice is cleared
+ * too; a partial review leaves it in place.
  *
  * @param array<int,string> $slugs Slugs to mark.
  * @return bool Whether the state now says so. False when the row cannot be read or written.
@@ -157,7 +158,15 @@ function aafm_bridge_mark_reviewed( array $slugs ): bool {
 	if ( ! $state['baselined'] ) {
 		$reviewed = array_merge( $reviewed, aafm_bridge_review_baseline_slugs() );
 	}
-	return aafm_bridge_review_store( array_values( array_unique( $reviewed ) ), array_values( array_diff( $state['notified'], $slugs ) ) );
+	if ( ! aafm_bridge_review_store( array_values( array_unique( $reviewed ) ), array_values( array_diff( $state['notified'], $slugs ) ) ) ) {
+		return false;
+	}
+	// The notice stores a count, not slugs, so it can only go once every tool is reviewed. The
+	// activity log already leaves aafm_notify_pending writes out, so this is not logged as an agent write.
+	if ( array() === aafm_bridge_new_tools() && ! aafm_notify_pending_forget( 'new_tools' ) ) {
+		aafm_notify_log_failure( __( 'The new tools notice could not be cleared', 'agent-abilities-for-mcp' ) );
+	}
+	return true;
 }
 
 /**

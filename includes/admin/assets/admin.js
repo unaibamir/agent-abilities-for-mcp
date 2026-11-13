@@ -85,7 +85,7 @@
 			this.#bindPauseAll();
 			this.#bindOauthRevoke();
 			this.#bindOauthPagination();
-			this.#focusGrantsAfterReload();
+			this.#focusCardAfterReload();
 			this.#bindStaleTokens();
 			this.#bindClientAgentToggle();
 			this.#bindAllowlist();
@@ -3426,7 +3426,14 @@
 							'revokeClientConfirm',
 							'Revoke this client? It is turned off and its active sessions end right away.'
 					  );
-				if ( ! window.confirm( confirmMsg ) ) {
+				// Success reloads the page. Unsaved edits elsewhere on this tab (a grant row, the
+				// lifetimes card) would go with it, so the same confirm says so first; the tab's
+				// unsaved dot (#bindDirtyDots) is the record of them.
+				const unsaved = false === document.querySelector( '.nav-tab[data-tab="connection"] .aafm-dirty-dot' )?.hidden;
+				const prompt = unsaved
+					? `${ confirmMsg } ${ this.#t( 'revokeReloadLosesEdits', 'The page reloads afterwards, and your unsaved changes on this tab will be lost.' ) }`
+					: confirmMsg;
+				if ( ! window.confirm( prompt ) ) {
 					return;
 				}
 
@@ -3459,9 +3466,9 @@
 				// come from the server (an emptied last page clamps to the new last page there), and
 				// a revoked client's people leave it, whether or not any of them are on this page.
 				// Focus cannot be set from the departing document, so a one-use marker asks the next
-				// load to put it on the grants card (#focusGrantsAfterReload).
+				// load to put it on the card the revoke came from (#focusCardAfterReload).
 				try {
-					window.sessionStorage.setItem( 'aafmFocusGrants', '1' );
+					window.sessionStorage.setItem( 'aafmFocusCard', isGrant ? 'aafm-card-grants' : 'aafm-card-clients' );
 				} catch {
 					// Storage blocked: the page still reloads, focus starts at the top.
 				}
@@ -3584,19 +3591,20 @@
 		}
 
 		/**
-		 * After a grant Revoke reloads the page, put focus on the Active grants card heading.
-		 * The marker is one-use: it is removed before anything else, so a later reload of the
-		 * same tab does not move focus again.
+		 * After a Revoke reloads the page, put focus on the heading of the card the revoke came
+		 * from (Registered clients or Active grants). The marker is one-use: it is removed before
+		 * anything else, so a later reload of the same tab does not move focus again. Only the two
+		 * known card ids are used as a selector.
 		 */
-		#focusGrantsAfterReload() {
-			let marked = false;
+		#focusCardAfterReload() {
+			let card = null;
 			try {
-				marked = '1' === window.sessionStorage.getItem( 'aafmFocusGrants' );
-				window.sessionStorage.removeItem( 'aafmFocusGrants' );
+				card = window.sessionStorage.getItem( 'aafmFocusCard' );
+				window.sessionStorage.removeItem( 'aafmFocusCard' );
 			} catch {
 				return;
 			}
-			const heading = marked ? document.querySelector( '#aafm-card-grants .aafm-card-head-title' ) : null;
+			const heading = [ 'aafm-card-grants', 'aafm-card-clients' ].includes( card ) ? document.querySelector( `#${ card } .aafm-card-head-title` ) : null;
 			if ( heading ) {
 				heading.setAttribute( 'tabindex', '-1' );
 				heading.focus();

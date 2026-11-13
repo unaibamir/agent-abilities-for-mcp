@@ -214,16 +214,19 @@ class ConnectionCardsTest extends TestCase {
 		$at = strpos( $js, '#bindOauthRevoke() {' );
 		$this->assertNotFalse( $at );
 		$revoke = substr( $js, (int) $at, (int) strpos( $js, '#paginateTable(', (int) $at ) - (int) $at );
-		$this->assertStringContainsString( "sessionStorage.setItem( 'aafmFocusGrants', '1' )", $revoke );
+		$this->assertStringContainsString( "sessionStorage.setItem( 'aafmFocusCard', isGrant ? 'aafm-card-grants' : 'aafm-card-clients' )", $revoke, 'Focus returns to the card the revoke came from.' );
+		$this->assertStringContainsString( '.nav-tab[data-tab="connection"] .aafm-dirty-dot', $revoke, 'A reload with unsaved edits on the tab says so before it happens.' );
+		$this->assertStringContainsString( "this.#t( 'revokeReloadLosesEdits'", $revoke );
 		$this->assertStringContainsString( 'window.location.reload()', $revoke );
 		$this->assertStringNotContainsString( "querySelectorAll( '#aafm-card-grants tr[data-grant-row]' ).length", $revoke, 'The card count never comes from rendered rows.' );
 
-		$at = strpos( $js, '#focusGrantsAfterReload() {' );
+		$at = strpos( $js, '#focusCardAfterReload() {' );
 		$this->assertNotFalse( $at );
 		$load = substr( $js, (int) $at, 700 );
-		$this->assertStringContainsString( "sessionStorage.removeItem( 'aafmFocusGrants' )", $load );
-		$this->assertStringContainsString( '#aafm-card-grants .aafm-card-head-title', $load );
-		$this->assertStringContainsString( 'this.#focusGrantsAfterReload();', $js );
+		$this->assertStringContainsString( "sessionStorage.removeItem( 'aafmFocusCard' )", $load );
+		$this->assertStringContainsString( "[ 'aafm-card-grants', 'aafm-card-clients' ].includes( card )", $load, 'Only a known card id from storage is used as a selector.' );
+		$this->assertStringContainsString( '.aafm-card-head-title', $load );
+		$this->assertStringContainsString( 'this.#focusCardAfterReload();', $js );
 	}
 
 	public function test_the_access_select_lists_the_four_presets_with_the_current_one_selected_and_a_custom_default_for_a_null_preset(): void {

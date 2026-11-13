@@ -313,6 +313,7 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'revokeClientConfirm'      => __( 'Revoke this client? It is turned off and its active sessions end right away.', 'agent-abilities-for-mcp' ),
 				'revokeGrantConfirm'       => __( 'Revoke this grant? The user will have to approve again to reconnect.', 'agent-abilities-for-mcp' ),
 				'revokeFailed'             => __( 'Could not revoke. Please try again.', 'agent-abilities-for-mcp' ),
+				'revokeReloadLosesEdits'   => __( 'The page reloads afterwards, and your unsaved changes on this tab will be lost.', 'agent-abilities-for-mcp' ),
 				'staleTokensConfirm'       => __( 'End every token issued for an old address of this site? Approvals stay; those apps reconnect.', 'agent-abilities-for-mcp' ),
 				'agentToggleFailed'        => __( 'Could not save. Please try again.', 'agent-abilities-for-mcp' ),
 				/* translators: %s: number of abilities matching the current search. */

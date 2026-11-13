@@ -83,10 +83,10 @@ class LifetimesCardTest extends TestCase {
 		$this->assertSame( 2, preg_match_all( '/save\.disabled = false;\s*save\.focus\(\);/', $lifetime ) );
 		$this->assertStringContainsString( "this.#removeRowKeepingFocus( btn.closest( 'tr' ), '.aafm-revoke-app-password', card );", $js );
 		// The grants card is paged on the server, so a grant Revoke reloads the page and a one-use
-		// marker puts focus back on the card heading after the reload (#focusGrantsAfterReload()).
-		$this->assertStringContainsString( "window.sessionStorage.setItem( 'aafmFocusGrants', '1' );", $js );
-		$this->assertStringContainsString( "window.sessionStorage.removeItem( 'aafmFocusGrants' );", $js );
-		$this->assertStringContainsString( "document.querySelector( '#aafm-card-grants .aafm-card-head-title' )", $js );
+		// marker puts focus back on the revoked row's card heading after the reload (#focusCardAfterReload()).
+		$this->assertStringContainsString( "window.sessionStorage.setItem( 'aafmFocusCard', isGrant ? 'aafm-card-grants' : 'aafm-card-clients' );", $js );
+		$this->assertStringContainsString( "window.sessionStorage.removeItem( 'aafmFocusCard' );", $js );
+		$this->assertStringContainsString( 'document.querySelector( `#${ card } .aafm-card-head-title` )', $js );
 		$helper = $section( '#removeRowKeepingFocus( row, selector, card ) {', '#bindAppPasswordRevoke() {' );
 		$this->assertStringContainsString( 'next.focus();', $helper );
 		$this->assertStringContainsString( 'heading.tabIndex = -1;', $helper );

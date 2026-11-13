@@ -809,6 +809,7 @@ function aafm_uninstall_site_data(): void {
 	wp_clear_scheduled_hook( 'aafm_oauth_cleanup' );
 	wp_clear_scheduled_hook( 'aafm_notifications_digest' );
 	wp_unschedule_hook( 'aafm_notify_send_scheduled' ); // Alert mail handed to cron; every event carries its own arguments.
+	delete_transient( 'aafm_ntf_overdue_seen' ); // The alert-mail self-heal's sighting record.
 
 	// Before-values are content, so change history goes on every uninstall, whatever the flag says.
 	aafm_drop_changes_table();

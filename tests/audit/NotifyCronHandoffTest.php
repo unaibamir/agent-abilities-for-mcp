@@ -270,9 +270,12 @@ final class NotifyCronHandoffTest extends TestCase {
 		aafm_notify_flush_outbox();
 		$this->assertCount( 2, $this->scheduled() );
 
+		set_transient( 'aafm_ntf_overdue_seen', array( '1:abc' => time() ), DAY_IN_SECONDS );
+
 		aafm_uninstall_site_data();
 
 		$this->assertSame( array(), $this->scheduled(), 'Every event goes, whatever its arguments.' );
+		$this->assertFalse( get_transient( 'aafm_ntf_overdue_seen' ), 'The self-heal sighting record goes with them.' );
 	}
 
 	public function test_deactivation_clears_the_scheduled_hook(): void {
@@ -282,9 +285,12 @@ final class NotifyCronHandoffTest extends TestCase {
 		aafm_notify_flush_outbox();
 		$this->assertCount( 2, $this->scheduled() );
 
+		set_transient( 'aafm_ntf_overdue_seen', array( '1:abc' => time() ), DAY_IN_SECONDS );
+
 		aafm_notify_unschedule( false );
 
 		$this->assertSame( array(), $this->scheduled() );
+		$this->assertFalse( get_transient( 'aafm_ntf_overdue_seen' ), 'The self-heal sighting record goes with them.' );
 	}
 
 	public function test_mode_label_and_right_away_paragraph_allow_a_short_delay(): void {

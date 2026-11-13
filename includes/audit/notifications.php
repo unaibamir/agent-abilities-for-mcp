@@ -841,6 +841,9 @@ function aafm_notify_send_overdue(): void {
 		set_transient( 'aafm_ntf_overdue_seen', $keep, DAY_IN_SECONDS );
 	}
 	// Core's own row, written through core's Options API from the fresh copy, as _set_cron_array() does.
+	// ponytail: like core's own cron writes, this is an unlocked read-modify-write of the whole row, so
+	// an unrelated event another request schedules between the fresh read and this write can be dropped.
+	// The window is one read and one write long; a lock would need the Options API to compare-and-swap.
 	if ( array() === $items || ! update_option( 'cron', $crons ) ) {
 		return;
 	}
@@ -1121,6 +1124,7 @@ function aafm_notify_unschedule( bool $network_wide = false ): void {
 			switch_to_blog( (int) $site_id );
 			wp_clear_scheduled_hook( 'aafm_notifications_digest' );
 			wp_unschedule_hook( 'aafm_notify_send_scheduled' );
+			delete_transient( 'aafm_ntf_overdue_seen' );
 			restore_current_blog();
 		}
 		return;
@@ -1129,6 +1133,7 @@ function aafm_notify_unschedule( bool $network_wide = false ): void {
 	// Each alert-mail event carries its message as arguments, which wp_clear_scheduled_hook() would
 	// have to match; wp_unschedule_hook() drops them all.
 	wp_unschedule_hook( 'aafm_notify_send_scheduled' );
+	delete_transient( 'aafm_ntf_overdue_seen' ); // The self-heal's sighting record goes with the events.
 }
 register_deactivation_hook( AAFM_PLUGIN_FILE, 'aafm_notify_unschedule' );
 

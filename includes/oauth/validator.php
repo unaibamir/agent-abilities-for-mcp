@@ -79,6 +79,28 @@ function aafm_oauth_current_client_id( ?string $client_id = null, bool $forget =
 function aafm_oauth_reset_current_client_id(): void {
 	aafm_oauth_current_client_id( null, true );
 	aafm_oauth_current_grant( null, true );
+	aafm_oauth_invalid_bearer( false );
+}
+
+/**
+ * Remember (or read) that this request presented one of our bearers and it failed to resolve.
+ *
+ * Set only by aafm_oauth_resolve_current_user(), from its own refusal branches: no active unexpired
+ * row, a token minted for another address, a deactivated client, or an expired or no longer allowed
+ * grant. aafm_oauth_filter_rest_challenge() reads it to add error="invalid_token" to the MCP 401
+ * (RFC 6750 section 3.1), so a client knows to refresh or sign in again. It holds a bool only, never
+ * the token or why it failed, and is cleared at the start of each resolution and on `shutdown` (see
+ * aafm_oauth_reset_current_client_id()), so it is per request on every SAPI.
+ *
+ * @param bool|null $set True or false to record, null to read.
+ * @return bool
+ */
+function aafm_oauth_invalid_bearer( ?bool $set = null ): bool {
+	static $flag = false;
+	if ( null !== $set ) {
+		$flag = $set;
+	}
+	return $flag;
 }
 
 // Registered at include time, beside the store whose contract it enforces, rather than in the
@@ -101,6 +123,9 @@ add_action( 'shutdown', 'aafm_oauth_reset_current_client_id' );
  * @return int|false The approving wp_user_id, or the incoming value unchanged.
  */
 function aafm_oauth_resolve_current_user( $user_id ) {
+	// 0. A failed bearer from an earlier resolution in this process never colours this one.
+	aafm_oauth_invalid_bearer( false );
+
 	// 1. Never preempt a user some earlier filter already resolved (App Password,
 	// cookie, another plugin). This early return is what makes the filter
 	// priority non-load-bearing for the frozen invariant.
@@ -212,6 +237,7 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 			if ( function_exists( 'aafm_oauth_log_event' ) && aafm_oauth_access_token_row_exists( $credential ) ) {
 				aafm_oauth_log_event( 'bearer', 'denied' );
 			}
+			aafm_oauth_invalid_bearer( true );
 			return $user_id;
 		}
 
@@ -221,6 +247,7 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 			if ( function_exists( 'aafm_oauth_log_event' ) ) {
 				aafm_oauth_log_event( 'bearer', 'denied', array( 'client_id' => (string) $row['client_id'] ) );
 			}
+			aafm_oauth_invalid_bearer( true );
 			return $user_id;
 		}
 
@@ -231,6 +258,7 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 			if ( function_exists( 'aafm_oauth_log_event' ) ) {
 				aafm_oauth_log_event( 'bearer', 'denied', array( 'client_id' => (string) $row['client_id'] ) );
 			}
+			aafm_oauth_invalid_bearer( true );
 			return $user_id;
 		}
 
@@ -247,6 +275,7 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 			if ( function_exists( 'aafm_oauth_log_event' ) ) {
 				aafm_oauth_log_event( 'bearer', 'denied', array( 'client_id' => (string) $row['client_id'] ) );
 			}
+			aafm_oauth_invalid_bearer( true );
 			return $user_id;
 		}
 

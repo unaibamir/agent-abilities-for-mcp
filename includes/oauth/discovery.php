@@ -425,10 +425,17 @@ function aafm_oauth_authorization_server_metadata(): array {
  * where to discover the authorization server (RFC 9728 resource_metadata). Points
  * at the same .well-known document aafm_oauth_maybe_serve_well_known() emits.
  *
+ * When the request presented one of our bearers and it failed (expired, revoked, deactivated,
+ * minted for another address), the challenge also carries error="invalid_token" (RFC 6750
+ * section 3.1), so the client refreshes or signs in again instead of treating the 401 as a
+ * first visit. No description is added: why a token failed is not told to whoever holds it.
+ *
+ * @param bool $invalid Whether a presented bearer failed to resolve this request.
  * @return string The Bearer challenge value for the WWW-Authenticate header.
  */
-function aafm_oauth_challenge_header(): string {
-	return 'Bearer resource_metadata="' . home_url( '/.well-known/oauth-protected-resource' ) . '"';
+function aafm_oauth_challenge_header( bool $invalid = false ): string {
+	$challenge = 'Bearer resource_metadata="' . home_url( '/.well-known/oauth-protected-resource' ) . '"';
+	return $invalid ? $challenge . ', error="invalid_token"' : $challenge;
 }
 
 /**
@@ -483,7 +490,8 @@ function aafm_oauth_filter_rest_challenge( $response, $server, $request ) {
 		return $response;
 	}
 
-	$response->header( 'WWW-Authenticate', aafm_oauth_challenge_header() );
+	// Set by the bearer resolver (validator.php) when this request's bearer failed to resolve.
+	$response->header( 'WWW-Authenticate', aafm_oauth_challenge_header( aafm_oauth_invalid_bearer() ) );
 
 	return $response;
 }

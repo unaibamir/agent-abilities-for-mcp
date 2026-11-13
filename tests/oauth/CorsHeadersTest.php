@@ -135,4 +135,14 @@ final class CorsHeadersTest extends TestCase {
 		$allowed = aafm_oauth_filter_allowed_cors_headers( array( 'Authorization' ) );
 		$this->assertSame( array( 'Authorization' ), $allowed );
 	}
+
+	/**
+	 * The invalid_token challenge rides on the same header name, so a browser client can still read it.
+	 */
+	public function test_www_authenticate_still_exposed_by_cors(): void {
+		$response = aafm_oauth_filter_rest_challenge( new \WP_REST_Response( null, 401 ), rest_get_server(), ( new \WP_REST_Request( 'POST', '/agent-abilities-for-mcp/mcp' ) ) );
+		$this->assertArrayHasKey( 'WWW-Authenticate', $response->get_headers() );
+		$this->assertStringContainsString( 'error="invalid_token"', aafm_oauth_challenge_header( true ) );
+		$this->assertContains( 'WWW-Authenticate', aafm_oauth_filter_exposed_cors_headers( $this->core_exposed_defaults() ) );
+	}
 }

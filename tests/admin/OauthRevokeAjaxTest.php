@@ -138,6 +138,21 @@ final class OauthRevokeAjaxTest extends TestCase {
 		);
 	}
 
+	/**
+	 * Setting-change rows the Activity Log holds for one ability, as [status, detail] pairs.
+	 *
+	 * @param string $ability Ability column value.
+	 * @return array<int,array<int,string>>
+	 */
+	private function setting_rows( string $ability ): array {
+		global $wpdb;
+		return array_map(
+			static fn( array $r ): array => array( (string) $r['status'], (string) $r['detail'] ),
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			(array) $wpdb->get_results( $wpdb->prepare( 'SELECT status, detail FROM %i WHERE event_type = %s AND ability = %s ORDER BY id', aafm_activity_log_table(), 'setting_changed', $ability ), ARRAY_A )
+		);
+	}
+
 	public function test_revoke_client_succeeds_for_admin(): void {
 		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $admin );
@@ -168,6 +183,7 @@ final class OauthRevokeAjaxTest extends TestCase {
 		);
 		$this->assertSame( 0, $active, 'The client tokens should be revoked.' );
 		$this->assertSame( 0, $this->codes( 'client_abc', 7 ), 'Pending authorization codes must be dropped on client revoke.' );
+		$this->assertSame( array( array( 'success', 'App revoked (app client_a)' ) ), $this->setting_rows( 'aafm/oauth-client' ), 'Logged like a pause or End old tokens.' );
 	}
 
 	public function test_revoke_client_denied_for_subscriber(): void {
@@ -236,6 +252,7 @@ final class OauthRevokeAjaxTest extends TestCase {
 		);
 		$this->assertSame( 0, $remaining, 'The consent should be deleted.' );
 		$this->assertSame( 0, $this->codes( 'client_abc', $admin ), 'Pending authorization codes must be dropped on grant revoke.' );
+		$this->assertSame( array( array( 'success', sprintf( 'Grant revoked (user ID %d, app client_a)', $admin ) ) ), $this->setting_rows( 'aafm/oauth-grant' ) );
 	}
 
 	/**
@@ -274,6 +291,7 @@ final class OauthRevokeAjaxTest extends TestCase {
 
 		$this->assertFalse( $json['success'] ?? true, 'A failed deactivation must not report success.' );
 		$this->assertFalse( aafm_oauth_client_is_deactivated( 'client_abc' ), 'The client must stay active when the write failed.' );
+		$this->assertSame( array( array( 'error', 'Could not revoke the app (app client_a)' ) ), $this->setting_rows( 'aafm/oauth-client' ) );
 	}
 
 	/**

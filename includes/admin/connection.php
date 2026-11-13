@@ -634,10 +634,13 @@ function aafm_ajax_oauth_revoke_client(): void {
 	// aafm_oauth_revoke_client_tokens() reports a genuine query failure as -1, and the final-state
 	// read can still find zero active tokens when that UPDATE failed, so -1 is refused the same as
 	// any other unconfirmed revoke.
+	$app = sprintf( ' (app %s)', substr( $client_id, 0, 8 ) );
 	if ( ! $deactivated || -1 === $revoked || aafm_oauth_client_has_active_tokens( $client_id ) || aafm_oauth_client_has_pending_codes( $client_id ) ) {
+		aafm_log_setting_change( 'aafm/oauth-client', __( 'Could not revoke the app', 'agent-abilities-for-mcp' ) . $app, false );
 		wp_send_json_error( array( 'message' => __( 'Could not fully revoke the client. Please try again.', 'agent-abilities-for-mcp' ) ) );
 	}
 
+	aafm_log_setting_change( 'aafm/oauth-client', __( 'App revoked', 'agent-abilities-for-mcp' ) . $app );
 	wp_send_json_success( array( 'client_id' => $client_id ) );
 }
 
@@ -713,9 +716,13 @@ function aafm_ajax_oauth_revoke_grant(): void {
 	// aafm_oauth_revoke_user_client_tokens() reports a genuine query failure as -1, and the
 	// final-state read can still find zero active tokens when that UPDATE failed, so -1 is refused
 	// the same as any other unconfirmed revoke.
+	$grant = sprintf( ' (user ID %1$d, app %2$s)', $user_id, substr( $client_id, 0, 8 ) );
 	if ( ! $consent_deleted || -1 === $revoked || aafm_oauth_user_client_has_active_tokens( $user_id, $client_id ) || aafm_oauth_user_client_has_pending_codes( $user_id, $client_id ) ) {
+		aafm_log_setting_change( 'aafm/oauth-grant', __( 'Could not revoke the grant', 'agent-abilities-for-mcp' ) . $grant, false );
 		wp_send_json_error( array( 'message' => __( 'Could not fully revoke the grant. Please try again.', 'agent-abilities-for-mcp' ) ) );
 	}
+
+	aafm_log_setting_change( 'aafm/oauth-grant', __( 'Grant revoked', 'agent-abilities-for-mcp' ) . $grant );
 
 	wp_send_json_success(
 		array(

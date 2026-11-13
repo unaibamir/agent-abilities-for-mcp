@@ -593,4 +593,23 @@ final class NavigationTest extends TestCase {
 			$this->assertStringContainsString( 'new tab', $text );
 		}
 	}
+
+	public function test_markup_wordpress_would_store_differently_is_refused_before_the_save(): void {
+		$this->acting_as( 'administrator' );
+		$id     = $this->make_navigation( '<!-- wp:page-list /-->' );
+		$filter = static fn( $content ) => $content . '<!-- wp:paragraph --><p>x</p><!-- /wp:paragraph -->';
+		add_filter( 'content_save_pre', $filter );
+		try {
+			$res = aafm_exec_update_navigation(
+				array(
+					'id'    => $id,
+					'items' => $this->nested_items(),
+				)
+			);
+		} finally {
+			remove_filter( 'content_save_pre', $filter );
+		}
+
+		$this->assert_refused_and_unchanged( $res, 'aafm_invalid_block_content', $id, '<!-- wp:page-list /-->' );
+	}
 }

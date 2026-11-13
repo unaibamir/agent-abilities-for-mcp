@@ -1733,6 +1733,10 @@ function aafm_exec_update_navigation( array $input ) {
 	// attribute to &amp;. The read-back is held to that, not to the request.
 	$expected_other = array();
 	$expected       = aafm_navigation_items_from_blocks( parse_blocks( aafm_post_field_canonical_replay( 'post_content', $content, $id ) ), $expected_other );
+	if ( array() !== $expected_other || count( $expected ) !== count( $items ) ) {
+		// WordPress would store something other than navigation links, so refuse before writing.
+		return new WP_Error( 'aafm_invalid_block_content', __( 'The navigation markup did not pass block validation, so nothing was changed.', 'agent-abilities-for-mcp' ), array( 'status' => 400 ) );
+	}
 
 	$owning_builder = aafm_post_has_foreign_builder_ownership( $id );
 	if ( false !== $owning_builder ) {
@@ -1760,7 +1764,7 @@ function aafm_exec_update_navigation( array $input ) {
 			return aafm_generic_error();
 		}
 	}
-	if ( array() !== $expected_other || ! aafm_navigation_markup_holds( (string) $saved->post_content, $expected ) ) {
+	if ( ! aafm_navigation_markup_holds( (string) $saved->post_content, $expected ) ) {
 		return new WP_Error( 'aafm_navigation_not_stored', __( 'The navigation was saved, but what WordPress stored is not the list that was sent. Read it with list-navigations before trying again.', 'agent-abilities-for-mcp' ), array( 'status' => 500 ) );
 	}
 	return aafm_navigation_shape( $saved );

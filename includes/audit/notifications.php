@@ -895,14 +895,20 @@ function aafm_notify_pending_clear(): bool {
  * Drop every admin-notice entry of one trigger and keep the rest. The row is deleted only when
  * nothing else is left in it, so another alert waiting in the notice is never lost.
  *
+ * Decided from the database row, not the cache: a stale cache copy that missed a newer alert would
+ * otherwise have that alert deleted or overwritten. A row that cannot be read changes nothing.
+ *
  * @param string $trigger A key of aafm_notify_triggers().
  * @return bool Whether the list now holds no entry of that trigger (true without a write when it had none).
  */
 function aafm_notify_pending_forget( string $trigger ): bool {
-	$list = aafm_notify_pending_list();
-	$left = array_values( wp_list_filter( $list, array( 'trigger' => $trigger ), 'NOT' ) );
-	if ( count( $left ) === count( $list ) ) {
-		return true;
+	$row = aafm_option_row( 'aafm_notify_pending' );
+	if ( ! $row['ok'] ) {
+		return false;
+	}
+	$left = array_values( wp_list_filter( aafm_notify_as_list( $row['value'] ), array( 'trigger' => $trigger ), 'NOT' ) );
+	if ( aafm_notify_pending_list() === $left && ( $row['found'] || array() === $left ) ) {
+		return true; // The row and the cache already agree on a list without the trigger.
 	}
 	return array() === $left ? aafm_notify_pending_clear() : aafm_update_option_verified( 'aafm_notify_pending', $left, false );
 }

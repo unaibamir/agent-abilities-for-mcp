@@ -404,13 +404,20 @@ final class BridgeReviewTest extends TestCase {
 	}
 
 	public function test_marking_reviewed_clears_the_pending_notice(): void {
+		// The suite detaches the write-outcome observer; attach it, with its table, as a real request has it.
+		aafm_install_activity_log();
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
 		$this->seed_new_tools_notice();
 
 		$this->assertTrue( aafm_bridge_mark_reviewed( array( 'demo/one', 'demo/two' ) ) );
 
 		$this->assertSame( 0, $this->announcements() );
 		$this->assertFalse( aafm_option_row( 'aafm_notify_pending' )['found'], 'With nothing else pending, the row is gone.' );
-		$this->assertSame( array(), aafm_query_activity( array( 'ability' => 'aafm_notify_pending' ) ), 'Clearing the notice is not logged as an agent write.' );
+		$outcomes = wp_list_pluck( aafm_query_activity( array( 'ability' => 'aafm/write-outcome' ) ), 'detail' );
+		$this->assertNotSame( array(), $outcomes, 'Precondition: the review-state write is logged, so the observer is attached.' );
+		foreach ( $outcomes as $detail ) {
+			$this->assertStringNotContainsString( 'aafm_notify_pending', (string) $detail, 'Clearing the notice is not logged as an agent write.' );
+		}
 	}
 
 	public function test_partial_review_keeps_the_notice(): void {
@@ -482,5 +489,45 @@ final class BridgeReviewTest extends TestCase {
 			) . ': 3',
 			$message['body']
 		);
+	}
+
+	public function test_a_stale_cache_cannot_make_the_notice_clear_drop_another_alert(): void {
+		$flip  = array(
+			'id'      => 'flip',
+			'trigger' => 'switch_flip',
+			'subtype' => 'read_only_on',
+			'time'    => time(),
+		);
+		$tools = array(
+			'id'      => 'tools',
+			'trigger' => 'new_tools',
+			'subtype' => 'detected',
+			'time'    => time(),
+			'count'   => 1,
+		);
+		$this->assertTrue( aafm_update_option_verified( 'aafm_notify_pending', array( $tools, $flip ), false ) );
+		// A cache copy that missed the switch flip, in both places core could read it.
+		wp_cache_set( 'aafm_notify_pending', array( $tools ), 'options' );
+		$all                        = wp_load_alloptions( true );
+		$all['aafm_notify_pending'] = maybe_serialize( array( $tools ) );
+		wp_cache_set( 'alloptions', $all, 'options' );
+		$this->assertSame( array( $tools ), aafm_notify_pending_list(), 'Precondition: the stale copy is what get_option() sees.' );
+
+		$this->assertTrue( aafm_notify_pending_forget( 'new_tools' ) );
+
+		$row = aafm_option_row( 'aafm_notify_pending' );
+		$this->assertTrue( $row['found'], 'The row with the switch flip was not deleted.' );
+		$this->assertSame( array( $flip ), $row['value'] );
+		$this->assertSame( array( $flip ), aafm_notify_pending_list(), 'The cache now agrees with the row.' );
+		wp_cache_delete( 'alloptions', 'options' );
+	}
+
+	public function test_the_notice_clear_refuses_an_unreadable_row(): void {
+		$this->assertTrue( aafm_update_option_verified( 'aafm_notify_pending', array( array( 'trigger' => 'new_tools' ) ), false ) );
+
+		$result = QueryFaultInjector::fail_query( 'aafm_notify_pending', static fn() => aafm_notify_pending_forget( 'new_tools' ) );
+
+		$this->assertFalse( $result );
+		$this->assertTrue( aafm_option_row( 'aafm_notify_pending' )['found'], 'Nothing was deleted.' );
 	}
 }

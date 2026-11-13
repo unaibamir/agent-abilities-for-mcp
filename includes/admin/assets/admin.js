@@ -85,6 +85,7 @@
 			this.#bindPauseAll();
 			this.#bindOauthRevoke();
 			this.#bindOauthPagination();
+			this.#focusGrantsAfterReload();
 			this.#bindClientAgentToggle();
 			this.#bindAllowlist();
 			this.#bindQuickConnect();
@@ -3446,42 +3447,43 @@
 					return;
 				}
 
+				if ( isGrant ) {
+					// The grants card is paged on the server, so its count and rows come from the
+					// server: reload the current page (an emptied last page clamps to the new last
+					// page there). Focus cannot be set from the departing document, so a one-use
+					// marker asks the next load to put it on the card (#focusGrantsAfterReload).
+					try {
+						window.sessionStorage.setItem( 'aafmFocusGrants', '1' );
+					} catch {
+						// Storage blocked: the page still reloads, focus starts at the top.
+					}
+					window.location.reload();
+					return;
+				}
+
 				const row = btn.closest( 'tr' );
 				if ( ! row ) {
 					return;
 				}
-				const revoked = Number( json?.data?.revoked_tokens ) || 0;
-				if ( isGrant ) {
-					// The grant is gone: drop its row, and lower the owning client's active-token
-					// count by the tokens we just revoked so it does not read stale.
-					this.#adjustClientTokens( root, clientId, -revoked );
-					this.#removeRowKeepingFocus( row, '.aafm-revoke-grant', root.querySelector( '#aafm-card-grants' ) );
-					const title = root.querySelector( '#aafm-card-grants .aafm-card-head-title' );
-					if ( title ) {
-						const left = root.querySelectorAll( '#aafm-card-grants tr[data-grant-row]' ).length;
-						title.textContent = `${ title.textContent.replace( /\s*\([^)]*\)$/, '' ) }${ left ? ` (${ left.toLocaleString() })` : '' }`;
-					}
-				} else {
-					// The client and all its tokens are revoked: its active-token count is now 0.
-					const tokensCell = row.querySelector( '.aafm-client-tokens' );
-					if ( tokensCell ) {
-						tokensCell.textContent = '0';
-					}
-					// Flip the Status pill to Revoked and replace the button with plain text.
-					const pill = row.querySelector( '.aafm-status-cell .aafm-pill' );
-					if ( pill ) {
-						pill.classList.remove( 'aafm-pill-success' );
-						pill.classList.add( 'aafm-pill-neutral' );
-						pill.textContent = this.#t( 'statusRevoked', 'Revoked' );
-					}
-					const cell = btn.parentElement;
-					btn.remove();
-					if ( cell ) {
-						const note = document.createElement( 'span' );
-						note.className = 'aafm-muted';
-						note.textContent = this.#t( 'statusRevoked', 'Revoked' );
-						cell.append( note );
-					}
+				// The client and all its tokens are revoked: its active-token count is now 0.
+				const tokensCell = row.querySelector( '.aafm-client-tokens' );
+				if ( tokensCell ) {
+					tokensCell.textContent = '0';
+				}
+				// Flip the Status pill to Revoked and replace the button with plain text.
+				const pill = row.querySelector( '.aafm-status-cell .aafm-pill' );
+				if ( pill ) {
+					pill.classList.remove( 'aafm-pill-success' );
+					pill.classList.add( 'aafm-pill-neutral' );
+					pill.textContent = this.#t( 'statusRevoked', 'Revoked' );
+				}
+				const cell = btn.parentElement;
+				btn.remove();
+				if ( cell ) {
+					const note = document.createElement( 'span' );
+					note.className = 'aafm-muted';
+					note.textContent = this.#t( 'statusRevoked', 'Revoked' );
+					cell.append( note );
 				}
 			} );
 		}
@@ -3588,19 +3590,36 @@
 		}
 
 		/**
-		 * Paginate the Connection tab's two OAuth tables, ten rows per page. Two
-		 * independent pagers over two unrelated datasets - Registered clients never
-		 * shares a page count with Active grants.
+		 * Paginate the Connection tab's OAuth tables, ten rows per page, each with its own
+		 * pager. A table marked data-aafm-server-paged (Active grants) is paged on the server
+		 * with plain links, so it is skipped here and the two pagers never stack.
 		 */
 		#bindOauthPagination() {
 			const PER_PAGE = 10;
-			const clientsTable = document.querySelector( '.aafm-clients-table' );
-			const grantsTable = document.querySelector( '.aafm-grants-table' );
-			if ( clientsTable ) {
-				this.#paginateTable( clientsTable, PER_PAGE );
+			document.querySelectorAll( '.aafm-clients-table, .aafm-grants-table' ).forEach( ( table ) => {
+				if ( ! table.hasAttribute( 'data-aafm-server-paged' ) ) {
+					this.#paginateTable( table, PER_PAGE );
+				}
+			} );
+		}
+
+		/**
+		 * After a grant Revoke reloads the page, put focus on the Active grants card heading.
+		 * The marker is one-use: it is removed before anything else, so a later reload of the
+		 * same tab does not move focus again.
+		 */
+		#focusGrantsAfterReload() {
+			let marked = false;
+			try {
+				marked = '1' === window.sessionStorage.getItem( 'aafmFocusGrants' );
+				window.sessionStorage.removeItem( 'aafmFocusGrants' );
+			} catch {
+				return;
 			}
-			if ( grantsTable ) {
-				this.#paginateTable( grantsTable, PER_PAGE );
+			const heading = marked ? document.querySelector( '#aafm-card-grants .aafm-card-head-title' ) : null;
+			if ( heading ) {
+				heading.setAttribute( 'tabindex', '-1' );
+				heading.focus();
 			}
 		}
 
@@ -4142,24 +4161,6 @@
 				}
 				card.inert = false;
 			} );
-		}
-
-		// Adjust a client's "Active tokens" cell in place after a revoke, so the count stays
-		// truthful without a page reload. Matches the row by dataset (no selector injection).
-		#adjustClientTokens( root, clientId, delta ) {
-			if ( ! clientId || ! delta ) {
-				return;
-			}
-			const clientRow = Array.from(
-				root.querySelectorAll( '[data-client-row]' )
-			).find( ( el ) => el.dataset.clientRow === clientId );
-			const cell = clientRow?.querySelector( '.aafm-client-tokens' );
-			if ( ! cell ) {
-				return;
-			}
-			const current =
-				parseInt( ( cell.textContent || '' ).replace( /[^0-9]/g, '' ), 10 ) || 0;
-			cell.textContent = String( Math.max( 0, current + delta ) );
 		}
 
 		#bindResetPlugin() {

@@ -2012,6 +2012,13 @@
 			margin-inline-end: auto;
 		}
 
+		/* Active grants is paged on the server: the count leads, Previous and Next are links. */
+		&.aafm-grants-pager {
+			.aafm-pager-status { margin-inline-end: auto; }
+
+			a.aafm-btn { text-decoration: none; }
+		}
+
 		.aafm-btn[disabled] {
 			opacity: 0.5;
 			cursor: default;

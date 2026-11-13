@@ -69,4 +69,36 @@ final class ConnectionTotalsTest extends TestCase {
 
 		$this->assertStringContainsString( 'Registered clients (2)', $this->render() );
 	}
+
+	/**
+	 * The grants card is paged on the server: its count is the server's total, not the rows on the
+	 * page.
+	 */
+	public function test_card_count_comes_from_server_total_not_rows(): void {
+		global $wpdb;
+		aafm_install_oauth_tables();
+		aafm_truncate_oauth_tables();
+		$wpdb->insert(
+			$wpdb->prefix . 'aafm_oauth_clients',
+			array(
+				'client_id'   => 'totals_app',
+				'client_name' => 'Totals',
+				'is_active'   => 1,
+			)
+		);
+		foreach ( self::factory()->user->create_many( 60 ) as $user ) {
+			$wpdb->insert(
+				$wpdb->prefix . 'aafm_oauth_consents',
+				array(
+					'wp_user_id' => (int) $user,
+					'client_id'  => 'totals_app',
+				)
+			);
+		}
+
+		$data = aafm_connection_grants_data();
+		$this->assertSame( 60, $data['count'] );
+		$this->assertCount( 50, $data['rows'] );
+		$this->assertStringContainsString( 'Active grants (60)', $this->render() );
+	}
 }

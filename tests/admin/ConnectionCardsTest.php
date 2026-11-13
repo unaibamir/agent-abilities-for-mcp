@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Admin;
 
+use AAFM\Tests\Support\AjaxHarness;
 use AAFM\Tests\TestCase;
 
 /**
@@ -16,6 +17,8 @@ use AAFM\Tests\TestCase;
  * aafm_render_connection_tabs().
  */
 class ConnectionCardsTest extends TestCase {
+
+	use AjaxHarness;
 
 	private const CLIENT = 'client_cards';
 
@@ -28,6 +31,8 @@ class ConnectionCardsTest extends TestCase {
 	}
 
 	public function tear_down(): void {
+		$this->reset_ajax_harness();
+		unset( $_GET['grants_page'] );
 		delete_option( 'aafm_oauth_enabled' );
 		parent::tear_down();
 	}
@@ -200,19 +205,25 @@ class ConnectionCardsTest extends TestCase {
 	}
 
 	/**
-	 * Revoking a grant removes its row, so the script must also lower the "(N)" in the card title.
-	 * There is no JS runner here: this pins the markup the script reads and the script's use of it.
+	 * The grants card is paged on the server, so a Revoke reloads the current page instead of
+	 * recounting the rows left in it, and the reloaded page puts focus back on the card. There is no
+	 * JS runner here: this pins the script's use of a one-use marker on both sides of the reload.
 	 */
-	public function test_revoking_a_grant_updates_the_card_title_count(): void {
-		$this->seed_grant();
-		$html = $this->grants_html();
-		$this->assertMatchesRegularExpression( '/id="aafm-card-grants".*?<h2 class="aafm-card-head-title">Active grants \(1\)<\/h2>/s', $html );
-
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a bundled static asset from disk in a test.
-		$js = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
-		$at = strpos( $js, 'this.#adjustClientTokens( root, clientId, -revoked );' );
+	public function test_revoking_a_grant_reloads_the_server_page_and_returns_focus(): void {
+		$js = $this->admin_js();
+		$at = strpos( $js, '#bindOauthRevoke() {' );
 		$this->assertNotFalse( $at );
-		$this->assertStringContainsString( '#aafm-card-grants .aafm-card-head-title', substr( $js, (int) $at, 600 ) );
+		$revoke = substr( $js, (int) $at, (int) strpos( $js, '#paginateTable(', (int) $at ) - (int) $at );
+		$this->assertStringContainsString( "sessionStorage.setItem( 'aafmFocusGrants', '1' )", $revoke );
+		$this->assertStringContainsString( 'window.location.reload()', $revoke );
+		$this->assertStringNotContainsString( "querySelectorAll( '#aafm-card-grants tr[data-grant-row]' ).length", $revoke, 'The card count never comes from rendered rows.' );
+
+		$at = strpos( $js, '#focusGrantsAfterReload() {' );
+		$this->assertNotFalse( $at );
+		$load = substr( $js, (int) $at, 700 );
+		$this->assertStringContainsString( "sessionStorage.removeItem( 'aafmFocusGrants' )", $load );
+		$this->assertStringContainsString( '#aafm-card-grants .aafm-card-head-title', $load );
+		$this->assertStringContainsString( 'this.#focusGrantsAfterReload();', $js );
 	}
 
 	public function test_the_access_select_lists_the_four_presets_with_the_current_one_selected_and_a_custom_default_for_a_null_preset(): void {
@@ -287,4 +298,111 @@ class ConnectionCardsTest extends TestCase {
 		$this->assertStringContainsString( 'This connection acts with elevated permissions.', $html );
 		$this->assertStringNotContainsString( 'full administrator access', $html );
 	}
+
+	/**
+	 * The bundled admin script.
+	 *
+	 * @return string
+	 */
+	private function admin_js(): string {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a bundled static asset from disk in a test.
+		return (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
+	}
+
+	/**
+	 * Seed $count grants across five active clients, oldest first.
+	 *
+	 * @param int $count Grants to seed.
+	 * @return list<array{0:int,1:string}> [user_id, client_id] pairs, oldest first.
+	 */
+	private function seed_grants( int $count ): array {
+		global $wpdb;
+		$clients = array( 'pg_a', 'pg_b', 'pg_c', 'pg_d', 'pg_e' );
+		foreach ( $clients as $client ) {
+			$wpdb->insert(
+				$wpdb->prefix . 'aafm_oauth_clients',
+				array(
+					'client_id'   => $client,
+					'client_name' => 'Paged ' . $client,
+					'is_active'   => 1,
+				)
+			);
+		}
+		$pairs = array();
+		foreach ( self::factory()->user->create_many( (int) ceil( $count / 5 ) ) as $user ) {
+			foreach ( $clients as $client ) {
+				if ( count( $pairs ) === $count ) {
+					break 2;
+				}
+				$wpdb->insert(
+					$wpdb->prefix . 'aafm_oauth_consents',
+					array(
+						'wp_user_id' => (int) $user,
+						'client_id'  => $client,
+					)
+				);
+				$pairs[] = array( (int) $user, $client );
+			}
+		}
+		return $pairs;
+	}
+
+	public function test_grants_card_shows_page_2_of_3_with_links(): void {
+		$this->seed_grants( 105 );
+		$_GET['grants_page'] = '2';
+		$html                = $this->grants_html();
+
+		$this->assertStringContainsString( 'Active grants (105)', $html );
+		$this->assertStringContainsString( 'Showing 51 to 100 of 105', $html );
+		$this->assertSame( 1, preg_match( '/<a [^>]*href="[^"]*grants_page=1[^"]*"[^>]*>Previous<\/a>/', $html ), 'Previous links to page 1.' );
+		$this->assertSame( 1, preg_match( '/<a [^>]*href="[^"]*grants_page=3[^"]*"[^>]*>Next<\/a>/', $html ), 'Next links to page 3.' );
+		preg_match( '/<tbody>(.*?)<\/tbody>/s', $html, $body );
+		$this->assertSame( 50, substr_count( $body[1], '<tr' ) );
+	}
+
+	public function test_grants_page_junk_renders_page_1(): void {
+		$this->seed_grants( 105 );
+		foreach ( array( 'abc', '0', '-5', array( '2' ), '' ) as $junk ) {
+			$_GET['grants_page'] = $junk;
+			$this->assertSame( 1, aafm_connection_grants_data()['page'], wp_json_encode( $junk ) );
+		}
+		$_GET['grants_page'] = '9999';
+		$this->assertSame( 3, aafm_connection_grants_data()['page'], 'A page past the end clamps to the last page.' );
+		$this->assertStringContainsString( 'Showing 101 to 105 of 105', $this->grants_html() );
+	}
+
+	public function test_grants_table_marked_server_paged(): void {
+		$this->seed_grant();
+		$this->assertMatchesRegularExpression( '/<table [^>]*class="[^"]*aafm-grants-table[^"]*"[^>]*data-aafm-server-paged="1"/', $this->grants_html() );
+		$this->assertStringNotContainsString( 'aafm-grants-pager', $this->grants_html(), 'One page needs no pager.' );
+	}
+
+	public function test_rendered_grants_card_keeps_server_paged_after_kses(): void {
+		$this->seed_grant();
+		// The card body goes through aafm_render_section(), which filters it with aafm_admin_allowed_html().
+		$this->assertStringContainsString( 'data-aafm-server-paged="1"', $this->grants_html() );
+		$this->assertArrayHasKey( 'data-aafm-server-paged', aafm_admin_allowed_html()['table'] );
+	}
+
+	public function test_save_and_pause_work_on_a_grant_beyond_page_1(): void {
+		$pairs = $this->seed_grants( 60 );
+		$grant = $pairs[0]; // The oldest grant, number 60 newest first, on page 2.
+		$this->assertNull(
+			current( array_filter( aafm_connection_grants_data()['rows'], static fn( $r ) => $grant[0] === $r['user_id'] && $grant[1] === $r['client_id'] ) ) ?: null
+		);
+
+		$this->post_as(
+			'administrator',
+			array(
+				'user_id'   => (string) $grant[0],
+				'client_id' => $grant[1],
+				'paused'    => '1',
+			)
+		);
+		$json = $this->run_handler( 'aafm_ajax_oauth_update_grant' );
+		$this->assertTrue( $json['success'] );
+		$this->assertSame( 'paused', $json['data']['status'] );
+		$this->assertSame( $grant[0], $json['data']['user_id'] );
+	}
+
 }

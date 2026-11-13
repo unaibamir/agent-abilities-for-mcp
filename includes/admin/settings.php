@@ -1117,7 +1117,7 @@ function aafm_render_settings_tab(): void {
 	}
 	$high_risk_control .= '<label class="aafm-switch"><input type="checkbox" id="aafm-high-risk-unlocked" name="aafm_high_risk_abilities_unlocked" value="1" ' . checked( $high_risk_checked, true, false ) . '><span class="aafm-switch-track"></span></label> ';
 	$high_risk_control .= '<label for="aafm-high-risk-unlocked">' . esc_html__( 'Allow refunds, creating and changing orders, payment gateway settings, coupons, and tax rates to be switched on individually.', 'agent-abilities-for-mcp' ) . '</label>';
-	$high_risk_control .= '<p class="help">' . esc_html__( "While this is off, no agent can issue a refund, create or change an order, change a payment gateway setting, or create or change a coupon or a tax rate through this plugin's own tools. WooCommerce's own order status and order update tools on the Other plugins tab are held too, and so are the Secure Custom Fields tools that can store a callback name. Order notes stay available.", 'agent-abilities-for-mcp' ) . '</p>';
+	$high_risk_control .= '<p class="help">' . esc_html__( "While this is off, no agent can issue a refund, create or change an order, change a payment gateway setting, or create or change a coupon or a tax rate through this plugin's own tools. WooCommerce's own order status and order update tools on the Plugins' own tools tab are held too, and so are the Secure Custom Fields tools that can store a callback name. Order notes stay available.", 'agent-abilities-for-mcp' ) . '</p>';
 	if ( aafm_high_risk_forced() ) {
 		$high_risk_control .= aafm_get_notice_html( 'info', __( 'Your host or a site setting keeps this locked, whatever this switch says.', 'agent-abilities-for-mcp' ), array( 'inline' => true ) );
 	}

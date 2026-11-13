@@ -44,7 +44,7 @@ function aafm_activity_bridge_groups(): array {
  *
  * A wrapper name two different plugins' slugs both normalize to (foo/bar-baz and foo-bar/baz) is left
  * out, because the audit row cannot say which plugin it belongs to. Such a row, and a row for a plugin
- * that is no longer registered, still appears under the Other plugins (Bridge) bucket.
+ * that is no longer registered, still appears under the Plugins' own tools bucket.
  *
  * @param string $key A bridge: filter key.
  * @return list<string>
@@ -100,7 +100,7 @@ function aafm_activity_plugin_groups(): array {
 			$groups[ (string) $slug ] = isset( $cards[ $slug ]['label'] ) ? (string) $cards[ $slug ]['label'] : (string) $slug;
 		}
 	}
-	$groups['bridge'] = __( 'Other plugins (Bridge)', 'agent-abilities-for-mcp' );
+	$groups['bridge'] = __( "Plugins' own tools", 'agent-abilities-for-mcp' );
 
 	$bridged = array();
 	foreach ( aafm_activity_bridge_groups() as $key => $slugs ) {

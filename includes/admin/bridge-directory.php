@@ -512,8 +512,9 @@ function aafm_bridge_display_label( string $ns ): string {
  * @return void
  */
 function aafm_render_bridge_group( string $ns, array $group, array $enabled, bool $disabled, int $unavailable = 0 ): void {
-	$rows  = isset( $group['abilities'] ) && is_array( $group['abilities'] ) ? $group['abilities'] : array();
-	$label = aafm_bridge_display_label( (string) ( $group['label'] ?? $ns ) );
+	$rows = isset( $group['abilities'] ) && is_array( $group['abilities'] ) ? $group['abilities'] : array();
+	// The orphan group's label is a translated heading already; only a namespace needs turning into one.
+	$label = $disabled ? (string) ( $group['label'] ?? $ns ) : aafm_bridge_display_label( (string) ( $group['label'] ?? $ns ) );
 
 	// Tallied the same way aafm_integration_manifest() tallies a native integration's rows, so the
 	// header goes through aafm_integration_count_breakdown() below instead of a second read/write

@@ -240,4 +240,12 @@ final class BridgeDirectoryLabelsTest extends TestCase {
 		$this->assertMatchesRegularExpression( '/class="aafm-ability-row is-destructive" data-risk="destructive"/', $html );
 		$this->assertSame( 3, substr_count( $html, 'name="bridged_abilities[]"' ), 'The notices add no field to the form.' );
 	}
+
+	public function test_inactive_plugin_heading_is_a_clean_string(): void {
+		update_option( 'aafm_enabled_bridged_abilities', array( 'gone-plugin/tool' ) );
+
+		$html = $this->render();
+
+		$this->assertStringContainsString( '<h2>' . esc_html__( 'Unavailable (plugin inactive)', 'agent-abilities-for-mcp' ) . '</h2>', $html );
+	}
 }

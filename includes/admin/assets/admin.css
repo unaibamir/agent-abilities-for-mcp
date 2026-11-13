@@ -3727,6 +3727,13 @@
 		outline-offset: 2px;
 	}
 
+	/* Inside a clipping scroller (the tab strip) or an overflow: hidden card (a wizard step), an
+	   outer ring is cut off; draw it inside the element instead. */
+	.aafm-wrap .nav-tab-wrapper .nav-tab:focus-visible,
+	.aafm-qc-overlay .aafm-qc-job-head:focus-visible {
+		outline-offset: -2px;
+	}
+
 	.aafm-wrap .aafm-client.on,
 	.aafm-qc-overlay .aafm-client.on {
 		border-style: dashed;

@@ -152,6 +152,14 @@ final class AvadaGlobalOptionsTest extends TestCase {
 		$this->assertSame( $keys, $args['input_schema']['properties']['keys']['items']['enum'] );
 	}
 
+	public function test_the_descriptions_do_not_promise_that_no_code_comes_back(): void {
+		// footer_text is an approved key and is Avada's HTML code field, returned as stored.
+		foreach ( array( aafm_ability_description( 'aafm/avada-get-global-options' ), aafm_ability_disclosures()['aafm/avada-get-global-options'] ) as $text ) {
+			$this->assertStringNotContainsString( 'custom code', $text );
+			$this->assertStringContainsString( 'stored HTML', $text );
+		}
+	}
+
 	public function test_an_editor_is_refused_and_an_admin_allowed(): void {
 		$args = aafm_args_avada_get_global_options();
 		$this->assertTrue( (bool) call_user_func( $args['permission_callback'], array() ) );

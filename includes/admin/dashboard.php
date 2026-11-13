@@ -471,7 +471,7 @@ function aafm_render_dashboard_tab(): void {
 	// Recent agents (24h).
 	aafm_render_stat_head( 'aafm-stat-recent', __( 'Recent agents (24h)', 'agent-abilities-for-mcp' ), 'recent' );
 	printf( '<div class="stat-value">%s</div>', esc_html( number_format_i18n( $recent ) ) );
-	echo '<div class="stat-sub">' . esc_html__( 'Separate agent users seen in the activity log in the last 24 hours. This is recent activity from the log, not a count of live connections.', 'agent-abilities-for-mcp' ) . '</div>';
+	echo '<div class="stat-sub">' . esc_html__( 'Separate accounts that called a tool in the last 24 hours, read from the activity log. Not a count of live connections.', 'agent-abilities-for-mcp' ) . '</div>';
 	echo '</div>';
 
 	// Audit log.

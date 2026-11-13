@@ -176,6 +176,7 @@ function aafm_admin_allowed_html(): array {
 		'aria-live'        => true,
 		'aria-selected'    => true,
 		'aria-pressed'     => true,
+		'aria-checked'     => true,
 		'aria-expanded'    => true,
 		'aria-controls'    => true,
 		'aria-labelledby'  => true,

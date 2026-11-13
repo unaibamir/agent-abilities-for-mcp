@@ -897,21 +897,23 @@ function aafm_render_client_picker( string $label_id, string $grid_id, array $cl
 	echo '</div>';
 
 	echo '<div class="aafm-connect-client">';
-	echo '<div class="aafm-stat-label">' . esc_html__( 'Your client', 'agent-abilities-for-mcp' ) . '</div>';
-	echo '<div class="aafm-client-grid" id="' . esc_attr( $grid_id ) . '">';
+	echo '<div class="aafm-stat-label" id="' . esc_attr( $grid_id . '-label' ) . '">' . esc_html__( 'Your client', 'agent-abilities-for-mcp' ) . '</div>';
+	// One choice from a set: a named radiogroup of radio buttons, with one tab stop and the arrow
+	// keys moving the selection (admin.js keeps aria-checked, tabindex and .on in step).
+	echo '<div class="aafm-client-grid" id="' . esc_attr( $grid_id ) . '" role="radiogroup" aria-labelledby="' . esc_attr( $grid_id . '-label' ) . '">';
 	$first = true;
 	foreach ( $clients as $slug => $label ) {
-		// A real <button> with aria-pressed, not a click-only div: the OAuth picker is the
-		// only route to the OAuth instructions, so it has to be reachable by keyboard
-		// and announce its selected state. admin.js keeps aria-pressed and .on in step.
+		// A real <button>, not a click-only div: the OAuth picker is the only route to the OAuth
+		// instructions, so it has to be reachable by keyboard and announce its selected state.
 		echo wp_kses(
 			sprintf(
-				'<button type="button" class="aafm-client%1$s" data-client="%2$s" aria-pressed="%5$s"><span class="ci">%3$s</span>%4$s</button>',
+				'<button type="button" class="aafm-client%1$s" data-client="%2$s" role="radio" aria-checked="%5$s" tabindex="%6$s"><span class="ci">%3$s</span>%4$s</button>',
 				$first ? ' on' : '',
 				esc_attr( $slug ),
 				aafm_icon( 'client-' . $slug ),
 				esc_html( $label ),
-				$first ? 'true' : 'false'
+				$first ? 'true' : 'false',
+				$first ? '0' : '-1'
 			),
 			aafm_admin_allowed_html()
 		);

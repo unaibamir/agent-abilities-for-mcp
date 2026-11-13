@@ -200,7 +200,7 @@ class ConnectionCardsTest extends TestCase {
 		$this->seed_grant();
 		preg_match( '/<table[^>]*aafm-grants-table.*?<\/thead>/s', $this->grants_html(), $m );
 		$this->assertNotEmpty( $m );
-		preg_match_all( '/<th>(?:<span[^>]*>)?([^<]+)/', $m[0], $heads );
+		preg_match_all( '/<th scope="col">(?:<span[^>]*>)?([^<]+)/', $m[0], $heads );
 		$this->assertSame( array( 'User', 'Current role', 'App', 'Access', 'Last used', 'Ends', 'Limit', 'Status', 'Actions' ), $heads[1] );
 	}
 
@@ -405,6 +405,16 @@ class ConnectionCardsTest extends TestCase {
 		$this->assertArrayHasKey( 'data-aafm-server-paged', aafm_admin_allowed_html()['table'] );
 	}
 
+	public function test_clients_and_grants_headers_have_scope_col(): void {
+		$this->seed_grant();
+		$html = $this->render( static fn() => aafm_render_clients_card( aafm_connection_clients_data() ) ) . $this->grants_html();
+		$this->assertSame( 2, preg_match_all( '/<thead>(.*?)<\/thead>/s', $html, $heads ) );
+		foreach ( $heads[1] as $head ) {
+			$this->assertGreaterThan( 0, substr_count( $head, '<th' ) );
+			$this->assertSame( substr_count( $head, '<th' ), substr_count( $head, '<th scope="col"' ) );
+		}
+	}
+
 	public function test_stale_token_notice_shows_count_and_button_only_when_count_positive(): void {
 		$this->seed_grant();
 		$this->seed_token( aafm_endpoint_url() );
@@ -444,6 +454,33 @@ class ConnectionCardsTest extends TestCase {
 		$this->assertSame( 3, $json['data']['deactivated'] );
 		$this->assertStringContainsString( '3 tokens', $json['data']['message'] );
 		$this->assertSame( 0, aafm_oauth_stale_token_count() );
+	}
+
+	public function test_client_picker_is_a_labelled_radiogroup(): void {
+		$html = $this->render( static fn() => aafm_render_client_picker( 'aafm-os-label-test', 'aafm-test-clients', aafm_quickstart_clients() ) );
+		$this->assertMatchesRegularExpression( '/<div class="aafm-client-grid" id="aafm-test-clients" role="radiogroup" aria-labelledby="aafm-test-clients-label">/', $html );
+		$this->assertStringContainsString( 'id="aafm-test-clients-label"', $html );
+	}
+
+	public function test_rendered_client_picker_keeps_radio_and_aria_checked_after_kses(): void {
+		$html = $this->render( static fn() => aafm_render_client_picker( 'aafm-os-label-test', 'aafm-test-clients', aafm_quickstart_clients() ) );
+		$this->assertSame( count( aafm_quickstart_clients() ), preg_match_all( '/<button type="button" class="aafm-client[^"]*"[^>]*role="radio"[^>]*aria-checked="(true|false)"[^>]*tabindex="(0|-1)"/', $html, $m ) );
+		$this->assertSame( array( 'true' ), array_values( array_unique( array_filter( $m[1], static fn( $v ) => 'true' === $v ) ) ) );
+		$this->assertSame( 1, substr_count( $html, 'aria-checked="true"' ), 'Exactly one client starts selected.' );
+		$this->assertStringNotContainsString( 'aria-pressed', $html );
+	}
+
+	public function test_client_picker_script_keeps_aria_checked_and_arrow_keys(): void {
+		$js = $this->admin_js();
+		foreach ( array( '#bindClientPicker() {', '#bindOauthClientPicker() {' ) as $handler ) {
+			$at = strpos( $js, $handler );
+			$this->assertNotFalse( $at, $handler );
+			$body = substr( $js, (int) $at, (int) strpos( $js, "\n\t\t}\n", (int) $at ) - (int) $at );
+			$this->assertStringContainsString( "setAttribute( 'aria-checked'", $body, $handler );
+			$this->assertStringNotContainsString( 'aria-pressed', $body, $handler );
+			$this->assertStringContainsString( 'this.#wireTablistKeys(', $body, $handler . ' moves the selection with the arrow keys.' );
+			$this->assertStringContainsString( 'this.#rovingTabindex(', $body, $handler );
+		}
 	}
 
 	public function test_save_and_pause_work_on_a_grant_beyond_page_1(): void {

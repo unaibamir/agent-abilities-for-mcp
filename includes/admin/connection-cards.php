@@ -130,18 +130,18 @@ function aafm_render_clients_card( array $data ): void {
 	} else {
 		echo '<div class="aafm-table-wrap">';
 		echo '<table class="widefat striped aafm-oauth-table aafm-clients-table"><thead><tr>';
-		echo '<th>' . esc_html__( 'Client', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Client ID', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Redirect URIs', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Created', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Active tokens', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Status', 'agent-abilities-for-mcp' ) . '</th>';
+		echo '<th scope="col">' . esc_html__( 'Client', 'agent-abilities-for-mcp' ) . '</th>';
+		echo '<th scope="col">' . esc_html__( 'Client ID', 'agent-abilities-for-mcp' ) . '</th>';
+		echo '<th scope="col">' . esc_html__( 'Redirect URIs', 'agent-abilities-for-mcp' ) . '</th>';
+		echo '<th scope="col">' . esc_html__( 'Created', 'agent-abilities-for-mcp' ) . '</th>';
+		echo '<th scope="col">' . esc_html__( 'Active tokens', 'agent-abilities-for-mcp' ) . '</th>';
+		echo '<th scope="col">' . esc_html__( 'Status', 'agent-abilities-for-mcp' ) . '</th>';
 		printf(
-			'<th><span title="%1$s">%2$s</span></th>',
+			'<th scope="col"><span title="%1$s">%2$s</span></th>',
 			esc_attr__( 'Marks this client as an AI agent connection rather than an ordinary human client, surfaced on the activity log.', 'agent-abilities-for-mcp' ),
 			esc_html__( 'Agent', 'agent-abilities-for-mcp' )
 		);
-		echo '<th>' . esc_html__( 'Action', 'agent-abilities-for-mcp' ) . '</th>';
+		echo '<th scope="col">' . esc_html__( 'Action', 'agent-abilities-for-mcp' ) . '</th>';
 		echo '</tr></thead><tbody>';
 
 		foreach ( $data['rows'] as $client ) {
@@ -294,14 +294,14 @@ function aafm_render_grants_card( array $data ): void {
 		echo '<div class="aafm-table-wrap">';
 		// Paged on the server: admin.js leaves a data-aafm-server-paged table to the page links.
 		echo '<table class="widefat striped aafm-oauth-table aafm-grants-table" data-aafm-server-paged="1"><thead><tr>';
-		echo '<th>' . esc_html__( 'User', 'agent-abilities-for-mcp' ) . '</th>';
+		echo '<th scope="col">' . esc_html__( 'User', 'agent-abilities-for-mcp' ) . '</th>';
 		printf(
-			'<th><span title="%1$s">%2$s</span></th>',
+			'<th scope="col"><span title="%1$s">%2$s</span></th>',
 			esc_attr__( "The user's role right now, not necessarily what it was when they approved this connection. A token always acts with whatever this identity can currently do.", 'agent-abilities-for-mcp' ),
 			esc_html__( 'Current role', 'agent-abilities-for-mcp' )
 		);
 		foreach ( array( __( 'App', 'agent-abilities-for-mcp' ), __( 'Access', 'agent-abilities-for-mcp' ), __( 'Last used', 'agent-abilities-for-mcp' ), __( 'Ends', 'agent-abilities-for-mcp' ), __( 'Limit', 'agent-abilities-for-mcp' ), __( 'Status', 'agent-abilities-for-mcp' ), __( 'Actions', 'agent-abilities-for-mcp' ) ) as $heading ) {
-			echo '<th>' . esc_html( $heading ) . '</th>';
+			echo '<th scope="col">' . esc_html( $heading ) . '</th>';
 		}
 		echo '</tr></thead><tbody>';
 

@@ -352,15 +352,16 @@
 			if ( ! cards.length ) {
 				return;
 			}
-			cards.forEach( ( card ) => {
-				card.addEventListener( 'click', () => {
-					cards.forEach( ( c ) => {
+			const list = Array.from( cards );
+			const select = ( card ) => {
+					list.forEach( ( c ) => {
 						const on = c === card;
 						c.classList.toggle( 'on', on );
-						// The cards are toggle buttons; aria-pressed carries the same
+						// The cards are radios in a radiogroup; aria-checked carries the same
 						// selected state to assistive tech that .on carries visually.
-						c.setAttribute( 'aria-pressed', String( on ) );
+						c.setAttribute( 'aria-checked', String( on ) );
 					} );
+					this.#rovingTabindex( list, card );
 
 					const client = card.dataset.client ?? '';
 					// The matching quickstart card carries the ready-made unix snippet.
@@ -394,8 +395,11 @@
 								copy.dataset.copy = next;
 							}
 						} );
-				} );
+			};
+			list.forEach( ( card ) => {
+				card.addEventListener( 'click', () => select( card ) );
 			} );
+			this.#wireTablistKeys( list, select );
 		}
 
 		/**
@@ -411,22 +415,26 @@
 			if ( ! cards.length ) {
 				return;
 			}
-			cards.forEach( ( card ) => {
-				card.addEventListener( 'click', () => {
-					cards.forEach( ( c ) => {
-						const on = c === card;
-						c.classList.toggle( 'on', on );
-						c.setAttribute( 'aria-pressed', String( on ) );
-					} );
-
-					const client = card.dataset.client ?? '';
-					document
-						.querySelectorAll( '.aafm-oauth-panel[data-client]' )
-						.forEach( ( panel ) => {
-							panel.hidden = panel.dataset.client !== client;
-						} );
+			const list = Array.from( cards );
+			const select = ( card ) => {
+				list.forEach( ( c ) => {
+					const on = c === card;
+					c.classList.toggle( 'on', on );
+					c.setAttribute( 'aria-checked', String( on ) );
 				} );
+				this.#rovingTabindex( list, card );
+
+				const client = card.dataset.client ?? '';
+				document
+					.querySelectorAll( '.aafm-oauth-panel[data-client]' )
+					.forEach( ( panel ) => {
+						panel.hidden = panel.dataset.client !== client;
+					} );
+			};
+			list.forEach( ( card ) => {
+				card.addEventListener( 'click', () => select( card ) );
 			} );
+			this.#wireTablistKeys( list, select );
 		}
 
 		/**

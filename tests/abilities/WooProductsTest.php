@@ -1446,10 +1446,11 @@ final class WooProductsTest extends TestCase {
 	 * A variable product with Color and Size attributes, created through the ability so both are real
 	 * attribute objects, plus a variation that uses Size when asked.
 	 *
-	 * @param bool $with_variation Whether to add a variation that uses Size.
+	 * @param bool   $with_variation Whether to add a variation that uses Size.
+	 * @param string $type           Product type the stub row gets.
 	 * @return array{0:int,1:int} Product id and variation id (0 when none).
 	 */
-	private function product_with_attributes( bool $with_variation ): array {
+	private function product_with_attributes( bool $with_variation, string $type = 'variable' ): array {
 		$this->acting_as( 'administrator' );
 		$created = wp_get_ability( 'aafm/wc-create-product' )->execute(
 			array(
@@ -1469,7 +1470,7 @@ final class WooProductsTest extends TestCase {
 		$this->assertNotInstanceOf( WP_Error::class, $created, is_wp_error( $created ) ? $created->get_error_message() : '' );
 		$id          = (int) $created['id'];
 		$row         = \AAFM\Tests\WcStubStore::get( $id );
-		$row['type'] = 'variable'; // The create schema only takes simple; the stub row is turned variable.
+		$row['type'] = $type; // The create schema only takes simple; the stub row gets the type.
 		\AAFM\Tests\WcStubStore::seed( $id, $row );
 		$variation = 0;
 		if ( $with_variation ) {
@@ -1589,5 +1590,20 @@ final class WooProductsTest extends TestCase {
 			)
 		);
 		$this->assertInstanceOf( WP_Error::class, $both, 'Removing and sending one attribute in one call is ambiguous and refused.' );
+	}
+
+	public function test_remove_attribute_used_by_a_variable_subscription_variation_is_refused(): void {
+		list( $id, $variation ) = $this->product_with_attributes( true, 'variable-subscription' );
+
+		$res = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id'        => $id,
+				'remove_attributes' => array( 'Size' ),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_attribute_in_use', $res->get_error_code() );
+		$this->assertStringContainsString( (string) $variation, $res->get_error_message() );
 	}
 }

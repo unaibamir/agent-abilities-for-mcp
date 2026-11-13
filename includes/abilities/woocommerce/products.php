@@ -861,9 +861,10 @@ function aafm_wc_attributes_without( \WC_Product $product, array $stored, array 
 	}
 
 	// A variation keys its chosen values by attribute slug. A variation that cannot be loaded counts
-	// as using every attribute, so a failed read never strands one.
+	// as using every attribute, so a failed read never strands one. Any variable product type has
+	// variations (a variable subscription too); a grouped product's children are not variations.
 	$in_use = array();
-	if ( 'variable' === $product->get_type() ) {
+	if ( is_a( $product, 'WC_Product_Variable' ) || 0 === strpos( (string) $product->get_type(), 'variable' ) ) {
 		foreach ( array_map( 'intval', (array) $product->get_children() ) as $child_id ) {
 			$variation = aafm_wc_get_variation( $child_id );
 			$chosen    = null === $variation ? null : (array) $variation->get_attributes();

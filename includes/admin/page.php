@@ -3529,7 +3529,7 @@ function aafm_render_help_tab(): void {
 			. '<li><strong>' . esc_html__( 'Gemini CLI:', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'add it to the mcpServers block in your settings.json.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '</ul>'
 			. '<p>' . esc_html__( 'For the proxy clients, copy the config straight from Connection → Step 2 - do not hand-build it. On Windows, use that tab\'s "Windows" view (it wraps the launcher in cmd /c); for a local or staging site, it adds the certificate handling. Both are covered in the Connecting section above.', 'agent-abilities-for-mcp' ) . '</p>'
-			. '<p><strong>' . esc_html__( 'The hosted Gemini app cannot connect in this release.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'Its web connector expects a native streamable HTTP/SSE MCP transport, which the bundled adapter does not serve yet. Gemini CLI is the exception: it runs as a proxy client, like Claude Code, so it works today, and the Connection tab has a ready-made quickstart for it.', 'agent-abilities-for-mcp' ) . '</p>',
+			. '<p><strong>' . esc_html__( 'The Gemini app:', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'We have not found a way to add a custom MCP server in the Gemini app, so there are no steps for it here. Gemini CLI can connect: it runs as a proxy client, like Claude Code, and the Connection tab has a ready-made quickstart for it.', 'agent-abilities-for-mcp' ) . '</p>',
 			$inline
 		)
 	);

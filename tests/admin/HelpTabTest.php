@@ -141,9 +141,10 @@ final class HelpTabTest extends TestCase {
 		$this->assertStringContainsString( 'Add custom MCP server', $html );
 		$this->assertStringNotContainsString( 'turn on Developer mode', $html );
 		$this->assertStringContainsString( 'Customize, then Connectors', $html );
-		// Only the hosted Gemini app is still called out as unable to connect; Gemini CLI works
-		// as a proxy client (accurate to this release).
-		$this->assertStringContainsString( 'hosted Gemini app cannot connect', $html );
+		// The Gemini app line states only what was checked: no way found to add a custom MCP server.
+		// It never blames the transport, which is the same one ChatGPT and Claude use.
+		$this->assertStringContainsString( 'We have not found a way to add a custom MCP server in the Gemini app', $html );
+		$this->assertStringNotContainsString( 'streamable HTTP', $html );
 		$this->assertStringContainsString( 'Gemini CLI', $html );
 	}
 

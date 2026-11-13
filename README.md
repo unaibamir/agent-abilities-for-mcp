@@ -149,7 +149,7 @@ The plugin calls no AI provider and sends no telemetry. It makes two kinds of re
 
 That notice comes from a copy of the MCP Adapter that runs its own loader and finds the adapter already loaded by a different copy. This plugin bundles adapter 0.7.1 and loads it without that loader, so its own copy never prints the notice. When the standalone MCP Adapter plugin is active too, this plugin asks it to step aside quietly, unless your site already sets the WP_MCP_AUTOLOAD constant.
 
-If the notice still shows, another plugin ships its own copy of the adapter, and updating that plugin is the fix. The Connection Doctor report on the Connection tab names the copy that is running, for example "MCP adapter: 0.7.1 (from plugin: example-plugin)".
+If the notice still shows, another plugin ships its own copy of the adapter. The Connection Doctor report on the Connection tab shows which copy is running. If it says bundled, this plugin's copy is in use and the notice comes from the other plugin's copy, so update or remove the plugin that bundles its own MCP Adapter.
 
 ## More documentation
 

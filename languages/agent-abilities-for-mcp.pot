@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-13T18:42:03+05:00\n"
+"POT-Creation-Date: 2026-11-13T22:12:26+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -5179,11 +5179,11 @@ msgstr ""
 msgid "Paused"
 msgstr ""
 
-#. translators: 1: number of token rows, 2: this site's MCP endpoint address.
+#. translators: %s: number of token rows.
 #: includes/admin/connection-cards.php:262
 #, php-format
-msgid "%1$s token was issued for an old address of this site, so it can no longer connect. To connect again, each person who approved that app has to remove the connector and add it again with this address: %2$s. Ending old tokens removes no one's approval."
-msgid_plural "%1$s tokens were issued for an old address of this site, so they can no longer connect. To connect again, each person who approved those apps has to remove the connector and add it again with this address: %2$s. Ending old tokens removes no one's approval."
+msgid "%s token was issued for an old address of this site, so it can no longer connect. To connect again, each person who approved that app has to remove the connector and add it again with the address below. Ending old tokens removes no one's approval."
+msgid_plural "%s tokens were issued for an old address of this site, so they can no longer connect. To connect again, each person who approved those apps has to remove the connector and add it again with the address below. Ending old tokens removes no one's approval."
 msgstr[0] ""
 msgstr[1] ""
 
@@ -6947,7 +6947,7 @@ msgid "Permalinks"
 msgstr ""
 
 #: includes/admin/doctor.php:616
-msgid "Permalinks are set to Plain. The endpoint address then carries ?rest_route= and some clients and discovery documents fail. Pick any other structure under Settings, Permalinks. Switching changes the endpoint address, so every OAuth connection ends and each app has to be removed and added again with the new address this row shows after you save. Use this exact endpoint address in your agent until you switch:"
+msgid "Permalinks are set to Plain. The endpoint address then carries ?rest_route= and some clients and discovery documents fail. Pick any other structure under Settings, Permalinks. Switching changes the endpoint address, so every OAuth connection ends and each app has to be removed and added again with the new address, which the MCP endpoint card at the top of this tab shows once you save. Use this exact endpoint address in your agent until you switch:"
 msgstr ""
 
 #: includes/admin/doctor.php:619
@@ -7827,7 +7827,7 @@ msgid "The page reloads afterwards, and your unsaved changes on this tab will be
 msgstr ""
 
 #: includes/admin/page.php:317
-msgid "End every token issued for an old address of this site? Approvals stay; those apps reconnect."
+msgid "End every token issued for an old address of this site? Approvals stay, but each app has to be removed and added again with the new address."
 msgstr ""
 
 #: includes/admin/page.php:318

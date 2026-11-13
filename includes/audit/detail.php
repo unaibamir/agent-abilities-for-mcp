@@ -171,7 +171,10 @@ function aafm_activity_detail_key_list( $value, array $allowed ): ?string {
  * args_builder: the security property is that a reviewer can read every field that can ever reach
  * an audit row in one place, and spreading it across twenty ability files destroys that.
  *
- * @return array<string, array{template: string, args?: list<array{key: string, type: string, enum?: string|list<string>}>, result_id?: string, result_type?: string, link?: string}>
+ * An arg may be marked `optional`; when it is absent or fails its check, the entry's
+ * `fallback_template` (which takes the other args only) is used instead of `template`.
+ *
+ * @return array<string, array{template: string, fallback_template?: string, args?: list<array{key: string, type: string, enum?: string|list<string>, optional?: bool}>, result_id?: string, result_type?: string, link?: string}>
  */
 function aafm_activity_detail_map(): array {
 	return array(
@@ -399,15 +402,24 @@ function aafm_activity_detail_map(): array {
 			'link'     => 'post',
 		),
 		'aafm/update-user'                 => array(
+			/* translators: 1: the user's numeric ID. 2: the role slug assigned, such as shop_manager. */
+			'template'          => __( 'Updated user #%1$s, role set to %2$s', 'agent-abilities-for-mcp' ),
 			/* translators: %s: the user's numeric ID. */
-			'template' => __( 'Updated user #%s', 'agent-abilities-for-mcp' ),
-			'args'     => array(
+			'fallback_template' => __( 'Updated user #%s', 'agent-abilities-for-mcp' ),
+			'args'              => array(
 				array(
 					'key'  => 'user_id',
 					'type' => 'id',
 				),
+				// The role slug, an identifier like any other key. Optional: a call that changes no role,
+				// or one whose role fails the check, gets the fallback template naming the user only.
+				array(
+					'key'      => 'role',
+					'type'     => 'key',
+					'optional' => true,
+				),
 			),
-			'link'     => 'user',
+			'link'              => 'user',
 		),
 		'aafm/delete-user'                 => array(
 			/* translators: %s: the user's numeric ID. */
@@ -1301,7 +1313,8 @@ function aafm_build_activity_detail( string $ability, array $args, string $statu
 		return null;
 	}
 
-	$values = array();
+	$values   = array();
+	$template = (string) $entry['template'];
 	foreach ( $entry['args'] as $field ) {
 		$allowed  = isset( $field['enum'] ) ? aafm_activity_detail_enum( $field['enum'] ) : array();
 		$rendered = aafm_activity_detail_field(
@@ -1309,13 +1322,19 @@ function aafm_build_activity_detail( string $ability, array $args, string $statu
 			$args[ $field['key'] ] ?? null,
 			$allowed
 		);
+		if ( null === $rendered && ! empty( $field['optional'] ) && isset( $entry['fallback_template'] ) ) {
+			// ponytail: one optional field per entry, swapped for the fallback template. A second one
+			// would need a template per combination.
+			$template = (string) $entry['fallback_template'];
+			continue;
+		}
 		if ( null === $rendered ) {
 			return null; // All or nothing: never emit a template with a hole in it.
 		}
 		$values[] = $rendered;
 	}
 
-	$detail = vsprintf( (string) $entry['template'], $values );
+	$detail = vsprintf( $template, $values );
 	if ( in_array( $status, array( 'denied', 'error' ), true ) ) {
 		/* translators: %s: what the call tried to do, such as "Updated meta key `x` on post #5". */
 		return sprintf( __( 'Attempted: %s', 'agent-abilities-for-mcp' ), $detail );

@@ -1688,4 +1688,56 @@ final class DetailTest extends TestCase {
 		);
 		return is_array( $row ) ? $row : array();
 	}
+
+	public function test_update_user_detail_includes_new_role(): void {
+		$this->assertSame(
+			'Updated user #5, role set to shop_manager',
+			aafm_build_activity_detail(
+				'aafm/update-user',
+				array(
+					'user_id' => 5,
+					'role'    => 'shop_manager',
+					'email'   => 'person@example.com',
+				)
+			)
+		);
+		// A role that is not an identifier never reaches the row; the user is still named.
+		$this->assertSame(
+			'Updated user #5',
+			aafm_build_activity_detail(
+				'aafm/update-user',
+				array(
+					'user_id' => 5,
+					'role'    => '<b>admin</b> x',
+				)
+			)
+		);
+		$this->assertSame(
+			'Attempted: Updated user #5, role set to administrator',
+			aafm_build_activity_detail(
+				'aafm/update-user',
+				array(
+					'user_id' => 5,
+					'role'    => 'administrator',
+				),
+				'denied'
+			)
+		);
+	}
+
+	public function test_update_user_detail_without_role_unchanged(): void {
+		$this->assertSame(
+			'Updated user #5',
+			aafm_build_activity_detail(
+				'aafm/update-user',
+				array(
+					'user_id'    => 5,
+					'first_name' => 'Ann',
+				)
+			)
+		);
+		$this->assertNull( aafm_build_activity_detail( 'aafm/update-user', array( 'role' => 'editor' ) ), 'The user id is still required.' );
+		$entry = aafm_activity_detail_map()['aafm/update-user'];
+		$this->assertSame( 1, substr_count( (string) $entry['fallback_template'], '%' ), 'The fallback takes the required id only.' );
+	}
 }

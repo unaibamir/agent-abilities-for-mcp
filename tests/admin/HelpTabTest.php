@@ -268,4 +268,20 @@ final class HelpTabTest extends TestCase {
 		$this->assertStringNotContainsString( 'All four', $html );
 		$this->assertStringNotContainsString( 'four guardrails', $html );
 	}
+
+	public function test_help_401_line_names_membership_lockdown(): void {
+		$this->acting_as( 'administrator' );
+
+		ob_start();
+		aafm_render_help_tab();
+		$html = (string) ob_get_clean();
+
+		$start = strpos( $html, 'reached WordPress but auth failed' );
+		$this->assertNotFalse( $start );
+		$line = substr( $html, (int) $start, (int) strpos( $html, '</li>', (int) $start ) - (int) $start );
+		$this->assertStringContainsString( 'wrong or expired Application Password', $line );
+		$this->assertStringContainsString( 'membership', $line );
+		$this->assertStringContainsString( 'correct password', $line );
+		$this->assertStringContainsString( 'Connection Doctor', $line );
+	}
 }

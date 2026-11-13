@@ -77,7 +77,7 @@ function aafm_doctor_interpret_http_status( int $code, bool $oauth_on ): array {
 		return array(
 			'status' => $oauth_on ? 'fail' : 'warn',
 			'who'    => 'plugin',
-			'detail' => __( 'WordPress answered 401 before this plugin could reply, so something requires a login for the whole REST API. Agents cannot finish connecting while that is on.', 'agent-abilities-for-mcp' ),
+			'detail' => __( 'WordPress answered 401 before this plugin could reply, so something requires a login for the whole REST API. Agents cannot finish connecting while that is on. A membership or security plugin is the usual cause, and on such a site even a correct Application Password gets this 401.', 'agent-abilities-for-mcp' ),
 		);
 	}
 	if ( 403 === $code ) {
@@ -640,6 +640,18 @@ function aafm_doctor_known_blockers(): array {
 }
 
 /**
+ * Whether BuddyBoss Platform refuses REST requests from anyone not signed in. The same condition its
+ * own bb_restricate_rest_api_callback() checks: Private REST APIs on, and, when BuddyBoss App is
+ * active, its private app on too. Both functions are BuddyBoss's own, so a site without it reads false.
+ *
+ * @return bool
+ */
+function aafm_doctor_buddyboss_private_rest(): bool {
+	return function_exists( 'bp_enable_private_rest_apis' ) && true === (bool) bp_enable_private_rest_apis()
+		&& ( ! function_exists( 'bbapp_is_private_app_enabled' ) || true === (bool) bbapp_is_private_app_enabled() );
+}
+
+/**
  * Row: security plugins that can get in the way.
  *
  * @return array<string,mixed>
@@ -656,18 +668,19 @@ function aafm_doctor_check_security_plugins(): array {
 			$active[] = (string) $name;
 		}
 	}
-	if ( array() === $active ) {
+	$details = array();
+	if ( array() !== $active ) {
+		/* translators: %s: comma-separated plugin names. */
+		$details[] = sprintf( __( '%s can restrict the REST API or Application Passwords. If a connection fails, check its REST API and login settings first.', 'agent-abilities-for-mcp' ), implode( ', ', $active ) );
+	}
+	if ( aafm_doctor_buddyboss_private_rest() ) {
+		$details[] = __( 'BuddyBoss has Private Rest APIs switched on, so it answers anyone it does not see as signed in with "Only authenticated users can access the REST API." That stops an AI client finishing OAuth, and it can refuse even a correct Application Password. In the BuddyBoss Privacy settings, add wp-json/agent-abilities-for-mcp/ to Public Rest APIs, or switch Private Rest APIs off.', 'agent-abilities-for-mcp' );
+	}
+	if ( array() === $details ) {
 		return aafm_doctor_row( 'security_plugins', $label, 'pass', '', __( 'None of the security plugins this check knows about is active.', 'agent-abilities-for-mcp' ) );
 	}
 
-	return aafm_doctor_row(
-		'security_plugins',
-		$label,
-		'warn',
-		'plugin',
-		/* translators: %s: comma-separated plugin names. */
-		sprintf( __( '%s can restrict the REST API or Application Passwords. If a connection fails, check its REST API and login settings first.', 'agent-abilities-for-mcp' ), implode( ', ', $active ) )
-	);
+	return aafm_doctor_row( 'security_plugins', $label, 'warn', 'plugin', implode( ' ', $details ) );
 }
 
 /**

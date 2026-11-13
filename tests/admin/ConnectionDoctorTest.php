@@ -77,6 +77,7 @@ final class ConnectionDoctorTest extends TestCase {
 		remove_all_filters( 'pre_http_request' );
 		remove_all_filters( 'wp_is_application_passwords_available' );
 		remove_all_filters( 'aafm_doctor_known_blockers' );
+		remove_all_filters( 'bp_enable_private_rest_apis' );
 		foreach ( $this->slots_seen as $slot ) {
 			delete_transient( $slot );
 		}
@@ -914,5 +915,68 @@ final class ConnectionDoctorTest extends TestCase {
 		$this->assertStringContainsString( 'id="aafm-doctor-show-all"', $html );
 		$this->assertMatchesRegularExpression( '/id="aafm-doctor-copy"[^>]*hidden/', $html );
 		$this->assertStringContainsString( 'run from this site&#039;s own server', str_replace( '&apos;', '&#039;', $html ) );
+	}
+
+	/**
+	 * Make BuddyBoss Platform's private REST switch read as on or off. The stub mirrors the real
+	 * bp_enable_private_rest_apis() (bp-core/bp-core-options.php): a bool that ends in its own
+	 * filter of the same name. Without BuddyBoss App the restriction applies whenever it is true.
+	 *
+	 * @param bool $on Whether private REST APIs are on.
+	 * @return void
+	 */
+	private function buddyboss_private_rest( bool $on ): void {
+		if ( ! function_exists( 'bp_enable_private_rest_apis' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a global vendor function cannot be declared inside this namespaced file.
+			eval( 'function bp_enable_private_rest_apis( $default = false ) { return apply_filters( \'bp_enable_private_rest_apis\', (bool) $default ); }' );
+		}
+		add_filter( 'bp_enable_private_rest_apis', $on ? '__return_true' : '__return_false' );
+	}
+
+	public function test_doctor_flags_buddyboss_private_rest_with_a_specific_line(): void {
+		$this->respond( $this->endpoint_ok() );
+		$this->buddyboss_private_rest( false );
+		$this->assertSame( 'pass', $this->row( aafm_doctor_run_checks(), 'security_plugins' )['status'], 'BuddyBoss with private REST off is no warning.' );
+
+		$this->buddyboss_private_rest( true );
+		$row = $this->row( aafm_doctor_run_checks(), 'security_plugins' );
+
+		$this->assertSame( 'warn', $row['status'] );
+		$this->assertSame( 'plugin', $row['who'] );
+		$this->assertStringContainsString( 'BuddyBoss', $row['detail'] );
+		$this->assertStringContainsString( 'Only authenticated users can access the REST API.', $row['detail'], 'The owner can match the error they saw.' );
+		$this->assertStringContainsString( 'wp-json/agent-abilities-for-mcp/', $row['detail'] );
+		$this->assertStringContainsString( 'Public Rest APIs', $row['detail'] );
+	}
+
+	public function test_doctor_generic_rest_login_line_is_not_duplicated(): void {
+		add_filter(
+			'aafm_doctor_known_blockers',
+			static function ( array $known ): array {
+				$known['fake-firewall/fake-firewall.php'] = 'Fake Firewall';
+				return $known;
+			}
+		);
+		update_option( 'active_plugins', array( 'fake-firewall/fake-firewall.php' ) );
+		$this->buddyboss_private_rest( true );
+		$this->respond( $this->endpoint_ok() );
+
+		$rows   = aafm_doctor_run_checks();
+		$detail = $this->row( $rows, 'security_plugins' )['detail'];
+		$all    = implode( "\n", array_column( $rows, 'detail' ) );
+
+		$this->assertStringContainsString( 'Fake Firewall can restrict the REST API', $detail, 'The generic line names only the known plugins.' );
+		$this->assertSame( 1, substr_count( $all, 'BuddyBoss has Private Rest APIs switched on' ), 'The BuddyBoss line appears once.' );
+		$this->assertStringNotContainsString( 'BuddyBoss can restrict', $all, 'BuddyBoss is not also folded into the generic line.' );
+		$this->assertSame( 1, substr_count( $all, 'can restrict the REST API' ) );
+		$this->assertStringNotContainsString( 'requires a login for the whole REST API', $all, 'The generic 401 diagnosis is not repeated beside it.' );
+	}
+
+	public function test_doctor_401_diagnosis_names_membership_lockdown(): void {
+		$read = aafm_doctor_interpret_http_status( 401, false );
+
+		$this->assertStringContainsString( 'requires a login for the whole REST API', $read['detail'] );
+		$this->assertStringContainsString( 'membership', $read['detail'] );
+		$this->assertStringContainsString( 'correct Application Password', $read['detail'] );
 	}
 }

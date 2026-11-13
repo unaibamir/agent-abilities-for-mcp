@@ -942,7 +942,8 @@ function aafm_undo_object_checks( array $row, array $d ): ?string {
 	if ( ! $term && 'restore' === $op ) {
 		$owner = aafm_post_has_foreign_builder_ownership( $id );
 		if ( false !== $owner ) {
-			$post_fields = array_filter( $d['fields'], static fn( string $f ): bool => 0 === strpos( $f, 'post:' ) );
+			// The page template counts with the post fields: the page writer refuses a template change on a builder-owned page.
+			$post_fields = array_filter( $d['fields'], static fn( string $f ): bool => 0 === strpos( $f, 'post:' ) || 'meta:_wp_page_template' === $f );
 			if ( AAFM_BUILDER_OWNERSHIP_UNKNOWN === $owner && array() !== $post_fields ) {
 				return 'builder_owned';
 			}

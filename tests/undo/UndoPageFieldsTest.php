@@ -153,6 +153,26 @@ final class UndoPageFieldsTest extends UndoTestCase {
 		$this->assertSame( 'tpl-b.php', get_page_template_slug( $page ) );
 	}
 
+	public function test_template_only_undo_refused_on_a_page_now_built_in_a_page_builder(): void {
+		$page = $this->page();
+		update_post_meta( $page, '_wp_page_template', 'tpl-a.php' );
+		$change = $this->change_from(
+			array(
+				'page_id'  => $page,
+				'template' => 'tpl-b.php',
+			)
+		);
+		update_post_meta( $page, '_elementor_data', '[{"id":"el1"}]' );
+		update_post_meta( $page, '_elementor_edit_mode', 'builder' );
+
+		$result = aafm_undo_apply( $change, 'owner' );
+
+		$this->assertWPError( $result, 'update-page refuses a template change on a builder-owned page, so its undo does too.' );
+		$this->assertSame( 'aafm_undo_builder_owned', $result->get_error_code() );
+		wp_cache_delete( $page, 'post_meta' );
+		$this->assertSame( 'tpl-b.php', get_page_template_slug( $page ) );
+	}
+
 	public function test_agent_undo_may_restore_page_template_key_only(): void {
 		$page = $this->page();
 		update_post_meta( $page, '_wp_page_template', 'tpl-a.php' );

@@ -984,14 +984,22 @@ function aafm_insert_post( array $input, string $default_status, string $type, ?
 	if ( is_wp_error( $enrichment ) ) {
 		return $enrichment;
 	}
+	// Page-only parent and template, checked before the insert like the enrichment.
+	$page_fields = aafm_page_write_fields( $input, $type, null );
+	if ( is_wp_error( $page_fields ) ) {
+		return $page_fields;
+	}
 
 	$sanitized = aafm_kses_block_markup( isset( $input['content'] ) ? (string) $input['content'] : '' );
-	$postarr   = array(
-		'post_type'    => $type,
-		'post_status'  => $status,
-		'post_title'   => $title,
-		'post_content' => $sanitized['content'],
-		'post_excerpt' => isset( $input['excerpt'] ) ? aafm_sanitize_plain_text( (string) $input['excerpt'] ) : '',
+	$postarr   = array_merge(
+		array(
+			'post_type'    => $type,
+			'post_status'  => $status,
+			'post_title'   => $title,
+			'post_content' => $sanitized['content'],
+			'post_excerpt' => isset( $input['excerpt'] ) ? aafm_sanitize_plain_text( (string) $input['excerpt'] ) : '',
+		),
+		$page_fields
 	);
 
 	// Optional slug → sanitize_title → post_name, folded into the same atomic row write.
@@ -1055,6 +1063,9 @@ function aafm_insert_post( array $input, string $default_status, string $type, ?
 		if ( ! aafm_post_field_confirm_logged( (int) $id, $field, $intended, '', 0 ) ) {
 			return aafm_generic_error();
 		}
+	}
+	if ( array() !== $page_fields && ! aafm_page_write_fields_landed( (int) $id, $page_fields ) ) {
+		return aafm_generic_error();
 	}
 
 	// Apply the pre-validated enrichment now that the id exists.
@@ -1320,12 +1331,18 @@ function aafm_exec_update_post( array $input ) {
 	if ( is_wp_error( $enrichment ) ) {
 		return $enrichment;
 	}
+	// Page-only parent and template, checked before any write. A builder-owned page never gets here
+	// with either: the excerpt-only check above refuses every other key.
+	$page_fields = aafm_page_write_fields( $input, $post->post_type, $post );
+	if ( is_wp_error( $page_fields ) ) {
+		return $page_fields;
+	}
 
 	$guard   = array(
 		'warnings' => array(),
 		'error'    => null,
 	);
-	$postarr = array( 'ID' => $id );
+	$postarr = array_merge( array( 'ID' => $id ), $page_fields );
 	if ( isset( $input['title'] ) ) {
 		$title = aafm_sanitize_plain_text( (string) $input['title'] );
 		if ( ! aafm_title_within_limit( $title ) ) {
@@ -1421,6 +1438,9 @@ function aafm_exec_update_post( array $input ) {
 		if ( ! aafm_post_field_confirm_logged( $id, $field, (string) $postarr[ $field ], (string) $post->$field ) ) {
 			return aafm_generic_error();
 		}
+	}
+	if ( array() !== $page_fields && ! aafm_page_write_fields_landed( $id, $page_fields ) ) {
+		return aafm_generic_error();
 	}
 
 	$response = array( 'post' => aafm_redact_post( $updated ) );

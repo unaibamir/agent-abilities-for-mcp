@@ -2187,6 +2187,11 @@ function aafm_redact_post( WP_Post $post ): array {
 		'modified_gmt' => aafm_post_gmt_date( $post->post_modified_gmt, $post->post_modified ),
 	);
 
+	if ( 'page' === $post->post_type ) {
+		$shape['parent_id'] = (int) $post->post_parent;
+		$shape['template']  = aafm_page_template_value( $post );
+	}
+
 	$lang = aafm_wpml_post_language( (int) $post->ID );
 	if ( null !== $lang ) {
 		$shape['lang'] = $lang;
@@ -2249,6 +2254,14 @@ function aafm_rich_post_output_properties(): array {
 			'description' => __( 'WPML language code of this item. Present only when WPML is active.', 'agent-abilities-for-mcp' ),
 		),
 		'link'            => array( 'type' => 'string' ),
+		'parent_id'       => array(
+			'type'        => 'integer',
+			'description' => __( 'Pages only: the parent page id, 0 for none.', 'agent-abilities-for-mcp' ),
+		),
+		'template'        => array(
+			'type'        => 'string',
+			'description' => __( 'Pages only: the page template file name, or "default".', 'agent-abilities-for-mcp' ),
+		),
 		'author_id'       => array( 'type' => 'integer' ),
 		'author'          => array(
 			'type'       => array( 'object', 'null' ),

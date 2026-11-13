@@ -36,7 +36,7 @@ function aafm_register_pages_definitions( array $registry ): array {
 	);
 	$registry['aafm/create-page'] = array(
 		'label'        => __( 'Create page', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Create a new page, published by default (requires publish_pages to call this ability at all). An explicit draft, pending, or private status is also accepted. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Create a new page, published by default (requires publish_pages to call this ability at all). An explicit draft, pending, or private status is also accepted. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). parent_id puts the page under another page and template picks one of the theme\'s page templates or "default". Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -46,7 +46,7 @@ function aafm_register_pages_definitions( array $registry ): array {
 		'label'        => __( 'Update page', 'agent-abilities-for-mcp' ),
 		'description'  => sprintf(
 			/* translators: %s: page builder names, for example Elementor and Divi. */
-			__( 'Update an existing page by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. When the page is owned by a foreign page builder (%s), an edit that sends only page_id and excerpt is accepted and the page\'s stored content is left as it was; any other change is refused, and so is every edit when the plugin cannot tell which builder owns it, since a write here would either have no visible effect or corrupt the builder\'s stored markup.', 'agent-abilities-for-mcp' ),
+			__( 'Update an existing page by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). parent_id moves the page under another page (0 for none) and template sets one of the theme\'s page templates or "default". Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. When the page is owned by a foreign page builder (%s), an edit that sends only page_id and excerpt is accepted and the page\'s stored content is left as it was; any other change is refused, and so is every edit when the plugin cannot tell which builder owns it, since a write here would either have no visible effect or corrupt the builder\'s stored markup.', 'agent-abilities-for-mcp' ),
 			aafm_page_builder_names()
 		),
 		'group'        => 'writes',
@@ -312,7 +312,7 @@ function aafm_args_create_page(): array {
 		'label'               => aafm_ability_label( 'aafm/create-page' ),
 		'description'         => aafm_ability_description( 'aafm/create-page' ),
 		'category'            => 'aafm-writes',
-		'input_schema'        => aafm_write_content_schema( true ),
+		'input_schema'        => aafm_page_write_schema( aafm_write_content_schema( true ) ),
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
@@ -356,6 +356,124 @@ function aafm_exec_create_page( array $input ) {
 }
 
 /**
+ * Add the two page-only fields, parent_id and template, to a page write schema. Posts never get them.
+ *
+ * @param array<string,mixed> $schema The shared content schema.
+ * @return array<string,mixed>
+ */
+function aafm_page_write_schema( array $schema ): array {
+	$schema['properties']['parent_id'] = array(
+		'type'        => 'integer',
+		'minimum'     => 0,
+		'description' => __( 'ID of the page to put this page under, or 0 for none. The parent must be a page that is not in the Trash, and it cannot be this page or one of its own sub-pages. Omit to keep the current parent.', 'agent-abilities-for-mcp' ),
+	);
+	$schema['properties']['template']  = array(
+		'type'        => 'string',
+		'minLength'   => 1,
+		'description' => __( 'Page template: a template file name the active theme offers for pages, or "default" for the theme\'s default. Any other value is refused. Omit to keep the current template.', 'agent-abilities-for-mcp' ),
+	);
+	return $schema;
+}
+
+/**
+ * Check a page parent: 0 means none; anything else must be a page outside the Trash that is not
+ * the page itself or one of its descendants. Shared by the page writers and the undo restore check.
+ *
+ * @param int $page_id   The page being written, 0 for a create.
+ * @param int $parent_id Requested parent.
+ * @return int|WP_Error The parent id, aafm_invalid_page_parent, or aafm_page_parent_loop.
+ */
+function aafm_page_parent_checked( int $page_id, int $parent_id ) {
+	if ( $parent_id <= 0 ) {
+		return 0;
+	}
+	$parent = aafm_exact_object( 'post', $parent_id );
+	if ( ! $parent instanceof WP_Post || 'page' !== $parent->post_type || in_array( $parent->post_status, array( 'trash', 'auto-draft' ), true ) ) {
+		return new WP_Error( 'aafm_invalid_page_parent', __( 'The parent must be an existing page that is not in the Trash, so nothing was changed.', 'agent-abilities-for-mcp' ), array( 'status' => 400 ) );
+	}
+	if ( $page_id > 0 && ( $parent_id === $page_id || in_array( $page_id, array_map( 'intval', get_post_ancestors( $parent ) ), true ) ) ) {
+		return new WP_Error( 'aafm_page_parent_loop', __( 'A page cannot be put under itself or under one of its own sub-pages, so nothing was changed.', 'agent-abilities-for-mcp' ), array( 'status' => 400 ) );
+	}
+	return $parent_id;
+}
+
+/**
+ * Whether a page template is one the active theme offers for pages now ('default' always is).
+ * The same list core's wp_insert_post() checks a page_template against.
+ *
+ * @param string       $template Template file name, or 'default'.
+ * @param WP_Post|null $page     The page, or null for a create.
+ * @return bool
+ */
+function aafm_page_template_available( string $template, ?WP_Post $page ): bool {
+	return 'default' === $template || array_key_exists( $template, wp_get_theme()->get_page_templates( $page, 'page' ) );
+}
+
+/**
+ * The parent and template of a page write, checked, as postarr keys. Refuses either field on any
+ * other post type.
+ *
+ * @param array<string,mixed> $input Write input.
+ * @param string              $type  Post type being written.
+ * @param WP_Post|null        $page  The page for an update, null for a create.
+ * @return array<string,mixed>|WP_Error post_parent and page_template, each only when requested.
+ */
+function aafm_page_write_fields( array $input, string $type, ?WP_Post $page ) {
+	if ( ! isset( $input['parent_id'] ) && ! isset( $input['template'] ) ) {
+		return array();
+	}
+	if ( 'page' !== $type ) {
+		return new WP_Error( 'aafm_page_only_field', __( 'parent_id and template apply to pages only, so nothing was changed.', 'agent-abilities-for-mcp' ), array( 'status' => 400 ) );
+	}
+	$fields = array();
+	if ( isset( $input['parent_id'] ) ) {
+		$parent = aafm_page_parent_checked( $page instanceof WP_Post ? (int) $page->ID : 0, (int) $input['parent_id'] );
+		if ( is_wp_error( $parent ) ) {
+			return $parent;
+		}
+		$fields['post_parent'] = $parent;
+	}
+	if ( isset( $input['template'] ) ) {
+		$template = sanitize_text_field( (string) $input['template'] );
+		if ( ! aafm_page_template_available( $template, $page ) ) {
+			return new WP_Error( 'aafm_invalid_page_template', __( 'That page template is not one the active theme offers, so nothing was changed. Use "default" or a template the theme lists for pages.', 'agent-abilities-for-mcp' ), array( 'status' => 400 ) );
+		}
+		$fields['page_template'] = $template;
+	}
+	return $fields;
+}
+
+/**
+ * Whether a saved page holds the parent and template a write asked for.
+ *
+ * @param int                 $id     Page id.
+ * @param array<string,mixed> $fields What aafm_page_write_fields() returned.
+ * @return bool
+ */
+function aafm_page_write_fields_landed( int $id, array $fields ): bool {
+	clean_post_cache( $id );
+	$page = aafm_exact_object( 'post', $id );
+	if ( ! $page instanceof WP_Post ) {
+		return false;
+	}
+	if ( isset( $fields['post_parent'] ) && (int) $page->post_parent !== (int) $fields['post_parent'] ) {
+		return false;
+	}
+	return ! isset( $fields['page_template'] ) || aafm_page_template_value( $page ) === $fields['page_template'];
+}
+
+/**
+ * A page's stored template as the tools report it: the file name, or 'default'.
+ *
+ * @param WP_Post $page Page.
+ * @return string
+ */
+function aafm_page_template_value( WP_Post $page ): string {
+	$slug = (string) get_page_template_slug( $page );
+	return '' === $slug ? 'default' : $slug;
+}
+
+/**
  * Args for aafm/update-page.
  *
  * @return array<string,mixed>
@@ -368,6 +486,7 @@ function aafm_args_update_page(): array {
 		'description' => __( 'ID of the page to update.', 'agent-abilities-for-mcp' ),
 	);
 	$schema['required']              = array( 'page_id' );
+	$schema                          = aafm_page_write_schema( $schema );
 
 	return array(
 		'label'               => aafm_ability_label( 'aafm/update-page' ),

@@ -997,9 +997,10 @@ function aafm_notify_pending_forget( string $trigger ): bool {
 	if ( ! $row['ok'] ) {
 		return false;
 	}
-	$left = array_values( wp_list_filter( aafm_notify_as_list( $row['value'] ), array( 'trigger' => $trigger ), 'NOT' ) );
-	if ( aafm_notify_pending_list() === $left && ( $row['found'] || array() === $left ) ) {
-		return true; // The row and the cache already agree on a list without the trigger.
+	$left   = array_values( wp_list_filter( aafm_notify_as_list( $row['value'] ), array( 'trigger' => $trigger ), 'NOT' ) );
+	$in_row = aafm_notify_as_list( $row['value'] );
+	if ( count( $left ) === count( $in_row ) && aafm_notify_pending_list() === $left && ( $row['found'] || array() === $left ) ) {
+		return true; // The row has no entry of the trigger, and the cache agrees with it.
 	}
 	return array() === $left ? aafm_notify_pending_clear() : aafm_update_option_verified( 'aafm_notify_pending', $left, false );
 }

@@ -530,4 +530,27 @@ final class BridgeReviewTest extends TestCase {
 		$this->assertFalse( $result );
 		$this->assertTrue( aafm_option_row( 'aafm_notify_pending' )['found'], 'Nothing was deleted.' );
 	}
+
+	public function test_a_cache_that_already_lost_the_trigger_does_not_leave_it_in_the_row(): void {
+		$flip  = array(
+			'id'      => 'flip',
+			'trigger' => 'switch_flip',
+			'subtype' => 'read_only_on',
+		);
+		$tools = array(
+			'id'      => 'tools',
+			'trigger' => 'new_tools',
+			'subtype' => 'detected',
+		);
+		$this->assertTrue( aafm_update_option_verified( 'aafm_notify_pending', array( $tools, $flip ), false ) );
+		wp_cache_set( 'aafm_notify_pending', array( $flip ), 'options' );
+		$all                        = wp_load_alloptions( true );
+		$all['aafm_notify_pending'] = maybe_serialize( array( $flip ) );
+		wp_cache_set( 'alloptions', $all, 'options' );
+
+		$this->assertTrue( aafm_notify_pending_forget( 'new_tools' ) );
+
+		$this->assertSame( array( $flip ), aafm_option_row( 'aafm_notify_pending' )['value'], 'The row loses the new-tools entry too.' );
+		wp_cache_delete( 'alloptions', 'options' );
+	}
 }

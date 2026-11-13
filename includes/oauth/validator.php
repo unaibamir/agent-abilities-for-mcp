@@ -243,7 +243,7 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 
 		// 9. Audience binding (RFC 8707): the token must have been minted for THIS
 		// endpoint. A token scoped to a different audience resolves no user here.
-		if ( ! hash_equals( aafm_endpoint_url(), (string) $row['resource'] ) ) {
+		if ( ! aafm_oauth_resource_is_this_endpoint( (string) $row['resource'] ) ) {
 			if ( function_exists( 'aafm_oauth_log_event' ) ) {
 				aafm_oauth_log_event( 'bearer', 'denied', array( 'client_id' => (string) $row['client_id'] ) );
 			}
@@ -312,6 +312,18 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 	} finally {
 		$resolving = false;
 	}
+}
+
+/**
+ * Audience binding (RFC 8707): whether a token's stored resource is this request's MCP endpoint,
+ * byte for byte. The one rule both the bearer path and refresh rotation apply, so a token minted for
+ * an address the endpoint no longer has neither authenticates nor rolls forward.
+ *
+ * @param string $resource_url Stored token resource.
+ * @return bool
+ */
+function aafm_oauth_resource_is_this_endpoint( string $resource_url ): bool {
+	return hash_equals( aafm_endpoint_url(), $resource_url );
 }
 
 /**

@@ -323,6 +323,16 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 		return new WP_Error( 'invalid_grant', __( 'This account can no longer connect apps.', 'agent-abilities-for-mcp' ) );
 	}
 
+	// A token minted for an address this endpoint no longer has (a permalink change, an http to
+	// https move) would only mint another pair the bearer check refuses. Refuse it unconsumed; ending
+	// the old tokens stays the owner's click.
+	if ( ! aafm_oauth_resource_is_this_endpoint( (string) $row['resource'] ) ) {
+		return new WP_Error(
+			'invalid_grant',
+			__( 'The refresh token was issued for an address this site no longer uses. Add the connector again with the current address.', 'agent-abilities-for-mcp' )
+		);
+	}
+
 	// Expired refresh token: reject without rotating. The PHP string compare is
 	// safe because 'Y-m-d H:i:s' is a fixed-width, zero-padded, lexicographically
 	// ordered datetime format.

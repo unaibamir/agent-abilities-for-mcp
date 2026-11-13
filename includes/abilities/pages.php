@@ -370,7 +370,7 @@ function aafm_page_write_schema( array $schema ): array {
 	$schema['properties']['template']  = array(
 		'type'        => 'string',
 		'minLength'   => 1,
-		'description' => __( 'Page template: a template file name the active theme offers for pages, or "default" for the theme\'s default. Any other value is refused. Omit to keep the current template.', 'agent-abilities-for-mcp' ),
+		'description' => __( 'Page template: one the active theme offers for pages (a file name such as template-wide.php on a classic theme, a template slug such as page-landing on a block theme), or "default" for the theme\'s default. Any other value is refused. Omit to keep the current template.', 'agent-abilities-for-mcp' ),
 	);
 	return $schema;
 }
@@ -387,8 +387,10 @@ function aafm_page_parent_checked( int $page_id, int $parent_id ) {
 	if ( $parent_id <= 0 ) {
 		return 0;
 	}
-	$parent = aafm_exact_object( 'post', $parent_id );
-	if ( ! $parent instanceof WP_Post || 'page' !== $parent->post_type || in_array( $parent->post_status, array( 'trash', 'auto-draft' ), true ) ) {
+	// A page the caller cannot read gets the same answer as one that does not exist, so a guessed id
+	// reveals nothing about its type, status or place in the tree.
+	$parent = aafm_exact_object_chain( 'post', $parent_id );
+	if ( ! $parent instanceof WP_Post || ! aafm_user_can_checked( 'read_post', $parent_id ) || 'page' !== $parent->post_type || in_array( $parent->post_status, array( 'trash', 'auto-draft' ), true ) ) {
 		return new WP_Error( 'aafm_invalid_page_parent', __( 'The parent must be an existing page that is not in the Trash, so nothing was changed.', 'agent-abilities-for-mcp' ), array( 'status' => 400 ) );
 	}
 	if ( $page_id > 0 && ( $parent_id === $page_id || in_array( $page_id, array_map( 'intval', get_post_ancestors( $parent ) ), true ) ) ) {

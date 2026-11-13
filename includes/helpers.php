@@ -2263,7 +2263,7 @@ function aafm_rich_post_output_properties(): array {
 		),
 		'template'        => array(
 			'type'        => 'string',
-			'description' => __( 'Pages only: the page template file name, or "default".', 'agent-abilities-for-mcp' ),
+			'description' => __( 'Pages only: the page template (a file name on a classic theme, a template slug on a block theme), or "default".', 'agent-abilities-for-mcp' ),
 		),
 		'author_id'       => array( 'type' => 'integer' ),
 		'author'          => array(

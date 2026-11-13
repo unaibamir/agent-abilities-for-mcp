@@ -243,4 +243,30 @@ final class PageParentTemplateTest extends TestCase {
 		$this->assertArrayNotHasKey( 'parent_id', $shape );
 		$this->assertArrayNotHasKey( 'template', $shape );
 	}
+
+	public function test_a_parent_the_caller_cannot_read_is_refused_like_a_missing_one(): void {
+		$parent = $this->page( array( 'post_status' => 'private' ) );
+		$page   = $this->page();
+		$deny   = static function ( array $caps, string $cap, int $user_id, array $args ) use ( $parent ): array {
+			return 'read_post' === $cap && (int) ( $args[0] ?? 0 ) === $parent ? array( 'do_not_allow' ) : $caps;
+		};
+		add_filter( 'map_meta_cap', $deny, 10, 4 );
+		try {
+			$res     = $this->update( $page, array( 'parent_id' => $parent ) );
+			$missing = $this->update( $page, array( 'parent_id' => 999999 ) );
+		} finally {
+			remove_filter( 'map_meta_cap', $deny, 10 );
+		}
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_invalid_page_parent', $res->get_error_code() );
+		$this->assertSame( $missing->get_error_message(), $res->get_error_message(), 'The answer does not reveal that the page exists.' );
+		$this->assertSame( 0, $this->stored_parent( $page ) );
+	}
+
+	public function test_template_description_names_both_theme_kinds(): void {
+		$description = aafm_args_update_page()['input_schema']['properties']['template']['description'];
+		$this->assertStringContainsString( 'slug', $description );
+		$this->assertStringContainsString( 'file name', $description );
+	}
 }

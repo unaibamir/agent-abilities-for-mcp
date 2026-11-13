@@ -306,7 +306,7 @@ final class NotifyCronHandoffTest extends TestCase {
 		$this->assertStringNotContainsString( 'do not depend on cron', $html );
 		$this->assertStringContainsString( esc_html( $label ), $html );
 		$this->assertStringContainsString( 'next visit', $html, 'The paragraph says the email can wait for the next visit.' );
-		$this->assertStringContainsString( 'about an hour where WP-Cron cannot run', $html, 'It names the self-heal wait too.' );
+		$this->assertStringContainsString( 'an hour or more where WP-Cron cannot run', $html, 'It names the self-heal wait too, an hour at the least.' );
 	}
 
 	public function test_an_alert_raised_inside_a_cron_run_is_sent_in_that_run(): void {

@@ -132,6 +132,33 @@ final class StaticHomepageSettingsTest extends TestCase {
 		$this->assertSame( array( 'page_for_posts' ), $res['landed'] );
 	}
 
+	public function test_a_negative_page_id_is_refused(): void {
+		$draft = $this->page( 'draft' );
+
+		$res = $this->update(
+			array(
+				'show_on_front' => 'page',
+				'page_on_front' => -1 * $draft,
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $res, 'core would absint() it into the draft page id.' );
+		$this->assertSame( 'aafm_setting_bad_type', $res->get_error_code() );
+
+		$front = $this->page();
+		update_option( 'page_on_front', $front );
+		$res = $this->update( array( 'page_for_posts' => -1 * $front ) );
+		$this->assertInstanceOf( WP_Error::class, $res, 'A negative posts page must not slip past the must-differ check.' );
+		$this->assertSame( 'aafm_setting_bad_type', $res->get_error_code() );
+		$this->assertSame(
+			array(
+				'show_on_front'  => 'posts',
+				'page_on_front'  => (string) $front,
+				'page_for_posts' => '0',
+			),
+			$this->stored()
+		);
+	}
+
 	public function test_show_on_front_page_without_a_front_page_is_refused(): void {
 		$res = $this->update( array( 'show_on_front' => 'page' ) );
 		$this->assertInstanceOf( WP_Error::class, $res );

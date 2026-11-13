@@ -401,7 +401,7 @@ function aafm_static_homepage_checked( array $settings ) {
 			$clean[ $key ] = $value;
 			continue;
 		}
-		if ( ! is_int( $value ) && ! ( is_string( $value ) && 1 === preg_match( '/^\d+$/', $value ) ) ) {
+		if ( ! ( is_int( $value ) && $value >= 0 ) && ! ( is_string( $value ) && 1 === preg_match( '/^\d+$/', $value ) ) ) {
 			return new WP_Error(
 				'aafm_setting_bad_type',
 				/* translators: %s: the setting key. */

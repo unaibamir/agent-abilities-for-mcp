@@ -504,4 +504,10 @@ class ConnectionCardsTest extends TestCase {
 		$this->assertSame( $grant[0], $json['data']['user_id'] );
 	}
 
+	public function test_switch_thumb_has_an_rtl_rule(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a bundled static asset from disk in a test.
+		$css = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.css' );
+		$this->assertMatchesRegularExpression( '/\[dir="rtl"\] &:not\(\.aafm-switch--lg\) input:checked \+ \.aafm-switch-track::before \{ transform: translateX\(-16px\); \}/', $css );
+		$this->assertSame( 1, substr_count( $css, 'translateX(16px)' ), 'The physical offset appears once, beside its RTL twin.' );
+	}
 }

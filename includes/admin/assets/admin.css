@@ -1010,6 +1010,9 @@
 
 		input:checked + .aafm-switch-track { background: var(--aafm-accent); }
 		input:checked + .aafm-switch-track::before { transform: translateX(16px); }
+		/* The thumb starts at the logical start edge, so in RTL it slides the other way. The
+		   wizard's large switch pins a physical left offset of its own and keeps its rule. */
+		[dir="rtl"] &:not(.aafm-switch--lg) input:checked + .aafm-switch-track::before { transform: translateX(-16px); }
 		input:focus-visible + .aafm-switch-track { box-shadow: var(--aafm-ring); }
 
 		/* An inactive integration and an orphaned bridge row both render their checkbox

@@ -510,32 +510,31 @@ function aafm_exec_count_media( array $input ) {
  * wp_count_attachments()'s key shape but via WP_Query so WPML's language filters
  * apply. Called from inside aafm_with_language() and directly - see aafm_exec_count_media().
  *
- * No row is loaded: one query reads the distinct mime types the library holds, then each type is
- * counted through a WP_Query that fetches at most one id and reads found_posts. That WP_Query keeps
- * suppress_filters false and the author argument, so WPML's language filter and the own-uploads
- * scope apply exactly as they do to the media list. Attachments stored with an empty mime type are
- * counted as the unfiltered total minus the typed ones, because an empty post_mime_type query var
- * means no mime filter at all.
+ * No attachment row is loaded. The WP_Query fetches ids only, 500 at a time, with suppress_filters
+ * false and the author argument, so WPML's language filter and the own-uploads scope apply exactly
+ * as they do to the media list. Each batch of ids is then counted by its stored post_mime_type in
+ * one grouped query, so every type is counted as stored. Two queries per 500 attachments.
  *
  * @param int|null $author_id Restrict to this author's attachments, or null for the
  *                            unscoped full library (aafm_media_scope_author_id()).
- * @return array<string,int>|WP_Error Mime type => count, or an error when the type list cannot be read.
+ * @return array<string,int>|WP_Error Mime type => count, or an error when a count query fails.
  */
 function aafm_query_attachment_counts_by_mime( ?int $author_id = null ) {
 	global $wpdb;
 
-	$mimes = aafm_wpdb_results( $wpdb->prepare( 'SELECT DISTINCT post_mime_type FROM %i WHERE post_type = %s AND post_status = %s', $wpdb->posts, 'attachment', 'inherit' ) );
-	if ( ! $mimes['ok'] ) {
-		return aafm_generic_error();
-	}
-
-	$count = static function ( string $mime ) use ( $author_id ): int {
+	$batch  = 500;
+	$counts = array();
+	$page   = 1;
+	do {
 		$args = array(
 			'post_type'              => 'attachment',
 			'post_status'            => 'inherit',
-			'post_mime_type'         => $mime,
-			'posts_per_page'         => 1,
 			'fields'                 => 'ids',
+			'posts_per_page'         => $batch,
+			'paged'                  => $page,
+			'orderby'                => 'ID',
+			'order'                  => 'ASC',
+			'no_found_rows'          => true,
 			'suppress_filters'       => false,
 			'update_post_meta_cache' => false,
 			'update_post_term_cache' => false,
@@ -543,30 +542,27 @@ function aafm_query_attachment_counts_by_mime( ?int $author_id = null ) {
 		if ( null !== $author_id ) {
 			$args['author'] = $author_id;
 		}
-		return (int) ( new WP_Query( $args ) )->found_posts;
-	};
+		$ids = array();
+		foreach ( ( new WP_Query( $args ) )->posts as $id ) {
+			$ids[] = $id instanceof WP_Post ? (int) $id->ID : (int) $id;
+		}
+		if ( array() === $ids ) {
+			break;
+		}
+		$sql = 'SELECT post_mime_type, COUNT(*) AS n FROM %i WHERE ID IN (' . implode( ', ', array_fill( 0, count( $ids ), '%d' ) ) . ') GROUP BY post_mime_type';
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- placeholders are generated from the id list.
+		$rows = aafm_wpdb_results( $wpdb->prepare( $sql, array_merge( array( $wpdb->posts ), $ids ) ) );
+		if ( ! $rows['ok'] ) {
+			return aafm_generic_error();
+		}
+		foreach ( (array) $rows['value'] as $row ) {
+			$mime            = (string) ( $row['post_mime_type'] ?? '' );
+			$counts[ $mime ] = ( $counts[ $mime ] ?? 0 ) + (int) ( $row['n'] ?? 0 );
+		}
+		++$page;
+		$full = count( $ids ) === $batch;
+	} while ( $full );
 
-	$counts = array();
-	$typed  = 0;
-	$blank  = false;
-	foreach ( (array) $mimes['value'] as $row ) {
-		$mime = (string) ( $row['post_mime_type'] ?? '' );
-		if ( '' === $mime ) {
-			$blank = true;
-			continue;
-		}
-		$n = $count( $mime );
-		if ( $n > 0 ) {
-			$counts[ $mime ] = $n;
-			$typed          += $n;
-		}
-	}
-	if ( $blank ) {
-		$untyped = $count( '' ) - $typed;
-		if ( $untyped > 0 ) {
-			$counts[''] = $untyped;
-		}
-	}
 	return $counts;
 }
 

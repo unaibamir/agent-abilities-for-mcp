@@ -129,10 +129,27 @@ final class MediaCountTest extends TestCase {
 		remove_action( 'pre_get_posts', $spy );
 
 		$this->assertSame( 5, $counts['image/jpeg'] );
-		$this->assertNotEmpty( $queries );
-		foreach ( $queries as $query ) {
-			$this->assertSame( array( 1, 'ids' ), $query, 'Each count query loads at most one id, never every row.' );
+		$this->assertSame( array( array( 500, 'ids' ) ), $queries, 'One ids-only query of at most 500, never every row.' );
+	}
+
+	public function test_media_count_pages_past_one_batch(): void {
+		$admin = $this->acting_as( 'administrator' );
+		for ( $i = 0; $i < 501; $i++ ) {
+			$this->attachment( 0 === $i % 2 ? 'image/jpeg' : 'image/png', $admin );
 		}
+		$batches = 0;
+		$spy     = static function ( \WP_Query $query ) use ( &$batches ): void {
+			if ( 'attachment' === $query->get( 'post_type' ) ) {
+				++$batches;
+			}
+		};
+		add_action( 'pre_get_posts', $spy );
+		$counts = aafm_query_attachment_counts_by_mime( null );
+		remove_action( 'pre_get_posts', $spy );
+
+		ksort( $counts );
+		$this->assertSame( $this->counts_from_rows(), $counts );
+		$this->assertSame( 2, $batches, 'Two id batches for 501 attachments.' );
 	}
 
 	/**

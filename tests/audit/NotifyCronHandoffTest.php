@@ -375,6 +375,7 @@ final class NotifyCronHandoffTest extends TestCase {
 		aafm_notify_send_overdue();
 		$this->assertCount( 1, $this->mail, 'A host where WP-Cron never runs still gets the alert.' );
 		$this->assertSame( array(), $this->scheduled(), 'The event is gone, so cron cannot send it again.' );
+		$this->assertSame( 2, ( (array) aafm_option_row( 'cron' )['value'] )['version'] ?? null, 'The healed row keeps the version marker core writes (_set_cron_array()).' );
 
 		aafm_notify_send_overdue();
 		$this->assertCount( 1, $this->mail, 'A later request sends nothing more.' );
@@ -415,6 +416,9 @@ final class NotifyCronHandoffTest extends TestCase {
 				),
 			),
 		);
+		// _get_cron_array() drops the version marker; a raw row without it makes WordPress 6.9 treat it as
+		// an old format and rewrite it, so the simulated cron run writes the row the way core does.
+		$fresh['version'] = 2;
 		$wpdb->update( $wpdb->options, array( 'option_value' => maybe_serialize( $fresh ) ), array( 'option_name' => 'cron' ) );
 		$this->assertCount( 1, $this->scheduled(), 'Precondition: this request still sees the stale copy.' );
 

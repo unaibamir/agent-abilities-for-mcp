@@ -1365,7 +1365,9 @@ function aafm_navigation_post( int $id ): ?WP_Post {
  */
 function aafm_perm_navigation_object( array $input ): bool {
 	$id = absint( $input['id'] ?? 0 );
-	return aafm_navigation_post( $id ) instanceof WP_Post && aafm_user_can_checked( 'edit_post', $id );
+	return aafm_navigation_post( $id ) instanceof WP_Post
+		&& aafm_exact_object_chain( 'post', $id ) instanceof WP_Post
+		&& aafm_user_can_checked( 'edit_post', $id );
 }
 
 /**

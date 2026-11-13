@@ -769,11 +769,15 @@ final class DashboardTest extends TestCase {
 	 * setting. The observer is attached the way production attaches it, and stays attached after.
 	 */
 	public function test_first_call_flag_write_logs_no_write_outcome_row(): void {
+		global $wpdb;
 		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->assertTrue( aafm_update_option_verified( 'aafm_test_observer_probe', '1', false ) );
+		$probe = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE event_type = %s AND detail LIKE %s', aafm_activity_log_table(), 'write_outcome', '%aafm\\_test\\_observer\\_probe%' ) );
+		$this->assertGreaterThan( 0, $probe, 'precondition: the observer logs an ordinary option write.' );
 
 		$this->assertTrue( aafm_mark_first_call_recorded( $this->log_row( 7 ) ) );
 		$this->assertSame( 0, $this->flag_outcome_rows(), 'The latch write is not an agent write.' );
-		$this->assertSame( PHP_INT_MIN, has_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome' ), 'The observer is restored at its own priority.' );
+		$this->assertSame( PHP_INT_MIN, has_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome' ), 'The observer stays attached.' );
 
 		delete_option( 'aafm_first_call_recorded' );
 		$this->assertTrue( aafm_first_call_recorded() );

@@ -467,6 +467,7 @@ class ConnectionCardsTest extends TestCase {
 		$this->assertTrue( $json['success'] );
 		$this->assertSame( 3, $json['data']['deactivated'] );
 		$this->assertStringContainsString( '3 tokens', $json['data']['message'] );
+		$this->assertStringContainsString( 'Reload the page to update the Active tokens counts.', $json['data']['message'], 'The clients table still shows the ended tokens until a reload.' );
 		$this->assertSame( 0, aafm_oauth_stale_token_count() );
 	}
 

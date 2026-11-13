@@ -737,7 +737,7 @@ function aafm_ajax_revoke_stale_tokens(): void {
 				/* translators: %s: number of token rows. */
 				_n( 'Ended %s token issued for an old address of this site.', 'Ended %s tokens issued for an old address of this site.', $ended, 'agent-abilities-for-mcp' ),
 				number_format_i18n( $ended )
-			),
+			) . ( $ended > 0 ? ' ' . __( 'Reload the page to update the Active tokens counts.', 'agent-abilities-for-mcp' ) : '' ),
 		)
 	);
 }

@@ -15,7 +15,9 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Abilities;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
+use WP_Error;
 
 final class AvadaLayoutsTest extends TestCase {
 
@@ -227,6 +229,22 @@ final class AvadaLayoutsTest extends TestCase {
 		$this->assertSame( 'unparseable', $shop['parse_status'] );
 		$this->assertArrayNotHasKey( 'sections', $shop );
 		$this->assertArrayNotHasKey( 'conditions', $shop );
+	}
+
+	public function test_a_section_that_fails_to_load_is_an_error_not_a_missing_section(): void {
+		$this->seed();
+		clean_post_cache( $this->header );
+		QueryFaultInjector::reset_fired_count();
+
+		$out = QueryFaultInjector::break_query_with_real_error(
+			array( 'SELECT', 'posts', 'ID = ' . $this->header ),
+			static function () {
+				return aafm_exec_avada_list_layouts( array() );
+			}
+		);
+
+		$this->assertGreaterThan( 0, QueryFaultInjector::fired_count() );
+		$this->assertInstanceOf( WP_Error::class, $out );
 	}
 
 	public function test_include_conditions_false_omits_conditions(): void {

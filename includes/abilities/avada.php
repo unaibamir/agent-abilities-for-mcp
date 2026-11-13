@@ -658,9 +658,9 @@ function aafm_args_avada_list_layouts(): array {
  * helper caches), and decodes each one with Avada's own expression, since that decides what renders.
  *
  * @param array<string,mixed> $input Validated input.
- * @return array<string,mixed>
+ * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_avada_list_layouts( array $input ): array {
+function aafm_exec_avada_list_layouts( array $input ) {
 	$with_conditions = ! array_key_exists( 'include_conditions', $input ) || ! empty( $input['include_conditions'] );
 
 	// Fusion_Template_Builder::get_registered_layouts_posts(): every status but trash and auto-draft.
@@ -699,25 +699,31 @@ function aafm_exec_avada_list_layouts( array $input ): array {
 	$layouts = array();
 	foreach ( array_slice( $posts, 0, $max ) as $position => $post ) {
 		// Fusion_Template_Builder::set_overrides() and get_conditions() decode layouts this way.
-		$data      = json_decode( str_replace( "'", "\'", wp_unslash( $post->post_content ) ), true );
+		$detail = aafm_avada_layout_detail( json_decode( str_replace( "'", "\'", wp_unslash( $post->post_content ) ), true ), $with_conditions );
+		if ( null === $detail ) {
+			return aafm_generic_error();
+		}
 		$layouts[] = array(
 			'id'     => $post->ID,
 			'title'  => $post->post_title,
 			'status' => $post->post_status,
 			'order'  => $position,
-		) + aafm_avada_layout_detail( $data, $with_conditions );
+		) + $detail;
 	}
 
 	$global = get_option( 'fusion_tb_layout_default' );
 	if ( false !== $global ) {
 		// Fusion_Template_Builder::get_default_layout() decodes the Global Layout this way.
-		$data      = is_string( $global ) ? json_decode( wp_unslash( $global ), true ) : null;
+		$detail = aafm_avada_layout_detail( is_string( $global ) ? json_decode( wp_unslash( $global ), true ) : null, $with_conditions );
+		if ( null === $detail ) {
+			return aafm_generic_error();
+		}
 		$layouts[] = array(
 			'id'     => 'global',
 			'title'  => __( 'Global Layout', 'agent-abilities-for-mcp' ),
 			'status' => 'publish',
 			'order'  => count( $layouts ),
-		) + aafm_avada_layout_detail( $data, $with_conditions );
+		) + $detail;
 	}
 
 	return array(
@@ -729,13 +735,14 @@ function aafm_exec_avada_list_layouts( array $input ): array {
 
 /**
  * Sections and conditions of one decoded layout, or unparseable with neither when the decode did
- * not give an array (never empty ones standing in for a failed read).
+ * not give an array (never empty ones standing in for a failed read). Null when a section's post
+ * did not load and its row is not certainly absent, so "exists: false" is never a guess.
  *
  * @param mixed $data            Decoded layout data.
  * @param bool  $with_conditions Whether to include the conditions.
- * @return array<string,mixed>
+ * @return array<string,mixed>|null
  */
-function aafm_avada_layout_detail( $data, bool $with_conditions ): array {
+function aafm_avada_layout_detail( $data, bool $with_conditions ): ?array {
 	if ( ! is_array( $data ) ) {
 		return array( 'parse_status' => 'unparseable' );
 	}
@@ -746,8 +753,11 @@ function aafm_avada_layout_detail( $data, bool $with_conditions ): array {
 			continue; // Avada skips an empty slot.
 		}
 		$id      = is_numeric( $section_id ) ? absint( $section_id ) : 0;
-		$section = $id > 0 ? get_post( $id ) : null;
-		$entry   = array(
+		$section = $id > 0 ? aafm_exact_object( 'post', $id ) : null;
+		if ( $id > 0 && ! $section instanceof WP_Post && ! aafm_object_absent( 'post', $id ) ) {
+			return null;
+		}
+		$entry = array(
 			'id'     => $id,
 			'exists' => $section instanceof WP_Post,
 		);

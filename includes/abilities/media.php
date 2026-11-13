@@ -517,7 +517,10 @@ function aafm_exec_count_media( array $input ) {
  *
  * Batches page by id (each one starts after the last id the previous one returned), so a large
  * library is not rescanned from the start for every batch, and the loop ends only on an empty
- * batch, so a filter that caps posts_per_page cannot cut the count short.
+ * batch, so a filter that caps posts_per_page cannot cut the count short. The id order is forced
+ * last on posts_orderby, because a plugin that sorts attachments by menu_order (Post Types Order)
+ * would otherwise make the next batch skip lower ids. A batch whose ids do not all rise past the
+ * last one seen (a hook dropped the id clause or the order) is refused rather than looped on.
  *
  * @param int|null $author_id Restrict to this author's attachments, or null for the
  *                            unscoped full library (aafm_media_scope_author_id()).
@@ -533,7 +536,15 @@ function aafm_query_attachment_counts_by_mime( ?int $author_id = null ) {
 		$from = (int) $query->get( 'aafm_after_id' );
 		return $from > 0 ? $where . $wpdb->prepare( " AND {$wpdb->posts}.ID > %d", $from ) : $where;
 	};
+	$by_id   = static function ( string $orderby, WP_Query $query ) use ( $wpdb ): string {
+		return null === $query->get( 'aafm_after_id', null ) ? $orderby : "{$wpdb->posts}.ID ASC";
+	};
+	$done    = static function () use ( $after, $by_id ): void {
+		remove_filter( 'posts_where', $after, 10 );
+		remove_filter( 'posts_orderby', $by_id, PHP_INT_MAX );
+	};
 	add_filter( 'posts_where', $after, 10, 2 );
+	add_filter( 'posts_orderby', $by_id, PHP_INT_MAX, 2 );
 	while ( true ) {
 		$args = array(
 			'post_type'              => 'attachment',
@@ -558,12 +569,18 @@ function aafm_query_attachment_counts_by_mime( ?int $author_id = null ) {
 		if ( array() === $ids ) {
 			break;
 		}
-		$last_id = max( $ids );
-		$sql     = 'SELECT post_mime_type, COUNT(*) AS n FROM %i WHERE ID IN (' . implode( ', ', array_fill( 0, count( $ids ), '%d' ) ) . ') GROUP BY post_mime_type';
+		foreach ( $ids as $id ) {
+			if ( $id <= $last_id ) {
+				$done();
+				return aafm_generic_error();
+			}
+			$last_id = $id;
+		}
+		$sql = 'SELECT post_mime_type, COUNT(*) AS n FROM %i WHERE ID IN (' . implode( ', ', array_fill( 0, count( $ids ), '%d' ) ) . ') GROUP BY post_mime_type';
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- placeholders are generated from the id list.
 		$rows = aafm_wpdb_results( $wpdb->prepare( $sql, array_merge( array( $wpdb->posts ), $ids ) ) );
 		if ( ! $rows['ok'] ) {
-			remove_filter( 'posts_where', $after, 10 );
+			$done();
 			return aafm_generic_error();
 		}
 		foreach ( (array) $rows['value'] as $row ) {
@@ -571,7 +588,7 @@ function aafm_query_attachment_counts_by_mime( ?int $author_id = null ) {
 			$counts[ $mime ] = ( $counts[ $mime ] ?? 0 ) + (int) ( $row['n'] ?? 0 );
 		}
 	}
-	remove_filter( 'posts_where', $after, 10 );
+	$done();
 
 	return $counts;
 }

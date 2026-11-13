@@ -34,6 +34,7 @@ final class MediaCountTest extends TestCase {
 		remove_all_filters( 'wpml_default_language' );
 		remove_all_actions( 'wpml_switch_language' );
 		remove_all_filters( 'posts_where' );
+		remove_all_filters( 'posts_orderby' );
 		parent::tear_down();
 	}
 
@@ -223,5 +224,66 @@ final class MediaCountTest extends TestCase {
 
 		$this->assertCount( 4, $offsets, 'Three batches of ids and one empty batch.' );
 		$this->assertSame( array( 0, 0, 0, 0 ), $offsets, 'Every batch starts after the last id seen, never at a page offset.' );
+	}
+
+	/**
+	 * Post Types Order sorts attachments by menu_order on posts_orderby (priority 99, autosort on
+	 * by default), and the media modal sets menu_order. Keyset paging must still walk ids in order.
+	 */
+	public function test_media_count_survives_a_menu_order_sort(): void {
+		$admin = $this->acting_as( 'administrator' );
+		$first = $this->attachment( 'image/jpeg', $admin );
+		for ( $i = 0; $i < 4; $i++ ) {
+			$this->attachment( 'image/jpeg', $admin );
+		}
+		wp_update_post(
+			array(
+				'ID'         => $first,
+				'menu_order' => 5,
+			)
+		);
+		$cap = static function ( \WP_Query $query ): void {
+			if ( 'attachment' === $query->get( 'post_type' ) ) {
+				$query->set( 'posts_per_page', 2 );
+			}
+		};
+		add_action( 'pre_get_posts', $cap );
+		add_filter(
+			'posts_orderby',
+			static function ( string $orderby ): string {
+				global $wpdb;
+				return "{$wpdb->posts}.menu_order ASC, " . $orderby;
+			},
+			99
+		);
+		$counts = aafm_query_attachment_counts_by_mime( null );
+		remove_action( 'pre_get_posts', $cap );
+
+		$this->assertSame( 5, $counts['image/jpeg'], 'An attachment with a higher menu_order and a lower id is still counted.' );
+	}
+
+	public function test_media_count_refuses_when_the_id_clause_is_dropped(): void {
+		$admin = $this->acting_as( 'administrator' );
+		for ( $i = 0; $i < 3; $i++ ) {
+			$this->attachment( 'image/jpeg', $admin );
+		}
+		$calls = 0;
+		add_filter(
+			'posts_where',
+			static function ( string $where, \WP_Query $query ) use ( &$calls ): string {
+				if ( 'attachment' !== $query->get( 'post_type' ) ) {
+					return $where;
+				}
+				// Drop the id clause; stop after a few rounds so the unguarded loop cannot hang the suite.
+				return ++$calls > 5 ? $where . ' AND 1 = 0' : (string) preg_replace( '/ AND \S+\.ID > \d+/', '', $where );
+			},
+			20,
+			2
+		);
+
+		$counts = aafm_query_attachment_counts_by_mime( null );
+
+		$this->assertWPError( $counts, 'A batch that does not move past the last id is refused, not counted again.' );
+		$this->assertSame( 2, $calls, 'Refused on the first batch that made no progress.' );
 	}
 }

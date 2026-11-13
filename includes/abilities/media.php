@@ -515,6 +515,10 @@ function aafm_exec_count_media( array $input ) {
  * as they do to the media list. Each batch of ids is then counted by its stored post_mime_type in
  * one grouped query, so every type is counted as stored. Two queries per 500 attachments.
  *
+ * Batches page by id (each one starts after the last id the previous one returned), so a large
+ * library is not rescanned from the start for every batch, and the loop ends only on an empty
+ * batch, so a filter that caps posts_per_page cannot cut the count short.
+ *
  * @param int|null $author_id Restrict to this author's attachments, or null for the
  *                            unscoped full library (aafm_media_scope_author_id()).
  * @return array<string,int>|WP_Error Mime type => count, or an error when a count query fails.
@@ -522,16 +526,21 @@ function aafm_exec_count_media( array $input ) {
 function aafm_query_attachment_counts_by_mime( ?int $author_id = null ) {
 	global $wpdb;
 
-	$batch  = 500;
-	$counts = array();
-	$page   = 1;
-	do {
+	$batch   = 500;
+	$counts  = array();
+	$last_id = 0;
+	$after   = static function ( string $where, WP_Query $query ) use ( $wpdb ): string {
+		$from = (int) $query->get( 'aafm_after_id' );
+		return $from > 0 ? $where . $wpdb->prepare( " AND {$wpdb->posts}.ID > %d", $from ) : $where;
+	};
+	add_filter( 'posts_where', $after, 10, 2 );
+	while ( true ) {
 		$args = array(
 			'post_type'              => 'attachment',
 			'post_status'            => 'inherit',
 			'fields'                 => 'ids',
 			'posts_per_page'         => $batch,
-			'paged'                  => $page,
+			'aafm_after_id'          => $last_id,
 			'orderby'                => 'ID',
 			'order'                  => 'ASC',
 			'no_found_rows'          => true,
@@ -549,19 +558,20 @@ function aafm_query_attachment_counts_by_mime( ?int $author_id = null ) {
 		if ( array() === $ids ) {
 			break;
 		}
-		$sql = 'SELECT post_mime_type, COUNT(*) AS n FROM %i WHERE ID IN (' . implode( ', ', array_fill( 0, count( $ids ), '%d' ) ) . ') GROUP BY post_mime_type';
+		$last_id = max( $ids );
+		$sql     = 'SELECT post_mime_type, COUNT(*) AS n FROM %i WHERE ID IN (' . implode( ', ', array_fill( 0, count( $ids ), '%d' ) ) . ') GROUP BY post_mime_type';
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- placeholders are generated from the id list.
 		$rows = aafm_wpdb_results( $wpdb->prepare( $sql, array_merge( array( $wpdb->posts ), $ids ) ) );
 		if ( ! $rows['ok'] ) {
+			remove_filter( 'posts_where', $after, 10 );
 			return aafm_generic_error();
 		}
 		foreach ( (array) $rows['value'] as $row ) {
 			$mime            = (string) ( $row['post_mime_type'] ?? '' );
 			$counts[ $mime ] = ( $counts[ $mime ] ?? 0 ) + (int) ( $row['n'] ?? 0 );
 		}
-		++$page;
-		$full = count( $ids ) === $batch;
-	} while ( $full );
+	}
+	remove_filter( 'posts_where', $after, 10 );
 
 	return $counts;
 }

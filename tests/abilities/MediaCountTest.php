@@ -129,7 +129,7 @@ final class MediaCountTest extends TestCase {
 		remove_action( 'pre_get_posts', $spy );
 
 		$this->assertSame( 5, $counts['image/jpeg'] );
-		$this->assertSame( array( array( 500, 'ids' ) ), $queries, 'One ids-only query of at most 500, never every row.' );
+		$this->assertSame( array( array( 500, 'ids' ), array( 500, 'ids' ) ), $queries, 'Ids-only queries of at most 500 (the second comes back empty), never every row.' );
 	}
 
 	public function test_media_count_pages_past_one_batch(): void {
@@ -149,7 +149,7 @@ final class MediaCountTest extends TestCase {
 
 		ksort( $counts );
 		$this->assertSame( $this->counts_from_rows(), $counts );
-		$this->assertSame( 2, $batches, 'Two id batches for 501 attachments.' );
+		$this->assertSame( 3, $batches, 'Two id batches for 501 attachments, then an empty one.' );
 	}
 
 	/**
@@ -186,5 +186,42 @@ final class MediaCountTest extends TestCase {
 		);
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- third-party WPML hook fired to simulate WPML being loaded.
 		do_action( 'wpml_loaded' );
+	}
+
+	public function test_media_count_keeps_going_when_a_filter_caps_the_batch(): void {
+		$admin = $this->acting_as( 'administrator' );
+		for ( $i = 0; $i < 5; $i++ ) {
+			$this->attachment( 'image/jpeg', $admin );
+		}
+		$cap = static function ( \WP_Query $query ): void {
+			if ( 'attachment' === $query->get( 'post_type' ) ) {
+				$query->set( 'posts_per_page', 2 );
+			}
+		};
+		add_action( 'pre_get_posts', $cap );
+		$counts = aafm_query_attachment_counts_by_mime( null );
+		remove_action( 'pre_get_posts', $cap );
+
+		$this->assertSame( 5, $counts['image/jpeg'], 'A short batch is not the end; only an empty one is.' );
+	}
+
+	public function test_media_count_pages_by_id_not_by_offset(): void {
+		$admin = $this->acting_as( 'administrator' );
+		for ( $i = 0; $i < 5; $i++ ) {
+			$this->attachment( 'image/jpeg', $admin );
+		}
+		$offsets = array();
+		$cap     = static function ( \WP_Query $query ) use ( &$offsets ): void {
+			if ( 'attachment' === $query->get( 'post_type' ) ) {
+				$query->set( 'posts_per_page', 2 );
+				$offsets[] = (int) $query->get( 'paged' ) + (int) $query->get( 'offset' );
+			}
+		};
+		add_action( 'pre_get_posts', $cap );
+		aafm_query_attachment_counts_by_mime( null );
+		remove_action( 'pre_get_posts', $cap );
+
+		$this->assertCount( 4, $offsets, 'Three batches of ids and one empty batch.' );
+		$this->assertSame( array( 0, 0, 0, 0 ), $offsets, 'Every batch starts after the last id seen, never at a page offset.' );
 	}
 }

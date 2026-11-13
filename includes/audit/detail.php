@@ -900,6 +900,17 @@ function aafm_activity_detail_map(): array {
 			),
 			'link'     => 'post',
 		),
+		'aafm/update-navigation'           => array(
+			/* translators: %s: the navigation's numeric ID. */
+			'template' => __( 'Updated navigation #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
 		'aafm/update-template'             => array(
 			/* translators: %s: the template's theme//slug identifier. */
 			'template' => __( 'Updated template `%s`', 'agent-abilities-for-mcp' ),

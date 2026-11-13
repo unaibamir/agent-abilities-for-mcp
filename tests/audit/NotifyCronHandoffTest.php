@@ -298,6 +298,7 @@ final class NotifyCronHandoffTest extends TestCase {
 		$this->assertStringNotContainsString( 'do not depend on cron', $html );
 		$this->assertStringContainsString( esc_html( $label ), $html );
 		$this->assertStringContainsString( 'next visit', $html, 'The paragraph says the email can wait for the next visit.' );
+		$this->assertStringContainsString( 'about an hour where WP-Cron cannot run', $html, 'It names the self-heal wait too.' );
 	}
 
 	public function test_an_alert_raised_inside_a_cron_run_is_sent_in_that_run(): void {
@@ -309,5 +310,87 @@ final class NotifyCronHandoffTest extends TestCase {
 
 		$this->assertCount( 1, $this->mail, 'No visitor waits on a cron run, so there is no second hop.' );
 		$this->assertSame( array(), $this->scheduled() );
+	}
+
+	/**
+	 * Put one alert-mail event in core's cron store at a given time, the way the handoff does.
+	 *
+	 * @param int $when Unix time the event was due.
+	 * @return array<string,mixed> The item it carries.
+	 */
+	private function schedule_at( int $when ): array {
+		$item = $this->item() + array( 'attempt' => 1 );
+		$this->assertTrue( wp_schedule_single_event( $when, 'aafm_notify_send_scheduled', array( $item ) ) );
+		return $item;
+	}
+
+	/**
+	 * Run due alert-mail events the way wp-cron.php does: remove each one, then fire its hook.
+	 *
+	 * @return void
+	 */
+	private function run_cron(): void {
+		foreach ( (array) wp_get_ready_cron_jobs() as $timestamp => $hooks ) {
+			foreach ( (array) ( $hooks['aafm_notify_send_scheduled'] ?? array() ) as $event ) {
+				wp_unschedule_event( (int) $timestamp, 'aafm_notify_send_scheduled', $event['args'] );
+				do_action_ref_array( 'aafm_notify_send_scheduled', $event['args'] );
+			}
+		}
+	}
+
+	public function test_an_overdue_event_is_sent_once_in_the_request_and_removed(): void {
+		$this->assertNotFalse( has_action( 'shutdown', 'aafm_notify_send_overdue' ) );
+		$this->schedule_at( time() - 2 * HOUR_IN_SECONDS );
+
+		aafm_notify_send_overdue();
+
+		$this->assertCount( 1, $this->mail, 'A host where WP-Cron never runs still gets the alert.' );
+		$this->assertSame( array(), $this->scheduled(), 'The event is gone, so cron cannot send it again.' );
+
+		aafm_notify_send_overdue();
+		$this->assertCount( 1, $this->mail, 'A second request sends nothing more.' );
+	}
+
+	public function test_an_event_not_yet_an_hour_overdue_is_left_for_cron(): void {
+		$this->schedule_at( time() - 30 * MINUTE_IN_SECONDS );
+
+		aafm_notify_send_overdue();
+
+		$this->assertSame( array(), $this->mail );
+		$this->assertCount( 1, $this->scheduled() );
+	}
+
+	public function test_no_double_send_when_cron_then_runs(): void {
+		$this->schedule_at( time() - 2 * HOUR_IN_SECONDS );
+		aafm_notify_send_overdue();
+		$this->run_cron();
+		$this->assertCount( 1, $this->mail, 'Self-heal first, then cron: one email.' );
+
+		$this->mail = array();
+		$this->schedule_at( time() - 3 * HOUR_IN_SECONDS );
+		$this->run_cron();
+		aafm_notify_send_overdue();
+		$this->assertCount( 1, $this->mail, 'Cron first, then self-heal: one email.' );
+	}
+
+	public function test_an_event_whose_removal_fails_is_not_sent(): void {
+		$this->schedule_at( time() - 2 * HOUR_IN_SECONDS );
+		add_filter( 'pre_unschedule_event', '__return_false' );
+
+		aafm_notify_send_overdue();
+		remove_all_filters( 'pre_unschedule_event' );
+
+		$this->assertSame( array(), $this->mail, 'Only an event this request removed is sent, so cron cannot send it too.' );
+		$this->assertCount( 1, $this->scheduled() );
+	}
+
+	public function test_a_cron_run_leaves_overdue_events_to_cron(): void {
+		$this->schedule_at( time() - 2 * HOUR_IN_SECONDS );
+		add_filter( 'wp_doing_cron', '__return_true' );
+
+		aafm_notify_send_overdue();
+
+		$this->assertSame( array(), $this->mail );
+		$this->assertCount( 1, $this->scheduled() );
 	}
 }

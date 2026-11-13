@@ -35,7 +35,7 @@ function aafm_render_notifications_section(): void {
 	$s = aafm_notifications_settings();
 
 	ob_start();
-	echo '<p class="aafm-card-desc">' . esc_html__( 'The daily email depends on WP-Cron, which only runs when your site gets visits and does not run at all if DISABLE_WP_CRON is set. On a quiet site, point a real cron job at wp-cron.php (or run "wp cron event run --due-now"). On hosts that cannot finish the page before sending, alerts emailed as they happen also go through WP-Cron, so an email can wait for the next visit; with DISABLE_WP_CRON set it is sent at once. The admin notice never depends on cron. If email is unreliable on your host, the admin notice still shows every alert.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="aafm-card-desc">' . esc_html__( 'The daily email depends on WP-Cron, which only runs when your site gets visits and does not run at all if DISABLE_WP_CRON is set. On a quiet site, point a real cron job at wp-cron.php (or run "wp cron event run --due-now"). On hosts that cannot finish the page before sending, alerts emailed as they happen also go through WP-Cron, so an email can wait for the next visit, or about an hour where WP-Cron cannot run; with DISABLE_WP_CRON set it is sent at once. The admin notice never depends on cron. If email is unreliable on your host, the admin notice still shows every alert.', 'agent-abilities-for-mcp' ) . '</p>';
 	$select = '<select id="aafm-notify-mode" name="aafm_notify_mode" aria-label="' . esc_attr__( 'How to be told', 'agent-abilities-for-mcp' ) . '">';
 	foreach ( aafm_notify_modes() as $mode => $mode_label ) {
 		$select .= '<option value="' . esc_attr( $mode ) . '"' . selected( $s['mode'], $mode, false ) . '>' . esc_html( $mode_label ) . '</option>';

@@ -263,6 +263,12 @@ The Adapter also has a built-in default server that other plugins can publish to
 
 Under Settings, Allow the MCP Adapter's default server starts on Automatic, which runs it only when another active plugin publishes tools there. Choose Always off to keep it off, or Always on if you ran the standalone Adapter only to reach WordPress core's public abilities, since those don't count as a publisher. This plugin's own tools are never on that server.
 
+= Why do I see "Another version of MCP Adapter is already loaded"? =
+
+That notice comes from a copy of the MCP Adapter that runs its own loader and finds the adapter already loaded by a different copy. This plugin bundles adapter 0.7.1 and loads it without that loader, so its own copy never prints the notice. When the standalone MCP Adapter plugin is active too, this plugin asks it to step aside quietly, unless your site already sets the WP_MCP_AUTOLOAD constant.
+
+If the notice still shows, another plugin ships its own copy of the adapter, and updating that plugin is the fix. The Connection Doctor report on the Connection tab names the copy that is running, for example "MCP adapter: 0.7.1 (from plugin: example-plugin)".
+
 = How is this different from other WordPress MCP plugins? =
 
 Because this plugin's tools are all off until you switch them on, it's a poor fit if you want everything available from day one. In exchange the AI acts as a user you choose, each OAuth connection can be paused or given an end date, and the plugin builds on the Abilities API and the MCP Adapter instead of running a server of its own.

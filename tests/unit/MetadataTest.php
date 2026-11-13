@@ -36,6 +36,13 @@ final class MetadataTest extends TestCase {
 		$this->assertSame( '1.11.3', AAFM_VERSION );
 	}
 
+	public function test_the_faq_explains_the_adapter_conflict_notice(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading the plugin's own readme.
+		$readme = (string) file_get_contents( AAFM_PLUGIN_DIR . 'readme.txt' );
+		$this->assertStringContainsString( '= Why do I see "Another version of MCP Adapter is already loaded"? =', $readme );
+		$this->assertLessThan( strpos( $readme, '= Why do I see "Another version of MCP Adapter' ), strpos( $readme, '= Do I need to install the MCP Adapter?' ), 'It follows the adapter question.' );
+	}
+
 	public function test_readme_stable_tag_matches_version(): void {
 		// Reading our own bundled readme from a local path - not a remote fetch.
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents

@@ -530,6 +530,7 @@ function aafm_bootstrap() {
 		add_action( 'wp_ajax_aafm_oauth_revoke_grant', 'aafm_ajax_oauth_revoke_grant' );
 		add_action( 'wp_ajax_aafm_save_oauth_lifetimes', 'aafm_ajax_save_oauth_lifetimes' );
 		add_action( 'wp_ajax_aafm_oauth_update_grant', 'aafm_ajax_oauth_update_grant' );
+		add_action( 'wp_ajax_aafm_revoke_stale_tokens', 'aafm_ajax_revoke_stale_tokens' );
 		add_action( 'wp_ajax_aafm_revoke_app_password', 'aafm_ajax_revoke_app_password' );
 		add_action( 'wp_ajax_aafm_set_pause_all', 'aafm_ajax_set_pause_all' );
 		add_action( 'wp_ajax_aafm_set_client_agent_identity', 'aafm_ajax_set_client_agent_identity' );

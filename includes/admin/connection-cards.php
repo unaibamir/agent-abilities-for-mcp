@@ -735,7 +735,6 @@ function aafm_ajax_revoke_stale_tokens(): void {
 		)
 	);
 }
-add_action( 'wp_ajax_aafm_revoke_stale_tokens', 'aafm_ajax_revoke_stale_tokens' );
 
 /**
  * AJAX: change one grant's pause, access preset, end date or rate override.

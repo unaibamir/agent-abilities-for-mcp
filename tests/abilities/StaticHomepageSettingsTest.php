@@ -216,4 +216,66 @@ final class StaticHomepageSettingsTest extends TestCase {
 			$this->assertSame( 'aafm_setting_not_allowed', $res->get_error_code(), $key );
 		}
 	}
+
+	public function test_an_escaped_site_name_beside_the_homepage_keys_all_land(): void {
+		$front = $this->page();
+		$blog  = $this->page();
+
+		$res = $this->update(
+			array(
+				'blogname'       => "Joe's Bakery & Cafe",
+				'page_on_front'  => $front,
+				'page_for_posts' => $blog,
+				'show_on_front'  => 'page',
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res, is_wp_error( $res ) ? $res->get_error_message() : '' );
+		$this->assertSame( array( 'blogname', 'page_on_front', 'page_for_posts', 'show_on_front' ), $res['landed'] );
+		$this->assertSame( 'page', $this->stored()['show_on_front'] );
+	}
+
+	public function test_a_failed_non_homepage_key_does_not_stop_the_homepage_keys(): void {
+		$front = $this->page();
+		add_filter( 'pre_update_option_blogdescription', static fn( $value, $old ) => $old, 10, 2 );
+
+		$res = $this->update(
+			array(
+				'blogdescription' => 'A new tagline',
+				'page_on_front'   => $front,
+				'show_on_front'   => 'page',
+			)
+		);
+		remove_all_filters( 'pre_update_option_blogdescription' );
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'A key that did not land is still reported.' );
+		$data = $res->get_error_data();
+		$this->assertSame( array( 'blogdescription' ), $data['failed'] );
+		$this->assertSame( array( 'page_on_front', 'show_on_front' ), $data['landed'] );
+		$this->assertSame( 'page', $this->stored()['show_on_front'] );
+	}
+
+	public function test_show_on_front_page_alone_checks_the_stored_front_page_is_published(): void {
+		$front = $this->page();
+		update_option( 'page_on_front', $front );
+		wp_update_post(
+			array(
+				'ID'          => $front,
+				'post_status' => 'draft',
+			)
+		);
+
+		$res = $this->update( array( 'show_on_front' => 'page' ) );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_homepage_not_a_published_page', $res->get_error_code() );
+		$this->assertSame( 'posts', $this->stored()['show_on_front'] );
+	}
+
+	public function test_output_schema_declares_the_report_lists(): void {
+		$properties = aafm_args_update_site_settings()['output_schema']['properties'];
+		foreach ( array( 'landed', 'unchanged', 'failed' ) as $key ) {
+			$this->assertSame( 'array', $properties[ $key ]['type'], $key );
+		}
+	}
 }

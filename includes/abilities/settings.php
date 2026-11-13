@@ -146,7 +146,22 @@ function aafm_args_update_site_settings(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'settings' => array( 'type' => 'object' ),
+				'settings'  => array( 'type' => 'object' ),
+				'landed'    => array(
+					'type'        => 'array',
+					'description' => __( 'Present only when a homepage key was sent: the keys that were saved.', 'agent-abilities-for-mcp' ),
+					'items'       => array( 'type' => 'string' ),
+				),
+				'unchanged' => array(
+					'type'        => 'array',
+					'description' => __( 'Present only when a homepage key was sent: the keys that already held the value.', 'agent-abilities-for-mcp' ),
+					'items'       => array( 'type' => 'string' ),
+				),
+				'failed'    => array(
+					'type'        => 'array',
+					'description' => __( 'Present only when a homepage key was sent: the keys that were not saved. Always empty on success.', 'agent-abilities-for-mcp' ),
+					'items'       => array( 'type' => 'string' ),
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_update_site_settings',
@@ -290,8 +305,8 @@ function aafm_exec_update_site_settings( array $input ) {
 	);
 	foreach ( $settings as $key => $value ) {
 		$key = (string) $key;
-		if ( array() !== $report['failed'] && in_array( $key, $homepage, true ) ) {
-			// A homepage key did not land: the ones after it are not written.
+		if ( array() !== array_intersect( $report['failed'], $homepage ) && in_array( $key, $homepage, true ) ) {
+			// A homepage key did not land: the homepage keys after it are not written.
 			$report['failed'][] = $key;
 			continue;
 		}
@@ -299,8 +314,9 @@ function aafm_exec_update_site_settings( array $input ) {
 		$outcome  = aafm_option_write( $key, $intended );
 		if ( array() !== $homepage ) {
 			// Read back from the row, never the cache or the option filters, so the report is what is stored.
-			$row    = aafm_option_row( $key );
-			$stored = $row['ok'] && $row['found'] && aafm_option_value_matches( $row['value'], $intended );
+			$row = aafm_option_row( $key );
+			// Compared with core's canonical form, the one the row holds (blogname is stored escaped).
+			$stored = $row['ok'] && $row['found'] && aafm_option_value_matches( $row['value'], sanitize_option( $key, $intended ) );
 			if ( $stored && AAFM_WRITE_WRITTEN === $outcome['status'] ) {
 				$report['landed'][] = $key;
 			} elseif ( $stored && AAFM_WRITE_UNCHANGED === $outcome['status'] ) {
@@ -393,15 +409,9 @@ function aafm_static_homepage_checked( array $settings ) {
 				array( 'status' => 400 )
 			);
 		}
-		$id   = (int) $value;
-		$page = $id > 0 ? aafm_exact_object( 'post', $id ) : null;
-		if ( $id > 0 && ! ( $page instanceof WP_Post && 'page' === $page->post_type && 'publish' === $page->post_status ) ) {
-			return new WP_Error(
-				'aafm_homepage_not_a_published_page',
-				/* translators: %s: the setting key. */
-				sprintf( __( 'The setting "%s" must name a published page, or 0 for none, so nothing was changed.', 'agent-abilities-for-mcp' ), $key ),
-				array( 'status' => 400 )
-			);
+		$id = (int) $value;
+		if ( $id > 0 && ! aafm_homepage_page_published( $id ) ) {
+			return aafm_homepage_not_published_error( $key );
 		}
 		$clean[ $key ] = $id;
 	}
@@ -424,7 +434,38 @@ function aafm_static_homepage_checked( array $settings ) {
 	if ( 'page' === $show && 0 === $front && ( isset( $clean['show_on_front'] ) || isset( $clean['page_on_front'] ) ) ) {
 		return new WP_Error( 'aafm_homepage_no_front_page', __( 'Showing a static front page needs page_on_front set to a published page, so nothing was changed.', 'agent-abilities-for-mcp' ), array( 'status' => 400 ) );
 	}
+	// Turning on a static front page that the request does not name relies on the stored one, which
+	// may have been trashed or unpublished since.
+	if ( isset( $clean['show_on_front'] ) && 'page' === $show && ! isset( $clean['page_on_front'] ) && ! aafm_homepage_page_published( (int) $front ) ) {
+		return aafm_homepage_not_published_error( 'page_on_front' );
+	}
 	return $clean;
+}
+
+/**
+ * Whether an id names a published page.
+ *
+ * @param int $id Post id.
+ * @return bool
+ */
+function aafm_homepage_page_published( int $id ): bool {
+	$page = $id > 0 ? aafm_exact_object( 'post', $id ) : null;
+	return $page instanceof WP_Post && 'page' === $page->post_type && 'publish' === $page->post_status;
+}
+
+/**
+ * The refusal for a homepage key that does not name a published page.
+ *
+ * @param string $key The setting key.
+ * @return WP_Error
+ */
+function aafm_homepage_not_published_error( string $key ): WP_Error {
+	return new WP_Error(
+		'aafm_homepage_not_a_published_page',
+		/* translators: %s: the setting key. */
+		sprintf( __( 'The setting "%s" must name a published page, or 0 for none, so nothing was changed.', 'agent-abilities-for-mcp' ), $key ),
+		array( 'status' => 400 )
+	);
 }
 
 /**

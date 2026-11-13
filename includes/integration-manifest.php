@@ -415,6 +415,10 @@ function aafm_integration_ability_order(): array {
 				'name' => 'aafm/avada-replace-text',
 				'risk' => 'write',
 			),
+			array(
+				'name' => 'aafm/avada-list-layouts',
+				'risk' => 'read',
+			),
 		),
 		'geodirectory'  => array(
 			array(

@@ -72,6 +72,14 @@ function aafm_avada_registry_definitions(): array {
 			'subject'      => 'avada',
 			'args_builder' => 'aafm_args_avada_replace_text',
 		),
+		'aafm/avada-list-layouts'     => array(
+			'label'        => __( 'List Avada layouts', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Lists Avada Layouts in the order Avada checks them, with the Global Layout last. Each layout has its sections (header, page title bar, content, footer) with each section\'s id, title, status and whether it exists, and its conditions exactly as Avada stores them. Conditions are not evaluated, so this does not say which layout a given page gets. A section that is not published is not used. A layout whose stored data Avada itself cannot read is marked unparseable. global_stored is false when no Global Layout was ever saved, and more than 200 layouts are cut to the first 200. Requires the manage_options capability, even where Avada\'s Role Manager opens Layouts to other roles. Only while Avada is active.', 'agent-abilities-for-mcp' ),
+			'group'        => 'reads',
+			'risk'         => 'read',
+			'subject'      => 'avada',
+			'args_builder' => 'aafm_args_avada_list_layouts',
+		),
 	);
 }
 
@@ -552,4 +560,201 @@ function aafm_exec_avada_replace_text( array $input ) {
 		'post'         => aafm_redact_post( $fresh ),
 		'replacements' => $replacements,
 	);
+}
+
+/**
+ * Args for aafm/avada-list-layouts.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_avada_list_layouts(): array {
+	$section = array(
+		'type'       => 'object',
+		'properties' => array(
+			'id'     => array( 'type' => 'integer' ),
+			'exists' => array( 'type' => 'boolean' ),
+			'title'  => array( 'type' => 'string' ),
+			'status' => array( 'type' => 'string' ),
+		),
+	);
+	return array(
+		'label'               => aafm_ability_label( 'aafm/avada-list-layouts' ),
+		'description'         => aafm_ability_description( 'aafm/avada-list-layouts' ),
+		'category'            => 'aafm-reads',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'include_conditions' => array(
+					'type'        => 'boolean',
+					'default'     => true,
+					'description' => __( 'When false, each layout is returned without its conditions.', 'agent-abilities-for-mcp' ),
+				),
+			),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'layouts'       => array(
+					'type'  => 'array',
+					'items' => array(
+						'type'       => 'object',
+						'properties' => array(
+							'id'           => array(
+								'type'        => array( 'integer', 'string' ),
+								'description' => __( 'The layout post id, or "global" for the Global Layout.', 'agent-abilities-for-mcp' ),
+							),
+							'title'        => array( 'type' => 'string' ),
+							'status'       => array( 'type' => 'string' ),
+							'order'        => array(
+								'type'        => 'integer',
+								'description' => __( 'Position in the order Avada checks layouts, from 0. The first layout whose conditions match is used.', 'agent-abilities-for-mcp' ),
+							),
+							'parse_status' => array(
+								'type'        => 'string',
+								'enum'        => array( 'ok', 'unparseable' ),
+								'description' => __( 'unparseable: Avada cannot read this layout\'s stored data, so no sections or conditions are returned for it.', 'agent-abilities-for-mcp' ),
+							),
+							'sections'     => array(
+								'type'                 => 'object',
+								'description'          => __( 'Keyed by section type (header, page_title_bar, content, footer). Only when parse_status is ok.', 'agent-abilities-for-mcp' ),
+								'additionalProperties' => $section,
+							),
+							'conditions'   => array(
+								'type'        => 'array',
+								'description' => __( 'The stored conditions, unchanged: mode (include or exclude), type, the value under the key named by type, and parent for a child condition. Only when parse_status is ok and include_conditions is true.', 'agent-abilities-for-mcp' ),
+								'items'       => array( 'type' => 'object' ),
+							),
+						),
+					),
+				),
+				'global_stored' => array( 'type' => 'boolean' ),
+				'truncated'     => array( 'type' => 'boolean' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_avada_list_layouts',
+		'permission_callback' => 'aafm_perm_manage_options',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => true,
+				'destructive' => false,
+				'idempotent'  => true,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/avada-list-layouts. Reads the layout posts, the layout order and the Global Layout
+ * option the way Avada Builder's Fusion_Template_Builder does, without calling Avada (its query
+ * helper caches), and decodes each one with Avada's own expression, since that decides what renders.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>
+ */
+function aafm_exec_avada_list_layouts( array $input ): array {
+	$with_conditions = ! array_key_exists( 'include_conditions', $input ) || ! empty( $input['include_conditions'] );
+
+	// Fusion_Template_Builder::get_registered_layouts_posts(): every status but trash and auto-draft.
+	$query = new WP_Query(
+		array(
+			'post_type'      => 'fusion_tb_layout',
+			'post_status'    => 'any',
+			'posts_per_page' => -1,
+			'no_found_rows'  => true,
+		)
+	);
+	$posts = (array) $query->posts;
+
+	// Same function: ordered ids first, the rest in query order, ordered ids with no post dropped.
+	$settings = get_option( 'fusion_builder_settings', array() );
+	$order    = is_array( $settings ) && isset( $settings['awb_layout_order'] ) && is_string( $settings['awb_layout_order'] ) ? $settings['awb_layout_order'] : '';
+	if ( '' !== $order ) {
+		$by_id = array();
+		foreach ( $posts as $post ) {
+			if ( $post instanceof WP_Post ) {
+				$by_id[ $post->ID ] = $post;
+			}
+		}
+		$posts = array_replace( array_flip( explode( ',', str_replace( 'global,', '', $order ) ) ), $by_id );
+	}
+	$posts = array_values(
+		array_filter(
+			$posts,
+			static function ( $post ): bool {
+				return $post instanceof WP_Post;
+			}
+		)
+	);
+
+	$max     = 200;
+	$layouts = array();
+	foreach ( array_slice( $posts, 0, $max ) as $position => $post ) {
+		// Fusion_Template_Builder::set_overrides() and get_conditions() decode layouts this way.
+		$data      = json_decode( str_replace( "'", "\'", wp_unslash( $post->post_content ) ), true );
+		$layouts[] = array(
+			'id'     => $post->ID,
+			'title'  => $post->post_title,
+			'status' => $post->post_status,
+			'order'  => $position,
+		) + aafm_avada_layout_detail( $data, $with_conditions );
+	}
+
+	$global = get_option( 'fusion_tb_layout_default' );
+	if ( false !== $global ) {
+		// Fusion_Template_Builder::get_default_layout() decodes the Global Layout this way.
+		$data      = is_string( $global ) ? json_decode( wp_unslash( $global ), true ) : null;
+		$layouts[] = array(
+			'id'     => 'global',
+			'title'  => __( 'Global Layout', 'agent-abilities-for-mcp' ),
+			'status' => 'publish',
+			'order'  => count( $layouts ),
+		) + aafm_avada_layout_detail( $data, $with_conditions );
+	}
+
+	return array(
+		'layouts'       => $layouts,
+		'global_stored' => false !== $global,
+		'truncated'     => count( $posts ) > $max,
+	);
+}
+
+/**
+ * Sections and conditions of one decoded layout, or unparseable with neither when the decode did
+ * not give an array (never empty ones standing in for a failed read).
+ *
+ * @param mixed $data            Decoded layout data.
+ * @param bool  $with_conditions Whether to include the conditions.
+ * @return array<string,mixed>
+ */
+function aafm_avada_layout_detail( $data, bool $with_conditions ): array {
+	if ( ! is_array( $data ) ) {
+		return array( 'parse_status' => 'unparseable' );
+	}
+	$sections = array();
+	$terms    = isset( $data['template_terms'] ) && is_array( $data['template_terms'] ) ? $data['template_terms'] : array();
+	foreach ( $terms as $type => $section_id ) {
+		if ( ! $section_id ) {
+			continue; // Avada skips an empty slot.
+		}
+		$id      = is_numeric( $section_id ) ? absint( $section_id ) : 0;
+		$section = $id > 0 ? get_post( $id ) : null;
+		$entry   = array(
+			'id'     => $id,
+			'exists' => $section instanceof WP_Post,
+		);
+		if ( $section instanceof WP_Post ) {
+			$entry['title']  = $section->post_title;
+			$entry['status'] = $section->post_status;
+		}
+		$sections[ (string) $type ] = $entry;
+	}
+	$out = array(
+		'parse_status' => 'ok',
+		'sections'     => (object) $sections,
+	);
+	if ( $with_conditions ) {
+		$out['conditions'] = isset( $data['conditions'] ) && is_array( $data['conditions'] ) ? array_values( $data['conditions'] ) : array();
+	}
+	return $out;
 }

@@ -1,0 +1,1 @@
+{\"conditions\":{\"singular_page\":{\"label\":\"All Pages\",\"type\":\"singular\",\"mode\":\"include\",\"singular\":\"singular_page\"},\"page_2\":{\"label\":\"Owner\'s page\",\"type\":\"singular\",\"mode\":\"exclude\",\"singular\":\"page_2\",\"parent\":\"singular_page\"}},\"template_terms\":{\"header\":13,\"footer\":14}}

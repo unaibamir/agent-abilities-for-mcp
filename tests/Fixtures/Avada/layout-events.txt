@@ -1,0 +1,1 @@
+{\"conditions\":{\"singular_post\":{\"label\":\"All Posts\",\"type\":\"singular\",\"mode\":\"include\",\"singular\":\"singular_post\"},\"post_5\":{\"label\":\"Hello world\",\"type\":\"singular\",\"mode\":\"exclude\",\"singular\":\"post_5\",\"parent\":\"singular_post\"}},\"template_terms\":{\"footer\":13}}

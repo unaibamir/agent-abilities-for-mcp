@@ -6,8 +6,8 @@
  * wrote through Fusion_Settings::set() on a disposable site, with planted secrets (smtp_password,
  * mailchimp_api) and code (custom_css, space_head) that must never come back.
  *
- * The first test needs the Avada class to be absent, so it runs before any other test here loads
- * the stand-in (tests/Fixtures/Avada/AvadaStandIn.php); its precondition fails loudly otherwise.
+ * The missing-theme test runs in its own process, since the stand-in Avada class
+ * (tests/Fixtures/Avada/AvadaStandIn.php) stays declared once any other test loads it.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -44,8 +44,15 @@ final class AvadaGlobalOptionsTest extends TestCase {
 		update_option( 'fusion_options', $stored );
 	}
 
+	/**
+	 * Runs in its own process, so a stand-in Avada class loaded by another test cannot hide the
+	 * missing-theme path, whatever order the suite runs in.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
 	public function test_without_the_avada_theme_class_it_errors_instead_of_reading_fusion_options(): void {
-		$this->assertFalse( class_exists( 'Avada', false ), 'Precondition: this test runs before the stand-in loads.' );
+		$this->assertFalse( class_exists( 'Avada', false ), 'Precondition: no Avada class in this process.' );
 		update_option( 'fusion_options', array( 'site_width' => '1200px' ) );
 
 		$out = aafm_exec_avada_get_global_options( array() );

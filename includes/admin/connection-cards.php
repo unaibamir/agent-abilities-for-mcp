@@ -765,7 +765,7 @@ function aafm_ajax_oauth_update_grant(): void {
 	$client  = is_string( $field( 'client_id' ) ) ? sanitize_text_field( $field( 'client_id' ) ) : '';
 	// The grant must be one the Active grants card lists (an active client, an existing user), so
 	// nothing is written to a consent whose client was revoked and the answer always carries the row.
-	if ( $user_id <= 0 || '' === $client || ! aafm_oauth_has_consent( $user_id, $client ) || null === aafm_connection_grant_row( $user_id, $client ) ) {
+	if ( $user_id <= 0 || '' === $client || null === aafm_connection_grant_row( $user_id, $client ) ) {
 		wp_send_json_error( array( 'message' => __( 'Missing grant.', 'agent-abilities-for-mcp' ) ) );
 	}
 	$refuse  = __( 'That value is not allowed.', 'agent-abilities-for-mcp' );

@@ -97,7 +97,7 @@ Two read tools, List playbooks and Get playbook, stay off until you enable them 
 
 When one of these plugins is active, its abilities appear on the Integrations tab. WooCommerce has the most, 52, covering products, variations, orders, customers, coupons, shipping, tax, payment gateways and reports, and because they reach names, emails and addresses an admin notice flags them. ACF adds 7 for field groups and the field values on posts, terms and users, and Rank Math (5), Yoast SEO (3), All in One SEO (3) and Slim SEO (2) let the AI read and edit a post's SEO data.
 
-The Events Calendar has 13 abilities, Event Tickets has 3, and Avada has 2 that read a page's Fusion Builder markup and replace text inside it. GeoDirectory has 4 for business listings, which stay off until you enable that integration on the Integrations tab, even when GeoDirectory is active.
+The Events Calendar has 13 abilities, Event Tickets has 3, and Avada has 5 (four reads, and one that replaces text in a Fusion Builder page). GeoDirectory has 4 for business listings, which stay off until you enable that integration, even when GeoDirectory is active.
 
 Minimum versions: WooCommerce 9.1, All in One SEO 4.9.8, The Events Calendar 6.17.3.1 and Event Tickets 5.29.3.1. Below these, their tools stay hidden and the Integrations tab says why.
 
@@ -113,7 +113,7 @@ WordPress 6.9 added the Abilities API, and the official MCP Adapter turns those 
 
 = Elementor, Divi and other page builder pages: AI edits are refused =
 
-A page builder owns its page's layout, so an edit to the post text can report success and change nothing on the page. For Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks and WPBakery the plugin checks first and refuses the write with an error naming the builder. There are two exceptions: an edit that only sets the excerpt goes through and leaves the stored content as it was, unless the plugin can't tell which builder owns the post, and Avada's two own tools can change text and refuse shortcode changes.
+A page builder owns its page's layout, so an edit to the post text can report success and change nothing on the page. For Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks and WPBakery the plugin checks first and refuses the write with an error naming the builder. There are two exceptions: an edit that only sets the excerpt goes through and leaves the stored content as it was, unless the plugin can't tell which builder owns the post, and Avada's replace-text tool can change text but refuses shortcode changes.
 
 = Is this the right WordPress MCP plugin for you? =
 
@@ -123,7 +123,7 @@ It's a poor fit if you want every tool on from day one, or an undo for every kin
 
 = Compatible clients =
 
-Any MCP client that can reach your endpoint can connect. Claude (web and Desktop), ChatGPT and Manus are hosted apps and use OAuth, while Claude Code, Cursor, VS Code, Windsurf and Gemini CLI can use OAuth or an Application Password. The hosted Gemini app is not supported yet. A client that can't connect directly can go through a bridge such as `mcp-remote`, which runs on your own machine.
+Any MCP client that can reach your endpoint can connect. Claude (web and Desktop), ChatGPT and Manus are hosted apps and use OAuth, while Claude Code, Cursor, VS Code, Windsurf and Gemini CLI can use OAuth or an Application Password. The Gemini app has no known way to add a custom MCP server. A client that can't connect directly can go through a bridge such as `mcp-remote`, which runs on your own machine.
 
 = Disclaimer =
 

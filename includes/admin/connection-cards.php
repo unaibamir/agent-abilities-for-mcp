@@ -41,7 +41,7 @@ function aafm_connection_clients_data(): array {
  * grants_page query argument; anything that is not a whole number clamps to the first page and a
  * number past the end clamps to the last.
  *
- * @return array{title:string,rule:string,count:int,rows:list<array<string,mixed>>,page:int,pages:int,per_page:int,empty:array{title:string,hint:string}}
+ * @return array{title:string,rule:string,count:int,rows:list<array<string,mixed>>,page:int,pages:int,per_page:int,stale_tokens:int,empty:array{title:string,hint:string}}
  */
 function aafm_connection_grants_data(): array {
 	// phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- read-only paging input, cast to an int and clamped by aafm_oauth_grants_page().
@@ -57,6 +57,7 @@ function aafm_connection_grants_data(): array {
 		'page'         => $page['page'],
 		'pages'        => $page['pages'],
 		'per_page'     => $per_page,
+		'stale_tokens' => aafm_oauth_stale_token_count(),
 		'empty'        => array(
 			'title' => __( 'No active grants yet', 'agent-abilities-for-mcp' ),
 			'hint'  => __( 'When someone approves an AI app, the approval shows up here.', 'agent-abilities-for-mcp' ),
@@ -246,11 +247,32 @@ function aafm_connection_grant_pill( string $status ): string {
  * The "Current role" column reads each identity's LIVE role (aafm_oauth_list_grants()), never a
  * value captured at approval: a token acts with whatever the identity can do right now.
  *
- * @param array{title:string,rule:string,count:int,rows:list<array<string,mixed>>,page:int,pages:int,per_page:int,empty:array{title:string,hint:string}} $data aafm_connection_grants_data().
+ * @param array{title:string,rule:string,count:int,rows:list<array<string,mixed>>,page:int,pages:int,per_page:int,stale_tokens:int,empty:array{title:string,hint:string}} $data aafm_connection_grants_data().
  * @return void
  */
 function aafm_render_grants_card( array $data ): void {
 	ob_start();
+	if ( $data['stale_tokens'] > 0 ) {
+		echo '<div class="aafm-stale-tokens">';
+		aafm_render_notice(
+			'warning',
+			sprintf(
+				/* translators: %s: number of token rows. */
+				_n(
+					'%s token was issued for an old address of this site, so it can no longer connect. The people who approved that app reconnect from their client. Ending old tokens removes no one\'s approval.',
+					'%s tokens were issued for an old address of this site, so they can no longer connect. The people who approved those apps reconnect from their client. Ending old tokens removes no one\'s approval.',
+					$data['stale_tokens'],
+					'agent-abilities-for-mcp'
+				),
+				number_format_i18n( $data['stale_tokens'] )
+			)
+		);
+		printf(
+			'<p><button type="button" class="aafm-btn aafm-btn-secondary aafm-revoke-stale-tokens">%1$s</button> <span class="aafm-stale-tokens-status" role="status" tabindex="-1"></span></p>',
+			esc_html__( 'End old tokens', 'agent-abilities-for-mcp' )
+		);
+		echo '</div>';
+	}
 	if ( array() === $data['rows'] ) {
 		echo aafm_connection_empty_state( $data['empty'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by the helper.
 	} else {
@@ -683,6 +705,36 @@ function aafm_connection_grant_row( int $user_id, string $client_id ): ?array {
 	$row = aafm_oauth_get_grant( $client_id, $user_id );
 	return null === $row ? null : aafm_connection_grant_with_status( $row );
 }
+
+/**
+ * AJAX: deactivate every token issued for an old address of this site (owner click only). The
+ * answer states how many token rows were deactivated. Consent rows are never touched.
+ *
+ * @return void
+ */
+function aafm_ajax_revoke_stale_tokens(): void {
+	check_ajax_referer( 'aafm_admin', 'nonce' );
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+	}
+	$ended = aafm_oauth_revoke_stale_tokens();
+	if ( $ended < 0 ) {
+		wp_send_json_error( array( 'message' => __( 'Could not end the old tokens. Please try again.', 'agent-abilities-for-mcp' ) ) );
+	}
+	/* translators: %d: number of token rows. */
+	aafm_log_setting_change( 'aafm/oauth-stale-tokens', sprintf( __( 'Ended %d tokens issued for an old site address', 'agent-abilities-for-mcp' ), $ended ) );
+	wp_send_json_success(
+		array(
+			'deactivated' => $ended,
+			'message'     => sprintf(
+				/* translators: %s: number of token rows. */
+				_n( 'Ended %s token issued for an old address of this site.', 'Ended %s tokens issued for an old address of this site.', $ended, 'agent-abilities-for-mcp' ),
+				number_format_i18n( $ended )
+			),
+		)
+	);
+}
+add_action( 'wp_ajax_aafm_revoke_stale_tokens', 'aafm_ajax_revoke_stale_tokens' );
 
 /**
  * AJAX: change one grant's pause, access preset, end date or rate override.

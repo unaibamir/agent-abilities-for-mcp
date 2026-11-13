@@ -86,6 +86,7 @@
 			this.#bindOauthRevoke();
 			this.#bindOauthPagination();
 			this.#focusGrantsAfterReload();
+			this.#bindStaleTokens();
 			this.#bindClientAgentToggle();
 			this.#bindAllowlist();
 			this.#bindQuickConnect();
@@ -3621,6 +3622,36 @@
 				heading.setAttribute( 'tabindex', '-1' );
 				heading.focus();
 			}
+		}
+
+		/**
+		 * The "End old tokens" button on the Active grants card: confirm, deactivate the tokens
+		 * issued for an old site address, and say how many were ended. On failure the button
+		 * comes back with focus and the server's message.
+		 */
+		#bindStaleTokens() {
+			const btn = document.querySelector( '.aafm-revoke-stale-tokens' );
+			const status = document.querySelector( '.aafm-stale-tokens-status' );
+			if ( ! btn || ! status ) {
+				return;
+			}
+			btn.addEventListener( 'click', async () => {
+				if ( ! window.confirm( this.#t( 'staleTokensConfirm', 'End every token issued for an old address of this site? Approvals stay; those apps reconnect.' ) ) ) {
+					return;
+				}
+				btn.disabled = true;
+				status.textContent = this.#t( 'bridgeWorking', 'Working…' );
+				const json = await this.#post( 'aafm_revoke_stale_tokens', {} );
+				if ( ! json?.success ) {
+					btn.disabled = false;
+					btn.focus();
+					status.textContent = json?.data?.message ?? this.#t( 'revokeFailed', 'Could not revoke. Please try again.' );
+					return;
+				}
+				btn.remove();
+				status.textContent = json.data?.message ?? '';
+				status.focus();
+			} );
 		}
 
 		/**

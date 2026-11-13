@@ -347,6 +347,27 @@ class ConnectionCardsTest extends TestCase {
 		return $pairs;
 	}
 
+	/**
+	 * Seed one active access token with the given audience.
+	 *
+	 * @param string $audience Stored resource.
+	 * @return void
+	 */
+	private function seed_token( string $audience ): void {
+		global $wpdb;
+		$wpdb->insert(
+			$wpdb->prefix . 'aafm_oauth_access_tokens',
+			array(
+				'token_hash'   => hash( 'sha256', 't' . wp_rand() ),
+				'refresh_hash' => hash( 'sha256', 'r' . wp_rand() ),
+				'client_id'    => self::CLIENT,
+				'wp_user_id'   => 1,
+				'resource'     => $audience,
+				'is_active'    => 1,
+			)
+		);
+	}
+
 	public function test_grants_card_shows_page_2_of_3_with_links(): void {
 		$this->seed_grants( 105 );
 		$_GET['grants_page'] = '2';
@@ -382,6 +403,47 @@ class ConnectionCardsTest extends TestCase {
 		// The card body goes through aafm_render_section(), which filters it with aafm_admin_allowed_html().
 		$this->assertStringContainsString( 'data-aafm-server-paged="1"', $this->grants_html() );
 		$this->assertArrayHasKey( 'data-aafm-server-paged', aafm_admin_allowed_html()['table'] );
+	}
+
+	public function test_stale_token_notice_shows_count_and_button_only_when_count_positive(): void {
+		$this->seed_grant();
+		$this->seed_token( aafm_endpoint_url() );
+		$this->assertStringNotContainsString( 'aafm-revoke-stale-tokens', $this->grants_html() );
+
+		$this->seed_token( 'https://old.example/wp-json/aafm/v1/mcp' );
+		$this->seed_token( 'https://old.example/wp-json/aafm/v1/mcp' );
+		$html = $this->grants_html();
+		$this->assertStringContainsString( '2 tokens were issued for an old address of this site', $html );
+		$this->assertMatchesRegularExpression( '/<button type="button" class="[^"]*aafm-revoke-stale-tokens[^"]*"/', $html );
+	}
+
+	public function test_stale_token_action_requires_nonce_and_capability(): void {
+		$this->seed_token( 'https://old.example/wp-json/aafm/v1/mcp' );
+
+		$this->post_as( 'administrator' );
+		$_POST['nonce']    = 'bad';
+		$_REQUEST['nonce'] = 'bad';
+		$this->assertNotTrue( $this->run_handler( 'aafm_ajax_revoke_stale_tokens' )['success'] ?? null );
+		$this->assertSame( 1, aafm_oauth_stale_token_count(), 'A bad nonce changes nothing.' );
+
+		$this->post_as( 'editor' );
+		$json = $this->run_handler( 'aafm_ajax_revoke_stale_tokens' );
+		$this->assertFalse( $json['success'] );
+		$this->assertSame( 1, aafm_oauth_stale_token_count(), 'An editor changes nothing.' );
+	}
+
+	public function test_stale_token_action_reports_deactivated_count(): void {
+		$this->seed_token( aafm_endpoint_url() );
+		$this->seed_token( 'https://old.example/wp-json/aafm/v1/mcp' );
+		$this->seed_token( 'https://old.example/wp-json/aafm/v1/mcp' );
+		$this->seed_token( 'https://old.example/wp-json/aafm/v1/mcp' );
+
+		$this->post_as( 'administrator' );
+		$json = $this->run_handler( 'aafm_ajax_revoke_stale_tokens' );
+		$this->assertTrue( $json['success'] );
+		$this->assertSame( 3, $json['data']['deactivated'] );
+		$this->assertStringContainsString( '3 tokens', $json['data']['message'] );
+		$this->assertSame( 0, aafm_oauth_stale_token_count() );
 	}
 
 	public function test_save_and_pause_work_on_a_grant_beyond_page_1(): void {

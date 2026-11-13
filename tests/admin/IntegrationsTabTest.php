@@ -94,12 +94,11 @@ final class IntegrationsTabTest extends TestCase {
 		// ability is ever added to or removed from another integration's manifest.
 		$wc = aafm_integration_manifest()['woocommerce'];
 		$this->assertStringContainsString( 'aafm-integration-count', $html );
-		// The enabled figure is wrapped in its own span so admin.js can patch it after a save
-		// (see the Integrations card staleness fix); assert the wrapped form the renderer
-		// actually produces, not the bare digit.
+		// An inactive card counts what is saved for it, not what is usable (always 0 there), and
+		// carries no .aafm-enabled-num span, so the live save patch cannot overwrite that count.
 		$this->assertStringContainsString(
 			sprintf(
-				'<span class="aafm-enabled-num">0</span> / %1$d · %2$s',
+				'0 saved / %1$d · %2$s',
 				$wc['total'],
 				aafm_integration_count_breakdown( $wc )
 			),

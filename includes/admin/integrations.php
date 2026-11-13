@@ -259,6 +259,22 @@ function aafm_integration_count_breakdown( array $counts ): string {
 }
 
 /**
+ * The tools of one integration card that the stored allowlist holds: the checked read of the saved
+ * option (aafm_get_stored_enabled_abilities_raw()) intersected with that card's static tool list.
+ * While the host plugin is inactive these are saved but not usable; registration and access still
+ * come only from aafm_get_enabled_abilities(). The card's saved count and its per-row state both
+ * read this one list.
+ *
+ * @param string $integration Integration card slug.
+ * @return list<string> Ability names, in the card's own order.
+ */
+function aafm_integration_saved_slugs( string $integration ): array {
+	$saved = aafm_get_stored_enabled_abilities_raw();
+	$names = array_column( aafm_integration_ability_manifest()[ $integration ] ?? array(), 'name' );
+	return array_values( array_intersect( array_map( 'strval', $names ), $saved ) );
+}
+
+/**
  * Render the Integrations tab: the disclaimer header, then one card per integration.
  *
  * @return void
@@ -348,6 +364,9 @@ function aafm_render_integrations_tab(): void {
 			}
 			$counts['enabled'] = $enabled_in_card;
 		}
+		// An inactive host has nothing usable, but its saved selections are still in the option.
+		// Count those as "saved" and mark each row, so "0 / N" never hides tools the owner chose.
+		$saved = $disabled ? aafm_integration_saved_slugs( $slug ) : array();
 
 		// The <summary> IS the card head: icon + label + status pill + count. A real <summary>
 		// toggles on click and on Enter/Space natively, so the accordion stays keyboard-accessible.
@@ -359,7 +378,22 @@ function aafm_render_integrations_tab(): void {
 		echo wp_kses( aafm_integration_status_pill( $status ), aafm_admin_allowed_html() );
 
 		echo '<span class="abilities-count">';
-		if ( null !== $counts ) {
+		if ( null !== $counts && $disabled ) {
+			// No .aafm-enabled-num span here: admin.js patches that span with the usable count after
+			// a save, which for an inactive host is always 0 and would overwrite the saved count.
+			printf(
+				'<p class="aafm-integration-count">%s</p>',
+				esc_html(
+					sprintf(
+						/* translators: 1: tools saved for this integration, 2: total abilities, 3: read/write/destructive breakdown. */
+						__( '%1$d saved / %2$d · %3$s', 'agent-abilities-for-mcp' ),
+						count( $saved ),
+						(int) $counts['total'],
+						aafm_integration_count_breakdown( $counts )
+					)
+				)
+			);
+		} elseif ( null !== $counts ) {
 			// The enabled figure is wrapped in its own span so admin.js can patch just that
 			// number after a save, instead of the whole card header reading stale ("0 / 52")
 			// until the next full page load. wp_kses (not esc_html) because the composed
@@ -391,7 +425,7 @@ function aafm_render_integrations_tab(): void {
 
 		aafm_render_integration_filter( $slug );
 
-		aafm_render_integration_abilities( $slug, $rows, $enabled, $disclosures, $disabled );
+		aafm_render_integration_abilities( $slug, $rows, $enabled, $disclosures, $disabled, $saved );
 
 		echo '</div>';
 
@@ -510,9 +544,11 @@ function aafm_render_integration_filter( string $slug ): void {
  * @param array<string,string>           $disclosures Disclosure map.
  * @param bool                           $disabled    True when the host is inactive - rows render
  *                                                    read-only and never submit.
+ * @param array<int,string>              $saved       Saved but currently unavailable names
+ *                                                    (aafm_integration_saved_slugs()).
  * @return void
  */
-function aafm_render_integration_abilities( string $slug, array $rows, array $enabled, array $disclosures, bool $disabled = false ): void {
+function aafm_render_integration_abilities( string $slug, array $rows, array $enabled, array $disclosures, bool $disabled = false, array $saved = array() ): void {
 	$has_sensitive = false;
 	foreach ( $rows as $row ) {
 		if ( 'destructive' === (string) ( $row['risk'] ?? '' ) ) {
@@ -536,7 +572,7 @@ function aafm_render_integration_abilities( string $slug, array $rows, array $en
 	// Each per-plugin card renders a flat ability list directly in the accordion body.
 	echo '<div class="aafm-card aafm-ability-list">';
 	foreach ( $rows as $ability ) {
-		aafm_render_integration_ability_row( $ability, $enabled, $disclosures, $disabled );
+		aafm_render_integration_ability_row( $ability, $enabled, $disclosures, $disabled, in_array( (string) $ability['name'], $saved, true ) );
 	}
 	echo '</div>';
 }
@@ -556,9 +592,12 @@ function aafm_render_integration_abilities( string $slug, array $rows, array $en
  * @param bool                 $disabled    True when the host is inactive - the checkbox renders
  *                                          disabled (so it never submits) and the row carries
  *                                          aria-disabled, while staying fully readable.
+ * @param bool                 $saved       True when the stored allowlist holds this ability while
+ *                                          its host is inactive: the row says so, the control
+ *                                          stays disabled.
  * @return void
  */
-function aafm_render_integration_ability_row( array $ability, array $enabled, array $disclosures, bool $disabled = false ): void {
+function aafm_render_integration_ability_row( array $ability, array $enabled, array $disclosures, bool $disabled = false, bool $saved = false ): void {
 	$name = (string) $ability['name'];
 	$risk = (string) ( $ability['risk'] ?? 'read' );
 	$hint = (string) ( $disclosures[ $name ] ?? ( $ability['description'] ?? '' ) );
@@ -602,6 +641,10 @@ function aafm_render_integration_ability_row( array $ability, array $enabled, ar
 	// badge stays on an unlocked, enabled row too - mirrors aafm_render_ability_row().
 	if ( aafm_ability_is_high_risk( $name ) ) {
 		echo ' <span class="aafm-badge aafm-badge-high-risk">' . esc_html__( 'high-risk', 'agent-abilities-for-mcp' ) . '</span>';
+	}
+
+	if ( $saved ) {
+		echo ' <span class="aafm-pill aafm-pill-neutral">' . esc_html__( 'Saved, currently unavailable', 'agent-abilities-for-mcp' ) . '</span>';
 	}
 
 	printf(

@@ -44,6 +44,7 @@ final class NotifyCronHandoffTest extends TestCase {
 		remove_all_filters( 'aafm_notify_finish_function' );
 		remove_all_filters( 'pre_schedule_event' );
 		remove_all_filters( 'aafm_notify_use_cron' );
+		remove_all_filters( 'wp_doing_cron' );
 		wp_unschedule_hook( 'aafm_notify_send_scheduled' );
 		parent::tear_down();
 	}
@@ -292,10 +293,21 @@ final class NotifyCronHandoffTest extends TestCase {
 		aafm_render_notifications_section();
 		$html = (string) ob_get_clean();
 
-		$this->assertStringNotContainsString( 'right away', $label );
+		$this->assertSame( 'Email alerts as they happen, plus an admin notice', $label );
 		$this->assertStringContainsString( 'admin notice', $label );
 		$this->assertStringNotContainsString( 'do not depend on cron', $html );
 		$this->assertStringContainsString( esc_html( $label ), $html );
 		$this->assertStringContainsString( 'next visit', $html, 'The paragraph says the email can wait for the next visit.' );
+	}
+
+	public function test_an_alert_raised_inside_a_cron_run_is_sent_in_that_run(): void {
+		$this->no_finish_function();
+		add_filter( 'wp_doing_cron', '__return_true' );
+		aafm_notify_outbox( 'add', $this->item() );
+
+		aafm_notify_flush_outbox();
+
+		$this->assertCount( 1, $this->mail, 'No visitor waits on a cron run, so there is no second hop.' );
+		$this->assertSame( array(), $this->scheduled() );
 	}
 }

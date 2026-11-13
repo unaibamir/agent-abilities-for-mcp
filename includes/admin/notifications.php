@@ -35,7 +35,7 @@ function aafm_render_notifications_section(): void {
 	$s = aafm_notifications_settings();
 
 	ob_start();
-	echo '<p class="aafm-card-desc">' . esc_html__( 'The daily email depends on WP-Cron, which only runs when your site gets visits and does not run at all if DISABLE_WP_CRON is set. On a quiet site, point a real cron job at wp-cron.php (or run "wp cron event run --due-now"). Email each alert also uses WP-Cron on hosts that cannot finish the page before sending, so that email can wait for the next visit; with DISABLE_WP_CRON set it is sent at once. The admin notice never depends on cron. If email is unreliable on your host, the admin notice still shows every alert.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="aafm-card-desc">' . esc_html__( 'The daily email depends on WP-Cron, which only runs when your site gets visits and does not run at all if DISABLE_WP_CRON is set. On a quiet site, point a real cron job at wp-cron.php (or run "wp cron event run --due-now"). On hosts that cannot finish the page before sending, alerts emailed as they happen also go through WP-Cron, so an email can wait for the next visit; with DISABLE_WP_CRON set it is sent at once. The admin notice never depends on cron. If email is unreliable on your host, the admin notice still shows every alert.', 'agent-abilities-for-mcp' ) . '</p>';
 	$select = '<select id="aafm-notify-mode" name="aafm_notify_mode" aria-label="' . esc_attr__( 'How to be told', 'agent-abilities-for-mcp' ) . '">';
 	foreach ( aafm_notify_modes() as $mode => $mode_label ) {
 		$select .= '<option value="' . esc_attr( $mode ) . '"' . selected( $s['mode'], $mode, false ) . '>' . esc_html( $mode_label ) . '</option>';
@@ -275,6 +275,8 @@ function aafm_notify_reset_warning( array $before, bool $read_only, bool $unlock
  */
 function aafm_notify_settle_queue( array $before, array $after ): void {
 	try {
+		// ponytail: the queue is drained only once the handed-over message is sent. Two address changes
+		// saved before that send hand the same events over twice; accepted under at-least-once.
 		$flush = 'digest' === $before['mode'] && '' !== $before['email']
 			&& ( 'digest' !== $after['mode'] || $before['email'] !== $after['email'] );
 		if ( 'digest' === $after['mode'] && ! $flush ) {

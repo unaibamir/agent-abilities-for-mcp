@@ -51,7 +51,7 @@ function aafm_notify_modes(): array {
 	return array(
 		'off'       => __( 'Off', 'agent-abilities-for-mcp' ),
 		'notice'    => __( 'Admin notice only', 'agent-abilities-for-mcp' ),
-		'immediate' => __( 'Email each alert, plus an admin notice', 'agent-abilities-for-mcp' ),
+		'immediate' => __( 'Email alerts as they happen, plus an admin notice', 'agent-abilities-for-mcp' ),
 		'digest'    => __( 'One email a day, plus an admin notice', 'agent-abilities-for-mcp' ),
 	);
 }
@@ -653,8 +653,8 @@ function aafm_notify_finish_function(): ?callable {
 }
 
 /**
- * Hand one message to WP-Cron as its own event, the message itself as the argument. Core stores and
- * de-duplicates the events, so there is no shared row to lock. Refused when WP-Cron is switched off.
+ * Hand one message to WP-Cron as its own event, the message itself as the argument. Refused when
+ * WP-Cron is switched off.
  *
  * @param array<string,mixed> $item An outbox item with its attempt number.
  * @param int                 $when Unix time to send at.
@@ -670,6 +670,10 @@ function aafm_notify_schedule_item( array $item, int $when ): bool {
 	if ( ! apply_filters( 'aafm_notify_use_cron', ! ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON ) ) ) {
 		return false;
 	}
+	// ponytail: core keeps every event in its one `cron` option and rewrites that row with an unlocked
+	// read-modify-write, so a wp-cron.php run writing at the same moment can drop this event and lose
+	// one email. The admin notice entry is already written, so the alert itself is not lost. A
+	// plugin-owned queue would need the same lock the Options API cannot give.
 	return true === wp_schedule_single_event( $when, 'aafm_notify_send_scheduled', array( $item ) );
 }
 
@@ -699,7 +703,8 @@ function aafm_notify_send_item( array $item ): bool {
  * Where the host can close the response first (PHP-FPM, LiteSpeed), it does, and the mail is sent here
  * without the caller waiting. Elsewhere each message becomes a WP-Cron event of its own, sent by
  * aafm_notify_send_scheduled() on a later request, so a slow mail host never holds the visitor's
- * request. A message WP-Cron cannot take (scheduling refused, or DISABLE_WP_CRON) is sent here as before.
+ * request. A message WP-Cron cannot take (scheduling refused, or DISABLE_WP_CRON) is sent here as before,
+ * and so is everything raised inside a cron run or a WP-CLI command, where nobody is waiting.
  *
  * ponytail: cron delivery is at-least-once. A crash between the send and the digest-queue cleanup can
  * repeat one email; exactly-once would need a lock the Options API cannot give.
@@ -714,7 +719,8 @@ function aafm_notify_flush_outbox(): void {
 	$finish = aafm_notify_finish_function();
 	if ( null !== $finish ) {
 		$finish();
-	} else {
+	} elseif ( ! wp_doing_cron() && ! ( defined( 'WP_CLI' ) && WP_CLI ) ) {
+		// Hand each message to cron. A cron run or a WP-CLI command skips this: nobody is waiting.
 		$items = array_values(
 			array_filter(
 				$items,

@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-13T22:12:26+05:00\n"
+"POT-Creation-Date: 2026-11-14T02:30:17+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -216,6 +216,7 @@ msgid "Number of entries per page, clamped to the 1-200 range regardless of the 
 msgstr ""
 
 #: includes/abilities/activity-log.php:66
+#: includes/abilities/avada.php:914
 #: includes/abilities/blocks.php:153
 #: includes/abilities/blocks.php:258
 #: includes/abilities/comments.php:104
@@ -334,7 +335,7 @@ msgid "Get Avada page content"
 msgstr ""
 
 #: includes/abilities/avada.php:61
-msgid "Reads the raw post content of an Avada/Fusion Builder page, unchanged. Fusion Builder shortcodes are returned exactly as stored, never rendered or stripped. Also returns is_avada_owned, true when Avada owns the content. Requires edit access to the post."
+msgid "Reads the raw post content of an Avada/Fusion Builder page, unchanged. Fusion Builder shortcodes are returned exactly as stored, never rendered or stripped. Also returns is_avada_owned, true when Avada owns the content. With include_structure it also returns an outline of the Fusion Builder elements (tag, nesting depth, attributes, and the library item id of a global element) to find the element that holds the text before calling avada-replace-text. Requires edit access to the post."
 msgstr ""
 
 #: includes/abilities/avada.php:68
@@ -345,36 +346,136 @@ msgstr ""
 msgid "Replaces literal text within an Avada/Fusion Builder page while requiring the Fusion shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee). A replacement that would touch a shortcode tag, its self-closing form, or an attribute is refused rather than risk breaking the layout. Requires edit access to the post."
 msgstr ""
 
-#: includes/abilities/avada.php:108
+#: includes/abilities/avada.php:76
+msgid "List Avada layouts"
+msgstr ""
+
+#: includes/abilities/avada.php:77
+msgid "Lists Avada Layouts in the order Avada checks them, with the Global Layout last. Each layout has its sections (header, page title bar, content, footer) with each section's id, title, status and whether it exists, and its conditions exactly as Avada stores them. Conditions are not evaluated, so this does not say which layout a given page gets. A section that is not published is not used. A layout whose stored data Avada itself cannot read is marked unparseable. global_stored is false when no Global Layout was ever saved, and more than 200 layouts are cut to the first 200. Requires the manage_options capability, even where Avada's Role Manager opens Layouts to other roles. Only while Avada is active."
+msgstr ""
+
+#: includes/abilities/avada.php:84
+msgid "Get Avada global options"
+msgstr ""
+
+#: includes/abilities/avada.php:85
+msgid "Reads a fixed list of Avada Global Options exactly as stored: site width, layout, the primary, palette and link colors, body and heading typography, header position and layout, logo, page title bar, footer widgets, copyright and footer text, responsive and maintenance mode. Nothing outside that list is ever returned, so API keys, passwords and custom code stay out. A requested key in not_set has no stored value, so Avada's built-in default applies, which this tool does not report. option_name is the option that was read, which differs per language on a multilingual site. Requires the manage_options capability, even where Avada's Role Manager opens Global Options to other roles. Only while Avada is active."
+msgstr ""
+
+#: includes/abilities/avada.php:92
+msgid "List the Avada library"
+msgstr ""
+
+#: includes/abilities/avada.php:93
+msgid "Lists Avada Library items: saved elements, columns, sections and post cards, and full-page templates. Returns id, title, status, kind (the library category, template for a template, or uncategorized), is_global and modified date, plus content, the raw Fusion Builder markup, only with include_content. A global item is shared, so editing it changes every page that shows it, and its text is edited in Avada's Library, not on the page (avada-get-page-content with include_structure gives the global_id of such an element). Response includes total (the query-wide count of matching items; each page omits items you lack edit access to, so total can exceed the rows returned). Requires the edit_posts capability. Only while Avada is active."
+msgstr ""
+
+#: includes/abilities/avada.php:132
 msgid "ID of the post/page to read. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/avada.php:172
+#: includes/abilities/avada.php:137
+msgid "When true, also returns structure: the Fusion Builder elements in document order with their nesting depth and attributes, and structure_status. Use it to find the element that holds the text you want to change before calling avada-replace-text."
+msgstr ""
+
+#: includes/abilities/avada.php:152
+msgid "Only with include_structure. ok: the outline is complete. unparseable: the shortcodes could not be read safely (avada-replace-text refuses this page too) and no structure is returned. truncated: only the first 2,000 elements are listed."
+msgstr ""
+
+#: includes/abilities/avada.php:156
+msgid "Only with include_structure, when structure_status is ok or truncated. A global_id means the element shows a library item: its text lives in that item, not on this page."
+msgstr ""
+
+#: includes/abilities/avada.php:276
 #: includes/abilities/posts.php:1472
 msgid "ID of the post to edit."
 msgstr ""
 
-#: includes/abilities/avada.php:177
+#: includes/abilities/avada.php:281
 #: includes/abilities/posts.php:1477
 msgid "Literal text to find in the post content. Matched as-is, not as a regular expression."
 msgstr ""
 
-#: includes/abilities/avada.php:181
+#: includes/abilities/avada.php:285
 #: includes/abilities/posts.php:1481
 msgid "Literal text to substitute for every match of search. Sanitized the same way as a full content update."
 msgstr ""
 
-#: includes/abilities/avada.php:415
+#: includes/abilities/avada.php:519
 msgid "This post is not owned by Avada/Fusion Builder."
 msgstr ""
 
-#: includes/abilities/avada.php:438
+#: includes/abilities/avada.php:542
 msgid "That replacement would change the Fusion Builder shortcode structure rather than its text. Choose a search term that appears in plain text between or inside elements, not one that would alter a shortcode tag, its self-closing form, or an attribute. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada.php:467
+#: includes/abilities/avada.php:571
 #: includes/abilities/posts.php:1852
 msgid "The replacement could not be confirmed as saved."
+msgstr ""
+
+#: includes/abilities/avada.php:606
+msgid "When false, each layout is returned without its conditions."
+msgstr ""
+
+#: includes/abilities/avada.php:621
+msgid "The layout post id, or \"global\" for the Global Layout."
+msgstr ""
+
+#: includes/abilities/avada.php:627
+msgid "Position in the order Avada checks layouts, from 0. The first layout whose conditions match is used."
+msgstr ""
+
+#: includes/abilities/avada.php:632
+msgid "unparseable: Avada cannot read this layout's stored data, so no sections or conditions are returned for it."
+msgstr ""
+
+#: includes/abilities/avada.php:636
+msgid "Keyed by section type (header, page_title_bar, content, footer). Only when parse_status is ok."
+msgstr ""
+
+#: includes/abilities/avada.php:641
+msgid "The stored conditions, unchanged: mode (include or exclude), type, the value under the key named by type, and parent for a child condition. Only when parse_status is ok and include_conditions is true."
+msgstr ""
+
+#: includes/abilities/avada.php:731
+msgid "Global Layout"
+msgstr ""
+
+#: includes/abilities/avada.php:820
+msgid "Only these options. Omit for the whole list."
+msgstr ""
+
+#: includes/abilities/avada.php:831
+msgid "Option key to its stored value, unchanged."
+msgstr ""
+
+#: includes/abilities/avada.php:836
+msgid "Requested keys with no stored value. Avada's built-in default applies to them."
+msgstr ""
+
+#: includes/abilities/avada.php:866
+msgid "The Avada theme is not active, so there are no Avada Global Options to read."
+msgstr ""
+
+#: includes/abilities/avada.php:875
+msgid "The Avada Global Options could not be read."
+msgstr ""
+
+#: includes/abilities/avada.php:913
+msgid "Number of items per page, clamped to the 1-100 range regardless of the value requested. Defaults to 20 when omitted."
+msgstr ""
+
+#: includes/abilities/avada.php:921
+msgid "Only one library category, or templates for full-page templates. Defaults to all."
+msgstr ""
+
+#: includes/abilities/avada.php:925
+msgid "Free-text search using WordPress's normal post search, matched against the item's title and content."
+msgstr ""
+
+#: includes/abilities/avada.php:930
+msgid "When true, each item also carries content, its raw Fusion Builder markup, unrendered."
 msgstr ""
 
 #: includes/abilities/blocks.php:32
@@ -4454,7 +4555,7 @@ msgstr ""
 #: includes/admin/connection.php:659
 #: includes/admin/connection.php:694
 #: includes/admin/connection.php:757
-#: includes/admin/doctor.php:919
+#: includes/admin/doctor.php:951
 #: includes/admin/notifications.php:312
 #: includes/admin/notifications.php:382
 #: includes/admin/page.php:728
@@ -6738,26 +6839,38 @@ msgid "Writes a post's Slim SEO fields. A field omitted from the call is left un
 msgstr ""
 
 #: includes/admin/disclosures.php:235
-msgid "Reads the raw post content of an Avada/Fusion Builder page, unchanged. Fusion Builder shortcodes are returned exactly as stored, never rendered or stripped. Requires edit access to the post."
+msgid "Reads the raw post content of an Avada/Fusion Builder page, unchanged. Fusion Builder shortcodes are returned exactly as stored, never rendered or stripped. With include_structure it also lists the Fusion Builder elements and their attributes, and marks an element whose text lives in a global library item. Requires edit access to the post."
 msgstr ""
 
 #: includes/admin/disclosures.php:240
 msgid "Replaces literal text within an Avada/Fusion Builder page while requiring the Fusion shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee). A replacement that would touch a shortcode tag or its attributes is refused rather than risk breaking the layout. Requires edit access to the post."
 msgstr ""
 
+#: includes/admin/disclosures.php:241
+msgid "Lists Avada Layouts in the order Avada checks them, with each one's header, page title bar, content and footer sections and its stored conditions. It does not work out which layout a page gets. Admins only."
+msgstr ""
+
+#: includes/admin/disclosures.php:242
+msgid "Reads a fixed list of Avada Global Options: colors, typography, header, logo, footer text and maintenance mode. API keys, passwords and custom code are never returned. Admins only."
+msgstr ""
+
 #: includes/admin/disclosures.php:243
-msgid "Lists GeoDirectory business/place listings (title, status, link)."
-msgstr ""
-
-#: includes/admin/disclosures.php:244
-msgid "Reads one GeoDirectory listing by id, including its address and coordinates."
-msgstr ""
-
-#: includes/admin/disclosures.php:245
-msgid "Creates a GeoDirectory business/place listing with a title, content, and optional address/coordinates."
+msgid "Lists the Avada Library (saved elements, columns, sections, post cards and templates) and marks the global items shared across pages, with their raw markup on request. Shows only items the user can edit."
 msgstr ""
 
 #: includes/admin/disclosures.php:246
+msgid "Lists GeoDirectory business/place listings (title, status, link)."
+msgstr ""
+
+#: includes/admin/disclosures.php:247
+msgid "Reads one GeoDirectory listing by id, including its address and coordinates."
+msgstr ""
+
+#: includes/admin/disclosures.php:248
+msgid "Creates a GeoDirectory business/place listing with a title, content, and optional address/coordinates."
+msgstr ""
+
+#: includes/admin/disclosures.php:249
 msgid "Updates an existing GeoDirectory listing's title, content, or address/coordinates. Fields omitted from the call are left untouched."
 msgstr ""
 
@@ -7017,24 +7130,24 @@ msgstr ""
 msgid "Pause all access is on, so every agent is refused with a 403 Forbidden until you resume it. The endpoint check below uses a test request, not an agent, so it can still pass. Choose Resume all access in the Pause all access card on this tab."
 msgstr ""
 
-#: includes/admin/doctor.php:940
-#: includes/admin/doctor.php:944
+#: includes/admin/doctor.php:972
+#: includes/admin/doctor.php:976
 msgid "Check my connection"
 msgstr ""
 
-#: includes/admin/doctor.php:942
+#: includes/admin/doctor.php:974
 msgid "These checks run from this site's own server. Nothing is sent to anyone else. They look for the usual reasons an agent cannot connect and say who can fix each one."
 msgstr ""
 
-#: includes/admin/doctor.php:945
+#: includes/admin/doctor.php:977
 msgid "Copy report for support"
 msgstr ""
 
-#: includes/admin/doctor.php:946
+#: includes/admin/doctor.php:978
 msgid "Show passing checks"
 msgstr ""
 
-#: includes/admin/doctor.php:949
+#: includes/admin/doctor.php:981
 msgid "Everything this check covers looks fine. Turn on \"Show passing checks\" to see each result."
 msgstr ""
 
@@ -8775,11 +8888,11 @@ msgid "For the proxy clients, copy the config straight from Connection → Step 
 msgstr ""
 
 #: includes/admin/page.php:3532
-msgid "The hosted Gemini app cannot connect in this release."
+msgid "The Gemini app:"
 msgstr ""
 
 #: includes/admin/page.php:3532
-msgid "Its web connector expects a native streamable HTTP/SSE MCP transport, which the bundled adapter does not serve yet. Gemini CLI is the exception: it runs as a proxy client, like Claude Code, so it works today, and the Connection tab has a ready-made quickstart for it."
+msgid "We have not found a way to add a custom MCP server in the Gemini app, so there are no steps for it here. Gemini CLI can connect: it runs as a proxy client, like Claude Code, and the Connection tab has a ready-made quickstart for it."
 msgstr ""
 
 #: includes/admin/page.php:3539

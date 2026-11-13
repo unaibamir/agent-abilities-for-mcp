@@ -332,6 +332,14 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 
 == Changelog ==
 
+= 1.11.3 =
+
+* **Feature:** Two new tools, list-navigations and update-navigation, read and replace a block theme's navigation menus; the write starts off and is in no preset. update-menu-item now takes a parent and a position, create-page and update-page take a parent page and a page template (with undo), update-site-settings sets the static homepage and reports which keys landed, wc-update-product removes attributes no variation uses, and count-media counts without loading every attachment.
+* **Feature:** The admin tabs stay on one row with the four links moved into the page header, the Other plugins tab is now Plugins' own tools, and the Search sub-tab is Site search. Active grants loads 50 at a time and drops the people of a revoked app, and Connection offers to end tokens issued for an old site address.
+* **Fix:** An expired or revoked OAuth token now gets error="invalid_token" in the 401, and server/discover advertises the same capabilities as initialize. The new-tools notice clears once you've reviewed every tool, and "Allow only read tools" and Mark reviewed act only on the tools you were shown.
+* **Fix:** On hosts that can't finish the page before sending, alert emails go through WP-Cron, the daily email counts every new tool, the modes are now "Email alerts as they happen" and "One email a day", and the Doctor names BuddyBoss's Private REST APIs setting when it blocks OAuth.
+* **Fix:** A batch of smaller fixes: the Dashboard setup steps, the Agent users and Recent agents tiles, the Quick Connect finish screen, Integrations saved counts and Help text are corrected, a role change is logged with the new role, the meta write tools say line breaks become spaces, update-navigation refuses link schemes other than http, https, mailto and tel, update-site-settings refuses a negative page id, and the admin screens got accessibility and right-to-left fixes.
+
 = 1.11.2 =
 
 * **Feature:** A new Changes tab keeps 30 days of what agents changed with 25 tools and reverts a change if the item hasn't been edited since, and a site-wide find and replace reverts as one group. Every write tool now reports whether its change can be undone, with a reason when it can't (permanent deletes, orders, refunds).
@@ -445,6 +453,10 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 [Full release history](https://agentabilitieswp.com/changelog/?utm_source=wordpress.org&utm_medium=readme&utm_campaign=plugin-listing).
 
 == Upgrade Notice ==
+
+= 1.11.3 =
+
+Adds list-navigations and update-navigation for block-theme menus; the write starts off. Pages can set a parent and template, and update-site-settings can set the static homepage. Nothing you have switched on is locked or narrowed.
 
 = 1.11.2 =
 

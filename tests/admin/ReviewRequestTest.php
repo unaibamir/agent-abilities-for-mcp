@@ -1198,4 +1198,28 @@ final class ReviewRequestTest extends TestCase {
 
 		$this->assertSame( 'pending', aafm_review_request_state()['status'] );
 	}
+
+	/**
+	 * With both snoozes spent, the next "Maybe later" is stored as a permanent dismissal, so its
+	 * announcement says the ask will not come back; an earlier one still says "for now". The
+	 * stored behaviour is unchanged.
+	 */
+	public function test_third_maybe_later_message_says_it_will_not_ask_again(): void {
+		$this->acting_as( 'administrator' );
+		$this->log_success_calls( 10 );
+		$this->backdate_first_success();
+
+		$state                 = aafm_review_request_state();
+		$state['status']       = 'snoozed';
+		$state['snooze_count'] = 2;
+		$state['snooze_until'] = time() - 10;
+		aafm_review_request_save_state( $state );
+		$html = $this->render_on( 'plugins' );
+		$this->assertStringContainsString( 'data-msg-later="Okay. We will not ask about a review again."', $html );
+
+		$state['snooze_count'] = 1;
+		aafm_review_request_save_state( $state );
+		$html = $this->render_on( 'plugins' );
+		$this->assertStringContainsString( 'data-msg-later="Okay. The review request is hidden for now."', $html );
+	}
 }

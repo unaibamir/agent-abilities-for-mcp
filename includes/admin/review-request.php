@@ -500,7 +500,8 @@ function aafm_render_review_request_notice(): void {
 		<?php // Its own action, not the shared aafm_admin one. This notice renders on every admin screen, so printing the shared nonce would hand every page in wp-admin a token good for all eighteen of the plugin's other AJAX actions. This one opens exactly one door. ?>
 		data-nonce="<?php echo esc_attr( wp_create_nonce( 'aafm_review_request' ) ); ?>"
 		data-msg-review="<?php echo esc_attr__( 'Thanks. The review page is open in a new tab.', 'agent-abilities-for-mcp' ); ?>"
-		data-msg-later="<?php echo esc_attr__( 'Okay. The review request is hidden for now.', 'agent-abilities-for-mcp' ); ?>"
+		<?php // With both snoozes spent, this "Maybe later" is stored as permanent (aafm_review_request_record_verdict()), so it says so. ?>
+		data-msg-later="<?php echo esc_attr( aafm_review_request_state()['snooze_count'] >= aafm_review_request_snooze_cap() ? __( 'Okay. We will not ask about a review again.', 'agent-abilities-for-mcp' ) : __( 'Okay. The review request is hidden for now.', 'agent-abilities-for-mcp' ) ); ?>"
 		<?php // "Closed", not "will not come back": the POST is fire and forget, so the stronger promise is one a failed write turns into a lie the operator hears and cannot check. This describes what they can see instead. ?>
 		data-msg-dismiss="<?php echo esc_attr__( 'Thanks. The review request is closed.', 'agent-abilities-for-mcp' ); ?>">
 		<p><strong><?php echo esc_html( $heading ); ?></strong></p>

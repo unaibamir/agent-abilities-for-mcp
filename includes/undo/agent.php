@@ -117,8 +117,7 @@ function aafm_undo_value_passes_forward_rules( string $field, $value, array $row
 		$post_obj  = 'post' === $row['object_type'] ? aafm_exact_object( 'post', (int) $row['object_id'] ) : null;
 		$post_type = $post_obj instanceof WP_Post ? $post_obj->post_type : 'post';
 		if ( '_wp_page_template' === $key && 'aafm/update-page' === $forward ) {
-			// The template is checked against the theme in aafm_undo_page_template_restorable().
-			return aafm_undo_page_template_restorable( $row, $decoded );
+			return true; // Checked in aafm_undo_agent_refusal().
 		}
 		if ( '_thumbnail_id' === $key ) {
 			foreach ( $rows as $raw ) {

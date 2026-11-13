@@ -137,8 +137,10 @@ final class HelpTabTest extends TestCase {
 		$this->assertStringContainsString( 'Claude:', $html );
 		$this->assertStringContainsString( 'Cursor:', $html );
 		$this->assertStringContainsString( 'Windsurf:', $html );
-		// ChatGPT now connects via its developer-mode custom connector.
-		$this->assertStringContainsString( 'Developer mode', $html );
+		// ChatGPT and Claude follow the readme's paths; ChatGPT needs no Developer mode toggle.
+		$this->assertStringContainsString( 'Add custom MCP server', $html );
+		$this->assertStringNotContainsString( 'turn on Developer mode', $html );
+		$this->assertStringContainsString( 'Customize, then Connectors', $html );
 		// Only the hosted Gemini app is still called out as unable to connect; Gemini CLI works
 		// as a proxy client (accurate to this release).
 		$this->assertStringContainsString( 'hosted Gemini app cannot connect', $html );

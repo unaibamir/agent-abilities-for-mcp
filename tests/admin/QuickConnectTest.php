@@ -256,6 +256,16 @@ final class QuickConnectTest extends TestCase {
 	 * on returns success + '1'; turning it back off returns success + '0'. This is the contract the
 	 * JS relies on to stop advancing on a failed write.
 	 */
+	public function test_wizard_paste_line_follows_the_readme_client_paths(): void {
+		$this->acting_as( 'administrator' );
+		ob_start();
+		aafm_quickconnect_render();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'ChatGPT &rarr; Plugins &rarr; Add custom MCP server', $html );
+		$this->assertStringContainsString( 'Claude &rarr; Customize &rarr; Connectors', $html );
+	}
+
 	public function test_oauth_handler_returns_success_and_resulting_state(): void {
 		$this->acting_as( 'administrator' );
 

@@ -664,7 +664,11 @@ final class ConnectionTest extends TestCase {
 
 		// The panel offers the endpoint URL to paste...
 		$this->assertStringContainsString( esc_html( aafm_endpoint_url() ), $panel );
-		$this->assertStringContainsString( 'Developer mode', $panel );
+		// The same path as the readme: Plugins, then Add custom MCP server, with no Developer mode toggle.
+		$this->assertStringContainsString( 'Add custom MCP server', $panel );
+		$this->assertStringNotContainsString( 'Turn on Developer mode', $panel );
+		$claude = substr( $html, (int) $next, (int) strpos( $html, 'aafm-oauth-panel" data-client=', (int) $next + 1 ) - (int) $next );
+		$this->assertStringContainsString( 'Customize, then Connectors', $claude, 'Claude matches the readme path too.' );
 		// ...and never an mcp-remote stdio config (a hosted web app cannot run one).
 		$this->assertStringNotContainsString( 'mcp-remote', $panel );
 		$this->assertStringNotContainsString( 'npx', $panel );

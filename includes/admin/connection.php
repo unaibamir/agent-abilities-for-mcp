@@ -544,9 +544,9 @@ function aafm_oauth_client_note( string $client ): string {
 	// eagerly built array would translate all nine notes on every call instead of one.
 	switch ( $client ) {
 		case 'chatgpt':
-			return __( 'Turn on Developer mode in ChatGPT settings, then add a custom connector: give it a name, paste the endpoint URL as the MCP server URL, create it, and approve the sign-in. Developer mode needs a paid ChatGPT plan.', 'agent-abilities-for-mcp' );
+			return __( 'On ChatGPT web, open Plugins, select the plus button, then Add custom MCP server. Name it, paste the endpoint URL under Connection, choose OAuth, tick the risk acknowledgment, select Create as a plugin, and approve the sign-in. You don\'t need to turn on Developer Mode first.', 'agent-abilities-for-mcp' );
 		case 'claude':
-			return __( 'Open Settings, then Connectors, add a custom connector, paste the endpoint URL, and approve the sign-in. The claude.ai web app and Claude Desktop use the same flow.', 'agent-abilities-for-mcp' );
+			return __( 'Open Customize, then Connectors, choose + Add, then Add custom connector, paste the endpoint URL, and approve the sign-in. The claude.ai web app and Claude Desktop use the same flow.', 'agent-abilities-for-mcp' );
 		case 'claude-code':
 			return __( 'Run: claude mcp add --transport http agent-abilities <endpoint-url>', 'agent-abilities-for-mcp' );
 		case 'cursor':

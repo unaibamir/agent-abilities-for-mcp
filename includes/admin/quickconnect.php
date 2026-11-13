@@ -498,7 +498,7 @@ function aafm_quickconnect_render(): void {
 							</div>
 							<p class="aafm-qc-nextline" data-qc-nextline>
 								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
-								<span><?php echo wp_kses( __( 'Paste into <b>ChatGPT &rarr; add a custom connector</b>, or <b>Claude &rarr; Settings &rarr; Connectors</b>, then approve in the browser tab that opens.', 'agent-abilities-for-mcp' ), array( 'b' => array() ) ); ?></span>
+								<span><?php echo wp_kses( __( 'Paste into <b>ChatGPT &rarr; Plugins &rarr; Add custom MCP server</b>, or <b>Claude &rarr; Customize &rarr; Connectors</b>, then approve in the browser tab that opens.', 'agent-abilities-for-mcp' ), array( 'b' => array() ) ); ?></span>
 							</p>
 						</div>
 

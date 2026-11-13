@@ -783,9 +783,11 @@ add_action( 'aafm_notify_send_scheduled', 'aafm_notify_send_scheduled' );
  * alert mail never goes to cron except as a retry. The first check is a loop over core's due events,
  * already in memory, so a healthy site pays nothing more.
  *
- * ponytail: the fresh read and the write are still an unlocked read-modify-write of core's row. A cron
- * run that sends the same event in that instant, five minutes after it was due to start, would repeat
- * one email; at-least-once, like the rest of the handoff.
+ * ponytail: the fresh read and the write are still an unlocked read-modify-write of core's row. The
+ * window is this healing request's own wp-cron.php spawn: when an earlier cron run was delayed or
+ * refused (a long UpdraftPlus backup holding the cron lock, a host's LVE 508 limit), the run this
+ * request starts can send the same event while it is being healed, and one email repeats.
+ * At-least-once, like the rest of the handoff.
  *
  * @return void
  */

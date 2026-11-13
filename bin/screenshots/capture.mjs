@@ -95,7 +95,8 @@ const SHOTS = [
 		url: plugin( 'tab=connection' ),
 		prep: async ( page ) => {
 			await click( page.locator( '[data-conn-tab="app-passwords"]' ) );
-			await top( page, '#aafm-card-pause-all', 20 );
+			// The Connect with OAuth card now sits above the tabs, so frame the passwords card itself.
+			await top( page, '#aafm-card-app-passwords', 70 );
 		},
 	},
 ];

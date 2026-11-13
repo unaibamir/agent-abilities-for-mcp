@@ -67,8 +67,9 @@ class LifetimesCardTest extends TestCase {
 	}
 	/**
 	 * Focus never drops to the page body after an async action (DESIGN.md, Focus ring and
-	 * keyboard): Save comes back enabled and focused, and a revoked grant or Application Password
-	 * row hands focus to its neighbour's Revoke button or the card heading.
+	 * keyboard): Save comes back enabled and focused, a revoked Application Password row hands focus to its
+	 * neighbour's Revoke button or the card heading, and a revoked grant returns focus to the grants
+	 * card heading after the page reloads.
 	 */
 	public function test_async_connection_actions_keep_keyboard_focus(): void {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a bundled static asset from disk in a test.
@@ -81,7 +82,11 @@ class LifetimesCardTest extends TestCase {
 		$lifetime = $section( '#bindLifetimesCard() {', '#bindAppPasswordRevoke() {' );
 		$this->assertSame( 2, preg_match_all( '/save\.disabled = false;\s*save\.focus\(\);/', $lifetime ) );
 		$this->assertStringContainsString( "this.#removeRowKeepingFocus( btn.closest( 'tr' ), '.aafm-revoke-app-password', card );", $js );
-		$this->assertStringContainsString( "this.#removeRowKeepingFocus( row, '.aafm-revoke-grant', root.querySelector( '#aafm-card-grants' ) );", $js );
+		// The grants card is paged on the server, so a grant Revoke reloads the page and a one-use
+		// marker puts focus back on the card heading after the reload (#focusGrantsAfterReload()).
+		$this->assertStringContainsString( "window.sessionStorage.setItem( 'aafmFocusGrants', '1' );", $js );
+		$this->assertStringContainsString( "window.sessionStorage.removeItem( 'aafmFocusGrants' );", $js );
+		$this->assertStringContainsString( "document.querySelector( '#aafm-card-grants .aafm-card-head-title' )", $js );
 		$helper = $section( '#removeRowKeepingFocus( row, selector, card ) {', '#bindAppPasswordRevoke() {' );
 		$this->assertStringContainsString( 'next.focus();', $helper );
 		$this->assertStringContainsString( 'heading.tabIndex = -1;', $helper );

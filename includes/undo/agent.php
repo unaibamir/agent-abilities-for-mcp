@@ -116,6 +116,10 @@ function aafm_undo_value_passes_forward_rules( string $field, $value, array $row
 		$rows      = array_map( 'strval', (array) $value );
 		$post_obj  = 'post' === $row['object_type'] ? aafm_exact_object( 'post', (int) $row['object_id'] ) : null;
 		$post_type = $post_obj instanceof WP_Post ? $post_obj->post_type : 'post';
+		if ( '_wp_page_template' === $key && 'aafm/update-page' === $forward ) {
+			// The template is checked against the theme in aafm_undo_page_template_restorable().
+			return aafm_undo_page_template_restorable( $row, $decoded );
+		}
 		if ( '_thumbnail_id' === $key ) {
 			foreach ( $rows as $raw ) {
 				if ( 1 !== preg_match( '/^[1-9][0-9]*$/', $raw ) ) {
@@ -214,6 +218,15 @@ function aafm_undo_agent_refusal( array $row ): ?string {
 	}
 
 	foreach ( $decoded['fields'] as $field ) {
+		// The page template key is protected, so the meta validator refuses it. update-page writes it
+		// itself, so its undo may put it back, but only on a page this connection may still edit and
+		// only to a template the theme still offers.
+		if ( 'meta:_wp_page_template' === $field && 'aafm/update-page' === $forward ) {
+			if ( ! aafm_undo_page_template_restorable( $row, $decoded ) ) {
+				return 'not_allowed';
+			}
+			continue;
+		}
 		if ( 0 === strpos( $field, 'meta:' ) && ! in_array( $forward, aafm_undo_fixed_meta_tools(), true ) && '_thumbnail_id' !== substr( $field, 5 ) ) {
 			$key   = substr( $field, 5 );
 			$check = 'term' === $row['object_type'] ? aafm_validate_term_meta_key( $key ) : aafm_validate_meta_key( $key );
@@ -245,6 +258,28 @@ function aafm_undo_agent_refusal( array $row ): ?string {
 	}
 
 	return aafm_undo_agent_status_refusal( $row, $decoded );
+}
+
+/**
+ * Whether an agent may put back an update-page change's recorded page template: the object is a
+ * page the caller may edit, and every recorded value is a template the theme still offers.
+ *
+ * @param array<string,mixed> $row     The change row.
+ * @param array<string,mixed> $decoded The decoded row.
+ * @return bool
+ */
+function aafm_undo_page_template_restorable( array $row, array $decoded ): bool {
+	$id   = (int) $row['object_id'];
+	$page = 'post' === $row['object_type'] ? aafm_exact_object_chain( 'post', $id ) : null;
+	if ( ! $page instanceof WP_Post || 'page' !== $page->post_type || ! aafm_user_can_checked( 'edit_post', $id ) ) {
+		return false;
+	}
+	foreach ( (array) ( $decoded['before']['meta:_wp_page_template'] ?? array() ) as $template ) {
+		if ( ! is_string( $template ) || ! aafm_page_template_available( $template, $page ) ) {
+			return false;
+		}
+	}
+	return true;
 }
 
 /**

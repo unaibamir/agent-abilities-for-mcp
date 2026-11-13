@@ -321,14 +321,14 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 
 1. First-run setup walks you through connecting an agent in three steps: turn the connection on, choose what it can touch, then hand the endpoint to your AI client.
 2. The Abilities tab. Nothing from this plugin is exposed until you switch it on. Abilities are grouped by section, here Menus with its reads on and its writes off, and each section has buttons to enable all reads or all writes.
-3. Read-only mode on. The header badge says Read-only and the Content section loses its Enable all writes button.
+3. Read-only mode on. The header badge says Read-only and the Enable all writes button is gone.
 4. The Read-only mode switch under Safety controls on the Settings tab. While it is on, the high-risk unlock beneath it is held too, and says so.
 5. WooCommerce tools that change orders, issue refunds or touch payment settings stay locked behind a second switch on the Settings tab.
-6. Each integration has a card showing whether its plugin is active and how many of its abilities are on. WooCommerce and Yoast SEO are active here, and the rest say Not installed.
+6. Each integration has a card showing whether its plugin is active and how many of its abilities are on. Here WooCommerce and Yoast SEO are active, and Rank Math, All in One SEO, ACF and Slim SEO are not installed.
 7. Abilities that other plugins register, grouped by plugin and off until you turn them on. A warning says this plugin does not filter what they return.
-8. The Connection tab: the Pause all access switch, then the OAuth and Application Passwords tabs, a token lifetimes card, registered clients and active grants.
+8. The Connection tab: the Pause all access button, then Connect with OAuth, where you pick your client and get its steps and your endpoint address, with the token lifetimes card below.
 9. The Activity Log with a 7-day summary, filters, the connection and IP of each call, duration, a Live view and a CSV export that follows the filters.
-10. The Dashboard: a setup checklist, the Needs review card, enabled abilities, recent agents, audit history, your endpoint and the versions in play.
+10. The Dashboard after setup: the Needs review card with two drafts from agents, and the Why is my tool missing card, which lists tools that are switched on but that agents cannot see right now, each with the reason.
 11. Site Brief: a few plain rules every connected agent reads when its session starts, such as spelling and what to leave alone.
 12. Connection Doctor checks the connection from your own server and says what to fix. Each finding says whether you or your host can fix it, and some come with a snippet to paste.
 13. Needs review: drafts and pending posts your agents wrote, with Preview, Open in editor, Publish and Discard.

@@ -577,4 +577,12 @@ final class DashboardTest extends TestCase {
 		}
 		$this->assertStringNotContainsString( '2025-06-18', $html, 'The old hard-coded literal is gone.' );
 	}
+
+	public function test_agent_users_tile_says_admins_can_reach_api_when_zero_agent_users(): void {
+		ob_start();
+		aafm_render_dashboard_tab();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'No agent user yet. Administrator accounts can still reach the API.', $html );
+	}
 }

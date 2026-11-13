@@ -472,7 +472,7 @@ function aafm_render_dashboard_tab(): void {
 	aafm_render_stat_head( 'aafm-stat-agent-users', __( 'Agent users', 'agent-abilities-for-mcp' ), 'shield' );
 	printf( '<div class="stat-value">%s</div>', esc_html( number_format_i18n( $created_count ) ) );
 	if ( 0 === $created_count ) {
-		echo '<div class="stat-sub">' . esc_html__( 'No agent user yet', 'agent-abilities-for-mcp' ) . '</div>';
+		echo '<div class="stat-sub">' . esc_html__( 'No agent user yet. Administrator accounts can still reach the API.', 'agent-abilities-for-mcp' ) . '</div>';
 	} else {
 		echo '<div class="stat-sub">' . esc_html__( 'Created by this plugin', 'agent-abilities-for-mcp' ) . '</div>';
 	}

@@ -119,4 +119,21 @@ final class StaleTokenTest extends TestCase {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$this->assertSame( 1, (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $consents ) ) );
 	}
+
+	/**
+	 * In wp-admin on an http site with FORCE_SSL_ADMIN the endpoint computes as https, while a
+	 * REST request computes it as http. A token minted for the other scheme of the same address
+	 * still works there, so it is not "old" and the button must not end it.
+	 */
+	public function test_other_scheme_of_the_current_address_is_not_stale(): void {
+		$current = aafm_endpoint_url();
+		$other   = 0 === strpos( $current, 'https:' ) ? set_url_scheme( $current, 'http' ) : set_url_scheme( $current, 'https' );
+		$this->assertNotSame( $current, $other );
+		$kept = $this->seed_token( $other );
+		$this->seed_token( 'https://old.example/wp-json/aafm/v1/mcp' );
+
+		$this->assertSame( 1, aafm_oauth_stale_token_count() );
+		$this->assertSame( 1, aafm_oauth_revoke_stale_tokens() );
+		$this->assertTrue( $this->is_active( $kept ) );
+	}
 }

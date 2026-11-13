@@ -3656,6 +3656,8 @@
 					status.textContent = json?.data?.message ?? this.#t( 'revokeFailed', 'Could not revoke. Please try again.' );
 					return;
 				}
+				// The tokens are gone, so the warning about them goes too; the status line stays.
+				btn.closest( '.aafm-stale-tokens' )?.querySelector( '.aafm-notice' )?.remove();
 				btn.remove();
 				status.textContent = json.data?.message ?? '';
 				status.focus();

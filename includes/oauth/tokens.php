@@ -875,7 +875,10 @@ function aafm_oauth_user_has_active_tokens( int $user_id ): bool {
  * aafm_endpoint_url() byte for byte. Bearer validation compares the two with hash_equals()
  * (validator.php), so these rows can never authenticate again. The comparison is a binary one,
  * so a case or trailing-space variant counts as different, as it does in validation; a text
- * comparison under a case-insensitive collation would call two different URLs equal.
+ * comparison under a case-insensitive collation would call two different URLs equal. The scheme
+ * is the one exception: a token for the http or https form of the current address is not old,
+ * because in wp-admin under FORCE_SSL_ADMIN the endpoint computes as https while REST requests on
+ * an http site validate the http form.
  *
  * Display only: a failed read counts as 0.
  *
@@ -887,9 +890,10 @@ function aafm_oauth_stale_token_count(): int {
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$view = aafm_wpdb_scalar(
 		$wpdb->prepare(
-			'SELECT COUNT(*) FROM %i WHERE is_active = 1 AND CAST(resource AS BINARY) <> CAST(%s AS BINARY)',
+			'SELECT COUNT(*) FROM %i WHERE is_active = 1 AND CAST(resource AS BINARY) <> CAST(%s AS BINARY) AND CAST(resource AS BINARY) <> CAST(%s AS BINARY)',
 			$wpdb->prefix . 'aafm_oauth_access_tokens',
-			aafm_endpoint_url()
+			set_url_scheme( aafm_endpoint_url(), 'http' ),
+			set_url_scheme( aafm_endpoint_url(), 'https' )
 		)
 	);
 	$wpdb->suppress_errors( $suppressed );
@@ -910,18 +914,20 @@ function aafm_oauth_revoke_stale_tokens(): int {
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$result  = $wpdb->query(
 		$wpdb->prepare(
-			'UPDATE %i SET is_active = 0 WHERE is_active = 1 AND CAST(resource AS BINARY) <> CAST(%s AS BINARY)',
+			'UPDATE %i SET is_active = 0 WHERE is_active = 1 AND CAST(resource AS BINARY) <> CAST(%s AS BINARY) AND CAST(resource AS BINARY) <> CAST(%s AS BINARY)',
 			$wpdb->prefix . 'aafm_oauth_access_tokens',
-			aafm_endpoint_url()
+			set_url_scheme( aafm_endpoint_url(), 'http' ),
+			set_url_scheme( aafm_endpoint_url(), 'https' )
 		)
 	);
 	$changed = (int) $wpdb->rows_affected;
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$left = aafm_wpdb_scalar(
 		$wpdb->prepare(
-			'SELECT COUNT(*) FROM %i WHERE is_active = 1 AND CAST(resource AS BINARY) <> CAST(%s AS BINARY)',
+			'SELECT COUNT(*) FROM %i WHERE is_active = 1 AND CAST(resource AS BINARY) <> CAST(%s AS BINARY) AND CAST(resource AS BINARY) <> CAST(%s AS BINARY)',
 			$wpdb->prefix . 'aafm_oauth_access_tokens',
-			aafm_endpoint_url()
+			set_url_scheme( aafm_endpoint_url(), 'http' ),
+			set_url_scheme( aafm_endpoint_url(), 'https' )
 		)
 	);
 	$wpdb->suppress_errors( $suppressed );

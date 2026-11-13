@@ -510,4 +510,35 @@ class ConnectionCardsTest extends TestCase {
 		$this->assertMatchesRegularExpression( '/\[dir="rtl"\] &:not\(\.aafm-switch--lg\) input:checked \+ \.aafm-switch-track::before \{ transform: translateX\(-16px\); \}/', $css );
 		$this->assertSame( 1, substr_count( $css, 'translateX(16px)' ), 'The physical offset appears once, beside its RTL twin.' );
 	}
+
+	public function test_stale_token_action_logs_a_pluralised_row_and_a_failure_row(): void {
+		global $wpdb;
+		$this->seed_token( 'https://old.example/wp-json/aafm/v1/mcp' );
+		$this->post_as( 'administrator' );
+		$this->assertTrue( $this->run_handler( 'aafm_ajax_revoke_stale_tokens' )['success'] );
+		$detail = $wpdb->get_var( $wpdb->prepare( 'SELECT detail FROM %i WHERE ability = %s ORDER BY id DESC LIMIT 1', aafm_activity_log_table(), 'aafm/oauth-stale-tokens' ) );
+		$this->assertStringContainsString( 'Ended 1 token issued for an old site address', (string) $detail );
+
+		$this->seed_token( 'https://old.example/wp-json/aafm/v1/mcp' );
+		$fail       = static fn( $query ) => false !== strpos( $query, 'SET is_active = 0' ) && false !== strpos( $query, 'CAST(resource AS BINARY)' ) ? 'SELECT broken FROM nowhere' : $query;
+		add_filter( 'query', $fail );
+		$suppressed = $wpdb->suppress_errors( true );
+		try {
+			$this->post_as( 'administrator' );
+			$json = $this->run_handler( 'aafm_ajax_revoke_stale_tokens' );
+		} finally {
+			remove_filter( 'query', $fail );
+			$wpdb->suppress_errors( $suppressed );
+		}
+		$this->assertFalse( $json['success'] );
+		$status = $wpdb->get_var( $wpdb->prepare( 'SELECT status FROM %i WHERE ability = %s ORDER BY id DESC LIMIT 1', aafm_activity_log_table(), 'aafm/oauth-stale-tokens' ) );
+		$this->assertSame( 'error', $status, 'A failed attempt leaves an error row.' );
+	}
+
+	public function test_stale_token_success_removes_the_warning(): void {
+		$js    = $this->admin_js();
+		$at    = (int) strpos( $js, '#bindStaleTokens() {' );
+		$stale = substr( $js, $at, 1600 );
+		$this->assertStringContainsString( "btn.closest( '.aafm-stale-tokens' )?.querySelector( '.aafm-notice' )?.remove();", $stale, 'The warning goes once the tokens are ended.' );
+	}
 }

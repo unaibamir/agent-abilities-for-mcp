@@ -719,10 +719,11 @@ function aafm_ajax_revoke_stale_tokens(): void {
 	}
 	$ended = aafm_oauth_revoke_stale_tokens();
 	if ( $ended < 0 ) {
+		aafm_log_setting_change( 'aafm/oauth-stale-tokens', __( 'Could not end the tokens issued for an old site address', 'agent-abilities-for-mcp' ), false );
 		wp_send_json_error( array( 'message' => __( 'Could not end the old tokens. Please try again.', 'agent-abilities-for-mcp' ) ) );
 	}
 	/* translators: %d: number of token rows. */
-	aafm_log_setting_change( 'aafm/oauth-stale-tokens', sprintf( __( 'Ended %d tokens issued for an old site address', 'agent-abilities-for-mcp' ), $ended ) );
+	aafm_log_setting_change( 'aafm/oauth-stale-tokens', sprintf( _n( 'Ended %d token issued for an old site address', 'Ended %d tokens issued for an old site address', $ended, 'agent-abilities-for-mcp' ), $ended ) );
 	wp_send_json_success(
 		array(
 			'deactivated' => $ended,

@@ -339,6 +339,8 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				// Quick Connect wizard.
 				'qcInProgress'             => __( 'In progress', 'agent-abilities-for-mcp' ),
 				'qcNotStarted'             => __( 'Not started', 'agent-abilities-for-mcp' ),
+				/* translators: %1$s: current setup step number. */
+				'qcStepOf'                 => __( 'Step %1$s of 3', 'agent-abilities-for-mcp' ),
 				'qcOauthOn'                => __( 'OAuth is on. Copy the URL, then continue.', 'agent-abilities-for-mcp' ),
 				'qcOauthOff'               => __( 'OAuth is off. Use the application-password path below, or turn OAuth on.', 'agent-abilities-for-mcp' ),
 				'qcUserCreated'            => __( 'mcp-agent created (subscriber)', 'agent-abilities-for-mcp' ),

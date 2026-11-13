@@ -3295,6 +3295,23 @@
 		gap: 12px;
 		padding: 14px 16px;
 	}
+	/* The step header is a real button inside an h3: reset both so they look as the div did. */
+	& .aafm-qc-job-heading { margin: 0; font: inherit; }
+	& button.aafm-qc-job-head {
+		inline-size: 100%;
+		margin: 0;
+		border: 0;
+		background: none;
+		color: inherit;
+		font: inherit;
+		text-align: start;
+		cursor: default;
+
+		/* Inset: the job card clips an outer ring (overflow: hidden). */
+		&:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--aafm-accent); }
+	}
+	& .aafm-qc-job-titles .jt,
+	& .aafm-qc-job-titles .js { display: block; }
 	& .aafm-qc-job.is-done .aafm-qc-job-head { cursor: pointer; }
 	& .aafm-qc-marker {
 		width: 26px;

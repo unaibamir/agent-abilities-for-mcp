@@ -4591,6 +4591,7 @@
 			const segs = Array.from( root.querySelectorAll( '[data-qc-seg]' ) );
 			const stepNow = root.querySelector( '[data-qc-stepnow]' );
 			const pct = root.querySelector( '[data-qc-pct]' );
+			const meter = root.querySelector( '.aafm-qc-meter' );
 
 			const setTag = ( job, kind, text ) => {
 				const tag = job.querySelector( '[data-qc-tag]' );
@@ -4611,6 +4612,8 @@
 					// Driven as an attribute, not the property, so the markup and the focus
 					// trap's [inert] filter agree even on an engine that does not implement it.
 					job.querySelector( '.aafm-qc-job-body' )?.toggleAttribute( 'inert', i !== state.step );
+					const head = job.querySelector( '.aafm-qc-job-head' );
+					head?.setAttribute( 'aria-expanded', String( i === state.step ) );
 					job.classList.remove( 'is-current', 'is-done', 'is-todo' );
 					if ( i < state.step ) {
 						job.classList.add( 'is-done' );
@@ -4634,6 +4637,9 @@
 				} );
 				if ( stepNow ) {
 					stepNow.textContent = String( state.step );
+					// The meter is a progressbar; its announced value follows the visible step.
+					meter?.setAttribute( 'aria-valuenow', String( state.step ) );
+					meter?.setAttribute( 'aria-valuetext', this.#format( this.#t( 'qcStepOf', 'Step %1$s of 3' ), String( state.step ) ) );
 				}
 				if ( pct ) {
 					pct.textContent = Math.round( ( ( state.step - 1 ) / 3 ) * 100 ) + '%';
@@ -4646,14 +4652,10 @@
 
 			// Advancing collapses the step the user was standing in, and the control they just
 			// pressed goes inert with it, which would drop focus on <body> and strand the
-			// keyboard outside the dialog. Move focus to the new step's title instead: it
-			// names where they have landed, and there is nothing there to fire by accident.
+			// keyboard outside the dialog. Move focus to the new step's header button instead: it
+			// names where they have landed, and on the current step it does nothing when pressed.
 			const focusStep = () => {
-				const heading = jobs[ state.step ]?.querySelector( '.aafm-qc-job-titles .jt' );
-				if ( heading ) {
-					heading.setAttribute( 'tabindex', '-1' );
-					heading.focus();
-				}
+				jobs[ state.step ]?.querySelector( '.aafm-qc-job-head' )?.focus();
 			};
 
 			const goStep = ( n ) => {

@@ -616,4 +616,57 @@ final class QuickConnectTest extends TestCase {
 		$this->assertFalse( get_option( 'aafm_quickconnect_dismissed', false ) );
 		$this->assertTrue( aafm_quickconnect_should_render(), 'After a reset the wizard shows again.' );
 	}
+
+	/**
+	 * The wizard's last screen.
+	 *
+	 * @return string
+	 */
+	private function wizard_html(): string {
+		$this->acting_as( 'administrator' );
+		ob_start();
+		aafm_quickconnect_render();
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Finishing the wizard saves settings; nothing has connected yet, so the finish screen must not
+	 * say it has. The approve-in-your-client sentence stays.
+	 */
+	public function test_finish_screen_does_not_claim_connected_before_a_connection(): void {
+		$html = $this->wizard_html();
+		$this->assertStringNotContainsString( 'Connected and governed', $html );
+		$this->assertStringNotContainsString( 'can reach this site through the MCP server now', $html );
+		$this->assertStringContainsString( '<h2>Ready to connect</h2>', $html );
+		$this->assertStringContainsString( 'approve the connection when it asks', $html );
+	}
+
+	public function test_wizard_step_headers_are_buttons_inside_headings(): void {
+		$html = $this->wizard_html();
+		$this->assertSame( 3, preg_match_all( '#<h3 class="aafm-qc-job-heading"><button type="button" class="aafm-qc-job-head" aria-expanded="(true|false)">#', $html, $m ) );
+		$this->assertSame( array( 'true', 'false', 'false' ), $m[1], 'Only the first step starts expanded.' );
+		$this->assertStringNotContainsString( '<div class="aafm-qc-job-head"', $html );
+	}
+
+	public function test_wizard_progress_meter_has_progressbar_role_and_values(): void {
+		$html = $this->wizard_html();
+		$this->assertSame( 1, preg_match( '#<div class="aafm-qc-meter"([^>]*)>#', $html, $m ) );
+		$this->assertStringContainsString( 'role="progressbar"', $m[1] );
+		$this->assertStringContainsString( 'aria-valuemin="1"', $m[1] );
+		$this->assertStringContainsString( 'aria-valuemax="3"', $m[1] );
+		$this->assertStringContainsString( 'aria-valuenow="1"', $m[1] );
+		$this->assertStringContainsString( 'aria-label="', $m[1] );
+		$this->assertStringNotContainsString( 'aria-hidden', $m[1] );
+	}
+
+	public function test_wizard_render_updates_aria_valuenow(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a bundled static asset from disk in a test.
+		$js = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
+		$at = strpos( $js, 'if ( stepNow ) {', (int) strpos( $js, '#bindQuickConnect() {' ) );
+		$this->assertNotFalse( $at );
+		$branch = substr( $js, (int) $at, 500 );
+		$this->assertStringContainsString( 'stepNow.textContent = String( state.step );', $branch );
+		$this->assertStringContainsString( "meter?.setAttribute( 'aria-valuenow', String( state.step ) );", $branch );
+		$this->assertStringContainsString( "head?.setAttribute( 'aria-expanded', String( i === state.step ) );", $js );
+	}
 }

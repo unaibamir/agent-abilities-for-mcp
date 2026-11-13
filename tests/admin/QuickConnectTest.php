@@ -639,12 +639,16 @@ final class QuickConnectTest extends TestCase {
 		$this->assertStringNotContainsString( 'can reach this site through the MCP server now', $html );
 		$this->assertStringContainsString( '<h2>Ready to connect</h2>', $html );
 		$this->assertStringContainsString( 'approve the connection when it asks', $html );
+		$this->assertStringNotContainsString( 'exactly what you allowed', $html, 'Tools are also limited by the role of the account the agent connects as.' );
+		$this->assertStringContainsString( 'and only what its WordPress role permits', $html );
 	}
 
 	public function test_wizard_step_headers_are_buttons_inside_headings(): void {
 		$html = $this->wizard_html();
-		$this->assertSame( 3, preg_match_all( '#<h3 class="aafm-qc-job-heading"><button type="button" class="aafm-qc-job-head" aria-expanded="(true|false)">#', $html, $m ) );
+		// h2 under the dialog's h1. No step is done yet, so no head can act: all start aria-disabled.
+		$this->assertSame( 3, preg_match_all( '#<h2 class="aafm-qc-job-heading"><button type="button" class="aafm-qc-job-head" aria-expanded="(true|false)" aria-disabled="true">#', $html, $m ) );
 		$this->assertSame( array( 'true', 'false', 'false' ), $m[1], 'Only the first step starts expanded.' );
+		$this->assertStringNotContainsString( '<h3 class="aafm-qc-job-heading">', $html );
 		$this->assertStringNotContainsString( '<div class="aafm-qc-job-head"', $html );
 	}
 
@@ -668,5 +672,6 @@ final class QuickConnectTest extends TestCase {
 		$this->assertStringContainsString( 'stepNow.textContent = String( state.step );', $branch );
 		$this->assertStringContainsString( "meter?.setAttribute( 'aria-valuenow', String( state.step ) );", $branch );
 		$this->assertStringContainsString( "head?.setAttribute( 'aria-expanded', String( i === state.step ) );", $js );
+		$this->assertStringContainsString( "head?.setAttribute( 'aria-disabled', String( i >= state.step ) );", $js, 'Only a done step head can act.' );
 	}
 }

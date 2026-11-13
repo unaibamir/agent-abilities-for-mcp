@@ -4614,6 +4614,8 @@
 					job.querySelector( '.aafm-qc-job-body' )?.toggleAttribute( 'inert', i !== state.step );
 					const head = job.querySelector( '.aafm-qc-job-head' );
 					head?.setAttribute( 'aria-expanded', String( i === state.step ) );
+					// Only a done step's head reopens it (the click handler below); the rest cannot act.
+					head?.setAttribute( 'aria-disabled', String( i >= state.step ) );
 					job.classList.remove( 'is-current', 'is-done', 'is-todo' );
 					if ( i < state.step ) {
 						job.classList.add( 'is-done' );

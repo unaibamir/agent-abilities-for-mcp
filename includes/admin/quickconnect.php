@@ -462,14 +462,14 @@ function aafm_quickconnect_render(): void {
 
 				<?php // JOB 1: connect. ?>
 				<section class="aafm-qc-job is-current" data-qc-job="1">
-					<h3 class="aafm-qc-job-heading"><button type="button" class="aafm-qc-job-head" aria-expanded="true">
+					<h2 class="aafm-qc-job-heading"><button type="button" class="aafm-qc-job-head" aria-expanded="true" aria-disabled="true">
 						<span class="aafm-qc-marker" aria-hidden="true"><span class="num">1</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 7"/></svg></span>
 						<span class="aafm-qc-job-titles">
 							<span class="jt"><?php esc_html_e( 'Turn on the connection', 'agent-abilities-for-mcp' ); ?></span>
 							<span class="js"><?php esc_html_e( 'Open the door, then hand the address to the agent', 'agent-abilities-for-mcp' ); ?></span>
 						</span>
 						<span class="aafm-qc-tag now" data-qc-tag><?php esc_html_e( 'In progress', 'agent-abilities-for-mcp' ); ?></span>
-					</button></h3>
+					</button></h2>
 					<div class="aafm-qc-job-body"><div><div class="aafm-qc-job-inner">
 
 						<div class="aafm-qc-control">
@@ -503,7 +503,7 @@ function aafm_quickconnect_render(): void {
 						</div>
 
 						<div class="aafm-qc-altauth" data-qc-altauth>
-							<button type="button" class="aafm-qc-alttrigger" data-qc-alttrigger aria-expanded="false">
+							<button type="button" class="aafm-qc-alttrigger" data-qc-alttrigger aria-expanded="false" aria-disabled="true">
 								<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
 								<span><?php echo wp_kses( __( 'Not using ChatGPT or Claude? <b>Connect with a username and application password instead</b>', 'agent-abilities-for-mcp' ), array( 'b' => array() ) ); ?></span>
 							</button>
@@ -573,14 +573,14 @@ function aafm_quickconnect_render(): void {
 
 				<?php // JOB 2: content access. ?>
 				<section class="aafm-qc-job is-todo" data-qc-job="2">
-					<h3 class="aafm-qc-job-heading"><button type="button" class="aafm-qc-job-head" aria-expanded="false">
+					<h2 class="aafm-qc-job-heading"><button type="button" class="aafm-qc-job-head" aria-expanded="false" aria-disabled="true">
 						<span class="aafm-qc-marker" aria-hidden="true"><span class="num">2</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 7"/></svg></span>
 						<span class="aafm-qc-job-titles">
 							<span class="jt"><?php esc_html_e( 'Choose what the agent can touch', 'agent-abilities-for-mcp' ); ?></span>
 							<span class="js"><?php esc_html_e( 'Reading is on. Writing is your call.', 'agent-abilities-for-mcp' ); ?></span>
 						</span>
 						<span class="aafm-qc-tag todo" data-qc-tag><?php esc_html_e( 'Not started', 'agent-abilities-for-mcp' ); ?></span>
-					</button></h3>
+					</button></h2>
 					<?php // Steps that are not the current one ship inert; admin.js moves it as the wizard advances. ?>
 					<div class="aafm-qc-job-body" inert><div><div class="aafm-qc-job-inner">
 
@@ -658,16 +658,16 @@ function aafm_quickconnect_render(): void {
 
 				<?php // JOB 3: finish. ?>
 				<section class="aafm-qc-job is-todo" data-qc-job="3">
-					<h3 class="aafm-qc-job-heading"><button type="button" class="aafm-qc-job-head" aria-expanded="false">
+					<h2 class="aafm-qc-job-heading"><button type="button" class="aafm-qc-job-head" aria-expanded="false" aria-disabled="true">
 						<span class="aafm-qc-marker" aria-hidden="true"><span class="num">3</span><svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 7"/></svg></span>
 						<span class="aafm-qc-job-titles">
 							<span class="jt"><?php esc_html_e( 'Finish and connect', 'agent-abilities-for-mcp' ); ?></span>
 							<span class="js"><?php esc_html_e( 'Review, then hand off to the agent', 'agent-abilities-for-mcp' ); ?></span>
 						</span>
 						<span class="aafm-qc-tag todo" data-qc-tag><?php esc_html_e( 'Not started', 'agent-abilities-for-mcp' ); ?></span>
-					</button></h3>
+					</button></h2>
 					<div class="aafm-qc-job-body" inert><div><div class="aafm-qc-job-inner">
-						<p class="aafm-qc-finishcopy"><?php esc_html_e( 'You are set. Approve the connection in the agent when it asks, and it will see exactly what you allowed here, nothing more.', 'agent-abilities-for-mcp' ); ?></p>
+						<p class="aafm-qc-finishcopy"><?php esc_html_e( 'You are set. Approve the connection in the agent when it asks. It can use only what you allowed here, and only what its WordPress role permits.', 'agent-abilities-for-mcp' ); ?></p>
 						<div class="aafm-qc-btnrow">
 							<button type="button" class="aafm-btn aafm-btn-primary" id="aafm-qc-finish">
 								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>

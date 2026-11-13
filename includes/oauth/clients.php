@@ -554,8 +554,9 @@ function aafm_oauth_list_clients(): array {
  *
  * Each row also carries the grant's per-connection state (aafm_oauth_grant_from_row()).
  *
- * The admin card reads one page at a time through aafm_oauth_grants_page(); this full listing
- * stays for the callers that need every row.
+ * The Active grants card reads one page at a time through aafm_oauth_grants_page(), and its row
+ * actions read one grant through aafm_oauth_get_grant(). This full listing stays for any caller
+ * that needs every row.
  *
  * @return array<int,array{user_id:int,user_display:string,user_login:string,client_id:string,client_name:string,granted_at:string,user_roles:list<string>,is_high_privilege:bool,is_administrator:bool,paused:bool,expired:bool,expires_at:?string,preset:string,rate:int,last_used_at:?string,last_used_ip:string}>
  */

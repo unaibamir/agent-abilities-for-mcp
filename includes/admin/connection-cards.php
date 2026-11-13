@@ -244,7 +244,7 @@ function aafm_connection_grant_pill( string $status ): string {
 /**
  * Render the "Active grants" card.
  *
- * The "Current role" column reads each identity's LIVE role (aafm_oauth_list_grants()), never a
+ * The "Current role" column reads each identity's LIVE role (aafm_oauth_grants_page()), never a
  * value captured at approval: a token acts with whatever the identity can do right now.
  *
  * @param array{title:string,rule:string,count:int,rows:list<array<string,mixed>>,page:int,pages:int,per_page:int,stale_tokens:int,empty:array{title:string,hint:string}} $data aafm_connection_grants_data().

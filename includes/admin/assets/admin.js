@@ -3501,15 +3501,14 @@
 		}
 
 		/**
-		 * Client-side pager for one OAuth management table (Registered clients or Active
-		 * grants). Both queries already run with no LIMIT and every row is already in the
-		 * DOM (aafm_oauth_list_clients()/aafm_oauth_list_grants()), so this only toggles
-		 * `hidden` on a rows-per-page slice - no second query, no AJAX round trip.
+		 * Client-side pager for an OAuth management table whose rows are all in the DOM
+		 * (Registered clients, from aafm_oauth_list_clients()). Active grants is paged on the
+		 * server instead (aafm_oauth_grants_page(), aafm_oauth_get_grant() for one row), so
+		 * #bindOauthPagination() skips it. This only toggles `hidden` on a rows-per-page slice
+		 * - no second query, no AJAX round trip.
 		 *
 		 * A MutationObserver on the <tbody> re-derives the page count whenever a row is
-		 * removed, rather than the click handlers being the only thing that can trigger a
-		 * recompute: #bindOauthRevoke() calls row.remove() for a revoked grant with no
-		 * knowledge of pagination at all, and the observer means it does not need any. If
+		 * removed, so any code that removes a row needs no knowledge of pagination. If
 		 * removing a row empties the current page (the last row on the last page), the
 		 * observer steps the page back and re-renders, so the pager never goes on showing a
 		 * page number or a Prev/Next state the live row set no longer has.

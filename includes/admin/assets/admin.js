@@ -3456,7 +3456,10 @@
 					return;
 				}
 
-				if ( isGrant ) {
+				// A revoked client's people leave Active grants too, and that card is paged on the
+				// server, so a client revoke that lists any of them takes the same reload path.
+				const listsClient = ! isGrant && Array.from( root.querySelectorAll( '#aafm-card-grants tr[data-grant-row]' ) ).some( ( r ) => r.dataset.grantRow?.endsWith( `|${ clientId }` ) );
+				if ( isGrant || listsClient ) {
 					// The grants card is paged on the server, so its count and rows come from the
 					// server: reload the current page (an emptied last page clamps to the new last
 					// page there). Focus cannot be set from the departing document, so a one-use

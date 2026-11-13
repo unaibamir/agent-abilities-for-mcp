@@ -511,6 +511,25 @@ class ConnectionCardsTest extends TestCase {
 		$this->assertSame( 1, substr_count( $css, 'translateX(16px)' ), 'The physical offset appears once, beside its RTL twin.' );
 	}
 
+	public function test_grant_update_on_a_revoked_client_is_refused_and_writes_nothing(): void {
+		global $wpdb;
+		$user = $this->seed_grant();
+		$wpdb->update( $wpdb->prefix . 'aafm_oauth_clients', array( 'is_active' => 0 ), array( 'client_id' => self::CLIENT ) );
+
+		$this->post_as(
+			'administrator',
+			array(
+				'user_id'   => (string) $user,
+				'client_id' => self::CLIENT,
+				'paused'    => '1',
+			)
+		);
+		$json = $this->run_handler( 'aafm_ajax_oauth_update_grant' );
+		$this->assertFalse( $json['success'] );
+		$this->assertSame( 'Missing grant.', $json['data']['message'] );
+		$this->assertFalse( aafm_oauth_grant_state( $user, self::CLIENT )['paused'], 'No pause lands on a grant the card no longer lists.' );
+	}
+
 	public function test_stale_token_action_logs_a_pluralised_row_and_a_failure_row(): void {
 		global $wpdb;
 		$this->seed_token( 'https://old.example/wp-json/aafm/v1/mcp' );
@@ -533,6 +552,14 @@ class ConnectionCardsTest extends TestCase {
 		$this->assertFalse( $json['success'] );
 		$status = $wpdb->get_var( $wpdb->prepare( 'SELECT status FROM %i WHERE ability = %s ORDER BY id DESC LIMIT 1', aafm_activity_log_table(), 'aafm/oauth-stale-tokens' ) );
 		$this->assertSame( 'error', $status, 'A failed attempt leaves an error row.' );
+	}
+
+	public function test_client_revoke_reloads_when_the_grants_card_lists_that_client(): void {
+		$js     = $this->admin_js();
+		$at     = (int) strpos( $js, '#bindOauthRevoke() {' );
+		$revoke = substr( $js, $at, (int) strpos( $js, '#paginateTable(', $at ) - $at );
+		$this->assertStringContainsString( 'r.dataset.grantRow?.endsWith( `|${ clientId }` )', $revoke, 'A client revoke checks the grants card for that client\'s rows.' );
+		$this->assertSame( 1, substr_count( $revoke, 'window.location.reload()' ), 'One reload path serves both revokes.' );
 	}
 
 	public function test_stale_token_success_removes_the_warning(): void {

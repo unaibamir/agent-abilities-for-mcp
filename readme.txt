@@ -69,7 +69,7 @@ With ACF active, the AI can read a post's fields and write new values, each sani
 
 = Limit what an AI agent can do on your site =
 
-These controls cover this plugin's own tools, plus any tool from another plugin that you switch on from the Other plugins tab. Each call is checked against the capabilities of the WordPress user the AI connects as, over OAuth or an Application Password.
+These controls cover this plugin's own tools, plus any other plugin's tool you switch on from the Plugins' own tools tab. Each call is checked against the capabilities of the WordPress user the AI connects as, over OAuth or an Application Password.
 
 **Pause all access** on the Connection tab is the emergency stop, the one switch that pauses all agents at once. It refuses every MCP request through your site, OAuth apps and Application Passwords alike. An Application Password can still use the rest of the REST API, so revoke it too for a full cut-off. To pause an AI agent without disconnecting it, use Pause and Resume next to Revoke on an OAuth connection. An OAuth connection can also get an end date, for access that expires, and a lower rate limit of its own; an Application Password has neither.
 
@@ -101,7 +101,7 @@ The Events Calendar has 13 abilities, Event Tickets has 3, and Avada has 2 that 
 
 Minimum versions: WooCommerce 9.1, All in One SEO 4.9.8, The Events Calendar 6.17.3.1 and Event Tickets 5.29.3.1. Below these, their tools stay hidden and the Integrations tab says why.
 
-Plugins that register their own abilities with the WordPress Abilities API appear on the Other plugins tab, and this plugin does not filter what another plugin's ability returns.
+Plugins that register their own abilities with the WordPress Abilities API appear on the Plugins' own tools tab, and this plugin does not filter what another plugin's ability returns.
 
 Each tool shows which plugin provides it (or its namespace, when the plugin cannot be identified), carries a Read, Write or Destructive label from the plugin's own annotations (an unlabelled tool is treated as Destructive and says so), and gets a notice when it may return personal data (a hint from the plugin and tool name, not a full check). Tools a plugin update adds wait for your review.
 
@@ -326,7 +326,7 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 11. Site Brief: a few plain rules every connected agent reads when its session starts, such as spelling and what to leave alone.
 12. Connection Doctor checks the connection from your own server and says what to fix. Each finding says whether you or your host can fix it, and some come with a snippet to paste.
 13. Needs review: drafts and pending posts your agents wrote, with Preview, Open in editor, Publish and Discard.
-14. Notifications, off until you choose an admin notice, an email right away or a daily email for the events you tick.
+14. Notifications, off until you choose "Admin notice only", "Email alerts as they happen" or "One email a day" for the events you tick.
 15. Active grants: each approved connection with its access, last use, optional end date and rate limit, and its status, with Pause or Resume next to Revoke.
 16. Application Passwords: the agent users' passwords with when each was created and last used, the address it was last used from, and a Revoke button.
 

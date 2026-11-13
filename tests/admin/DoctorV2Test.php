@@ -378,4 +378,21 @@ final class DoctorV2Test extends TestCase {
 		$this->assertSame( 'pass', $this->row( $rows, 'endpoint' )['status'], 'The unauthenticated probe still passes.' );
 		$this->assertStringContainsString( '- pause_all: fail [you]', aafm_doctor_build_report( $rows ) );
 	}
+
+	public function test_the_report_says_the_running_adapter_is_the_bundled_one(): void {
+		$this->assertFalse( aafm_adapter_declared_elsewhere(), 'precondition: the suite runs the bundled adapter.' );
+		$report = aafm_doctor_build_report( array() );
+		$this->assertStringContainsString( 'MCP adapter: ' . aafm_loaded_adapter_version() . ' (bundled)', $report );
+	}
+
+	public function test_the_adapter_origin_names_another_plugin_by_slug_only(): void {
+		$file = trailingslashit( WP_PLUGIN_DIR ) . 'other-plugin/vendor/wordpress/mcp-adapter/includes/Core/McpAdapter.php';
+		$this->assertSame( 'from plugin: other-plugin', aafm_doctor_adapter_origin( $file, true ) );
+		$this->assertSame( 'from outside the plugins folder', aafm_doctor_adapter_origin( '/opt/shared/mcp-adapter/includes/Core/McpAdapter.php', true ) );
+		$this->assertSame( 'from outside the plugins folder', aafm_doctor_adapter_origin( null, true ) );
+		$this->assertSame( 'bundled', aafm_doctor_adapter_origin( $file, false ), 'Bundled follows aafm_adapter_declared_elsewhere().' );
+		foreach ( array( aafm_doctor_adapter_origin( $file, true ), aafm_doctor_adapter_origin( '/opt/x/McpAdapter.php', true ) ) as $origin ) {
+			$this->assertStringNotContainsString( '/', $origin, 'No path in the report, only the slug.' );
+		}
+	}
 }

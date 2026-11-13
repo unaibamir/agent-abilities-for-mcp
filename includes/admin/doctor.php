@@ -857,6 +857,33 @@ function aafm_doctor_run_checks(): array {
 }
 
 /**
+ * Where the running MCP adapter copy came from, for the Doctor report: "bundled" when it is this
+ * plugin's own copy (aafm_adapter_declared_elsewhere() false), "from plugin: <slug>" when its class
+ * file sits in another plugin's folder, "from outside the plugins folder" otherwise. Only the
+ * plugin's folder name is printed, never a path, so the report stays free of paths and host names.
+ *
+ * @param string|null $file      The McpAdapter class file, or null when it cannot be read.
+ * @param bool        $elsewhere Whether the class was declared by a copy other than ours.
+ * @return string
+ */
+function aafm_doctor_adapter_origin( ?string $file, bool $elsewhere ): string {
+	if ( ! $elsewhere ) {
+		return 'bundled';
+	}
+	$real    = realpath( WP_PLUGIN_DIR );
+	$plugins = trailingslashit( wp_normalize_path( false === $real ? WP_PLUGIN_DIR : $real ) );
+	$real    = null === $file ? false : realpath( $file );
+	$path    = null === $file ? '' : wp_normalize_path( false === $real ? $file : $real );
+	if ( '' !== $path && 0 === strpos( $path, $plugins ) ) {
+		$slug = (string) preg_replace( '/[^A-Za-z0-9._-]/', '', (string) strtok( substr( $path, strlen( $plugins ) ), '/' ) );
+		if ( '' !== $slug ) {
+			return 'from plugin: ' . $slug;
+		}
+	}
+	return 'from outside the plugins folder';
+}
+
+/**
  * The plain-text report an owner can paste into a support thread.
  *
  * Holds versions, active plugin names, and each check's result and HTTP code. It never holds a
@@ -881,6 +908,11 @@ function aafm_doctor_build_report( array $rows ): string {
 	$software = isset( $_SERVER['SERVER_SOFTWARE'] ) ? (string) preg_replace( '/[^A-Za-z0-9._-].*$/', '', (string) wp_unslash( $_SERVER['SERVER_SOFTWARE'] ) ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- reduced to the product name by the regex.
 	$scheme   = wp_parse_url( (string) get_option( 'home' ), PHP_URL_SCHEME );
 	$adapter  = aafm_loaded_adapter_version();
+	if ( null !== $adapter ) {
+		// The class file comes from the same ReflectionClass read aafm_adapter_declared_elsewhere() makes.
+		$adapter_file = class_exists( 'WP\\MCP\\Core\\McpAdapter', false ) ? ( new ReflectionClass( 'WP\\MCP\\Core\\McpAdapter' ) )->getFileName() : false;
+		$adapter     .= ' (' . aafm_doctor_adapter_origin( is_string( $adapter_file ) ? $adapter_file : null, aafm_adapter_declared_elsewhere() ) . ')';
+	}
 
 	$lines = array(
 		'Agent Abilities for MCP connection report',

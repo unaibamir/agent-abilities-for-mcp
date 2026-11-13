@@ -45,7 +45,7 @@ function aafm_render_notifications_section(): void {
 		array(
 			'label'   => __( 'Tell me', 'agent-abilities-for-mcp' ),
 			'control' => $select,
-			'help'    => __( 'Off by default. Nothing is sent or shown until you choose a mode and tick at least one thing below.', 'agent-abilities-for-mcp' ),
+			'help'    => __( 'Off by default. Nothing is sent or shown until you choose a mode and tick at least one thing below. Both email modes also show the admin notice.', 'agent-abilities-for-mcp' ),
 		)
 	);
 

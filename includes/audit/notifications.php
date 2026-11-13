@@ -51,7 +51,7 @@ function aafm_notify_modes(): array {
 	return array(
 		'off'       => __( 'Off', 'agent-abilities-for-mcp' ),
 		'notice'    => __( 'Admin notice only', 'agent-abilities-for-mcp' ),
-		'immediate' => __( 'Email alerts as they happen, plus an admin notice', 'agent-abilities-for-mcp' ),
+		'immediate' => __( 'Email alerts as they happen', 'agent-abilities-for-mcp' ),
 		'digest'    => __( 'One email a day, plus an admin notice', 'agent-abilities-for-mcp' ),
 	);
 }

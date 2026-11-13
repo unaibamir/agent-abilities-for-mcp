@@ -301,8 +301,8 @@ final class NotifyCronHandoffTest extends TestCase {
 		aafm_render_notifications_section();
 		$html = (string) ob_get_clean();
 
-		$this->assertSame( 'Email alerts as they happen, plus an admin notice', $label );
-		$this->assertStringContainsString( 'admin notice', $label );
+		$this->assertSame( 'Email alerts as they happen', $label, 'Short enough for the closed select on a phone.' );
+		$this->assertStringContainsString( 'Both email modes also show the admin notice.', $html, 'The help says the notice comes with it.' );
 		$this->assertStringNotContainsString( 'do not depend on cron', $html );
 		$this->assertStringContainsString( esc_html( $label ), $html );
 		$this->assertStringContainsString( 'next visit', $html, 'The paragraph says the email can wait for the next visit.' );

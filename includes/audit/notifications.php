@@ -51,7 +51,7 @@ function aafm_notify_modes(): array {
 	return array(
 		'off'       => __( 'Off', 'agent-abilities-for-mcp' ),
 		'notice'    => __( 'Admin notice only', 'agent-abilities-for-mcp' ),
-		'immediate' => __( 'Email right away, plus an admin notice', 'agent-abilities-for-mcp' ),
+		'immediate' => __( 'Email each alert, plus an admin notice', 'agent-abilities-for-mcp' ),
 		'digest'    => __( 'One email a day, plus an admin notice', 'agent-abilities-for-mcp' ),
 	);
 }
@@ -629,8 +629,80 @@ function aafm_notify_hold_back( string $bucket, int $carried ): void {
 }
 
 /**
- * Send what the request queued. Runs on shutdown, after WordPress has flushed its output buffers; on
- * PHP-FPM the response is closed first so the caller is not left waiting on the mail host.
+ * The host function that closes the response before the mail is sent: PHP-FPM's
+ * fastcgi_finish_request(), else LiteSpeed's litespeed_finish_request(), else null.
+ *
+ * @return callable|null
+ */
+function aafm_notify_finish_function(): ?callable {
+	$finish = null;
+	foreach ( array( 'fastcgi_finish_request', 'litespeed_finish_request' ) as $name ) {
+		if ( function_exists( $name ) ) {
+			$finish = $name;
+			break;
+		}
+	}
+	/**
+	 * Filters the function that closes the response before alert mail is sent. Return null to treat
+	 * the host as one that cannot, so each message goes to WP-Cron instead.
+	 *
+	 * @param callable|null $finish The detected function, or null.
+	 */
+	$finish = apply_filters( 'aafm_notify_finish_function', $finish );
+	return is_callable( $finish ) ? $finish : null;
+}
+
+/**
+ * Hand one message to WP-Cron as its own event, the message itself as the argument. Core stores and
+ * de-duplicates the events, so there is no shared row to lock. Refused when WP-Cron is switched off.
+ *
+ * @param array<string,mixed> $item An outbox item with its attempt number.
+ * @param int                 $when Unix time to send at.
+ * @return bool Whether the event was scheduled.
+ */
+function aafm_notify_schedule_item( array $item, int $when ): bool {
+	/**
+	 * Filters whether alert mail may wait for WP-Cron. Off when DISABLE_WP_CRON is set, since nothing
+	 * may ever run the event; a site that sets it and runs a real cron job can return true.
+	 *
+	 * @param bool $use_cron Whether WP-Cron runs on this site.
+	 */
+	if ( ! apply_filters( 'aafm_notify_use_cron', ! ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON ) ) ) {
+		return false;
+	}
+	return true === wp_schedule_single_event( $when, 'aafm_notify_send_scheduled', array( $item ) );
+}
+
+/**
+ * Send one outbox item, then drop the digest events it described.
+ *
+ * @param array<string,mixed> $item An outbox item.
+ * @return bool Whether wp_mail() reported success.
+ */
+function aafm_notify_send_item( array $item ): bool {
+	try {
+		$sent = aafm_notify_deliver( (string) $item['to'], (array) $item['events'], (bool) $item['digest'], (string) $item['extra'] );
+		if ( $sent && ! empty( $item['drain'] ) && ! aafm_notify_queue_remove( (array) $item['drain'] ) ) {
+			aafm_notify_log_failure( __( 'The queued notifications went out but could not be cleared', 'agent-abilities-for-mcp' ) );
+		}
+		return $sent;
+	} catch ( \Throwable $e ) {
+		unset( $e );
+		aafm_notify_log_failure( __( 'A notification email could not be sent', 'agent-abilities-for-mcp' ) );
+		return false;
+	}
+}
+
+/**
+ * Send what the request queued. Runs on shutdown, after WordPress has flushed its output buffers.
+ *
+ * Where the host can close the response first (PHP-FPM, LiteSpeed), it does, and the mail is sent here
+ * without the caller waiting. Elsewhere each message becomes a WP-Cron event of its own, sent by
+ * aafm_notify_send_scheduled() on a later request, so a slow mail host never holds the visitor's
+ * request. A message WP-Cron cannot take (scheduling refused, or DISABLE_WP_CRON) is sent here as before.
+ *
+ * ponytail: cron delivery is at-least-once. A crash between the send and the digest-queue cleanup can
+ * repeat one email; exactly-once would need a lock the Options API cannot give.
  *
  * @return void
  */
@@ -639,25 +711,53 @@ function aafm_notify_flush_outbox(): void {
 	if ( array() === $items ) {
 		return;
 	}
-	// ponytail: without fastcgi_finish_request() (mod_php, some CGI setups) the response is not closed
-	// first, so a slow mail host holds the visitor's request until wp_mail() returns. Accepted: at most
-	// the hourly caps' worth of messages per hour. Upgrade path is a queued send (cron or Action
-	// Scheduler) that mails outside the request.
-	if ( function_exists( 'fastcgi_finish_request' ) ) {
-		fastcgi_finish_request();
+	$finish = aafm_notify_finish_function();
+	if ( null !== $finish ) {
+		$finish();
+	} else {
+		$items = array_values(
+			array_filter(
+				$items,
+				static function ( array $item ): bool {
+					return ! aafm_notify_schedule_item( $item + array( 'attempt' => 1 ), time() );
+				}
+			)
+		);
 	}
 	foreach ( $items as $item ) {
-		try {
-			$sent = aafm_notify_deliver( (string) $item['to'], (array) $item['events'], (bool) $item['digest'], (string) $item['extra'] );
-			if ( $sent && ! empty( $item['drain'] ) && ! aafm_notify_queue_remove( (array) $item['drain'] ) ) {
-				aafm_notify_log_failure( __( 'The queued notifications went out but could not be cleared', 'agent-abilities-for-mcp' ) );
-			}
-		} catch ( \Throwable $e ) {
-			unset( $e );
-			aafm_notify_log_failure( __( 'A notification email could not be sent', 'agent-abilities-for-mcp' ) );
-		}
+		aafm_notify_send_item( $item );
 	}
 }
+
+/**
+ * Cron: send one message handed over by aafm_notify_flush_outbox(). A failed first attempt is tried
+ * once more a few minutes later; a second failure, or an item without a whole-number attempt, stops
+ * there. aafm_notify_deliver() already writes the bounded error row for each failed send.
+ *
+ * @param mixed $item The outbox item, with its attempt number.
+ * @return void
+ */
+function aafm_notify_send_scheduled( $item ): void {
+	if ( ! is_array( $item ) ) {
+		return;
+	}
+	$item += array(
+		'to'     => '',
+		'events' => array(),
+		'digest' => false,
+		'extra'  => '',
+		'drain'  => array(),
+	);
+	if ( aafm_notify_send_item( $item ) ) {
+		return;
+	}
+	// A missing or malformed attempt reads as a retry already used, so an odd payload can never loop.
+	$attempt = isset( $item['attempt'] ) && is_int( $item['attempt'] ) ? $item['attempt'] : 2;
+	if ( 1 === $attempt && ! aafm_notify_schedule_item( array( 'attempt' => 2 ) + $item, time() + 5 * MINUTE_IN_SECONDS ) ) {
+		aafm_notify_log_failure( __( 'A notification email could not be sent and could not be retried', 'agent-abilities-for-mcp' ) );
+	}
+}
+add_action( 'aafm_notify_send_scheduled', 'aafm_notify_send_scheduled' );
 
 /**
  * A stored list option as a list, or an empty list when it holds anything else.
@@ -905,7 +1005,7 @@ function aafm_notify_sync_schedule(): void {
 add_action( 'admin_init', 'aafm_notify_sync_schedule' );
 
 /**
- * Clear the digest event on deactivation. A network-wide deactivation clears it on every site, the same
+ * Clear the digest and alert-mail events on deactivation. A network-wide deactivation clears them on every site, the same
  * get_sites() walk network activation and uninstall.php use; a per-site deactivation clears this site.
  *
  * @param bool $network_wide True when the plugin is being deactivated network-wide.
@@ -922,11 +1022,15 @@ function aafm_notify_unschedule( bool $network_wide = false ): void {
 		foreach ( $site_ids as $site_id ) {
 			switch_to_blog( (int) $site_id );
 			wp_clear_scheduled_hook( 'aafm_notifications_digest' );
+			wp_unschedule_hook( 'aafm_notify_send_scheduled' );
 			restore_current_blog();
 		}
 		return;
 	}
 	wp_clear_scheduled_hook( 'aafm_notifications_digest' );
+	// Each alert-mail event carries its message as arguments, which wp_clear_scheduled_hook() would
+	// have to match; wp_unschedule_hook() drops them all.
+	wp_unschedule_hook( 'aafm_notify_send_scheduled' );
 }
 register_deactivation_hook( AAFM_PLUGIN_FILE, 'aafm_notify_unschedule' );
 

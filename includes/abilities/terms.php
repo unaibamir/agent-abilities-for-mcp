@@ -68,7 +68,7 @@ function aafm_register_terms_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-term-meta'] = array(
 		'label'        => __( 'Update term meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Write a single allowlisted scalar meta value to a term you can edit. The response returns the old value when it is plain text or a number. Keys are opt-in: an administrator exposes each one under Exposed term meta keys in the Taxonomies & Terms sub-tab of the Abilities tab.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Write a single allowlisted scalar meta value to a term you can edit. The value is stored as plain text: line breaks and tabs become single spaces, so multi-line text is saved on one line. The response returns the old value when it is plain text or a number. Keys are opt-in: an administrator exposes each one under Exposed term meta keys in the Taxonomies & Terms sub-tab of the Abilities tab.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'taxonomies',

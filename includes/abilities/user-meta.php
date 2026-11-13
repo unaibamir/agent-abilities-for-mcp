@@ -33,7 +33,7 @@ function aafm_register_user_meta_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-user-meta'] = array(
 		'label'        => __( 'Update user meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Write a single allowlisted scalar meta value to a user the agent can edit. Auth, capability, and 2FA keys are blocked outright. The response returns the old value when it is plain text or a number. Keys are opt-in: an administrator exposes each one under Exposed user meta keys in the Users sub-tab of the Abilities tab.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Write a single allowlisted scalar meta value to a user the agent can edit. The value is stored as plain text: line breaks and tabs become single spaces, so multi-line text is saved on one line. Auth, capability, and 2FA keys are blocked outright. The response returns the old value when it is plain text or a number. Keys are opt-in: an administrator exposes each one under Exposed user meta keys in the Users sub-tab of the Abilities tab.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'users',

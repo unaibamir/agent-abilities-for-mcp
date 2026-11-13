@@ -1923,6 +1923,8 @@ function aafm_site_subgroups(): array {
 				'aafm/create-menu-item',
 				'aafm/update-menu-item',
 				'aafm/delete-menu-item',
+				'aafm/list-navigations',
+				'aafm/update-navigation',
 			),
 		),
 		'search'        => array(

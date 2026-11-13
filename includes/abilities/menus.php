@@ -19,6 +19,11 @@
  * trash-bypass flag in our source - wp_delete_post() is called with no second argument, which
  * deletes the trash-less nav_menu_item directly without matching the banned ,true pattern.
  *
+ * Block themes keep their menus elsewhere: a core/navigation block shows a wp_navigation post whose
+ * content is navigation-link blocks. list-navigations and update-navigation reach those posts. Core
+ * maps every wp_navigation capability to edit_theme_options, so the write's per-object edit_post
+ * check holds callers to the same bar, and server.php gives it a discovery case.
+ *
  * @package AgentAbilitiesForMCP
  */
 
@@ -35,7 +40,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_menus_definitions' );
  * @return array<string,array<string,mixed>>
  */
 function aafm_register_menus_definitions( array $registry ): array {
-	$registry['aafm/list-menus']       = array(
+	$registry['aafm/list-menus']        = array(
 		'label'        => __( 'List menus', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Lists the navigation menus by id, name, slug, and item count. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
@@ -43,7 +48,7 @@ function aafm_register_menus_definitions( array $registry ): array {
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_list_menus',
 	);
-	$registry['aafm/get-menu']         = array(
+	$registry['aafm/get-menu']          = array(
 		'label'        => __( 'Get menu', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Reads one navigation menu by id: its name, slug, and item count. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
@@ -51,7 +56,7 @@ function aafm_register_menus_definitions( array $registry ): array {
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_get_menu',
 	);
-	$registry['aafm/list-menu-items']  = array(
+	$registry['aafm/list-menu-items']   = array(
 		'label'        => __( 'List menu items', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Lists the items in a navigation menu by id: each item id, title, URL, what it links to, and its place in the order. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
@@ -59,7 +64,7 @@ function aafm_register_menus_definitions( array $registry ): array {
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_list_menu_items',
 	);
-	$registry['aafm/create-menu']      = array(
+	$registry['aafm/create-menu']       = array(
 		'label'        => __( 'Create menu', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Creates a navigation menu by name. The menu is not attached to any theme location; wiring it in is a manual step. On a block theme it stays invisible on the front end until a human adds it to a template, since the core/navigation block reads from a separate mechanism this ability does not touch. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -67,7 +72,7 @@ function aafm_register_menus_definitions( array $registry ): array {
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_create_menu',
 	);
-	$registry['aafm/update-menu']      = array(
+	$registry['aafm/update-menu']       = array(
 		'label'        => __( 'Update menu', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Renames a navigation menu by id. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -75,7 +80,7 @@ function aafm_register_menus_definitions( array $registry ): array {
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_update_menu',
 	);
-	$registry['aafm/delete-menu']      = array(
+	$registry['aafm/delete-menu']       = array(
 		'label'        => __( 'Delete menu', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Permanently deletes a navigation menu and all of its items. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -83,7 +88,7 @@ function aafm_register_menus_definitions( array $registry ): array {
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_delete_menu',
 	);
-	$registry['aafm/create-menu-item'] = array(
+	$registry['aafm/create-menu-item']  = array(
 		'label'        => __( 'Create menu item', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Adds an item (link) to a navigation menu. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -91,7 +96,7 @@ function aafm_register_menus_definitions( array $registry ): array {
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_create_menu_item',
 	);
-	$registry['aafm/update-menu-item'] = array(
+	$registry['aafm/update-menu-item']  = array(
 		'label'        => __( 'Update menu item', 'agent-abilities-for-mcp' ),
 		'description'  => __( "Updates a menu item's title or URL by id. Requires the edit-theme-options capability.", 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -99,13 +104,29 @@ function aafm_register_menus_definitions( array $registry ): array {
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_update_menu_item',
 	);
-	$registry['aafm/delete-menu-item'] = array(
+	$registry['aafm/delete-menu-item']  = array(
 		'label'        => __( 'Delete menu item', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Permanently removes one item from a navigation menu. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_delete_menu_item',
+	);
+	$registry['aafm/list-navigations']  = array(
+		'label'        => __( 'List navigations', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Lists the block-theme navigation menus (the wp_navigation posts a core/navigation block shows) by id, title and status, each with its links as a nested items tree of label, URL and children. Blocks the tree cannot show, such as a page list or a search box, are named under other_blocks. A classic menu is not listed here; use list-menus for those. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
+		'group'        => 'reads',
+		'risk'         => 'read',
+		'subject'      => 'site',
+		'args_builder' => 'aafm_args_list_navigations',
+	);
+	$registry['aafm/update-navigation'] = array(
+		'label'        => __( 'Update navigation', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Replaces the links of one block-theme navigation menu by id with the list you send: each item a label and a URL, with optional children up to three levels deep and 100 items in all. The whole navigation is replaced, including any blocks list-navigations names under other_blocks. URLs must be http, https, mailto or tel links, a path starting with /, or an anchor starting with #. A navigation owned by a page builder is refused. Navigation edits are not recorded in change history, so this cannot be undone here; with WordPress revisions enabled, the earlier version is kept as a revision of the navigation. Requires the edit-theme-options capability. Off by default.', 'agent-abilities-for-mcp' ),
+		'group'        => 'writes',
+		'risk'         => 'write',
+		'subject'      => 'site',
+		'args_builder' => 'aafm_args_update_navigation',
 	);
 	return $registry;
 }
@@ -1243,4 +1264,426 @@ function aafm_menu_item_post( int $menu_id, int $item_id ): ?WP_Post {
 		return null;
 	}
 	return $post;
+}
+
+/**
+ * The most items one navigation write may hold, counting children.
+ */
+const AAFM_NAVIGATION_MAX_ITEMS = 100;
+
+/**
+ * How deep one navigation write may nest: top-level items are level 1.
+ */
+const AAFM_NAVIGATION_MAX_DEPTH = 3;
+
+/**
+ * The longest label a navigation item may carry, in characters.
+ */
+const AAFM_NAVIGATION_MAX_LABEL = 200;
+
+/**
+ * Load a navigation post by id: an exact wp_navigation post that is not in the Trash, or null.
+ *
+ * @param int $id Post id.
+ * @return WP_Post|null
+ */
+function aafm_navigation_post( int $id ): ?WP_Post {
+	$post = $id > 0 ? aafm_exact_object( 'post', $id ) : null;
+	return $post instanceof WP_Post && 'wp_navigation' === $post->post_type && 'trash' !== $post->post_status ? $post : null;
+}
+
+/**
+ * Per-object permission for aafm/update-navigation: the id is a navigation post the caller may edit.
+ * Core maps edit_post on a wp_navigation post to edit_theme_options.
+ *
+ * @param array<string,mixed> $input Input carrying id.
+ * @return bool
+ */
+function aafm_perm_navigation_object( array $input ): bool {
+	$id = absint( $input['id'] ?? 0 );
+	return aafm_navigation_post( $id ) instanceof WP_Post && aafm_user_can_checked( 'edit_post', $id );
+}
+
+/**
+ * The input schema of one navigation item at a given level. The deepest level takes no children.
+ *
+ * @param int $level 1 for a top-level item.
+ * @return array<string,mixed>
+ */
+function aafm_navigation_item_schema( int $level ): array {
+	$children = array(
+		'type'        => 'array',
+		'description' => __( 'Items nested under this one, in the same shape. Up to three levels in all.', 'agent-abilities-for-mcp' ),
+	);
+	if ( $level < AAFM_NAVIGATION_MAX_DEPTH ) {
+		$children['items'] = aafm_navigation_item_schema( $level + 1 );
+	} else {
+		$children['maxItems'] = 0;
+	}
+	return array(
+		'type'                 => 'object',
+		'properties'           => array(
+			'label'    => array(
+				'type'        => 'string',
+				'description' => __( 'The visible link text, 1 to 200 characters. Sanitized as plain text.', 'agent-abilities-for-mcp' ),
+			),
+			'url'      => array(
+				'type'        => 'string',
+				'description' => __( 'Where the link goes: an http, https, mailto or tel link, a path starting with /, or an anchor starting with #. Anything else is refused.', 'agent-abilities-for-mcp' ),
+			),
+			'children' => $children,
+		),
+		'required'             => array( 'label', 'url' ),
+		'additionalProperties' => false,
+	);
+}
+
+/**
+ * Output schema of one navigation: the shape list-navigations returns per post and update-navigation returns.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_navigation_output_properties(): array {
+	return array(
+		'id'           => array( 'type' => 'integer' ),
+		'title'        => array( 'type' => 'string' ),
+		'status'       => array( 'type' => 'string' ),
+		'items'        => array(
+			'type'        => 'array',
+			'description' => __( 'The links, in order, each with label, url and children (the same shape, nested).', 'agent-abilities-for-mcp' ),
+			'items'       => array( 'type' => 'object' ),
+		),
+		'other_blocks' => array(
+			'type'        => 'array',
+			'description' => __( 'Names of blocks in this navigation that are not links, such as core/page-list. update-navigation replaces them too.', 'agent-abilities-for-mcp' ),
+			'items'       => array( 'type' => 'string' ),
+		),
+	);
+}
+
+/**
+ * Args for aafm/list-navigations.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_list_navigations(): array {
+	return array(
+		'label'               => aafm_ability_label( 'aafm/list-navigations' ),
+		'description'         => aafm_ability_description( 'aafm/list-navigations' ),
+		'category'            => 'aafm-reads',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'navigations' => array(
+					'type'  => 'array',
+					'items' => array(
+						'type'       => 'object',
+						'properties' => aafm_navigation_output_properties(),
+					),
+				),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_list_navigations',
+		'permission_callback' => 'aafm_perm_edit_theme_options',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => true,
+				'destructive' => false,
+				'idempotent'  => true,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/list-navigations: every navigation post outside the Trash, oldest first. A site with
+ * none (a classic theme, usually) gets an empty list.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_exec_list_navigations(): array {
+	$posts = get_posts(
+		array(
+			'post_type'   => 'wp_navigation',
+			'post_status' => array( 'publish', 'draft', 'pending', 'private', 'future' ),
+			// ponytail: no paging; a site keeps a handful of navigations. Page it if one ever holds hundreds.
+			'numberposts' => -1,
+			'orderby'     => 'ID',
+			'order'       => 'ASC',
+		)
+	);
+	$navigations = array();
+	foreach ( $posts as $post ) {
+		if ( $post instanceof WP_Post ) {
+			$navigations[] = aafm_navigation_shape( $post );
+		}
+	}
+	return array( 'navigations' => $navigations );
+}
+
+/**
+ * One navigation post as the tools return it.
+ *
+ * @param WP_Post $post A wp_navigation post.
+ * @return array<string,mixed>
+ */
+function aafm_navigation_shape( WP_Post $post ): array {
+	$other = array();
+	$items = aafm_navigation_items_from_blocks( parse_blocks( (string) $post->post_content ), $other );
+	return array(
+		'id'           => (int) $post->ID,
+		'title'        => (string) $post->post_title,
+		'status'       => (string) $post->post_status,
+		'items'        => $items,
+		'other_blocks' => array_values( array_unique( $other ) ),
+	);
+}
+
+/**
+ * The item tree of parsed navigation blocks. Links and submenus become items; any other block is
+ * named in $other, and so is non-blank markup outside a block.
+ *
+ * @param array<int|string,array<string,mixed>> $blocks Parsed blocks.
+ * @param string[]                              $other  Names of the blocks the tree leaves out, appended.
+ * @return array<int,array<string,mixed>>
+ */
+function aafm_navigation_items_from_blocks( array $blocks, array &$other ): array {
+	$items = array();
+	foreach ( $blocks as $block ) {
+		$name = $block['blockName'] ?? null;
+		if ( null === $name ) {
+			if ( '' !== trim( (string) ( $block['innerHTML'] ?? '' ) ) ) {
+				$other[] = 'core/freeform';
+			}
+			continue;
+		}
+		if ( 'core/navigation-link' !== $name && 'core/navigation-submenu' !== $name ) {
+			$other[] = (string) $name;
+			continue;
+		}
+		$attrs   = is_array( $block['attrs'] ?? null ) ? $block['attrs'] : array();
+		$items[] = array(
+			'label'    => is_string( $attrs['label'] ?? null ) ? $attrs['label'] : '',
+			'url'      => is_string( $attrs['url'] ?? null ) ? $attrs['url'] : '',
+			'children' => aafm_navigation_items_from_blocks( is_array( $block['innerBlocks'] ?? null ) ? $block['innerBlocks'] : array(), $other ),
+		);
+	}
+	return $items;
+}
+
+/**
+ * Validate and clean a navigation item list: every label 1 to 200 characters of plain text, every URL
+ * an http, https, mailto or tel link or a relative path, at most three levels and 100 items in all.
+ *
+ * @param mixed $items  The caller's list.
+ * @param int   $level  1 for the top level.
+ * @param int   $count  Items seen so far, carried across levels.
+ * @return array<int,array<string,mixed>>|WP_Error The cleaned tree, every item with label, url and children.
+ */
+function aafm_navigation_items_checked( $items, int $level, int &$count ) {
+	$clean = array();
+	foreach ( is_array( $items ) ? $items : array() as $item ) {
+		if ( ++$count > AAFM_NAVIGATION_MAX_ITEMS ) {
+			return new WP_Error(
+				'aafm_navigation_too_many_items',
+				/* translators: %d: the most items one navigation may hold. */
+				sprintf( __( 'A navigation can hold at most %d items, counting nested ones, so nothing was changed.', 'agent-abilities-for-mcp' ), AAFM_NAVIGATION_MAX_ITEMS ),
+				array( 'status' => 400 )
+			);
+		}
+		if ( ! is_array( $item ) ) {
+			return new WP_Error( 'aafm_navigation_bad_item', __( 'Each navigation item must be an object with a label and a url, so nothing was changed.', 'agent-abilities-for-mcp' ), array( 'status' => 400 ) );
+		}
+		$label = aafm_sanitize_plain_text( is_string( $item['label'] ?? null ) ? $item['label'] : '' );
+		if ( '' === $label ) {
+			return new WP_Error( 'aafm_navigation_label_empty', __( 'Every navigation item needs a label, so nothing was changed.', 'agent-abilities-for-mcp' ), array( 'status' => 400 ) );
+		}
+		if ( mb_strlen( $label ) > AAFM_NAVIGATION_MAX_LABEL ) {
+			return new WP_Error(
+				'aafm_navigation_label_too_long',
+				/* translators: %d: the longest label allowed, in characters. */
+				sprintf( __( 'A navigation label can be at most %d characters, so nothing was changed.', 'agent-abilities-for-mcp' ), AAFM_NAVIGATION_MAX_LABEL ),
+				array( 'status' => 400 )
+			);
+		}
+		$url    = aafm_checked_url( is_string( $item['url'] ?? null ) ? $item['url'] : '', 'url' );
+		$scheme = is_string( $url ) ? strtolower( (string) wp_parse_url( $url, PHP_URL_SCHEME ) ) : '';
+		if ( is_wp_error( $url ) || '' === $url || ( '' !== $scheme && ! in_array( $scheme, array( 'http', 'https', 'mailto', 'tel' ), true ) ) ) {
+			return new WP_Error(
+				'aafm_invalid_url',
+				__( 'The url value is not a valid URL, so nothing was changed. Use an https:// or http:// address, a mailto: or tel: link, a path starting with /, or an anchor starting with #.', 'agent-abilities-for-mcp' ),
+				array( 'status' => 400 )
+			);
+		}
+		$children = $item['children'] ?? array();
+		if ( is_array( $children ) && array() !== $children && $level >= AAFM_NAVIGATION_MAX_DEPTH ) {
+			return new WP_Error(
+				'aafm_navigation_too_deep',
+				/* translators: %d: the deepest nesting allowed. */
+				sprintf( __( 'Navigation items can nest at most %d levels deep, so nothing was changed.', 'agent-abilities-for-mcp' ), AAFM_NAVIGATION_MAX_DEPTH ),
+				array( 'status' => 400 )
+			);
+		}
+		$children = aafm_navigation_items_checked( $children, $level + 1, $count );
+		if ( is_wp_error( $children ) ) {
+			return $children;
+		}
+		$clean[] = array(
+			'label'    => $label,
+			'url'      => $url,
+			'children' => $children,
+		);
+	}
+	return $clean;
+}
+
+/**
+ * Canonical core/navigation-link blocks for a cleaned item tree; children are nested links.
+ *
+ * @param array<int,array<string,mixed>> $items Cleaned items.
+ * @return array<int,array{blockName:string,attrs:array<string,string>,innerBlocks:array<int,mixed>,innerHTML:string,innerContent:array<int,null>}> Block arrays for serialize_blocks().
+ */
+function aafm_navigation_blocks( array $items ): array {
+	$blocks = array();
+	foreach ( $items as $item ) {
+		$inner    = aafm_navigation_blocks( $item['children'] );
+		$blocks[] = array(
+			'blockName'    => 'core/navigation-link',
+			'attrs'        => array(
+				'label' => $item['label'],
+				'url'   => $item['url'],
+				'kind'  => 'custom',
+			),
+			'innerBlocks'  => $inner,
+			'innerHTML'    => '',
+			'innerContent' => array_fill( 0, count( $inner ), null ),
+		);
+	}
+	return $blocks;
+}
+
+/**
+ * Whether markup parses back to exactly this item tree and nothing else.
+ *
+ * @param string                         $markup Navigation markup.
+ * @param array<int,array<string,mixed>> $items  The tree it must hold.
+ * @return bool
+ */
+function aafm_navigation_markup_holds( string $markup, array $items ): bool {
+	$other = array();
+	return aafm_navigation_items_from_blocks( parse_blocks( $markup ), $other ) === $items && array() === $other;
+}
+
+/**
+ * Args for aafm/update-navigation.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_update_navigation(): array {
+	return array(
+		'label'               => aafm_ability_label( 'aafm/update-navigation' ),
+		'description'         => aafm_ability_description( 'aafm/update-navigation' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'id'    => array(
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the navigation to replace, from list-navigations.', 'agent-abilities-for-mcp' ),
+				),
+				'items' => array(
+					'type'        => 'array',
+					'description' => __( 'The complete new list of links, in order. It replaces everything in the navigation. At most 100 items in all, counting nested ones.', 'agent-abilities-for-mcp' ),
+					'items'       => aafm_navigation_item_schema( 1 ),
+				),
+				'title' => array(
+					'type'        => 'string',
+					'description' => __( 'New name for the navigation. Sanitized as plain text. Omit to keep the current name.', 'agent-abilities-for-mcp' ),
+				),
+			),
+			'required'             => array( 'id', 'items' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => aafm_navigation_output_properties(),
+		),
+		'execute_callback'    => 'aafm_exec_update_navigation',
+		'permission_callback' => 'aafm_perm_navigation_object',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/update-navigation.
+ *
+ * Order: load the navigation, clean the list, build canonical markup and check that it parses back
+ * to the same tree with no block the guard would refuse in strict mode, run the page-builder ownership
+ * guard (an unknown owner refuses too), save, then read the stored post back and refuse unless it
+ * holds exactly that tree.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_update_navigation( array $input ) {
+	$id   = absint( $input['id'] ?? 0 );
+	$post = aafm_navigation_post( $id );
+	if ( null === $post || ! aafm_exact_object_chain( 'post', $id ) instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+
+	$count = 0;
+	$items = aafm_navigation_items_checked( $input['items'] ?? array(), 1, $count );
+	if ( is_wp_error( $items ) ) {
+		return $items;
+	}
+
+	$content = serialize_blocks( aafm_navigation_blocks( $items ) );
+	$guard   = aafm_block_guard_evaluate( $content );
+	$strict  = array_intersect( array_column( $guard['warnings'], 'code' ), aafm_block_guard_strict_codes() );
+	if ( ! aafm_navigation_markup_holds( $content, $items ) || $guard['error'] instanceof WP_Error || array() !== $strict ) {
+		return new WP_Error( 'aafm_invalid_block_content', __( 'The navigation markup did not pass block validation, so nothing was changed.', 'agent-abilities-for-mcp' ), array( 'status' => 400 ) );
+	}
+
+	$owning_builder = aafm_post_has_foreign_builder_ownership( $id );
+	if ( false !== $owning_builder ) {
+		return aafm_page_builder_owned_error( $owning_builder );
+	}
+
+	$update = array(
+		'ID'           => $id,
+		'post_content' => $content,
+	);
+	if ( isset( $input['title'] ) ) {
+		$update['post_title'] = aafm_sanitize_plain_text( (string) $input['title'] );
+	}
+	$result = wp_update_post( wp_slash( $update ), true );
+	if ( is_wp_error( $result ) || 0 === (int) $result ) {
+		return aafm_generic_error();
+	}
+
+	$saved = aafm_navigation_post( $id );
+	if ( null === $saved ) {
+		return aafm_generic_error();
+	}
+	foreach ( array( 'post_title', 'post_content' ) as $field ) {
+		if ( isset( $update[ $field ] ) && ! aafm_post_field_confirm_logged( $id, $field, (string) $update[ $field ], (string) $post->$field ) ) {
+			return aafm_generic_error();
+		}
+	}
+	if ( ! aafm_navigation_markup_holds( (string) $saved->post_content, $items ) ) {
+		return new WP_Error( 'aafm_navigation_not_stored', __( 'The navigation was saved, but what WordPress stored is not the list that was sent. Read it with list-navigations before trying again.', 'agent-abilities-for-mcp' ), array( 'status' => 500 ) );
+	}
+	return aafm_navigation_shape( $saved );
 }

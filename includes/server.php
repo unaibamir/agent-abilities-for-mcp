@@ -386,6 +386,14 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// ability falls through to its real permission_callback with empty input, which is the
 		// correct discovery answer for reads and writes alike.
 
+		// Block-theme navigation: update-navigation gates per object on edit_post for a wp_navigation
+		// post (aafm_perm_navigation_object), which is false with empty input at discovery. Core maps
+		// every wp_navigation primitive capability to edit_theme_options (create_initial_post_types()),
+		// so that is the floor, the same cap the menu tools above use. list-navigations gates on
+		// edit_theme_options directly and needs no case. Proven in NavigationTest.
+		case 'aafm/update-navigation':
+			return static fn(): bool => current_user_can( 'edit_theme_options' );
+
 		// The FSE family (get-active-theme, list-themes, list-templates, get-template,
 		// get-global-styles, and update-template) gates on the same object-independent
 		// edit_theme_options capability, so none needs a server.php case either. WordPress has no

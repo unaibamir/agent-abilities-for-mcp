@@ -400,6 +400,19 @@ final class PageBuilderGuardSweepTest extends TestCase {
 			// declared inside stub_tec() (set_up()), which PHPUnit runs AFTER this data provider.
 			'tec-update-event'            => array( 'aafm_exec_tec_update_event', array( 'title' => 'x' ), 'event_id', 'tribe_events' ),
 			'geodirectory-update-listing' => array( 'aafm_exec_geodirectory_update_listing', array( 'title' => 'x' ), 'listing_id', 'gd_place' ),
+			'update-navigation'           => array(
+				'aafm_exec_update_navigation',
+				array(
+					'items' => array(
+						array(
+							'label' => 'x',
+							'url'   => '/',
+						),
+					),
+				),
+				'id',
+				'wp_navigation',
+			),
 		);
 	}
 

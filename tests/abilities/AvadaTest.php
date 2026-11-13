@@ -401,12 +401,18 @@ final class AvadaTest extends TestCase {
 	public function test_structure_names_the_library_item_behind_a_global_element(): void {
 		// Avada registers fusion_global itself (fusion-builder/shortcodes/fusion-global.php); PHPUnit does not load Avada.
 		add_shortcode( 'fusion_global', '__return_empty_string' );
-		$content = '[fusion_global id="12"][/fusion_global][fusion_builder_container fusion_global="34"][fusion_text]Shared[/fusion_text][/fusion_builder_container]';
+		// A global is stored as a bare opener with no closer, as page 22 held it on the S4-7 smoke site
+		// ([fusion_global id="19"]); update_global_elements() collapses an expanded one back to that on save.
+		$content = '[fusion_global id="12"][fusion_builder_container fusion_global="34"][fusion_text]Shared[/fusion_text][/fusion_builder_container]';
 
 		$out = $this->read_page( $this->make_avada_post( $content ), true );
 
 		$this->assertSame( 'ok', $out['structure_status'] );
+		$this->assertSame( 'fusion_global', $out['structure'][0]['tag'] );
+		$this->assertFalse( $out['structure'][0]['has_closer'] );
 		$this->assertSame( 12, $out['structure'][0]['global_id'] );
+		$this->assertSame( 'fusion_builder_container', $out['structure'][1]['tag'] );
+		$this->assertSame( 0, $out['structure'][1]['depth'], 'The bare opener does not swallow its sibling.' );
 		$this->assertSame( 34, $out['structure'][1]['global_id'] );
 		$this->assertArrayNotHasKey( 'global_id', $out['structure'][2] );
 	}

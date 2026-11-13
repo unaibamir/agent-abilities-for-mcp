@@ -87,7 +87,7 @@ function aafm_oauth_grant_state( int $user_id, string $client_id ): ?array {
 
 /**
  * Turn a consents row (any subset of the six v9 columns) into the state shape. The one mapping: the
- * resolver reads it through aafm_oauth_grant_state() and the Connection tab through aafm_oauth_list_grants().
+ * resolver reads it through aafm_oauth_grant_state() and the Connection tab through aafm_oauth_build_grant_row().
  * An absent key and a NULL both mean the default.
  *
  * @param array<string,mixed> $row Row from the consents table.

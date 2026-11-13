@@ -207,14 +207,15 @@ function aafm_notify_bucket_key( string $bucket ): string {
  * counter that the next send reports. An unreadable counter counts as "inside the window".
  *
  * @param string $bucket Trigger and subtype, for example "switch_flip:read_only_off".
+ * @param int    $weight How much a held event adds to the counter: 1, or a new-tools batch's tool count.
  * @return array{allowed:bool,suppressed:int}
  */
-function aafm_notify_take_slot( string $bucket ): array {
+function aafm_notify_take_slot( string $bucket, int $weight = 1 ): array {
 	$key   = aafm_notify_bucket_key( $bucket );
 	$count = aafm_transient_count( $key );
 	if ( null === $count || $count > 0 ) {
 		$swallowed = (int) aafm_transient_count( $key . '_n' );
-		set_transient( $key . '_n', $swallowed + 1, DAY_IN_SECONDS );
+		set_transient( $key . '_n', $swallowed + max( 1, $weight ), DAY_IN_SECONDS );
 		return array(
 			'allowed'    => false,
 			'suppressed' => 0,
@@ -355,7 +356,8 @@ function aafm_notify_event( string $trigger, string $subtype, array $facts = arr
 		$bucket = '';
 		try {
 			$bucket = $trigger . ':' . $subtype . ( '' !== $client_id ? ':' . $client_id : '' );
-			$slot   = aafm_notify_take_slot( $bucket );
+			// A held new-tools batch is counted by its tools, so the next email says how many tools it missed.
+			$slot = aafm_notify_take_slot( $bucket, 'new_tools' === $trigger ? $event['count'] : 1 );
 		} catch ( \Throwable $e ) {
 			unset( $e ); // A throttle that cannot answer means no mail; the notice entry already exists.
 			return;
@@ -494,8 +496,11 @@ function aafm_notify_build_message( array $events, bool $digest ): array {
 				: sprintf( __( 'Denied calls counted: %d', 'agent-abilities-for-mcp' ), (int) $event['count'] );
 		}
 		if ( ! empty( $event['suppressed'] ) ) {
-			/* translators: %d: how many similar alerts were held back. */
-			$lines[] = sprintf( __( 'Held back since the last message: plus %d more', 'agent-abilities-for-mcp' ), (int) $event['suppressed'] );
+			$lines[] = $new_tools
+				/* translators: %d: how many new tools were held back since the last email. */
+				? sprintf( __( 'More new tools since the last message: %d', 'agent-abilities-for-mcp' ), (int) $event['suppressed'] )
+				/* translators: %d: how many similar alerts were held back. */
+				: sprintf( __( 'Held back since the last message: plus %d more', 'agent-abilities-for-mcp' ), (int) $event['suppressed'] );
 		}
 		if ( count( $events ) > 1 ) {
 			// A settings save that did several things at once: the first event is the headline, the rest follow.

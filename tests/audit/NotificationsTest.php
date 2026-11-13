@@ -819,6 +819,25 @@ final class NotificationsTest extends TestCase {
 		}
 	}
 
+	public function test_new_tools_held_back_in_the_window_are_counted_as_tools(): void {
+		$this->configure(
+			array(
+				'triggers' => array( 'new_tools' => true ),
+			)
+		);
+
+		aafm_notify_event( 'new_tools', 'detected', array( 'count' => 3 ) );
+		aafm_notify_event( 'new_tools', 'detected', array( 'count' => 5 ) );
+		$this->assertCount( 1, $this->sent(), 'precondition: the second batch is held back by the throttle.' );
+		delete_transient( aafm_notify_bucket_key( 'new_tools:detected' ) ); // The window ends.
+		aafm_notify_event( 'new_tools', 'detected', array( 'count' => 2 ) );
+
+		$sent = $this->sent();
+		$this->assertCount( 2, $sent );
+		$this->assertStringContainsString( 'More new tools since the last message: 5', $sent[1]['message'], 'The held batch is counted by the tool.' );
+		$this->assertStringNotContainsString( 'plus 1 more', $sent[1]['message'] );
+	}
+
 	public function test_the_digest_counts_new_tools_as_tools_and_other_events_as_events(): void {
 		$tools = array(
 			'trigger' => 'new_tools',

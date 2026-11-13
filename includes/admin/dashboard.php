@@ -240,7 +240,7 @@ function aafm_first_call_recorded(): bool {
 	if ( aafm_agent_call_count() <= 0 ) {
 		return false;
 	}
-	aafm_update_option_verified( 'aafm_first_call_recorded', '1', false );
+	aafm_write_first_call_flag();
 	return true;
 }
 

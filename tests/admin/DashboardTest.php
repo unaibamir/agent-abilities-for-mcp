@@ -745,4 +745,40 @@ final class DashboardTest extends TestCase {
 		$this->assertFalse( get_option( 'aafm_first_call_recorded', false ) );
 		$this->assertTrue( aafm_setup_steps()[2]['done'], 'The step falls back to the live count.' );
 	}
+
+	/**
+	 * Write-outcome rows the activity log holds for the first-call flag.
+	 *
+	 * @return int
+	 */
+	private function flag_outcome_rows(): int {
+		global $wpdb;
+		return (int) $wpdb->get_var(
+			$wpdb->prepare(
+				'SELECT COUNT(*) FROM %i WHERE event_type = %s AND detail LIKE %s',
+				aafm_activity_log_table(),
+				'write_outcome',
+				'%' . $wpdb->esc_like( 'aafm_first_call_recorded' ) . '%'
+			)
+		);
+	}
+
+	/**
+	 * The flag is the plugin's own bookkeeping: setting it during an agent's first call, or in the
+	 * Dashboard backfill, must not log a write-outcome row as if the agent or the admin changed a
+	 * setting. The observer is attached the way production attaches it, and stays attached after.
+	 */
+	public function test_first_call_flag_write_logs_no_write_outcome_row(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$this->assertTrue( aafm_mark_first_call_recorded( $this->log_row( 7 ) ) );
+		$this->assertSame( 0, $this->flag_outcome_rows(), 'The latch write is not an agent write.' );
+		$this->assertSame( PHP_INT_MIN, has_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome' ), 'The observer is restored at its own priority.' );
+
+		delete_option( 'aafm_first_call_recorded' );
+		$this->assertTrue( aafm_first_call_recorded() );
+		$this->assertSame( '1', get_option( 'aafm_first_call_recorded' ) );
+		$this->assertSame( 0, $this->flag_outcome_rows(), 'The Dashboard backfill write is not an admin settings change either.' );
+		$this->assertSame( PHP_INT_MIN, has_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome' ) );
+	}
 }

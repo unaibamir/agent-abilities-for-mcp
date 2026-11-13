@@ -388,7 +388,32 @@ function aafm_mark_first_call_recorded( int $row_id ): bool {
 		return false;
 	}
 
-	return aafm_update_option_verified( 'aafm_first_call_recorded', '1', false );
+	return aafm_write_first_call_flag();
+}
+
+/**
+ * Write the aafm_first_call_recorded flag through the verified option writer, with the activity
+ * log's write-outcome observer detached for that one write.
+ *
+ * The flag is the plugin's own bookkeeping. Written during an agent's first call (or a Dashboard
+ * backfill) with the observer attached, it would log an "option aafm_first_call_recorded written"
+ * row against that call, as if the agent or the admin had changed a setting. The detach and
+ * restore follow aafm_uninstall_site_data(); other aafm_write_completed listeners still run.
+ *
+ * @return bool True when the flag certifies as set.
+ */
+function aafm_write_first_call_flag(): bool {
+	$priority = has_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome' );
+	if ( false !== $priority ) {
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', $priority );
+	}
+	try {
+		return aafm_update_option_verified( 'aafm_first_call_recorded', '1', false );
+	} finally {
+		if ( false !== $priority ) {
+			add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', $priority, 2 );
+		}
+	}
 }
 
 /**

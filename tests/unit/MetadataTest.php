@@ -41,6 +41,13 @@ final class MetadataTest extends TestCase {
 		$readme = (string) file_get_contents( AAFM_PLUGIN_DIR . 'readme.txt' );
 		$this->assertStringContainsString( '= Why do I see "Another version of MCP Adapter is already loaded"? =', $readme );
 		$this->assertLessThan( strpos( $readme, '= Why do I see "Another version of MCP Adapter' ), strpos( $readme, '= Do I need to install the MCP Adapter?' ), 'It follows the adapter question.' );
+
+		// The GitHub readme carries the same entry, word for word.
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading the plugin's own readme.
+		$markdown = (string) file_get_contents( AAFM_PLUGIN_DIR . 'README.md' );
+		$this->assertStringContainsString( '### Why do I see "Another version of MCP Adapter is already loaded"?', $markdown );
+		$this->assertSame( 1, preg_match( '/= Why do I see "Another version of MCP Adapter is already loaded"\? =\n\n(.+?)\n\n= /s', $readme, $txt_entry ) );
+		$this->assertStringContainsString( $txt_entry[1], $markdown, 'README.md repeats the readme.txt answer word for word.' );
 	}
 
 	public function test_readme_stable_tag_matches_version(): void {

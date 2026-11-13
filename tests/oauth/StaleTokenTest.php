@@ -160,7 +160,9 @@ final class StaleTokenTest extends TestCase {
 			$this->seed_token( $audience );
 			$this->assertTrue( aafm_oauth_audience_accepted( $audience ) );
 		}
-		$this->assertTrue( hash_equals( $plain, $plain ) && hash_equals( $secure, $secure ) );
+		// Both request-context endpoints are listed as audiences, so a byte-exact compare against
+		// the admin screen's own endpoint alone (which is only one of them) would fail this.
+		$this->assertEqualsCanonicalizing( array( $plain, $secure ), aafm_oauth_accepted_audiences() );
 		$this->assertSame( 0, aafm_oauth_stale_token_count() );
 		$this->assertSame( 0, aafm_oauth_revoke_stale_tokens() );
 	}

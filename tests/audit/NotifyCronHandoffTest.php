@@ -45,6 +45,8 @@ final class NotifyCronHandoffTest extends TestCase {
 		remove_all_filters( 'pre_schedule_event' );
 		remove_all_filters( 'aafm_notify_use_cron' );
 		remove_all_filters( 'wp_doing_cron' );
+		delete_transient( 'aafm_ntf_overdue_seen' );
+		wp_unschedule_hook( 'aafm_test_other_event' );
 		wp_unschedule_hook( 'aafm_notify_send_scheduled' );
 		parent::tear_down();
 	}
@@ -338,17 +340,37 @@ final class NotifyCronHandoffTest extends TestCase {
 		}
 	}
 
+	/**
+	 * Move every recorded first sighting of an overdue event back in time, as if the request that saw
+	 * it ran that long ago.
+	 *
+	 * @param int $seconds How far back.
+	 * @return void
+	 */
+	private function age_sightings( int $seconds ): void {
+		$seen = (array) get_transient( 'aafm_ntf_overdue_seen' );
+		$this->assertNotSame( array(), $seen, 'Precondition: a sighting was recorded.' );
+		set_transient( 'aafm_ntf_overdue_seen', array_map( static fn( $time ) => (int) $time - $seconds, $seen ), DAY_IN_SECONDS );
+	}
+
 	public function test_an_overdue_event_is_sent_once_in_the_request_and_removed(): void {
 		$this->assertNotFalse( has_action( 'shutdown', 'aafm_notify_send_overdue' ) );
 		$this->schedule_at( time() - 2 * HOUR_IN_SECONDS );
 
 		aafm_notify_send_overdue();
+		$this->assertSame( array(), $this->mail, 'The first sighting only records it: the cron run this visit spawns may still send it.' );
+		$this->assertCount( 1, $this->scheduled() );
 
+		aafm_notify_send_overdue();
+		$this->assertSame( array(), $this->mail, 'A second sighting within a few minutes still waits.' );
+
+		$this->age_sightings( 10 * MINUTE_IN_SECONDS );
+		aafm_notify_send_overdue();
 		$this->assertCount( 1, $this->mail, 'A host where WP-Cron never runs still gets the alert.' );
 		$this->assertSame( array(), $this->scheduled(), 'The event is gone, so cron cannot send it again.' );
 
 		aafm_notify_send_overdue();
-		$this->assertCount( 1, $this->mail, 'A second request sends nothing more.' );
+		$this->assertCount( 1, $this->mail, 'A later request sends nothing more.' );
 	}
 
 	public function test_an_event_not_yet_an_hour_overdue_is_left_for_cron(): void {
@@ -358,29 +380,66 @@ final class NotifyCronHandoffTest extends TestCase {
 
 		$this->assertSame( array(), $this->mail );
 		$this->assertCount( 1, $this->scheduled() );
+		$this->assertFalse( get_transient( 'aafm_ntf_overdue_seen' ), 'Nothing overdue, nothing recorded.' );
 	}
 
-	public function test_no_double_send_when_cron_then_runs(): void {
+	public function test_a_cron_run_between_the_two_sightings_sends_once_and_resurrects_nothing(): void {
+		global $wpdb;
 		$this->schedule_at( time() - 2 * HOUR_IN_SECONDS );
+		$this->assertTrue( wp_schedule_single_event( time() + HOUR_IN_SECONDS, 'aafm_test_other_event' ) );
 		aafm_notify_send_overdue();
-		$this->run_cron();
-		$this->assertCount( 1, $this->mail, 'Self-heal first, then cron: one email.' );
 
-		$this->mail = array();
-		$this->schedule_at( time() - 3 * HOUR_IN_SECONDS );
-		$this->run_cron();
+		// The cron run the first visit spawned, in its own process: it sends the alert, drops the event
+		// and moves another plugin's event. This request's cached copy of the row never hears of it.
+		do_action( 'aafm_notify_send_scheduled', $this->scheduled()[0]['item'] );
+		$fresh = (array) _get_cron_array();
+		foreach ( $fresh as $time => $hooks ) {
+			unset( $fresh[ $time ]['aafm_notify_send_scheduled'], $fresh[ $time ]['aafm_test_other_event'] );
+			if ( is_array( $fresh[ $time ] ) && array() === $fresh[ $time ] ) {
+				unset( $fresh[ $time ] );
+			}
+		}
+		$moved           = time() + 2 * HOUR_IN_SECONDS;
+		$fresh[ $moved ] = array(
+			'aafm_test_other_event' => array(
+				'40cd750bba9870f18aada2478b24840a' => array( // Core's event key for empty args, md5( serialize( array() ) ).
+					'schedule' => false,
+					'args'     => array(),
+				),
+			),
+		);
+		$wpdb->update( $wpdb->options, array( 'option_value' => maybe_serialize( $fresh ) ), array( 'option_name' => 'cron' ) );
+		$this->assertCount( 1, $this->scheduled(), 'Precondition: this request still sees the stale copy.' );
+
+		$this->age_sightings( 10 * MINUTE_IN_SECONDS );
 		aafm_notify_send_overdue();
-		$this->assertCount( 1, $this->mail, 'Cron first, then self-heal: one email.' );
+
+		$this->assertCount( 1, $this->mail, 'Cron sent it; the self-heal does not send it again.' );
+		$row = (array) aafm_option_row( 'cron' )['value'];
+		$this->assertSame( maybe_serialize( $fresh ), maybe_serialize( $row ), 'The row is untouched: nothing the cron run removed or moved comes back.' );
+		wp_cache_delete( 'alloptions', 'options' );
 	}
 
 	public function test_an_event_whose_removal_fails_is_not_sent(): void {
 		$this->schedule_at( time() - 2 * HOUR_IN_SECONDS );
-		add_filter( 'pre_unschedule_event', '__return_false' );
+		aafm_notify_send_overdue();
+		$this->age_sightings( 10 * MINUTE_IN_SECONDS );
+		add_filter( 'pre_update_option_cron', static fn( $value, $old ) => $old, 10, 2 );
 
 		aafm_notify_send_overdue();
-		remove_all_filters( 'pre_unschedule_event' );
+		remove_all_filters( 'pre_update_option_cron' );
 
 		$this->assertSame( array(), $this->mail, 'Only an event this request removed is sent, so cron cannot send it too.' );
+		$this->assertCount( 1, $this->scheduled() );
+	}
+
+	public function test_a_host_that_can_finish_the_response_skips_the_self_heal(): void {
+		$this->schedule_at( time() - 2 * HOUR_IN_SECONDS );
+		add_filter( 'aafm_notify_finish_function', static fn() => static function (): void {} );
+
+		aafm_notify_send_overdue();
+
+		$this->assertFalse( get_transient( 'aafm_ntf_overdue_seen' ), 'Not even a sighting is recorded.' );
 		$this->assertCount( 1, $this->scheduled() );
 	}
 

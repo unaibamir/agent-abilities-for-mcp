@@ -705,7 +705,8 @@ function aafm_notify_send_item( array $item ): bool {
  * aafm_notify_send_scheduled() on a later request, so a slow mail host never holds the visitor's
  * request. A message WP-Cron cannot take (scheduling refused, or DISABLE_WP_CRON) is sent here as before,
  * and so is everything raised inside a cron run or a WP-CLI command, where nobody is waiting. On a host
- * where WP-Cron never runs, aafm_notify_send_overdue() sends an event once it is an hour late.
+ * where WP-Cron never runs, aafm_notify_send_overdue() sends an event once it is an hour late and a
+ * second request a few minutes later still finds it.
  *
  * ponytail: cron delivery is at-least-once. A crash between the send and the digest-queue cleanup can
  * repeat one email; exactly-once would need a lock the Options API cannot give.
@@ -769,34 +770,82 @@ add_action( 'aafm_notify_send_scheduled', 'aafm_notify_send_scheduled' );
 /**
  * Self-heal for a host where WP-Cron never runs (a blocked loopback request, basic auth on a staging
  * copy, a firewall rule) while DISABLE_WP_CRON is not set: an alert-mail event more than an hour
- * overdue is sent at the end of this request instead.
+ * overdue is sent from a later request instead.
  *
- * Each event is removed before it is sent, and sent only when this request's removal took, so the cron
- * run can never fire it as well: wp-cron.php also removes an event before it runs it, and an event it
- * already ran is gone from the list. The check reads core's due-events list, which is already in
- * memory, so a healthy site pays a loop over its due events and nothing else.
+ * Two sightings, a few minutes apart. The visit that first finds an event an hour late is the visit
+ * that spawns wp-cron.php on a host where cron works, so it only records the event; a cron run then
+ * sends and removes it. A request at least five minutes later reads the `cron` row fresh from the
+ * database, and removes and sends only the events that are still there. Its write starts from that
+ * fresh row, so nothing a cron run removed or moved comes back, and an event is sent only once its
+ * removal was written.
  *
- * ponytail: a wp-cron.php run that starts in the same instant reads the same `cron` row before either
- * write lands, and both can send that one email. Only an hour-late event on a host whose cron
- * suddenly works can meet it; at-least-once, like the rest of the handoff.
+ * Skipped inside a cron run (it sends its own due events) and on a host with a finish function, where
+ * alert mail never goes to cron except as a retry. The first check is a loop over core's due events,
+ * already in memory, so a healthy site pays nothing more.
+ *
+ * ponytail: the fresh read and the write are still an unlocked read-modify-write of core's row. A cron
+ * run that sends the same event in that instant, five minutes after it was due to start, would repeat
+ * one email; at-least-once, like the rest of the handoff.
  *
  * @return void
  */
 function aafm_notify_send_overdue(): void {
-	if ( wp_doing_cron() ) {
-		return; // The cron run sends its own due events.
+	if ( wp_doing_cron() || null !== aafm_notify_finish_function() ) {
+		return;
 	}
+	$hook   = 'aafm_notify_send_scheduled';
 	$cutoff = time() - HOUR_IN_SECONDS;
+	$late   = false;
 	foreach ( (array) wp_get_ready_cron_jobs() as $timestamp => $hooks ) {
-		if ( (int) $timestamp > $cutoff ) {
+		if ( (int) $timestamp <= $cutoff && ! empty( $hooks[ $hook ] ) ) {
+			$late = true;
+			break;
+		}
+	}
+	if ( ! $late ) {
+		return;
+	}
+
+	$row = aafm_option_row( 'cron' );
+	if ( ! $row['ok'] || ! is_array( $row['value'] ) ) {
+		return;
+	}
+	$crons = $row['value'];
+	$seen  = get_transient( 'aafm_ntf_overdue_seen' );
+	$seen  = is_array( $seen ) ? $seen : array();
+	$keep  = array();
+	$items = array();
+	$wait  = 5 * MINUTE_IN_SECONDS;
+	foreach ( $crons as $timestamp => $hooks ) {
+		if ( ! is_int( $timestamp ) || $timestamp > $cutoff || ! is_array( $hooks ) || empty( $hooks[ $hook ] ) ) {
 			continue;
 		}
-		foreach ( (array) ( $hooks['aafm_notify_send_scheduled'] ?? array() ) as $event ) {
-			$args = array_values( (array) ( $event['args'] ?? array() ) );
-			if ( true === wp_unschedule_event( (int) $timestamp, 'aafm_notify_send_scheduled', $args ) ) {
-				aafm_notify_send_scheduled( $args[0] ?? null );
+		foreach ( (array) $hooks[ $hook ] as $key => $event ) {
+			$id    = $timestamp . ':' . $key;
+			$first = isset( $seen[ $id ] ) ? (int) $seen[ $id ] : time();
+			if ( time() - $first < $wait ) {
+				$keep[ $id ] = $first;
+				continue;
 			}
+			$items[] = $event['args'][0] ?? null;
+			unset( $crons[ $timestamp ][ $hook ][ $key ] );
 		}
+		if ( array() === $crons[ $timestamp ][ $hook ] ) {
+			unset( $crons[ $timestamp ][ $hook ] );
+		}
+		if ( array() === $crons[ $timestamp ] ) {
+			unset( $crons[ $timestamp ] );
+		}
+	}
+	if ( $keep !== $seen ) {
+		set_transient( 'aafm_ntf_overdue_seen', $keep, DAY_IN_SECONDS );
+	}
+	// Core's own row, written through core's Options API from the fresh copy, as _set_cron_array() does.
+	if ( array() === $items || ! update_option( 'cron', $crons ) ) {
+		return;
+	}
+	foreach ( $items as $item ) {
+		aafm_notify_send_scheduled( $item );
 	}
 }
 add_action( 'shutdown', 'aafm_notify_send_overdue' );

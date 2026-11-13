@@ -103,17 +103,24 @@ final class AdminPageHeaderTest extends TestCase {
 
 	public function test_nav_tab_wrapper_contains_only_tabs(): void {
 		$html = $this->page_html();
-		$this->assertSame( 1, preg_match( '#<nav class="nav-tab-wrapper">(.*?)</nav>#s', $html, $nav ) );
+		$this->assertSame( 1, preg_match( '#<nav class="nav-tab-wrapper"[^>]*>(.*?)</nav>#s', $html, $nav ) );
 		$this->assertStringNotContainsString( 'aafm-nav-ext', $nav[1] );
 		$this->assertSame( count( aafm_admin_tabs() ), preg_match_all( '#<a [^>]*class="nav-tab[ "]#', $nav[1] ) );
 		$this->assertSame( count( aafm_admin_tabs() ), substr_count( $nav[1], '<a ' ), 'Nothing but the tab links.' );
 	}
 
+	public function test_nav_tab_strip_is_named_and_marks_the_current_tab(): void {
+		$html = $this->page_html();
+		$this->assertSame( 1, preg_match( '#<nav class="nav-tab-wrapper" aria-label="Plugin sections">(.*?)</nav>#s', $html, $nav ), 'The tab strip has a name for screen readers.' );
+		$this->assertSame( 1, substr_count( $nav[1], 'aria-current="page"' ), 'Exactly one tab is the current page.' );
+		$this->assertMatchesRegularExpression( '#<a [^>]*class="nav-tab nav-tab-active"[^>]*aria-current="page"#', $nav[1], 'kses keeps aria-current on the active tab.' );
+	}
+
 	public function test_nav_tabs_keep_data_tab_and_dirty_dot_markup(): void {
 		$html = $this->page_html();
-		$this->assertSame( 1, preg_match( '#<nav class="nav-tab-wrapper">(.*?)</nav>#s', $html, $nav ) );
+		$this->assertSame( 1, preg_match( '#<nav class="nav-tab-wrapper"[^>]*>(.*?)</nav>#s', $html, $nav ) );
 		foreach ( array_keys( aafm_admin_tabs() ) as $slug ) {
-			$this->assertMatchesRegularExpression( '#<a [^>]*class="nav-tab[^"]*" data-tab="' . $slug . '">#', $nav[1], $slug );
+			$this->assertMatchesRegularExpression( '#<a [^>]*class="nav-tab[^"]*" data-tab="' . $slug . '"( aria-current="page")?>#', $nav[1], $slug );
 		}
 		$this->assertSame( count( aafm_admin_tabs() ), substr_count( $nav[1], '<span class="aafm-dirty-dot" hidden aria-hidden="true"></span>' ) );
 

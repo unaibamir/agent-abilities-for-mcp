@@ -22,7 +22,7 @@ class DirtyDotMarkupTest extends TestCase {
 		aafm_render_admin_page();
 		$html = (string) ob_get_clean();
 
-		$this->assertSame( 1, preg_match_all( '#<nav class="nav-tab-wrapper">.*?</nav>#s', $html, $nav ) );
+		$this->assertSame( 1, preg_match_all( '#<nav class="nav-tab-wrapper"[^>]*>.*?</nav>#s', $html, $nav ) );
 		$this->assertGreaterThan( 3, preg_match_all( '#<a [^>]*class="nav-tab[^"]*"[^>]*>(.*?)</a>#s', $nav[0][0], $links, PREG_SET_ORDER ) );
 		foreach ( $links as $link ) {
 			$this->assertMatchesRegularExpression( '#data-tab="[a-z-]+"#', $link[0] );

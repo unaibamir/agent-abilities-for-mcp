@@ -1769,11 +1769,11 @@ function aafm_render_admin_page(): void {
 
 	aafm_render_undo_notice();
 
-	echo '<nav class="nav-tab-wrapper">';
+	echo '<nav class="nav-tab-wrapper" aria-label="' . esc_attr__( 'Plugin sections', 'agent-abilities-for-mcp' ) . '">';
 	foreach ( $tabs as $slug => $label ) {
 		echo wp_kses(
 			sprintf(
-				'<a href="%s" class="nav-tab %s" data-tab="%s">%s %s<span class="aafm-dirty-dot" hidden aria-hidden="true"></span><span class="screen-reader-text aafm-dirty-sr" hidden>%s</span></a>',
+				'<a href="%s" class="nav-tab %s" data-tab="%s"%s>%s %s<span class="aafm-dirty-dot" hidden aria-hidden="true"></span><span class="screen-reader-text aafm-dirty-sr" hidden>%s</span></a>',
 				esc_url(
 					add_query_arg(
 						array(
@@ -1785,6 +1785,7 @@ function aafm_render_admin_page(): void {
 				),
 				esc_attr( $active === $slug ? 'nav-tab-active' : '' ),
 				esc_attr( $slug ),
+				$active === $slug ? ' aria-current="page"' : '',
 				aafm_icon( $slug ),
 				esc_html( $label ),
 				esc_html__( 'Unsaved changes', 'agent-abilities-for-mcp' )

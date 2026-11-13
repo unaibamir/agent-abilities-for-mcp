@@ -532,4 +532,65 @@ final class NavigationTest extends TestCase {
 		$this->assertSame( aafm_preset_permits( 'read_only', 'aafm/list-menus' ), aafm_preset_permits( 'read_only', 'aafm/list-navigations' ) );
 		$this->assertNotContains( 'aafm/update-navigation', aafm_get_enabled_abilities(), 'The write starts off.' );
 	}
+
+	public function test_an_ampersand_saves_for_a_user_without_unfiltered_html(): void {
+		$this->register_navigation();
+		$this->acting_as( 'administrator' );
+		$deny = static function ( array $caps, string $cap ): array {
+			return 'unfiltered_html' === $cap ? array( 'do_not_allow' ) : $caps;
+		};
+		add_filter( 'map_meta_cap', $deny, 10, 2 );
+		kses_init();
+		$id = $this->make_navigation();
+		try {
+			$this->assertFalse( current_user_can( 'unfiltered_html' ), 'precondition: kses filters this user.' );
+			$res = wp_get_ability( 'aafm/update-navigation' )->execute(
+				array(
+					'id'    => $id,
+					'items' => array(
+						array(
+							'label' => 'Terms & Conditions',
+							'url'   => 'https://shop.example/?utm_source=nav&utm_medium=menu',
+						),
+					),
+				)
+			);
+		} finally {
+			remove_filter( 'map_meta_cap', $deny, 10 );
+			kses_remove_filters();
+		}
+
+		$this->assertNotInstanceOf( WP_Error::class, $res, is_wp_error( $res ) ? $res->get_error_message() : '' );
+		$listed = aafm_exec_list_navigations()['navigations'][0]['items'];
+		$this->assertSame( $listed, $res['items'], 'The response is what was stored.' );
+		$this->assertCount( 1, $res['items'] );
+	}
+
+	public function test_an_empty_list_is_refused(): void {
+		$this->acting_as( 'administrator' );
+		$id = $this->make_navigation( '<!-- wp:page-list /-->' );
+
+		$res = aafm_exec_update_navigation(
+			array(
+				'id'    => $id,
+				'items' => array(),
+			)
+		);
+
+		$this->assert_refused_and_unchanged( $res, 'aafm_navigation_empty', $id, '<!-- wp:page-list /-->' );
+	}
+
+	public function test_schema_declares_the_limits(): void {
+		$schema = aafm_args_update_navigation()['input_schema']['properties']['items'];
+		$this->assertSame( 1, $schema['minItems'] );
+		$this->assertSame( 100, $schema['maxItems'] );
+		$this->assertSame( 1, $schema['items']['properties']['label']['minLength'] );
+		$this->assertSame( 200, $schema['items']['properties']['label']['maxLength'] );
+	}
+
+	public function test_description_says_link_settings_are_not_kept(): void {
+		foreach ( array( aafm_ability_description( 'aafm/update-navigation' ), aafm_ability_disclosures()['aafm/update-navigation'] ) as $text ) {
+			$this->assertStringContainsString( 'new tab', $text );
+		}
+	}
 }

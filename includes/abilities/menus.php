@@ -122,7 +122,7 @@ function aafm_register_menus_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-navigation'] = array(
 		'label'        => __( 'Update navigation', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Replaces the links of one block-theme navigation menu by id with the list you send: each item a label and a URL, with optional children up to three levels deep and 100 items in all. The whole navigation is replaced, including any blocks list-navigations names under other_blocks. URLs must be http, https, mailto or tel links, a path starting with /, or an anchor starting with #. A navigation owned by a page builder is refused. Navigation edits are not recorded in change history, so this cannot be undone here; with WordPress revisions enabled, the earlier version is kept as a revision of the navigation. Requires the edit-theme-options capability. Off by default.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Replaces the links of one block-theme navigation menu by id with the list you send: each item a label and a URL, with optional children up to three levels deep and 100 items in all. The whole navigation is replaced, including any blocks list-navigations names under other_blocks. Each link is saved as a plain custom link, so per-link settings such as open in a new tab, rel, CSS classes and a link\'s binding to a page or post are not kept. URLs must be http, https, mailto or tel links, a path starting with /, or an anchor starting with #. A navigation owned by a page builder is refused. Navigation edits are not recorded in change history, so this cannot be undone here; with WordPress revisions enabled, the earlier version is kept as a revision of the navigation. Requires the edit-theme-options capability. Off by default.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'site',
@@ -1391,6 +1391,8 @@ function aafm_navigation_item_schema( int $level ): array {
 		'properties'           => array(
 			'label'    => array(
 				'type'        => 'string',
+				'minLength'   => 1,
+				'maxLength'   => AAFM_NAVIGATION_MAX_LABEL,
 				'description' => __( 'The visible link text, 1 to 200 characters. Sanitized as plain text.', 'agent-abilities-for-mcp' ),
 			),
 			'url'      => array(
@@ -1665,7 +1667,9 @@ function aafm_args_update_navigation(): array {
 				),
 				'items' => array(
 					'type'        => 'array',
-					'description' => __( 'The complete new list of links, in order. It replaces everything in the navigation. At most 100 items in all, counting nested ones.', 'agent-abilities-for-mcp' ),
+					'minItems'    => 1,
+					'maxItems'    => AAFM_NAVIGATION_MAX_ITEMS,
+					'description' => __( 'The complete new list of links, in order. It replaces everything in the navigation, and each link is saved as a plain custom link without per-link settings such as open in a new tab. At least 1 and at most 100 items in all, counting nested ones; an empty list is refused.', 'agent-abilities-for-mcp' ),
 					'items'       => aafm_navigation_item_schema( 1 ),
 				),
 				'title' => array(
@@ -1714,6 +1718,9 @@ function aafm_exec_update_navigation( array $input ) {
 	if ( is_wp_error( $items ) ) {
 		return $items;
 	}
+	if ( array() === $items ) {
+		return new WP_Error( 'aafm_navigation_empty', __( 'An empty list would remove every link from this navigation and cannot be undone here, so nothing was changed. Send at least one item.', 'agent-abilities-for-mcp' ), array( 'status' => 400 ) );
+	}
 
 	$content = serialize_blocks( aafm_navigation_blocks( $items ) );
 	$guard   = aafm_block_guard_evaluate( $content );
@@ -1721,6 +1728,11 @@ function aafm_exec_update_navigation( array $input ) {
 	if ( ! aafm_navigation_markup_holds( $content, $items ) || $guard['error'] instanceof WP_Error || array() !== $strict ) {
 		return new WP_Error( 'aafm_invalid_block_content', __( 'The navigation markup did not pass block validation, so nothing was changed.', 'agent-abilities-for-mcp' ), array( 'status' => 400 ) );
 	}
+
+	// What WordPress will store: for a user without unfiltered_html, kses rewrites & in a block
+	// attribute to &amp;. The read-back is held to that, not to the request.
+	$expected_other = array();
+	$expected       = aafm_navigation_items_from_blocks( parse_blocks( aafm_post_field_canonical_replay( 'post_content', $content, $id ) ), $expected_other );
 
 	$owning_builder = aafm_post_has_foreign_builder_ownership( $id );
 	if ( false !== $owning_builder ) {
@@ -1748,7 +1760,7 @@ function aafm_exec_update_navigation( array $input ) {
 			return aafm_generic_error();
 		}
 	}
-	if ( ! aafm_navigation_markup_holds( (string) $saved->post_content, $items ) ) {
+	if ( array() !== $expected_other || ! aafm_navigation_markup_holds( (string) $saved->post_content, $expected ) ) {
 		return new WP_Error( 'aafm_navigation_not_stored', __( 'The navigation was saved, but what WordPress stored is not the list that was sent. Read it with list-navigations before trying again.', 'agent-abilities-for-mcp' ), array( 'status' => 500 ) );
 	}
 	return aafm_navigation_shape( $saved );

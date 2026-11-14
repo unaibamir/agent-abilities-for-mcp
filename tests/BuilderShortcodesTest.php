@@ -754,6 +754,46 @@ final class BuilderShortcodesTest extends TestCase {
 		}
 	}
 
+	/**
+	 * SEC-S9b-R2-2: a callback that throws during the forced revision does not leave the plugin's closure on the hook.
+	 */
+	public function test_the_forced_revision_hook_comes_off_when_a_callback_throws(): void {
+		global $wpdb;
+		$post = $this->page( 'seed' );
+		wp_update_post(
+			wp_slash(
+				array(
+					'ID'           => $post->ID,
+					'post_content' => str_replace( 'Old text.', "Old\ntext.", self::PAGE ),
+				)
+			)
+		);
+		$crlf = str_replace( 'Old text.', "Old\r\ntext.", self::PAGE );
+		$wpdb->update( $wpdb->posts, array( 'post_content' => $crlf ), array( 'ID' => $post->ID ) );
+		clean_post_cache( $post->ID );
+		$calls = 0;
+		$throw = static function ( $check ) use ( &$calls ) {
+			++$calls;
+			if ( 2 === $calls ) {
+				throw new \RuntimeException( 'site callback failed' );
+			}
+			return $check;
+		};
+		add_filter( 'wp_save_post_revision_check_for_changes', $throw );
+		$thrown = null;
+		try {
+			$this->commit_text( get_post( $post->ID ), str_replace( "Old\r\ntext.", 'New text.', $crlf ) );
+		} catch ( \RuntimeException $e ) {
+			$thrown = $e->getMessage();
+		}
+		$left = array_keys( $GLOBALS['wp_filter']['wp_save_post_revision_check_for_changes']->callbacks ?? array() );
+		remove_filter( 'wp_save_post_revision_check_for_changes', $throw );
+
+		$this->assertSame( 'site callback failed', $thrown );
+		$this->assertSame( array( 10 ), $left, 'Only the site callback is left on the hook.' );
+		$this->assertSame( $crlf, get_post_field( 'post_content', $post->ID, 'raw' ) );
+	}
+
 	public function test_commit_runs_without_a_way_back_when_revisions_are_off(): void {
 		$post = $this->page();
 		add_filter( 'wp_revisions_to_keep', '__return_zero' );

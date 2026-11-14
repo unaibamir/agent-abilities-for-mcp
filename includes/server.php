@@ -497,6 +497,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/avada-get-page-content':
 		case 'aafm/avada-replace-text':
 		case 'aafm/wpbakery-get-page-content':
+		case 'aafm/wpbakery-replace-text':
 			return static fn(): bool => aafm_can_edit_post_family();
 
 		// GeoDirectory (added 1.7.4, default-off): gd_place registers with the literal

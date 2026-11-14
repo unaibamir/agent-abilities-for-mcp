@@ -177,4 +177,51 @@ final class WpbakeryWireTest extends TestCase {
 			$outline
 		);
 	}
+
+	public function test_wpbakery_replace_round_trips_over_a_real_tools_call(): void {
+		list( $handler, $id ) = $this->wired();
+
+		$done = $this->wire(
+			$handler->call_tool(
+				array(
+					'name'      => aafm_mcp_tool_name( 'aafm/wpbakery-replace-text' ),
+					'arguments' => array(
+						'post_id' => $id,
+						'search'  => 'Hello world',
+						'replace' => 'Greetings world',
+					),
+				),
+				'req-wpb-replace-1'
+			)
+		);
+		$this->assertSame( array( 'post', 'replacements' ), array_keys( $done ) );
+		$this->assertSame( 1, $done['replacements'] );
+		$this->assertSame( $id, $done['post']['id'] ?? $done['post']['ID'] ?? null );
+		$this->assertSame( str_replace( 'Hello world', 'Greetings world', self::PAGE ), get_post_field( 'post_content', $id, 'raw' ) );
+
+		$refused = $handler->call_tool(
+			array(
+				'name'      => aafm_mcp_tool_name( 'aafm/wpbakery-replace-text' ),
+				'arguments' => array(
+					'post_id' => $id,
+					'search'  => 'Heading bravo',
+					'replace' => 'Heading changed',
+				),
+			),
+			'req-wpb-replace-2'
+		);
+		$this->assertNotInstanceOf( \AAFM\Tests\Support\McpProtocolError::class, $refused );
+		$this->assertTrue( $refused->getIsError() );
+		$this->assertSame(
+			aafm_exec_wpbakery_replace_text(
+				array(
+					'post_id' => $id,
+					'search'  => 'Heading bravo',
+					'replace' => 'Heading changed',
+				)
+			)->get_error_message(),
+			$refused->getContent()[0]->getText()
+		);
+		$this->assertStringContainsString( 'Heading bravo', get_post_field( 'post_content', $id, 'raw' ) );
+	}
 }

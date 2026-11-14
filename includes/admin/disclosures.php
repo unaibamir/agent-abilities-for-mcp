@@ -244,6 +244,7 @@ function aafm_ability_disclosures(): array {
 
 		// WPBakery Page Builder.
 		'aafm/wpbakery-get-page-content'   => __( 'Reads the raw content of a WPBakery page, unchanged, and says whether WPBakery owns it. With include_structure it also lists the shortcode elements and their attributes as WPBakery stores them. Requires edit access to the post; WPBakery\'s Role Manager is not applied.', 'agent-abilities-for-mcp' ),
+		'aafm/wpbakery-replace-text'       => __( 'Replaces literal text between the elements of a WPBakery page. Heading text, button labels and other text kept in element settings are refused, as is any change to an element or attribute, or a save that would change other content on the page for this user. Not undoable here; WordPress keeps a revision when revisions are on. Requires edit access to the post; WPBakery\'s Role Manager is not applied.', 'agent-abilities-for-mcp' ),
 
 		// GeoDirectory (default-off).
 		'aafm/geodirectory-get-listings'   => __( 'Lists GeoDirectory business/place listings (title, status, link).', 'agent-abilities-for-mcp' ),

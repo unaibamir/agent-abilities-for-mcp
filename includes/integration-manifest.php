@@ -433,6 +433,10 @@ function aafm_integration_ability_order(): array {
 				'name' => 'aafm/wpbakery-get-page-content',
 				'risk' => 'read',
 			),
+			array(
+				'name' => 'aafm/wpbakery-replace-text',
+				'risk' => 'write',
+			),
 		),
 		'geodirectory'  => array(
 			array(

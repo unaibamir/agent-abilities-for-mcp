@@ -343,4 +343,341 @@ WPB;
 		$this->assertFalse( aafm_perm_avada_post_object( array( 'post_id' => (int) array_key_first( $revisions ) ) ) );
 		$this->assertFalse( aafm_perm_avada_post_object( array( 'post_id' => $attachment ) ) );
 	}
+
+	/**
+	 * Run the write with the given search and replacement.
+	 *
+	 * @param int    $id      Post id.
+	 * @param string $search  Search text.
+	 * @param string $replace Replacement text.
+	 * @return array<string,mixed>|WP_Error
+	 */
+	private function replace( int $id, string $search, string $replace ) {
+		return aafm_exec_wpbakery_replace_text(
+			array(
+				'post_id' => $id,
+				'search'  => $search,
+				'replace' => $replace,
+			)
+		);
+	}
+
+	private function assert_refused( $out, string $code, int $id, string $before, ?int $status ): void {
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( $code, $out->get_error_code() );
+		$data = $out->get_error_data();
+		$this->assertSame( $status, is_array( $data ) ? ( $data['status'] ?? null ) : null );
+		$this->assertStringNotContainsString( ' - ', $out->get_error_message() );
+		clean_post_cache( $id );
+		$this->assertSame( $before, get_post_field( 'post_content', $id, 'raw' ), 'Nothing was changed.' );
+	}
+
+	public function test_replace_changes_text_inside_vc_column_text(): void {
+		$id = $this->make_page( self::PAGE );
+		$this->acting_as( 'editor' );
+		$revisions = count( wp_get_post_revisions( $id ) );
+
+		$out = $this->replace( $id, 'Opening paragraph alpha.', 'Opening paragraph changed.' );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( 1, $out['replacements'] );
+		$this->assertSame( str_replace( 'Opening paragraph alpha.', 'Opening paragraph changed.', self::PAGE ), get_post_field( 'post_content', $id, 'raw' ) );
+		$this->assertSame( $revisions + 1, count( wp_get_post_revisions( $id ) ) );
+	}
+
+	public function test_replace_succeeds_on_a_page_with_bracketed_words_in_body_text(): void {
+		$content = '[vc_row][vc_column][vc_column_text]<p>As written [sic] in note [1].</p><p>Change me.</p>[/vc_column_text][/vc_column][/vc_row]';
+		$id      = $this->make_page( $content );
+		$this->acting_as( 'editor' );
+
+		$out = $this->replace( $id, 'Change me.', 'Changed.' );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( 1, $out['replacements'] );
+	}
+
+	public function test_replace_refuses_text_that_is_a_heading_attribute(): void {
+		$id = $this->make_page( self::PAGE );
+		$this->acting_as( 'editor' );
+
+		$out = $this->replace( $id, 'Heading bravo', 'Heading changed' );
+
+		$this->assert_refused( $out, 'aafm_replace_inside_shortcode', $id, self::PAGE, 400 );
+		$this->assertStringContainsString( 'heading', strtolower( $out->get_error_message() ) );
+	}
+
+	public function test_replace_refuses_part_of_a_tag_name(): void {
+		$id = $this->make_page( self::PAGE );
+		$this->acting_as( 'editor' );
+
+		$this->assert_refused( $this->replace( $id, 'column_text', 'column_txt' ), 'aafm_replace_inside_shortcode', $id, self::PAGE, 400 );
+	}
+
+	public function test_replace_refuses_a_replacement_that_adds_a_raw_html_element(): void {
+		$id = $this->make_page( self::PAGE );
+		$this->acting_as( 'editor' );
+
+		$this->assert_refused( $this->replace( $id, 'Opening paragraph alpha.', 'x[vc_raw_html]abc[/vc_raw_html]' ), 'aafm_replace_inside_shortcode', $id, self::PAGE, 400 );
+	}
+
+	public function test_replace_refuses_adding_a_custom_onclick_attribute(): void {
+		$id = $this->make_page( self::PAGE );
+		$this->acting_as( 'editor' );
+
+		$this->assert_refused( $this->replace( $id, 'Button charlie"', 'Button charlie" custom_onclick="true"' ), 'aafm_replace_inside_shortcode', $id, self::PAGE, 400 );
+	}
+
+	public function test_replace_refuses_removing_a_closing_tag(): void {
+		$id = $this->make_page( self::PAGE );
+		$this->acting_as( 'editor' );
+
+		$this->assert_refused( $this->replace( $id, '[/vc_column_text]', '' ), 'aafm_replace_inside_shortcode', $id, self::PAGE, 400 );
+	}
+
+	public function test_replace_refuses_when_the_search_also_matches_an_attribute_value(): void {
+		$content = '[vc_row][vc_column][vc_column_text]<p>Contact us today.</p>[/vc_column_text][vc_btn title="Contact us"][/vc_column][/vc_row]';
+		$id      = $this->make_page( $content );
+		$this->acting_as( 'editor' );
+
+		$this->assert_refused( $this->replace( $id, 'Contact us', 'Call us' ), 'aafm_replace_inside_shortcode', $id, $content, 400 );
+	}
+
+	public function test_replace_refuses_a_post_with_no_wpbakery_layout(): void {
+		$id = $this->make_page( '<p>Plain text.</p>' );
+		$this->acting_as( 'editor' );
+
+		$this->assert_refused( $this->replace( $id, 'Plain', 'Simple' ), 'aafm_not_wpbakery_owned', $id, '<p>Plain text.</p>', 409 );
+	}
+
+	public function test_replace_refuses_an_avada_owned_post(): void {
+		$content = '[fusion_builder_container]Hello world[/fusion_builder_container]';
+		$id      = $this->make_page( $content );
+		update_post_meta( $id, 'fusion_builder_status', 'active' );
+		$this->acting_as( 'editor' );
+
+		$this->assert_refused( $this->replace( $id, 'Hello', 'Hi' ), 'aafm_not_wpbakery_owned', $id, $content, 409 );
+	}
+
+	public function test_replace_refuses_a_post_with_vc_row_and_an_elementor_marker(): void {
+		$id = $this->make_page( self::PAGE );
+		update_post_meta( $id, '_elementor_data', '[]' );
+		$this->acting_as( 'editor' );
+
+		$this->assert_refused( $this->replace( $id, 'Opening paragraph alpha.', 'Changed.' ), 'aafm_not_wpbakery_owned', $id, self::PAGE, 409 );
+	}
+
+	public function test_replace_refuses_above_300_distinct_tag_names(): void {
+		$content = '[vc_row][vc_column][vc_column_text]Change me.[/vc_column_text]';
+		for ( $i = 1; $i <= 301; $i++ ) {
+			$content .= '[t' . $i . ']';
+		}
+		$content .= '[/vc_column][/vc_row]';
+		$id       = $this->make_page( $content );
+		$this->acting_as( 'editor' );
+
+		$this->assert_refused( $this->replace( $id, 'Change me.', 'Changed.' ), 'aafm_wpbakery_unparseable', $id, $content, 409 );
+	}
+
+	public function test_zero_matches_writes_nothing(): void {
+		$id = $this->make_page( self::PAGE );
+		$this->acting_as( 'editor' );
+		$modified  = get_post_field( 'post_modified', $id );
+		$revisions = count( wp_get_post_revisions( $id ) );
+
+		$out = $this->replace( $id, 'Not on the page', 'Anything' );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( 0, $out['replacements'] );
+		$this->assertSame( $modified, get_post_field( 'post_modified', $id ) );
+		$this->assertSame( $revisions, count( wp_get_post_revisions( $id ) ) );
+		$this->assertSame( self::PAGE, get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
+	public function test_replace_refuses_when_the_save_would_strip_untouched_content(): void {
+		$content = '[vc_row][vc_column][vc_column_text]<p>Change me.</p>[/vc_column_text][vc_column_text]<iframe></iframe>[/vc_column_text][/vc_column][/vc_row]';
+		$this->acting_as( 'editor' ); // Created as a user with unfiltered_html, so the iframe is stored.
+		$id = $this->make_page( $content );
+		$this->assertSame( $content, get_post_field( 'post_content', $id, 'raw' ) );
+		$strip = static fn( $value ) => str_replace( '<iframe></iframe>', '', (string) $value );
+		add_filter( 'content_save_pre', $strip );
+		try {
+			$out = $this->replace( $id, 'Change me.', 'Changed.' );
+		} finally {
+			remove_filter( 'content_save_pre', $strip );
+		}
+
+		$this->assert_refused( $out, 'aafm_wpbakery_save_would_change_page', $id, $content, 409 );
+	}
+
+	/**
+	 * Models V10 as the S5-5 real-vendor run confirmed it: for a role whose WPBakery
+	 * unfiltered_html access is off, WPBakery 9.1's content_save_pre filter deletes every
+	 * vc_raw_html element on save.
+	 */
+	public function test_replace_refuses_when_the_save_would_delete_an_element(): void {
+		$id = $this->make_page( self::PAGE );
+		$this->acting_as( 'editor' );
+		$v10 = static fn( $value ) => (string) preg_replace( '/\[vc_raw_html\].*?\[\/vc_raw_html\]/s', '', (string) $value );
+		add_filter( 'content_save_pre', $v10 );
+		try {
+			$out = $this->replace( $id, 'Opening paragraph alpha.', 'Changed.' );
+		} finally {
+			remove_filter( 'content_save_pre', $v10 );
+		}
+
+		$this->assert_refused( $out, 'aafm_wpbakery_save_would_change_page', $id, self::PAGE, 409 );
+	}
+
+	public function test_replace_as_a_user_without_unfiltered_html_refuses_on_content_with_an_iframe(): void {
+		$author  = self::factory()->user->create( array( 'role' => 'author' ) );
+		$content = '[vc_row][vc_column][vc_column_text]<p>Hello there.</p><iframe src="https://example.com/embed"></iframe>[/vc_column_text][/vc_column][/vc_row]';
+		$this->acting_as( 'administrator' ); // The iframe is stored by a user who may store it.
+		$id = self::factory()->post->create(
+			array(
+				'post_type'    => 'post',
+				'post_author'  => $author,
+				'post_content' => $content,
+			)
+		);
+		$this->assertSame( $content, get_post_field( 'post_content', $id, 'raw' ) );
+		wp_set_current_user( $author );
+		$this->assertFalse( current_user_can( 'unfiltered_html' ) );
+		$this->assertTrue( aafm_perm_avada_post_object( array( 'post_id' => $id ) ) );
+
+		$this->assert_refused( $this->replace( $id, 'Hello there.', 'Hi there.' ), 'aafm_wpbakery_save_would_change_page', $id, $content, 409 );
+		$this->assertStringContainsString( '<iframe', get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
+	public function test_replace_refuses_when_a_save_filter_deletes_an_element_once_the_new_text_is_present(): void {
+		$id = $this->make_page( self::PAGE );
+		$this->acting_as( 'editor' );
+		$react = static function ( $value ) {
+			$value = (string) $value;
+			return false === strpos( $value, 'Trigger text' ) ? $value : (string) preg_replace( '/\[vc_custom_heading[^\]]*\]/', '', $value );
+		};
+		add_filter( 'content_save_pre', $react );
+		try {
+			$out = $this->replace( $id, 'Opening paragraph alpha.', 'Trigger text' );
+		} finally {
+			remove_filter( 'content_save_pre', $react );
+		}
+
+		$this->assert_refused( $out, 'aafm_wpbakery_save_would_change_layout', $id, self::PAGE, 409 );
+	}
+
+	public function test_replace_reports_unconfirmed_when_a_filter_alters_the_stored_content(): void {
+		$id = $this->make_page( self::PAGE );
+		$this->acting_as( 'editor' );
+		$alter = static function ( $data ) {
+			$data['post_content'] .= ' altered';
+			return $data;
+		};
+		add_filter( 'wp_insert_post_data', $alter );
+		try {
+			$out = $this->replace( $id, 'Opening paragraph alpha.', 'Changed.' );
+		} finally {
+			remove_filter( 'wp_insert_post_data', $alter );
+		}
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_wpbakery_write_unconfirmed', $out->get_error_code() );
+	}
+
+	public function test_replace_is_reported_as_not_covered_by_undo(): void {
+		$this->assertSame( 'not_covered', aafm_undo_refusals()['aafm/wpbakery-replace-text'] );
+	}
+
+	public function test_replace_schema_is_closed_and_requires_all_three(): void {
+		$args = aafm_args_wpbakery_replace_text();
+
+		$this->assertFalse( $args['input_schema']['additionalProperties'] );
+		$this->assertSame( array( 'post_id', 'search', 'replace' ), $args['input_schema']['required'] );
+		$this->assertSame( 1, $args['input_schema']['properties']['search']['minLength'] );
+		$this->assertSame( 1, $args['input_schema']['properties']['post_id']['minimum'] );
+		$this->assertSame( 'aafm-writes', $args['category'] );
+		$this->assertSame( 'aafm_perm_avada_post_object', $args['permission_callback'] );
+		$this->assertSame(
+			array(
+				'readonly'    => false,
+				'destructive' => false,
+			),
+			$args['meta']['annotations']
+		);
+	}
+
+	public function test_write_description_says_what_the_design_requires(): void {
+		$row = aafm_get_abilities_registry_full()['aafm/wpbakery-replace-text'];
+		$this->assertSame( 'writes', $row['group'] );
+		$this->assertSame( 'write', $row['risk'] );
+		$this->assertSame( 'wpbakery', $row['subject'] );
+		foreach ( array( $row['description'], aafm_ability_disclosures()['aafm/wpbakery-replace-text'] ) as $text ) {
+			$this->assertStringContainsString( 'edit access', $text );
+			$this->assertStringContainsString( 'revision', $text );
+			$this->assertStringNotContainsString( ' - ', $text );
+			foreach ( array( 'Visual Composer', 'Avada', 'Elementor' ) as $other ) {
+				$this->assertStringNotContainsString( $other, $text );
+			}
+		}
+		$this->assertStringContainsString( 'heading', $row['description'] );
+		$this->assertStringContainsString( 'Only while WPBakery Page Builder is active', $row['description'] );
+	}
+
+	public function test_replace_contributor_is_refused_on_another_users_page_and_editor_allowed(): void {
+		$id = $this->make_page( self::PAGE, self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		$this->acting_as( 'contributor' );
+		$this->assertFalse(
+			aafm_perm_avada_post_object(
+				array(
+					'post_id' => $id,
+					'search'  => 'a',
+					'replace' => 'b',
+				)
+			)
+		);
+		$this->acting_as( 'editor' );
+		$this->assertTrue(
+			aafm_perm_avada_post_object(
+				array(
+					'post_id' => $id,
+					'search'  => 'a',
+					'replace' => 'b',
+				)
+			)
+		);
+	}
+
+	public function test_discovery_shows_the_write_to_an_editor_and_hides_it_from_a_subscriber(): void {
+		$check = aafm_ability_list_permission( 'aafm/wpbakery-replace-text' );
+		$this->assertIsCallable( $check );
+
+		$this->acting_as( 'editor' );
+		$this->assertTrue( $check() );
+		$this->acting_as( 'subscriber' );
+		$this->assertFalse( $check() );
+	}
+
+	public function test_replace_refuses_a_revision_id_and_an_attachment_id(): void {
+		$id = $this->make_page( self::PAGE );
+		wp_update_post(
+			array(
+				'ID'           => $id,
+				'post_content' => self::PAGE . ' ',
+			)
+		);
+		$revision   = (int) array_key_first( wp_get_post_revisions( $id ) );
+		$attachment = self::factory()->attachment->create( array( 'post_parent' => $id ) );
+		$this->acting_as( 'administrator' );
+
+		foreach ( array( $revision, $attachment ) as $target ) {
+			$this->assertFalse(
+				aafm_perm_avada_post_object(
+					array(
+						'post_id' => $target,
+						'search'  => 'a',
+						'replace' => 'b',
+					)
+				)
+			);
+		}
+	}
 }

@@ -493,7 +493,9 @@ function aafm_wpbakery_encode_clean( string $kind, $value, array $param ): ?stri
 			}
 			return aafm_wpbakery_escape_attribute( implode( ',', $items ) );
 		case 'content':
-			return is_string( $value ) ? wp_kses_post( $value ) : null;
+			// Bracket entities as brackets, so a shortcode spelled with them is refused by the structure check rather
+			// than created by WPBakery's editor on its next save.
+			return is_string( $value ) ? wp_kses_post( aafm_wpbakery_decode_bracket_entities( $value ) ) : null;
 		case 'link':
 			return aafm_wpbakery_encode_link( $value, 'href' === $type );
 		case 'image':
@@ -531,16 +533,17 @@ function aafm_wpbakery_plain_text( $value ): ?string {
 }
 
 /**
- * Quote entities written as the quote itself. WPBakery 9.1's editor turns &quot;, &#034; and &#039; in an attribute
- * value into bare quotes on its next save, which ends the attribute early and breaks the element (smoke run S9-5a),
- * so the encoder stores the quote and lets W2 escape a double quote. Core's sanitize_text_field() produces these
- * entities for text after a lone <.
+ * Quote and bracket entities written as the character itself. WPBakery 9.1's editor reads the page through TinyMCE,
+ * which decodes every entity and re-encodes only & < and >, so &quot;, &#034;, &#039;, &#91; and &#93; in an
+ * attribute value become bare characters on its next save and end the attribute or the tag (smoke runs S9-5a and
+ * S9a fix round 1). The encoder stores the character and lets W2 escape a double quote or a bracket. Core's
+ * sanitize_text_field() produces the quote entities for text after a lone <.
  *
  * @param string $text Text with entities normalised.
  * @return string
  */
 function aafm_wpbakery_unquote_entities( string $text ): string {
-	return (string) preg_replace( array( '/&(quot|#0*34|#x0*22);/i', '/&(apos|#0*39|#x0*27);/i' ), array( '"', "'" ), $text );
+	return aafm_wpbakery_decode_bracket_entities( (string) preg_replace( array( '/&(quot|#0*34|#x0*22);/i', '/&(apos|#0*39|#x0*27);/i' ), array( '"', "'" ), $text ) );
 }
 
 /**

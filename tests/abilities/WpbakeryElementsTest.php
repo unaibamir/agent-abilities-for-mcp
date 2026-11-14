@@ -409,6 +409,18 @@ final class WpbakeryElementsTest extends TestCase {
 		$this->assertSame( 'A ``q`` \'s\' ``n`` ``x`` C &gt; D &lt; E &amp; F', $this->encode( 'wpb_btn', 'title', 'A &quot;q&quot; &#039;s&#39; &#034;n&#34; &#x22;x&#x22; C &gt; D &lt; E &amp; F' ) );
 	}
 
+	/**
+	 * SEC-S9a-1: WPBakery's editor reads the page through TinyMCE, which decodes every entity, so a bracket entity in
+	 * a value would become a real bracket on the next editor save and end the tag. Bracket entities are written as
+	 * brackets, so W2 escapes them.
+	 */
+	public function test_text_writes_bracket_entities_as_escaped_brackets(): void {
+		$value = 'x&#93;&#91;vc_raw_js&#93;PHNjcmlwdD4=&#91;/vc_raw_js&#93;&#91; &#x5B;a&#x5d; &#091;b&#0093; &lsqb;c&rsqb; &lbrack;d&rbrack;';
+		// The named forms are not entities kses knows, so normalisation already writes them as &amp;..., which stays text.
+		$this->assertSame( 'x`}``{`vc_raw_js`}`PHNjcmlwdD4=`{`/vc_raw_js`}``{` `{`a`}` `{`b`}` &amp;lsqb;c&amp;rsqb; &amp;lbrack;d&amp;rbrack;', $this->encode( 'vc_custom_heading', 'text', $value ) );
+		$this->assertSame( '`{`x`}`', $this->encode( 'wpb_btn', 'custom_onclick_code', '&#91;x&#93;' ) );
+	}
+
 	public function test_text_refuses_a_line_break_and_a_pre_encoded_value(): void {
 		$this->assert_error( $this->encode( 'wpb_btn', 'title', "two\nlines" ), 'aafm_builder_invalid_value', 400 );
 		$this->assert_error( $this->encode( 'wpb_btn', 'title', '#E-8_PHNjcmlwdD4=' ), 'aafm_builder_invalid_value', 400 );
@@ -1002,6 +1014,14 @@ final class WpbakeryElementsTest extends TestCase {
 		$this->acting_as( 'editor' );
 
 		$this->assert_refused( $this->update( $id, 1, array( 'text' => 'flat' ) ), 'aafm_builder_attribute_not_writable', 400, $id, $content );
+	}
+
+	public function test_update_refuses_inner_text_with_bracket_entities_that_spell_an_element(): void {
+		$id = $this->page( $this->fixture() );
+		$this->acting_as( 'editor' );
+
+		$this->assert_refused( $this->update( $id, 8, array( 'text' => '<p>a &#91;vc_raw_html&#93;PHA+&#91;/vc_raw_html&#93; b</p>' ) ), 'aafm_builder_structure_changed', 400, $id, $this->fixture() );
+		$this->assert_refused( $this->update( $id, 8, array( 'text' => '<p>&#x5b;vc_raw_js&#x5D;x&#X5B;/vc_raw_js&#093;</p>' ) ), 'aafm_builder_structure_changed', 400, $id, $this->fixture() );
 	}
 
 	public function test_update_refuses_inner_text_that_adds_an_element(): void {

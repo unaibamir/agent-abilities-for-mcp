@@ -379,6 +379,18 @@ function aafm_wpbakery_decode_raw( string $inner ): ?string {
 }
 
 /**
+ * Bracket entities written as brackets: the named, decimal and hex forms of [ and ], any case, zero-padded.
+ * WPBakery's backend editor reads the page through TinyMCE, which decodes every entity and re-encodes only & < and >,
+ * so a bracket entity in stored text becomes a bare bracket, and can open or close a shortcode, on its next save.
+ *
+ * @param string $text Text.
+ * @return string
+ */
+function aafm_wpbakery_decode_bracket_entities( string $text ): string {
+	return (string) preg_replace( array( '/&(#0*91|#x0*5b|lsqb|lbrack);/i', '/&(#0*93|#x0*5d|rsqb|rbrack);/i' ), array( '[', ']' ), $text );
+}
+
+/**
  * Every distinct shortcode name that appears in the given strings, merged.
  *
  * The scan accepts every name get_shortcode_regex() could match: opening tags, closing tags

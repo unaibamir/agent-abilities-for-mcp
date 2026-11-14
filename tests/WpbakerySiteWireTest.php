@@ -21,7 +21,7 @@ final class WpbakerySiteWireTest extends TestCase {
 
 	private const TEMPLATE = '[vc_row][vc_column][vc_column_text]<p>From the template</p>[/vc_column_text][/vc_column][/vc_row]';
 
-	private const TOOLS = array( 'aafm/wpbakery-list-templates', 'aafm/wpbakery-insert-template', 'aafm/wpbakery-update-page-code', 'aafm/wpbakery-get-settings' );
+	private const TOOLS = array( 'aafm/wpbakery-list-templates', 'aafm/wpbakery-insert-template', 'aafm/wpbakery-update-page-code', 'aafm/wpbakery-get-settings', 'aafm/wpbakery-update-settings' );
 
 	public function set_up(): void {
 		parent::set_up();
@@ -379,5 +379,63 @@ final class WpbakerySiteWireTest extends TestCase {
 		);
 		delete_option( 'wpb_js_css_loading' );
 		delete_option( 'wpb_js_js_composer_purchase_code' );
+	}
+
+	public function test_update_settings_round_trips_over_a_real_tools_call(): void {
+		update_option( 'wpb_js_css_loading', 'hybrid' );
+		$general         = new class() {
+			/**
+			 * WPBakery's own rule (class-vc-settings.php:930).
+			 *
+			 * @param mixed $value Value.
+			 * @return string
+			 */
+			public function sanitize_css_loading_callback( $value ): string {
+				return in_array( $value, array( 'hybrid', 'optimized', 'legacy' ), true ) ? $value : 'hybrid';
+			}
+		};
+		$filter          = static fn( $resolved, string $entry ) => 'wpbakery_settings' === $entry ? static fn() => $general : $resolved;
+		add_filter( 'aafm_builder_vendor', $filter, 20, 2 );
+		list( $handler ) = $this->wired();
+		$done            = $this->wire(
+			$handler->call_tool(
+				array(
+					'name'      => aafm_mcp_tool_name( 'aafm/wpbakery-update-settings' ),
+					'arguments' => array( 'set' => array( 'css_loading' => 'legacy' ) ),
+				),
+				'req-wpb-settings-write-1'
+			)
+		);
+		$this->assertSame(
+			array(
+				'changed'  => array( 'css_loading' ),
+				'previous' => array( 'css_loading' => 'hybrid' ),
+				'undo'     => array(
+					'undoable'   => false,
+					'change_ids' => array(),
+					'reason'     => 'not_covered',
+				),
+			),
+			$done
+		);
+		$this->assertSame( 'legacy', get_option( 'wpb_js_css_loading' ) );
+		$raw = $handler->call_tool(
+			array(
+				'name'      => aafm_mcp_tool_name( 'aafm/wpbakery-update-settings' ),
+				'arguments' => array( 'set' => array( 'css_loading' => 'legacy' ) ),
+			),
+			'req-wpb-settings-write-2'
+		);
+		$this->assertStringContainsString( '"changed":[],"previous":{}', (string) $raw->getContent()[0]->getText() );
+		remove_filter( 'aafm_builder_vendor', $filter, 20 );
+		delete_option( 'wpb_js_css_loading' );
+	}
+
+	public function test_both_settings_tools_are_absent_from_tools_list_for_an_editor(): void {
+		list( $handler, , $server ) = $this->wired( 'editor' );
+		$names                      = array_map( static fn( $tool ) => $tool->getName(), aafm_filter_mcp_tools_list( $handler->list_tools()->getTools(), $server ) );
+		$this->assertNotContains( aafm_mcp_tool_name( 'aafm/wpbakery-get-settings' ), $names );
+		$this->assertNotContains( aafm_mcp_tool_name( 'aafm/wpbakery-update-settings' ), $names );
+		$this->assertContains( aafm_mcp_tool_name( 'aafm/wpbakery-list-templates' ), $names );
 	}
 }

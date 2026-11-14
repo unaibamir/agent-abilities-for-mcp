@@ -1404,6 +1404,17 @@ function aafm_activity_detail_map(): array {
 			),
 			'link'     => 'post',
 		),
+		'aafm/wpbakery-update-settings'    => array(
+			/* translators: %s: comma-separated list of the WPBakery setting keys in the call. */
+			'template' => __( 'Ran a WPBakery settings update: %s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'set',
+					'type' => 'keys',
+					'enum' => 'aafm_wpbakery_settings_keys',
+				),
+			),
+		),
 		'aafm/geodirectory-create-listing' => array(
 			/* translators: %s: the new listing's numeric ID. */
 			'template'  => __( 'Created listing #%s', 'agent-abilities-for-mcp' ),

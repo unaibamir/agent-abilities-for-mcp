@@ -1047,6 +1047,8 @@ function aafm_non_removal_destructive_abilities(): array {
 	$slugs = array(
 		'aafm/create-user',
 		'aafm/update-site-settings',
+		// Overwrites WPBakery's site-wide settings in place; previous is the way back, nothing is removed.
+		'aafm/wpbakery-update-settings',
 	);
 
 	/**

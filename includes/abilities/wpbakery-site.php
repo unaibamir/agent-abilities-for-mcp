@@ -81,6 +81,14 @@ function aafm_wpbakery_site_registry_definitions(): array {
 			'subject'      => 'wpbakery',
 			'args_builder' => 'aafm_args_wpbakery_get_settings',
 		),
+		'aafm/wpbakery-update-settings'  => array(
+			'label'        => __( 'Update WPBakery settings', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Overwrites site-wide WPBakery Page Builder settings from wpbakery-get-settings: not_responsive_css, local_google_fonts and shortcuts (true or false), google_fonts_subsets (a list), css_loading and js_loading (hybrid, optimized or legacy), and the global custom_css, custom_js_header and custom_js_footer, which also need a user who may post unfiltered HTML. Each value goes through WPBakery\'s own sanitize callback for that field, and a value it would change is refused; a setting whose callback cannot be found, and the Gutenberg switch, auto save and Design Options use, are not writable. The change applies to the whole site at once; previous returns the old value of every setting that changed, null where none was stored, which is the way back. A value equal to what is stored is left alone. Writing custom_css rebuilds WPBakery\'s custom.css file, and the call reports an error when the file does not match afterwards. Not undoable from this plugin\'s change history. Requires a user who can manage site options. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
+			'group'        => 'writes',
+			'risk'         => 'destructive',
+			'subject'      => 'wpbakery',
+			'args_builder' => 'aafm_args_wpbakery_update_settings',
+		),
 	);
 }
 
@@ -629,5 +637,251 @@ function aafm_exec_wpbakery_get_settings( array $input ): array {
 		'not_set'           => array_values( array_diff( $keys, array_keys( $stored ) ) ),
 		'editor_post_types' => array_values( array_map( 'strval', array_filter( is_array( $types ) ? $types : array(), 'is_string' ) ) ),
 		'version'           => defined( 'WPB_VC_VERSION' ) ? (string) constant( 'WPB_VC_VERSION' ) : '',
+	);
+}
+
+/**
+ * The settings aafm/wpbakery-update-settings may write: the read list minus use_custom (Design Options' own switch,
+ * WB-14) and minus the keys whose sanitize callback is not a method on a vendor object (Ruling R3-P8): gutenberg_disable
+ * and auto_save are registered with plain functions (include/autoload/vendors/gutenberg.php:28,
+ * include/autoload/hooks/vc-settings-auto-save.php:21), so scratchpad/1113/s13-wpbakery-callbacks.md records them NOT
+ * RESOLVED and they are refused, never validated by a rule made up here.
+ *
+ * @return list<string>
+ */
+function aafm_wpbakery_settings_writable(): array {
+	return array( 'not_responsive_css', 'google_fonts_subsets', 'local_google_fonts', 'shortcuts', 'css_loading', 'js_loading', 'custom_css', 'custom_js_header', 'custom_js_footer' );
+}
+
+/**
+ * The vendor sanitize callback of one writable setting, as a method on the object that defines it (Ruling B10), or
+ * null when it cannot be resolved: the general tab methods on vc_settings(), the custom CSS and custom JS methods on
+ * their modules' settings objects, only while that module is on (otherwise WPBakery neither prints the value nor
+ * rebuilds custom.css).
+ *
+ * @param string $key Setting key.
+ * @return callable|null
+ */
+function aafm_wpbakery_setting_callback( string $key ): ?callable {
+	$modules = array(
+		'custom_css'       => 'vc-custom-css',
+		'custom_js_header' => 'vc-custom-js',
+		'custom_js_footer' => 'vc-custom-js',
+	);
+	try {
+		if ( isset( $modules[ $key ] ) ) {
+			$manager = aafm_builder_vendor( 'wpbakery_modules' );
+			$manager = null !== $manager ? $manager() : null;
+			if ( ! is_object( $manager ) || ! method_exists( $manager, 'is_module_on' ) || ! method_exists( $manager, 'get_module' ) || true !== $manager->is_module_on( $modules[ $key ] ) ) {
+				return null;
+			}
+			// ponytail: get_module() builds a second module instance, which adds WPBakery's post-save filters again for the
+			// rest of this request; no settings call saves a post, so nothing runs them twice.
+			$module = $manager->get_module( $modules[ $key ] );
+			$object = is_object( $module ) && isset( $module->settings ) && is_object( $module->settings ) ? $module->settings : null;
+		} else {
+			$settings = aafm_builder_vendor( 'wpbakery_settings' );
+			$object   = null !== $settings ? $settings() : null;
+		}
+	} catch ( Throwable $e ) {
+		unset( $e );
+		return null;
+	}
+	$method   = 'sanitize_' . $key . '_callback';
+	$callback = is_object( $object ) && method_exists( $object, $method ) ? array( $object, $method ) : null;
+	return is_callable( $callback ) ? $callback : null;
+}
+
+/**
+ * One setting value as WPBakery's own callback stores it, or a refusal naming the setting. The JSON type is checked
+ * first; a choice or a subset list the callback would change is refused, so a value is never stored other than as
+ * given. Checkboxes are stored as '1' or '', the form the settings screen leaves in the database.
+ *
+ * @param string $key   Setting key.
+ * @param mixed  $value Input.
+ * @return mixed|WP_Error
+ */
+function aafm_wpbakery_sanitize_setting( string $key, $value ) {
+	$bools = array( 'not_responsive_css', 'local_google_fonts', 'shortcuts' );
+	$ok    = in_array( $key, $bools, true ) ? is_bool( $value )
+		: ( 'google_fonts_subsets' === $key ? is_array( $value ) && array_values( $value ) === $value && array() === array_filter( $value, static fn( $one ): bool => ! is_string( $one ) ) : is_string( $value ) );
+	if ( ! $ok ) {
+		return aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $key );
+	}
+	if ( in_array( $key, aafm_wpbakery_settings_js_keys(), true ) && is_string( $value ) && 1 === preg_match( '#</script#i', $value ) ) {
+		// WPBakery prints the value inside a script tag, so a closing tag would end it early.
+		return aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $key );
+	}
+	$callback = aafm_wpbakery_setting_callback( $key );
+	if ( null === $callback ) {
+		return aafm_wpbakery_setting_error( 'aafm_builder_attribute_not_writable', $key );
+	}
+	try {
+		$clean = call_user_func( $callback, $value );
+	} catch ( Throwable $e ) {
+		unset( $e );
+		return aafm_wpbakery_setting_error( 'aafm_builder_attribute_not_writable', $key );
+	}
+	if ( in_array( $key, $bools, true ) ) {
+		return $clean ? '1' : '';
+	}
+	if ( in_array( $key, array( 'google_fonts_subsets', 'css_loading', 'js_loading' ), true ) && $clean !== $value ) {
+		return aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $key );
+	}
+	return is_string( $clean ) || is_array( $clean ) ? $clean : aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $key );
+}
+
+/**
+ * Args for aafm/wpbakery-update-settings.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_wpbakery_update_settings(): array {
+	return array(
+		'label'               => aafm_ability_label( 'aafm/wpbakery-update-settings' ),
+		'description'         => aafm_ability_description( 'aafm/wpbakery-update-settings' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'set' => array(
+					'type'        => 'object',
+					'description' => __( 'Setting key to its new value, keys from wpbakery-get-settings.', 'agent-abilities-for-mcp' ),
+				),
+			),
+			'required'             => array( 'set' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'changed'  => array(
+					'type'  => 'array',
+					'items' => array( 'type' => 'string' ),
+				),
+				'previous' => array(
+					'type'        => 'object',
+					'description' => __( 'The old value of each changed setting, null where none was stored.', 'agent-abilities-for-mcp' ),
+				),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_wpbakery_update_settings',
+		'permission_callback' => 'aafm_perm_manage_options',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => true,
+				'idempotent'  => true,
+			),
+		),
+	);
+}
+
+/**
+ * Whether WPBakery's custom.css file holds what it writes for $css (custom-css/module.php build_custom_css(): the
+ * option with each url(../ pointed at WPBakery's assets folder). Both sides have those references reduced to url( so
+ * the comparison does not depend on the assets URL. False when the file cannot be read.
+ *
+ * @param string $css Stored global CSS.
+ * @return bool
+ */
+function aafm_wpbakery_custom_css_file_matches( string $css ): bool {
+	$settings = aafm_builder_vendor( 'wpbakery_settings' );
+	try {
+		$object = null !== $settings ? $settings() : null;
+		if ( ! is_object( $object ) || ! method_exists( $object, 'getFileSystem' ) || ! method_exists( $object, 'uploadDir' ) ) {
+			return false;
+		}
+		// Both are static methods on WPBakery's settings class (class-vc-settings.php:1057, :1092).
+		$class = get_class( $object );
+		$fs    = call_user_func( array( $class, 'getFileSystem' ) );
+		$file  = is_object( $fs ) && method_exists( $fs, 'get_contents' ) ? $fs->get_contents( (string) call_user_func( array( $class, 'uploadDir' ) ) . '/custom.css' ) : false;
+	} catch ( Throwable $e ) {
+		unset( $e );
+		return false;
+	}
+	if ( ! is_string( $file ) ) {
+		return false;
+	}
+	$want = preg_replace( '#url\(\.\./(?!\.)#', 'url(', wp_strip_all_tags( $css ) );
+	$have = preg_replace( '#url\([^)]*?/assets/#', 'url(', $file );
+	return $want === $have;
+}
+
+/**
+ * Execute aafm/wpbakery-update-settings (design WB-14). Every key and value is checked and sanitized before anything
+ * is written; each changed setting is written with aafm_update_option_verified(), and a write that does not certify
+ * is an error naming what had already landed. A custom_css change loads wp-admin's template functions first, because
+ * WPBakery's file rebuild calls add_settings_error() when it fails (W19), and is checked against the file after.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_wpbakery_update_settings( array $input ) {
+	$set = $input['set'] ?? null;
+	if ( $set instanceof stdClass ) {
+		$set = (array) $set;
+	}
+	if ( ! is_array( $set ) || array() === $set ) {
+		return aafm_builder_error( 'aafm_builder_invalid_value' );
+	}
+	$apply = array();
+	foreach ( $set as $key => $value ) {
+		$key = (string) $key;
+		if ( ! in_array( $key, aafm_wpbakery_settings_writable(), true ) ) {
+			return aafm_wpbakery_setting_error( 'aafm_builder_attribute_not_writable', $key );
+		}
+		if ( in_array( $key, array( 'custom_css', 'custom_js_header', 'custom_js_footer' ), true ) && ! current_user_can( 'unfiltered_html' ) ) {
+			return aafm_builder_error( 'aafm_builder_needs_unfiltered_html' );
+		}
+		$clean = aafm_wpbakery_sanitize_setting( $key, $value );
+		if ( is_wp_error( $clean ) ) {
+			return $clean;
+		}
+		$apply[ $key ] = $clean;
+	}
+
+	$old      = aafm_wpbakery_stored_settings( array_keys( $apply ) );
+	$changed  = array();
+	$previous = array();
+	foreach ( $apply as $key => $value ) {
+		$before = $old[ $key ] ?? null;
+		if ( null !== $before && ( $before === $value || ( is_bool( $before ) && ( $before ? '1' : '' ) === $value ) ) ) {
+			continue;
+		}
+		if ( 'custom_css' === $key ) {
+			require_once ABSPATH . 'wp-admin/includes/template.php';
+		}
+		if ( ! aafm_update_option_verified( 'wpb_js_' . $key, $value ) ) {
+			return new WP_Error(
+				'aafm_wpbakery_setting_not_saved',
+				/* translators: %s: the setting key. */
+				sprintf( __( 'The WPBakery setting %s could not be saved. Settings listed in changed were saved before it.', 'agent-abilities-for-mcp' ), $key ),
+				array(
+					'status'   => 500,
+					'setting'  => $key,
+					'changed'  => $changed,
+					'previous' => $previous,
+				)
+			);
+		}
+		$changed[]        = $key;
+		$previous[ $key ] = $before;
+	}
+	if ( in_array( 'custom_css', $changed, true ) && ! aafm_wpbakery_custom_css_file_matches( (string) $apply['custom_css'] ) ) {
+		return new WP_Error(
+			'aafm_wpbakery_css_stale',
+			__( 'The global CSS was saved, but WPBakery\'s custom.css file does not match it, so the site may still show the old CSS. Check that the uploads folder is writable, then save the CSS again.', 'agent-abilities-for-mcp' ),
+			array(
+				'status'   => 500,
+				'changed'  => $changed,
+				'previous' => $previous,
+			)
+		);
+	}
+	return array(
+		'changed'  => $changed,
+		// An empty previous goes out as {} so the wire shape matches the object the schema declares.
+		'previous' => array() === $previous ? new stdClass() : $previous,
 	);
 }

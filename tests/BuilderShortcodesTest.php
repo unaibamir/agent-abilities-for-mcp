@@ -629,6 +629,36 @@ final class BuilderShortcodesTest extends TestCase {
 		$this->assertSame( self::PAGE, get_post( $out['restore_revision_id'] )->post_content );
 	}
 
+	/**
+	 * Core compares a post with its newest revision after normalize_whitespace(), so stored CRLF content whose newest
+	 * revision is the LF form gets no new revision and no revision holds the stored bytes. The commit forces one.
+	 */
+	public function test_commit_keeps_a_revision_of_crlf_content_whose_newest_revision_is_lf(): void {
+		global $wpdb;
+		$post = $this->page( 'seed' );
+		wp_update_post(
+			wp_slash(
+				array(
+					'ID'           => $post->ID,
+					'post_content' => str_replace( 'Old text.', "Old\ntext.", self::PAGE ),
+				)
+			)
+		);
+		$crlf = str_replace( 'Old text.', "Old\r\ntext.", self::PAGE );
+		$wpdb->update( $wpdb->posts, array( 'post_content' => $crlf ), array( 'ID' => $post->ID ) );
+		clean_post_cache( $post->ID );
+		$stored = get_post( $post->ID );
+		$this->assertSame( $crlf, $stored->post_content );
+
+		$out = $this->commit_text( $stored, str_replace( "Old\r\ntext.", 'New text.', $crlf ) );
+
+		$this->assertIsArray( $out );
+		$this->assertTrue( $out['reversible'] );
+		$this->assertIsInt( $out['restore_revision_id'] );
+		$this->assertSame( $crlf, get_post( $out['restore_revision_id'] )->post_content );
+		$this->assertFalse( has_filter( 'wp_save_post_revision_check_for_changes', '__return_false' ) );
+	}
+
 	public function test_commit_runs_without_a_way_back_when_revisions_are_off(): void {
 		$post = $this->page();
 		add_filter( 'wp_revisions_to_keep', '__return_zero' );

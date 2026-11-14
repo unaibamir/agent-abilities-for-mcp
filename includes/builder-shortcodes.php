@@ -681,6 +681,16 @@ function aafm_builder_commit( WP_Post $post, string $old, string $new, array $ta
 				}
 				break;
 			}
+			if ( null === $restore_revision_id ) {
+				// Core compares after normalize_whitespace(), so content that differs from its newest revision only in
+				// line endings gets none and no revision holds these bytes. Force one for this call only.
+				add_filter( 'wp_save_post_revision_check_for_changes', '__return_false' );
+				$saved = wp_save_post_revision( $id );
+				remove_filter( 'wp_save_post_revision_check_for_changes', '__return_false' );
+				if ( is_int( $saved ) && $saved > 0 && get_post_field( 'post_content', $saved, 'raw' ) === $old ) {
+					$restore_revision_id = $saved;
+				}
+			}
 		}
 		$reversible = null !== $restore_revision_id;
 	}

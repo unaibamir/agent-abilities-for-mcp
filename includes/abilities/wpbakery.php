@@ -396,6 +396,12 @@ function aafm_wpbakery_decode_entities( string $text ): string {
 				return $m[0];
 			}
 			$char = html_entity_decode( $m[0], ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+			if ( $char === $m[0] && '#' === $m[1][0] ) {
+				// A numeric reference HTML5 leaves alone (a control such as &#13;) is still decoded by code point, as
+				// the editor does.
+				$code = 'x' === strtolower( $m[1][1] ?? '' ) ? (int) hexdec( substr( $m[1], 2 ) ) : (int) substr( $m[1], 1 );
+				$char = $code > 0 && $code <= 0x10FFFF && ( $code < 0xD800 || $code > 0xDFFF ) ? (string) mb_chr( $code, 'UTF-8' ) : $m[0];
+			}
 			return $char === $m[0] ? $m[0] : strtr(
 				$char,
 				array(

@@ -416,8 +416,7 @@ final class WpbakeryElementsTest extends TestCase {
 	 */
 	public function test_text_writes_bracket_entities_as_escaped_brackets(): void {
 		$value = 'x&#93;&#91;vc_raw_js&#93;PHNjcmlwdD4=&#91;/vc_raw_js&#93;&#91; &#x5B;a&#x5d; &#091;b&#0093; &lsqb;c&rsqb; &lbrack;d&rbrack;';
-		// The named forms are not entities kses knows, so normalisation already writes them as &amp;..., which stays text.
-		$this->assertSame( 'x`}``{`vc_raw_js`}`PHNjcmlwdD4=`{`/vc_raw_js`}``{` `{`a`}` `{`b`}` &amp;lsqb;c&amp;rsqb; &amp;lbrack;d&amp;rbrack;', $this->encode( 'vc_custom_heading', 'text', $value ) );
+		$this->assertSame( 'x`}``{`vc_raw_js`}`PHNjcmlwdD4=`{`/vc_raw_js`}``{` `{`a`}` `{`b`}` `{`c`}` `{`d`}`', $this->encode( 'vc_custom_heading', 'text', $value ) );
 		$this->assertSame( '`{`x`}`', $this->encode( 'wpb_btn', 'custom_onclick_code', '&#91;x&#93;' ) );
 	}
 
@@ -440,6 +439,16 @@ final class WpbakeryElementsTest extends TestCase {
 		$this->assertSame( "Line one\r\nLine two", $this->encode( 'vc_custom_heading', 'text', "Line one\nLine two" ) );
 		$this->assertSame( "Line one\r\nLine \"two\"", str_replace( '``', '"', (string) $this->encode( 'vc_custom_heading', 'text', "Line one\r\nLine \"two\"" ) ) );
 		$this->assert_error( $this->encode( 'wpb_btn', 'title', "two\nlines" ), 'aafm_builder_invalid_value', 400 );
+	}
+
+	/**
+	 * R2-1: the guards run on decoded text, so an entity cannot bring back a line break or a bidi control.
+	 */
+	public function test_text_guards_run_after_entities_are_decoded(): void {
+		$this->assert_error( $this->encode( 'wpb_btn', 'title', 'two&#10;lines' ), 'aafm_builder_invalid_value', 400 );
+		$this->assert_error( $this->encode( 'wpb_btn', 'custom_onclick_code', 'a&#13;b' ), 'aafm_builder_invalid_value', 400 );
+		$this->assertSame( 'abc', $this->encode( 'wpb_btn', 'title', 'a&#8238;b&#x2066;c' ) );
+		$this->assertSame( "one\r\ntwo", $this->encode( 'vc_custom_heading', 'text', 'one&#10;two' ) );
 	}
 
 	public function test_text_refuses_a_line_break_and_a_pre_encoded_value(): void {

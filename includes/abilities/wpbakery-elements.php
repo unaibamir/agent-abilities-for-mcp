@@ -441,6 +441,7 @@ function aafm_wpbakery_encode_raw( string $base, $value, array $param ): ?string
 	}
 	if ( 'safe_text' === $base || 'text' === $base ) {
 		$text = aafm_wpbakery_scalar_text( $value );
+		$text = null === $text ? null : aafm_wpbakery_decode_entities( $text );
 		if ( null === $text || 0 === strpos( $text, '#E-8_' ) || ( 'text' === $base && 1 === preg_match( '/[\r\n]/', $text ) ) ) {
 			return null;
 		}
@@ -528,6 +529,8 @@ function aafm_wpbakery_encode_clean( string $kind, $value, array $param ): ?stri
  */
 function aafm_wpbakery_plain_text( $value, bool $multiline = false ): ?string {
 	$text = aafm_wpbakery_scalar_text( $value );
+	// Decoded first, so the line break refusal and the sanitizer's control strip see what the editor will save.
+	$text = null === $text ? null : aafm_wpbakery_decode_entities( $text );
 	if ( null === $text || ( ! $multiline && 1 === preg_match( '/[\r\n]/', $text ) ) || 0 === strpos( $text, '#E-8_' ) ) {
 		return null;
 	}

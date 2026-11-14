@@ -629,7 +629,8 @@ function aafm_render_integration_ability_row( array $ability, array $enabled, ar
 	// locked ability - high-risk, or a write while read-only mode is on - gets the same lock
 	// treatment as the Abilities tab instead of a checkbox, see aafm_render_ability_toggle_control().
 	// The two are independent: a row can be host-disabled, lock-disabled, both, or neither.
-	$lock_reason = aafm_render_ability_toggle_control( $name, $title_id, $enabled, $disabled );
+	// The saved pill renders after the control, so its id is derived from the title id, not looked up.
+	$lock_reason = aafm_render_ability_toggle_control( $name, $title_id, $enabled, $disabled, $saved ? $title_id . '-saved' : '' );
 
 	echo '<div class="aafm-ability-main"><div class="aafm-ability-title">';
 	printf(
@@ -649,7 +650,7 @@ function aafm_render_integration_ability_row( array $ability, array $enabled, ar
 	}
 
 	if ( $saved ) {
-		echo ' <span class="aafm-pill aafm-pill-neutral">' . esc_html__( 'Saved, currently unavailable', 'agent-abilities-for-mcp' ) . '</span>';
+		echo ' <span class="aafm-pill aafm-pill-neutral" id="' . esc_attr( $title_id . '-saved' ) . '">' . esc_html__( 'Saved, currently unavailable', 'agent-abilities-for-mcp' ) . '</span>';
 	}
 
 	printf(

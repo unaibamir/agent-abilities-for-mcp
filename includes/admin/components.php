@@ -157,10 +157,12 @@ function aafm_render_section( array $args ): void {
  *                                         unlocked checkbox then renders disabled so it never
  *                                         submits. Ignored when the ability is locked, since a
  *                                         locked row never renders a checkbox at all.
+ * @param string            $describedby   Id of an element that describes the checkbox (the "Saved,
+ *                                         currently unavailable" pill), or '' for none.
  * @return string|null The lock reason ('read_only' or 'high_risk') when the row is locked, so the
  *                     caller can render the matching note, or null when it is freely toggleable.
  */
-function aafm_render_ability_toggle_control( string $name, string $title_id, array $enabled, bool $host_disabled = false ): ?string {
+function aafm_render_ability_toggle_control( string $name, string $title_id, array $enabled, bool $host_disabled = false, string $describedby = '' ): ?string {
 	$reason = aafm_ability_lock_reason( $name );
 
 	if ( null !== $reason ) {
@@ -173,11 +175,12 @@ function aafm_render_ability_toggle_control( string $name, string $title_id, arr
 	}
 
 	printf(
-		'<label class="aafm-switch"><input type="checkbox" name="aafm_abilities[]" value="%1$s" aria-labelledby="%2$s" %3$s%4$s><span class="aafm-switch-track"></span></label>',
+		'<label class="aafm-switch"><input type="checkbox" name="aafm_abilities[]" value="%1$s" aria-labelledby="%2$s"%5$s %3$s%4$s><span class="aafm-switch-track"></span></label>',
 		esc_attr( $name ),
 		esc_attr( $title_id ),
 		$host_disabled ? '' : checked( in_array( $name, $enabled, true ), true, false ),
-		$host_disabled ? ' disabled' : ''
+		$host_disabled ? ' disabled' : '',
+		'' === $describedby ? '' : ' aria-describedby="' . esc_attr( $describedby ) . '"'
 	);
 
 	return null;

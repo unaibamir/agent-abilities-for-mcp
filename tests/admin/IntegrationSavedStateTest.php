@@ -66,4 +66,23 @@ final class IntegrationSavedStateTest extends TestCase {
 			$this->assertNotContains( $name, aafm_get_enabled_abilities() );
 		}
 	}
+
+	public function test_saved_inactive_row_checkbox_is_described_by_its_pill(): void {
+		$card = $this->woocommerce_card();
+		foreach ( self::SAVED as $name ) {
+			$title_id = 'aafm-int-ability-title-' . sanitize_key( $name );
+			$this->assertSame( 1, preg_match( '#value="' . preg_quote( $name, '#' ) . '" aria-labelledby="' . $title_id . '" aria-describedby="' . $title_id . '-saved"#', $card ), $name );
+			$this->assertStringContainsString( '<span class="aafm-pill aafm-pill-neutral" id="' . $title_id . '-saved">Saved, currently unavailable</span>', $card );
+		}
+	}
+
+	public function test_no_other_ability_row_has_aria_describedby(): void {
+		$card = $this->woocommerce_card();
+		$this->assertSame( count( self::SAVED ), substr_count( $card, 'aria-describedby=' ) );
+		$this->acting_as( 'administrator' );
+		ob_start();
+		aafm_render_integrations_tab();
+		$html = (string) ob_get_clean();
+		$this->assertSame( count( self::SAVED ), substr_count( $html, 'aria-describedby="aafm-int-ability-title-' ) );
+	}
 }

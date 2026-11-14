@@ -95,4 +95,15 @@ final class ComponentsTest extends TestCase {
 		$this->assertStringContainsString( '<input name="x">', $html );
 		$this->assertStringContainsString( 'requests per minute', $html );
 	}
+
+	public function test_toggle_control_prints_aria_describedby_only_when_given(): void {
+		ob_start();
+		aafm_render_ability_toggle_control( 'aafm/get-post', 't-id', array(), true, 't-id-saved' );
+		$with = (string) ob_get_clean();
+		$this->assertStringContainsString( 'aria-labelledby="t-id" aria-describedby="t-id-saved"', $with );
+
+		ob_start();
+		aafm_render_ability_toggle_control( 'aafm/get-post', 't-id', array() );
+		$this->assertStringNotContainsString( 'aria-describedby', (string) ob_get_clean() );
+	}
 }

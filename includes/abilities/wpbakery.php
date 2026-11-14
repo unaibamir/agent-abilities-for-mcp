@@ -160,7 +160,7 @@ function aafm_exec_wpbakery_get_page_content( array $input ) {
 	$out     = array(
 		'post_id'           => $id,
 		'content'           => $content,
-		'is_wpbakery_owned' => 'wpbakery' === aafm_post_has_foreign_builder_ownership( $id, true ),
+		'is_wpbakery_owned' => aafm_builder_ownership_allows( 'wpbakery', aafm_post_has_foreign_builder_ownership( $id, true ), $post ),
 	);
 	if ( ! empty( $input['include_structure'] ) ) {
 		$tags = aafm_wpbakery_shortcode_tags( $content );

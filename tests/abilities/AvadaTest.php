@@ -609,4 +609,18 @@ final class AvadaTest extends TestCase {
 			$this->assertFalse( aafm_perm_avada_post_object( array( 'post_id' => $id ) ), (string) $id );
 		}
 	}
+
+	public function test_get_page_content_reports_a_layout_section_as_avada_owned(): void {
+		$this->register_avada_type( 'fusion_tb_section' );
+		$this->acting_as( 'administrator' );
+		$id = self::factory()->post->create(
+			array(
+				'post_type'    => 'fusion_tb_section',
+				'post_content' => '[fusion_builder_container][/fusion_builder_container]',
+			)
+		);
+		$this->assertFalse( aafm_post_has_foreign_builder_ownership( $id, true ) );
+
+		$this->assertTrue( aafm_exec_avada_get_page_content( array( 'post_id' => $id ) )['is_avada_owned'] );
+	}
 }

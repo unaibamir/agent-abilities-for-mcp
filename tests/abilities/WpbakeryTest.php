@@ -757,4 +757,25 @@ WPB;
 
 		$this->assert_refused( $this->replace( $id, 'Loose text.', 'Changed.' ), 'aafm_not_wpbakery_owned', $id, $content, 409 );
 	}
+
+	public function test_get_page_content_reports_a_grid_item_as_wpbakery_owned(): void {
+		register_post_type(
+			'vc_grid_item',
+			array(
+				'public'          => false,
+				'capability_type' => 'post',
+				'supports'        => array( 'title', 'editor' ),
+			)
+		);
+		$this->acting_as( 'editor' );
+		$id = self::factory()->post->create(
+			array(
+				'post_type'    => 'vc_grid_item',
+				'post_content' => '[vc_gitem][vc_gitem_animated_block][/vc_gitem_animated_block][/vc_gitem]',
+			)
+		);
+		$this->assertFalse( aafm_post_has_foreign_builder_ownership( $id, true ) );
+
+		$this->assertTrue( $this->read( array( 'post_id' => $id ) )['is_wpbakery_owned'] );
+	}
 }

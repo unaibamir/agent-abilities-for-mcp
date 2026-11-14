@@ -1040,4 +1040,37 @@ final class RevisionsTest extends TestCase {
 		$this->assertStringContainsString( 'except an Avada or WPBakery page while that builder is active', $text );
 		$this->assertStringNotContainsString( ' - ', $text );
 	}
+
+	public function test_restore_refuses_a_wpbakery_revision_on_a_page_avada_owns_now(): void {
+		add_filter( 'aafm_integration_active_avada', '__return_true' );
+		add_filter( 'aafm_integration_active_wpbakery', '__return_true' );
+		list( $pid, $rid ) = $this->builder_post( self::WPB_A, self::AV_B );
+		update_post_meta( $pid, 'fusion_builder_status', 'active' );
+		$this->assertSame( 'avada', aafm_post_has_foreign_builder_ownership( $pid ) );
+
+		$this->assert_restore_refused( $this->restore( $pid, $rid ), 'aafm_restore_other_builder', $pid, self::AV_B );
+	}
+
+	public function test_restore_refuses_an_avada_revision_on_a_page_wpbakery_owns_now(): void {
+		add_filter( 'aafm_integration_active_avada', '__return_true' );
+		add_filter( 'aafm_integration_active_wpbakery', '__return_true' );
+		$this->record_rebuilds();
+		list( $pid, $rid ) = $this->builder_post( self::AV_A, self::WPB_B );
+		$this->assertSame( 'wpbakery', aafm_post_has_foreign_builder_ownership( $pid ) );
+
+		$this->assert_restore_refused( $this->restore( $pid, $rid ), 'aafm_restore_other_builder', $pid, self::WPB_B );
+		$this->assertSame( array(), $this->rebuilds );
+	}
+
+	public function test_restore_of_a_same_builder_revision_still_runs_with_both_builders_active(): void {
+		add_filter( 'aafm_integration_active_avada', '__return_true' );
+		add_filter( 'aafm_integration_active_wpbakery', '__return_true' );
+		list( $pid, $rid ) = $this->builder_post( self::AV_A, self::AV_B );
+		update_post_meta( $pid, 'fusion_builder_status', 'active' );
+
+		$out = $this->restore( $pid, $rid );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( self::AV_A, get_post_field( 'post_content', $pid, 'raw' ) );
+	}
 }

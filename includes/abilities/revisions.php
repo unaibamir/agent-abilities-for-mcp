@@ -421,11 +421,7 @@ function aafm_exec_restore_revision( array $input ) {
  * @return string|null avada, wpbakery or null.
  */
 function aafm_restore_builder( $owning, WP_Post $post, WP_Post $revision ): ?string {
-	$patterns = array(
-		'avada'    => '/\[fusion_builder_container\b/',
-		'wpbakery' => aafm_page_builder_content_pattern(),
-	);
-	foreach ( $patterns as $builder => $pattern ) {
+	foreach ( aafm_restore_builder_patterns() as $builder => $pattern ) {
 		if ( ! aafm_integration_active( $builder ) ) {
 			continue;
 		}
@@ -444,8 +440,21 @@ function aafm_restore_builder( $owning, WP_Post $post, WP_Post $revision ): ?str
 }
 
 /**
+ * The content pattern of each builder a restore can belong to: a Fusion container for Avada, the
+ * guard's root row or section for WPBakery.
+ *
+ * @return array<string,string> Builder => regular expression.
+ */
+function aafm_restore_builder_patterns(): array {
+	return array(
+		'avada'    => '/\[fusion_builder_container\b/',
+		'wpbakery' => aafm_page_builder_content_pattern(),
+	);
+}
+
+/**
  * The builder checks a restore runs before wp_restore_post_revision() (design 325 section 8): the
- * revision's content must parse, saving the current page as this user must leave it as it is, and the
+ * revision must not be the other builder's, the revision's content must parse, saving the current page as this user must leave it as it is, and the
  * revision's content replayed through the same save must keep its outline and equal itself byte for
  * byte, so an embed the user may not keep is not stripped on the way back.
  *
@@ -455,6 +464,18 @@ function aafm_restore_builder( $owning, WP_Post $post, WP_Post $revision ): ?str
  * @return true|WP_Error
  */
 function aafm_restore_builder_check( string $builder, WP_Post $post, string $target ) {
+	// A revision made by the other builder (a page rebuilt from WPBakery in Avada, or back) would be
+	// checked with the wrong tag list, pass on two empty outlines, and leave content the page's
+	// owner cannot read.
+	foreach ( aafm_restore_builder_patterns() as $other => $pattern ) {
+		if ( $other !== $builder && 1 === preg_match( $pattern, $target ) ) {
+			return new WP_Error(
+				'aafm_restore_other_builder',
+				__( 'This revision was made with a different page builder than the one that owns the page now, so restoring it would leave content the current builder cannot edit. Nothing was changed.', 'agent-abilities-for-mcp' ),
+				array( 'status' => 409 )
+			);
+		}
+	}
 	$current = (string) $post->post_content;
 	$tags    = 'wpbakery' === $builder ? aafm_wpbakery_shortcode_tags( $current, $target ) : aafm_fusion_shortcode_tags();
 	$walk    = null === $tags ? null : aafm_builder_walk( $target, $tags );

@@ -93,6 +93,7 @@ final class AdminCssTokensTest extends TestCase {
 		$this->assertStringContainsString( '--aafm-accent-tint:rgba(var(--wp-admin-theme-color--rgb,34,113,177),0.08);', $rule );
 		$this->assertStringContainsString( '--aafm-accent-text:var(--wp-admin-theme-color-darker-10,#135e96);', $rule );
 		$this->assertStringContainsString( '--aafm-accent-active:var(--wp-admin-theme-color-darker-20,#0a4b78);', $rule );
+		$this->assertStringContainsString( '--aafm-accent-rgb:var(--wp-admin-theme-color--rgb,34,113,177);', $rule );
 	}
 
 	public function test_no_text_colour_uses_the_raw_accent_outside_the_allowlist(): void {

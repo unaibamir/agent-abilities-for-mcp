@@ -304,7 +304,9 @@ final class BuilderShortcodesTest extends TestCase {
 
 	public function test_every_seam_row_is_a_callable_shape(): void {
 		$rows = aafm_builder_vendor_rows();
-		$this->assertSame( array( 'wpbakery_css_rebuild', 'wpbakery_grid_post_type', 'wpbakery_param_type' ), array_keys( $rows ) );
+		$this->assertSame( array( 'wpbakery_css_rebuild', 'wpbakery_grid_post_type', 'wpbakery_param_type', 'avada_option_name' ), array_keys( $rows ) );
+		$this->assertSame( array( 'Avada', 'get_option_name' ), $rows['avada_option_name']['target'] );
+		$this->assertSame( 'Avada', $rows['avada_option_name']['requires'], 'The theme\'s own Avada() function, so a loaded stand-in class alone never makes the row present.' );
 		foreach ( $rows as $entry => $row ) {
 			$target = $row['target'];
 			$ok     = $target instanceof \Closure

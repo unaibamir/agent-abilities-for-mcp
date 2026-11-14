@@ -343,6 +343,11 @@ function aafm_builder_vendor_rows(): array {
 			},
 			'requires' => 'vc_map',
 		),
+		// The Global Options name of the active Avada theme; present only with the theme's own Avada() loaded.
+		'avada_option_name'       => array(
+			'target'   => array( 'Avada', 'get_option_name' ),
+			'requires' => 'Avada',
+		),
 	);
 }
 

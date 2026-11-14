@@ -1320,6 +1320,10 @@ final class WpbakeryElementsTest extends TestCase {
 		$this->assertSame( 'not_covered', aafm_undo_refusals()['aafm/wpbakery-update-element'] );
 	}
 
+	public function test_audit_detail_reads_ran_an_element_update(): void {
+		$this->assertStringContainsString( 'Ran an element update on WPBakery page #42', (string) aafm_build_activity_detail( 'aafm/wpbakery-update-element', array( 'post_id' => 42 ) ) );
+	}
+
 	public function test_update_schema_is_closed(): void {
 		$args   = aafm_args_wpbakery_update_element();
 		$schema = $args['input_schema'];

@@ -277,8 +277,8 @@ function aafm_exec_wpbakery_replace_text( array $input ) {
 	}
 
 	// The write form answers unknown for two builders or a failed read, so only a page WPBakery
-	// alone owns gets past here.
-	if ( 'wpbakery' !== aafm_post_has_foreign_builder_ownership( $id ) ) {
+	// alone owns, or a Grid Builder template the guard cannot see (vc_grid_item), gets past here.
+	if ( ! aafm_builder_ownership_allows( 'wpbakery', aafm_post_has_foreign_builder_ownership( $id ), $post ) ) {
 		return new WP_Error(
 			'aafm_not_wpbakery_owned',
 			__( 'This post is not a WPBakery page. Use replace-in-post for an ordinary post, and edit a page built with another builder in that builder.', 'agent-abilities-for-mcp' ),

@@ -722,4 +722,41 @@ WPB;
 			remove_role( 'aafm_reader_only' );
 		}
 	}
+
+	/* ---------------------------------------------------------------- S7-3: the shared ownership rule */
+
+	public function test_replace_works_on_a_grid_item_without_a_row(): void {
+		// WPBakery registers vc_grid_item as not public with capability type post (W16).
+		register_post_type(
+			'vc_grid_item',
+			array(
+				'public'          => false,
+				'capability_type' => 'post',
+				'supports'        => array( 'title', 'editor' ),
+			)
+		);
+		$content = '[vc_gitem][vc_gitem_animated_block][vc_gitem_zone_a][vc_gitem_row position="top"][vc_gitem_col width="1/1"]Grid label[/vc_gitem_col][/vc_gitem_row][/vc_gitem_zone_a][/vc_gitem_animated_block][/vc_gitem]';
+		$this->acting_as( 'editor' );
+		$id = self::factory()->post->create(
+			array(
+				'post_type'    => 'vc_grid_item',
+				'post_content' => $content,
+			)
+		);
+		$this->assertFalse( aafm_post_has_foreign_builder_ownership( $id ) );
+
+		$out = $this->replace( $id, 'Grid label', 'Grid title' );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( 1, $out['replacements'] );
+		$this->assertSame( str_replace( 'Grid label', 'Grid title', $content ), get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
+	public function test_replace_still_refuses_a_plain_page_without_a_row(): void {
+		$content = '[vc_column_text]<p>Loose text.</p>[/vc_column_text]';
+		$id      = $this->make_page( $content );
+		$this->acting_as( 'editor' );
+
+		$this->assert_refused( $this->replace( $id, 'Loose text.', 'Changed.' ), 'aafm_not_wpbakery_owned', $id, $content, 409 );
+	}
 }

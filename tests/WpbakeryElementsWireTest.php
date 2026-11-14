@@ -339,4 +339,38 @@ final class WpbakeryElementsWireTest extends TestCase {
 		$this->assertSame( self::PAGE, get_post( $done['restore_revision_id'] )->post_content );
 		$this->assertSame( 'not_covered', $done['undo']['reason'] );
 	}
+
+	public function test_reversible_reason_is_on_the_wire_only_when_the_restore_point_is_gone(): void {
+		list( $handler, $id ) = $this->wired();
+		$text                 = '[vc_column_text]<p>Hello</p>[/vc_column_text]';
+		$one                  = static fn(): int => 1;
+		add_filter( 'wp_revisions_to_keep', $one );
+		$done = $this->wire(
+			$handler->call_tool(
+				array(
+					'name'      => aafm_mcp_tool_name( 'aafm/wpbakery-insert-element' ),
+					'arguments' => array(
+						'post_id'          => $id,
+						'page_fingerprint' => self::fp( self::PAGE ),
+						'anchor_index'     => 3,
+						'anchor_expect'    => array(
+							'tag'         => 'vc_column_text',
+							'fingerprint' => self::fp( $text ),
+						),
+						'placement'        => 'after',
+						'element'          => array(
+							'tag'  => 'vc_custom_heading',
+							'atts' => array( 'text' => 'Limited' ),
+						),
+					),
+				),
+				'req-wpb-insert-limit'
+			)
+		);
+		remove_filter( 'wp_revisions_to_keep', $one );
+		$this->assertSame( array( 'post', 'index', 'fingerprint', 'page_fingerprint', 'inserted', 'restore_revision_id', 'reversible', 'reversible_reason', 'undo' ), array_keys( $done ) );
+		$this->assertNull( $done['restore_revision_id'] );
+		$this->assertFalse( $done['reversible'] );
+		$this->assertNotSame( '', $done['reversible_reason'] );
+	}
 }

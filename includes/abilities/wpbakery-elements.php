@@ -1226,6 +1226,10 @@ function aafm_args_wpbakery_update_element(): array {
 					'description' => __( 'Pass to restore-revision to put the page back as it was. Null when nothing was saved or no revision is kept.', 'agent-abilities-for-mcp' ),
 				),
 				'reversible'          => array( 'type' => 'boolean' ),
+				'reversible_reason'   => array(
+					'type'        => 'string',
+					'description' => __( 'Present only when the restore point was gone after the save; says why there is no way back.', 'agent-abilities-for-mcp' ),
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_wpbakery_update_element',
@@ -2057,6 +2061,10 @@ function aafm_args_wpbakery_insert_element(): array {
 				'inserted'            => array( 'type' => 'integer' ),
 				'restore_revision_id' => array( 'type' => array( 'integer', 'null' ) ),
 				'reversible'          => array( 'type' => 'boolean' ),
+				'reversible_reason'   => array(
+					'type'        => 'string',
+					'description' => __( 'Present only when the restore point was gone after the save; says why there is no way back.', 'agent-abilities-for-mcp' ),
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_wpbakery_insert_element',
@@ -2140,6 +2148,10 @@ function aafm_args_wpbakery_move_element(): array {
 				'moved'               => array( 'type' => 'boolean' ),
 				'restore_revision_id' => array( 'type' => array( 'integer', 'null' ) ),
 				'reversible'          => array( 'type' => 'boolean' ),
+				'reversible_reason'   => array(
+					'type'        => 'string',
+					'description' => __( 'Present only when the restore point was gone after the save; says why there is no way back.', 'agent-abilities-for-mcp' ),
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_wpbakery_move_element',
@@ -2275,6 +2287,10 @@ function aafm_args_wpbakery_remove_element(): array {
 				'removed'             => array( 'type' => 'integer' ),
 				'page_fingerprint'    => array( 'type' => 'string' ),
 				'restore_revision_id' => array( 'type' => array( 'integer', 'null' ) ),
+				'reversible_reason'   => array(
+					'type'        => 'string',
+					'description' => __( 'Present only when the restore point was gone after the save; says why there is no way back.', 'agent-abilities-for-mcp' ),
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_wpbakery_remove_element',

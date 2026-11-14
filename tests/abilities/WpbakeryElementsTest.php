@@ -2566,6 +2566,17 @@ final class WpbakeryElementsTest extends TestCase {
 		}
 	}
 
+	/**
+	 * CX-S9b-R2-1: every tool that can return reversible_reason declares it as an optional string.
+	 */
+	public function test_output_schemas_declare_reversible_reason(): void {
+		foreach ( array( 'update', 'insert', 'move', 'remove' ) as $tool ) {
+			$schema = call_user_func( 'aafm_args_wpbakery_' . $tool . '_element' )['output_schema'];
+			$this->assertSame( 'string', $schema['properties']['reversible_reason']['type'] ?? null, $tool );
+			$this->assertNotContains( 'reversible_reason', (array) ( $schema['required'] ?? array() ), $tool );
+		}
+	}
+
 	public function test_structural_tool_descriptions_say_what_the_design_requires(): void {
 		$registry = aafm_get_abilities_registry_full();
 		foreach ( array( 'insert', 'move', 'remove' ) as $tool ) {

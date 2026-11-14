@@ -509,6 +509,7 @@ function aafm_exec_wpbakery_update_page_code( array $input ) {
 	return array(
 		'post_id'  => $id,
 		'changed'  => $changed,
-		'previous' => $previous,
+		// An empty previous goes out as {} so the wire shape matches the object the schema declares.
+		'previous' => array() === $previous ? new stdClass() : $previous,
 	);
 }

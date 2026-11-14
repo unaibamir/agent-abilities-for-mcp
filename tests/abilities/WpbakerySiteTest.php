@@ -841,14 +841,10 @@ final class WpbakerySiteTest extends TestCase {
 		);
 		remove_filter( 'update_post_metadata', $count );
 		remove_filter( 'delete_post_metadata', $count );
-		$this->assertSame(
-			array(
-				'post_id'  => $id,
-				'changed'  => array(),
-				'previous' => array(),
-			),
-			$out
-		);
+		$this->assertSame( $id, $out['post_id'] );
+		$this->assertSame( array(), $out['changed'] );
+		$this->assertEquals( new \stdClass(), $out['previous'] );
+		$this->assertSame( '{}', wp_json_encode( $out['previous'] ) );
 		$this->assertSame( 0, $writes );
 	}
 

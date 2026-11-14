@@ -333,6 +333,14 @@ final class WpbakerySiteWireTest extends TestCase {
 		);
 		$this->assertSame( array(), $again['changed'] );
 		$this->assertSame( array(), $again['previous'] );
+		$raw = $handler->call_tool(
+			array(
+				'name'      => aafm_mcp_tool_name( 'aafm/wpbakery-update-page-code' ),
+				'arguments' => $args,
+			),
+			'req-wpb-page-code-3'
+		);
+		$this->assertStringContainsString( '"previous":{}', (string) $raw->getContent()[0]->getText() );
 		remove_filter( 'aafm_builder_vendor', $access, 20 );
 	}
 

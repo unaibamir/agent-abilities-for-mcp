@@ -690,9 +690,13 @@ function aafm_builder_commit( WP_Post $post, string $old, string $new, array $ta
 			if ( null === $restore_revision_id ) {
 				// Core compares after normalize_whitespace(), so content that differs from its newest revision only in
 				// line endings gets none and no revision holds these bytes. Force one for this call only.
-				add_filter( 'wp_save_post_revision_check_for_changes', '__return_false' );
+				// A closure the plugin owns, last in line, so only this hook is added and removed.
+				$force = static function (): bool {
+					return false;
+				};
+				add_filter( 'wp_save_post_revision_check_for_changes', $force, PHP_INT_MAX );
 				$saved = wp_save_post_revision( $id );
-				remove_filter( 'wp_save_post_revision_check_for_changes', '__return_false' );
+				remove_filter( 'wp_save_post_revision_check_for_changes', $force, PHP_INT_MAX );
 				$forced = is_int( $saved ) && $saved > 0 ? aafm_exact_object( 'post', $saved ) : null;
 				if ( $forced instanceof WP_Post && $forced->post_content === $old ) {
 					$restore_revision_id = $saved;

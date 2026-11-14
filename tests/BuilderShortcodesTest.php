@@ -658,7 +658,39 @@ final class BuilderShortcodesTest extends TestCase {
 		$this->assertTrue( $out['reversible'] );
 		$this->assertIsInt( $out['restore_revision_id'] );
 		$this->assertSame( $crlf, get_post( $out['restore_revision_id'] )->post_content );
-		$this->assertFalse( has_filter( 'wp_save_post_revision_check_for_changes', '__return_false' ) );
+		$this->assertFalse( has_filter( 'wp_save_post_revision_check_for_changes' ) );
+	}
+
+	/**
+	 * INFO-1: the forced revision adds and removes only the plugin's own callback, so a site's identical
+	 * __return_false on the hook stays.
+	 */
+	public function test_forcing_a_revision_keeps_a_sites_own_callback_on_the_hook(): void {
+		global $wpdb;
+		$post = $this->page( 'seed' );
+		wp_update_post(
+			wp_slash(
+				array(
+					'ID'           => $post->ID,
+					'post_content' => str_replace( 'Old text.', "Old\ntext.", self::PAGE ),
+				)
+			)
+		);
+		$crlf = str_replace( 'Old text.', "Old\r\ntext.", self::PAGE );
+		$wpdb->update( $wpdb->posts, array( 'post_content' => $crlf ), array( 'ID' => $post->ID ) );
+		clean_post_cache( $post->ID );
+		add_filter( 'wp_save_post_revision_check_for_changes', '__return_false' );
+		add_filter( 'wp_save_post_revision_check_for_changes', '__return_true', 20 );
+
+		$out  = $this->commit_text( get_post( $post->ID ), str_replace( "Old\r\ntext.", 'New text.', $crlf ) );
+		$kept = has_filter( 'wp_save_post_revision_check_for_changes', '__return_false' );
+		remove_filter( 'wp_save_post_revision_check_for_changes', '__return_false' );
+		remove_filter( 'wp_save_post_revision_check_for_changes', '__return_true', 20 );
+
+		$this->assertIsArray( $out );
+		$this->assertTrue( $out['reversible'] );
+		$this->assertSame( $crlf, get_post( $out['restore_revision_id'] )->post_content );
+		$this->assertSame( 10, $kept );
 	}
 
 	public function test_commit_runs_without_a_way_back_when_revisions_are_off(): void {

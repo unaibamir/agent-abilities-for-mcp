@@ -327,8 +327,11 @@ function aafm_builder_vendor_rows(): array {
 		// until its own registration runs (Ruling R-S8a-4). The vendor's class file defines classes only.
 		'wpbakery_grid_post_type' => array(
 			'target'   => static function (): void {
-				require_once (string) call_user_func( 'vc_path_dir', 'PARAMS_DIR', 'vc_grid_item/editor/class-vc-grid-item-editor.php' ); // @phpstan-ignore-line argument.type (WPBakery's own path helper; this row is present only when it exists, see requires)
-				call_user_func( array( 'Vc_Grid_Item_Editor', 'createPostType' ) ); // @phpstan-ignore-line argument.type (defined by the file required above)
+				$file = (string) call_user_func( 'vc_path_dir', 'PARAMS_DIR', 'vc_grid_item/editor/class-vc-grid-item-editor.php' ); // @phpstan-ignore-line argument.type (WPBakery's own path helper; this row is present only when it exists, see requires)
+				// A WPBakery release that moves the file or drops the method leaves the type unregistered, and the call is refused.
+				if ( aafm_builder_load_vendor_class( $file, 'Vc_Grid_Item_Editor', 'createPostType' ) ) {
+					call_user_func( array( 'Vc_Grid_Item_Editor', 'createPostType' ) ); // @phpstan-ignore-line argument.type (checked by the loader above)
+				}
 			},
 			'requires' => 'vc_path_dir',
 		),
@@ -341,6 +344,22 @@ function aafm_builder_vendor_rows(): array {
 			'requires' => 'vc_map',
 		),
 	);
+}
+
+/**
+ * Loads a vendor class from its own file only when the file is there, so a vendor release that moves the
+ * file is a refusal and never a fatal error inside a permission check.
+ *
+ * @param string $file       Vendor file that defines the class.
+ * @param string $class_name Class.
+ * @param string $method     Method the caller needs.
+ * @return bool Whether the class and method are available.
+ */
+function aafm_builder_load_vendor_class( string $file, string $class_name, string $method ): bool {
+	if ( ! class_exists( $class_name, false ) && is_readable( $file ) ) {
+		require_once $file;
+	}
+	return class_exists( $class_name, false ) && method_exists( $class_name, $method );
 }
 
 /**

@@ -748,4 +748,18 @@ final class BuilderShortcodesTest extends TestCase {
 
 		$this->assertSame( 0, $calls );
 	}
+	public function test_the_vendor_class_loader_refuses_a_missing_file_or_class_without_a_fatal(): void {
+		$this->assertFalse( aafm_builder_load_vendor_class( '/nonexistent/vc_grid_item/editor/class-vc-grid-item-editor.php', 'Aafm_No_Such_Vendor_Class', 'createPostType' ) );
+
+		$file = get_temp_dir() . 'aafm-empty-vendor-file-' . wp_generate_password( 8, false ) . '.php';
+		file_put_contents( $file, "<?php\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- a throwaway temp file for this test.
+		try {
+			$this->assertFalse( aafm_builder_load_vendor_class( $file, 'Aafm_No_Such_Vendor_Class', 'createPostType' ), 'A file that no longer defines the class is a refusal.' );
+		} finally {
+			wp_delete_file( $file );
+		}
+
+		$this->assertTrue( aafm_builder_load_vendor_class( '/nonexistent.php', \WP_Post::class, 'get_instance' ), 'A class already loaded needs no file.' );
+		$this->assertFalse( aafm_builder_load_vendor_class( '/nonexistent.php', \WP_Post::class, 'aafm_no_such_method' ) );
+	}
 }

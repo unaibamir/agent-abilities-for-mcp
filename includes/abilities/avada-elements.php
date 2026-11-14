@@ -1031,7 +1031,9 @@ function aafm_exec_avada_update_element( array $input ) {
 		if ( ! $kind['writable'] ) {
 			return aafm_wpbakery_setting_error( 'aafm_builder_attribute_not_writable', $name );
 		}
-		if ( null === $dynamic || in_array( $name, $dynamic, true ) ) {
+		// Dynamic data is keyed by the param's own name, so a side of a dimension or image_id (element_content) is
+		// checked under that name too.
+		if ( null === $dynamic || array() !== array_intersect( array( $name, (string) ( $settings[ $name ]['param_name'] ?? '' ) ), $dynamic ) ) {
 			return aafm_avada_dynamic_error( $name );
 		}
 		$gate = aafm_avada_script_gate( $kind['kind'] );

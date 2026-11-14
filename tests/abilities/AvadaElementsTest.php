@@ -677,6 +677,20 @@ final class AvadaElementsTest extends TestCase {
 		$this->assert_error( aafm_exec_avada_update_element( $this->addr( $id, 'fusion_button', array( 'set_atts' => array( 'dynamic_params' => '' ) ) ) ), 'aafm_builder_attribute_not_writable', 400 );
 	}
 
+	public function test_dynamic_data_on_the_inner_image_blocks_an_image_change(): void {
+		$this->act_as_admin();
+		$dyn    = base64_encode( (string) wp_json_encode( array( 'element_content' => array( 'data' => 'featured_image' ) ) ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Avada's stored form.
+		$id     = $this->avada_post( '[fusion_builder_container][fusion_builder_row][fusion_builder_column][fusion_imageframe image_id="" dynamic_params="' . $dyn . '"][/fusion_imageframe][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]' );
+		$before = (string) get_post( $id )->post_content;
+		$image  = self::factory()->attachment->create(
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'file'           => '2026/11/s10-dyn.jpg',
+			)
+		);
+		$this->assert_refused( aafm_exec_avada_update_element( $this->addr( $id, 'fusion_imageframe', array( 'set_atts' => array( 'image_id' => $image ) ) ) ), 'aafm_avada_dynamic_setting', 400, $id, $before );
+	}
+
 	public function test_dynamic_params_is_refused_for_an_administrator_too(): void {
 		$this->act_as_admin();
 		$id = $this->avada_post();

@@ -1056,4 +1056,111 @@ WPB;
 			}
 		}
 	}
+	/**
+	 * A vc_grid_item post with WPBakery's grid post type NOT registered, as in a REST request (W16:
+	 * WPBakery registers it only inside is_admin()), and a seam stand-in that registers it the way
+	 * Vc_Grid_Item_Editor::createPostType() does. Returns the post id and a call counter.
+	 *
+	 * @param bool $with_seam Whether the seam entry is present.
+	 * @return array{0:int,1:\ArrayObject<string,int>}
+	 */
+	private function unregistered_grid_item( bool $with_seam ): array {
+		unregister_post_type( 'vc_grid_item' );
+		$this->assertFalse( post_type_exists( 'vc_grid_item' ) );
+		$id    = (int) wp_insert_post(
+			array(
+				'post_type'    => 'vc_grid_item',
+				'post_status'  => 'publish',
+				'post_title'   => 'Grid',
+				'post_content' => (string) file_get_contents( dirname( __DIR__ ) . '/Fixtures/Wpbakery/grid-item.txt' ), // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a local fixture file, not a remote URL.
+				'post_author'  => self::factory()->user->create( array( 'role' => 'administrator' ) ),
+			)
+		);
+		$calls = new \ArrayObject( array( 'n' => 0 ) );
+		$seam  = static function ( $resolved, string $entry ) use ( $calls, $with_seam ) {
+			if ( 'wpbakery_grid_post_type' !== $entry ) {
+				return $resolved;
+			}
+			return $with_seam ? static function () use ( $calls ): void {
+				++$calls['n'];
+				register_post_type(
+					'vc_grid_item',
+					array(
+						'public'          => false,
+						'capability_type' => 'post',
+						'supports'        => array( 'title', 'editor' ),
+					)
+				);
+			} : null;
+		};
+		add_filter( 'aafm_builder_vendor', $seam, 10, 2 );
+		return array( $id, $calls );
+	}
+
+	public function test_a_grid_item_is_readable_through_the_seam_when_the_type_is_not_registered(): void {
+		list( $id, $calls ) = $this->unregistered_grid_item( true );
+		$this->acting_as( 'editor' );
+
+		$this->assertTrue( aafm_perm_avada_post_object( array( 'post_id' => $id ) ) );
+		$this->assertSame( 1, $calls['n'] );
+		$this->assertTrue( post_type_exists( 'vc_grid_item' ) );
+		$out = $this->read(
+			array(
+				'post_id'           => $id,
+				'include_structure' => true,
+			)
+		);
+		$this->assertTrue( $out['is_wpbakery_owned'] );
+		$this->assertCount( 25, $out['structure'] );
+
+		$this->assertTrue( aafm_perm_avada_post_object( array( 'post_id' => $id ) ) );
+		$this->assertSame( 1, $calls['n'], 'Once registered, the seam is not called again.' );
+	}
+
+	public function test_a_grid_item_stays_refused_when_the_seam_entry_is_absent(): void {
+		list( $id ) = $this->unregistered_grid_item( false );
+		$this->acting_as( 'editor' );
+
+		$this->assertFalse( aafm_perm_avada_post_object( array( 'post_id' => $id ) ) );
+		$this->assertFalse( post_type_exists( 'vc_grid_item' ) );
+	}
+
+	public function test_a_user_without_edit_access_is_still_refused_after_the_seam_registers(): void {
+		list( $id, $calls ) = $this->unregistered_grid_item( true );
+		$this->acting_as( 'subscriber' );
+
+		$this->assertFalse( aafm_perm_avada_post_object( array( 'post_id' => $id ) ) );
+		$this->assertSame( 1, $calls['n'] );
+		$this->acting_as( 'contributor' );
+		$this->assertFalse( aafm_perm_avada_post_object( array( 'post_id' => $id ) ), 'A contributor cannot edit an administrator\'s grid template.' );
+	}
+
+	public function test_the_seam_registers_nothing_for_another_type_or_with_wpbakery_inactive(): void {
+		list( $grid, $calls ) = $this->unregistered_grid_item( true );
+		unregister_post_type( 'fusion_element' );
+		$other = (int) wp_insert_post(
+			array(
+				'post_type'    => 'fusion_element',
+				'post_status'  => 'publish',
+				'post_title'   => 'Element',
+				'post_content' => '[fusion_text]x[/fusion_text]',
+			)
+		);
+		$this->acting_as( 'editor' );
+
+		$this->assertFalse( aafm_perm_avada_post_object( array( 'post_id' => $other ) ) );
+		$this->assertSame( 0, $calls['n'] );
+		$this->assertFalse( post_type_exists( 'fusion_element' ) );
+
+		remove_filter( 'aafm_integration_active_wpbakery', '__return_true' );
+		add_filter( 'aafm_integration_active_wpbakery', '__return_false' );
+		try {
+			$this->assertFalse( aafm_perm_avada_post_object( array( 'post_id' => $grid ) ) );
+			$this->assertSame( 0, $calls['n'] );
+			$this->assertFalse( post_type_exists( 'vc_grid_item' ) );
+		} finally {
+			remove_filter( 'aafm_integration_active_wpbakery', '__return_false' );
+			add_filter( 'aafm_integration_active_wpbakery', '__return_true' );
+		}
+	}
 }

@@ -313,7 +313,7 @@ function aafm_builder_ownership_allows( string $builder, $guard_answer, WP_Post 
  */
 function aafm_builder_vendor_rows(): array {
 	return array(
-		'wpbakery_css_rebuild' => array(
+		'wpbakery_css_rebuild'    => array(
 			'target'   => static function ( int $id, string $type ): void {
 				$vc = call_user_func( 'wpbakery' ); // @phpstan-ignore-line argument.type (WPBakery's own accessor; this row is present only when the function exists, see requires)
 				if ( ! is_object( $vc ) || ! method_exists( $vc, 'buildShortcodesCss' ) ) {
@@ -322,6 +322,15 @@ function aafm_builder_vendor_rows(): array {
 				$vc->buildShortcodesCss( $id, $type );
 			},
 			'requires' => 'wpbakery',
+		),
+		// W16: WPBakery registers vc_grid_item only inside is_admin(), so a REST request has no such type
+		// until its own registration runs (Ruling R-S8a-4). The vendor's class file defines classes only.
+		'wpbakery_grid_post_type' => array(
+			'target'   => static function (): void {
+				require_once (string) call_user_func( 'vc_path_dir', 'PARAMS_DIR', 'vc_grid_item/editor/class-vc-grid-item-editor.php' ); // @phpstan-ignore-line argument.type (WPBakery's own path helper; this row is present only when it exists, see requires)
+				call_user_func( array( 'Vc_Grid_Item_Editor', 'createPostType' ) ); // @phpstan-ignore-line argument.type (defined by the file required above)
+			},
+			'requires' => 'vc_path_dir',
 		),
 	);
 }

@@ -121,6 +121,13 @@ function aafm_perm_avada_post_object( array $input ): bool {
 	if ( ! in_array( $post->post_type, $own, true ) ) {
 		return aafm_can_edit_post_object( $post );
 	}
+	if ( 'vc_grid_item' === $post->post_type && ! post_type_exists( 'vc_grid_item' ) && aafm_integration_active( 'wpbakery' ) ) {
+		// WPBakery registers its Grid Builder type only in wp-admin; its own registration runs here (Ruling R-S8a-4).
+		$register = aafm_builder_vendor( 'wpbakery_grid_post_type' );
+		if ( null !== $register ) {
+			$register();
+		}
+	}
 	return aafm_type_caps( $post->post_type )['mapped']
 		&& aafm_user_can_checked( 'edit_post', $id )
 		&& ( 'fusion_tb_section' !== $post->post_type || current_user_can( 'manage_options' ) );

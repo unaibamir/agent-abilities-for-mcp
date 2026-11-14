@@ -304,7 +304,7 @@ final class BuilderShortcodesTest extends TestCase {
 
 	public function test_every_seam_row_is_a_callable_shape(): void {
 		$rows = aafm_builder_vendor_rows();
-		$this->assertSame( array( 'wpbakery_css_rebuild' ), array_keys( $rows ) );
+		$this->assertSame( array( 'wpbakery_css_rebuild', 'wpbakery_grid_post_type' ), array_keys( $rows ) );
 		foreach ( $rows as $entry => $row ) {
 			$target = $row['target'];
 			$ok     = $target instanceof \Closure

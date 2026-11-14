@@ -331,6 +331,7 @@ function aafm_wpbakery_decode_value( string $value, ?string $type = null ) {
 /**
  * A link value read as vc_build_link() reads it (W3, vc_parse_multi_attribute()): the four parts default
  * to empty, pairs split on the pipe, each pair split on its first colon, the value URL-decoded and trimmed.
+ * Only those four keys are kept, the shape the S9a encoder writes back.
  *
  * @param string $value Stored value, W2 already reversed.
  * @return array<string,string>
@@ -344,7 +345,7 @@ function aafm_wpbakery_parse_link( string $value ): array {
 	);
 	foreach ( explode( '|', $value ) as $pair ) {
 		$parts = explode( ':', $pair, 2 );
-		if ( '' !== $parts[0] && isset( $parts[1] ) ) {
+		if ( isset( $parts[1] ) && array_key_exists( $parts[0], $link ) ) {
 			$link[ $parts[0] ] = trim( rawurldecode( $parts[1] ) );
 		}
 	}

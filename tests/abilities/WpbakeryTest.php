@@ -1246,4 +1246,19 @@ WPB;
 		);
 		$this->assertSame( array( 'text' => 'url:https://example.com/docs' ), aafm_wpbakery_decode_atts( 'vc_custom_heading', array( 'text' => 'url:https://example.com/docs' ) ) );
 	}
+	public function test_a_mapped_link_keeps_only_the_four_link_parts(): void {
+		$filter = $this->map_types( array( 'vc_custom_heading' => array( 'link' => 'vc_link' ) ) );
+		$this->assertSame(
+			array(
+				'link' => array(
+					'url'    => '',
+					'title'  => '',
+					'target' => '',
+					'rel'    => '',
+				),
+			),
+			aafm_wpbakery_decode_atts( 'vc_custom_heading', array( 'link' => 'https://example.com/plain' ) )
+		);
+		remove_filter( 'aafm_builder_vendor', $filter, 10 );
+	}
 }

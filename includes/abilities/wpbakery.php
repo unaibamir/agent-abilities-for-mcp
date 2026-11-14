@@ -65,7 +65,7 @@ function aafm_wpbakery_registry_definitions(): array {
 		),
 		'aafm/wpbakery-replace-text'     => array(
 			'label'        => __( 'Replace text in a WPBakery page', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Replaces literal text within a WPBakery page while requiring the shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee). Text that WPBakery keeps in an element\'s settings, such as a heading or a button label, cannot be changed here and is refused, as is any replacement that would add, remove or alter an element. If saving the page as this user would remove or change elements, or change other content on the page, the call is refused and nothing is saved. Not undoable from this plugin\'s change history; WordPress keeps a revision when revisions are on. Requires edit access to the post; WPBakery\'s Role Manager settings are not applied. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Replaces literal text within a WPBakery page while requiring the shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee). Text that WPBakery keeps in an element\'s settings, such as a heading or a button label, cannot be changed here and is refused, as is any replacement that would add, remove or alter an element. Square brackets in body text need a user who may post unfiltered HTML. If saving the page as this user would remove or change elements, or change other content on the page, the call is refused and nothing is saved. Not undoable from this plugin\'s change history; WordPress keeps a revision when revisions are on. Requires edit access to the post; WPBakery\'s Role Manager settings are not applied. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'wpbakery',
@@ -402,17 +402,37 @@ function aafm_wpbakery_decode_entities( string $text ): string {
 				$code = 'x' === strtolower( $m[1][1] ?? '' ) ? (int) hexdec( substr( $m[1], 2 ) ) : (int) substr( $m[1], 1 );
 				$char = $code > 0 && $code <= 0x10FFFF && ( $code < 0xD800 || $code > 0xDFFF ) ? (string) mb_chr( $code, 'UTF-8' ) : $m[0];
 			}
-			return $char === $m[0] ? $m[0] : strtr(
-				$char,
-				array(
-					'&' => '&amp;',
-					'<' => '&lt;',
-					'>' => '&gt;',
-				)
+			$keep = array(
+				'&' => '&amp;',
+				'<' => '&lt;',
+				'>' => '&gt;',
 			);
+			return $char === $m[0] ? $m[0] : strtr( $char, $keep );
 		},
 		$text
 	);
+}
+
+/**
+ * Body text for a WPBakery page: text stored between shortcode tags rather than in an escaped attribute (an
+ * element's inner content, a replace-text replacement). The one choke point every such write goes through.
+ * Entities are decoded to the form WPBakery's editor saves, then, for a user who may not post unfiltered HTML, the
+ * text may hold no square bracket at all: the editor rewrites body text on its next save in ways a check cannot all
+ * predict, and with no bracket no shortcode can come of it. For a user who may, the structure and closer checks that follow still apply. Then wp_kses_post().
+ *
+ * @param string $text Text from the caller.
+ * @return string|WP_Error
+ */
+function aafm_wpbakery_body_text( string $text ) {
+	$decoded = aafm_wpbakery_decode_entities( $text );
+	if ( ! current_user_can( 'unfiltered_html' ) && false !== strpbrk( $decoded, '[]' ) ) {
+		return new WP_Error(
+			'aafm_wpbakery_brackets_need_unfiltered_html',
+			__( 'Square brackets in this text need a user who may post unfiltered HTML, because WPBakery can turn them into an element the next time the page is saved in its editor. Remove the brackets, or ask such a user to make the edit. Nothing was changed.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
+	}
+	return wp_kses_post( $decoded );
 }
 
 /**
@@ -558,9 +578,12 @@ function aafm_exec_wpbakery_replace_text( array $input ) {
 		);
 	}
 
-	// Entities are decoded first to the form WPBakery's editor saves, so a shortcode spelled with them reaches the
-	// structure check below as a shortcode and is refused.
-	$inserted = wp_kses_post( aafm_wpbakery_decode_entities( $replace ) );
+	// Body text through the one choke point: entities decoded to the editor's form, brackets refused for a user
+	// without unfiltered_html, then kses; a shortcode spelled with entities reaches the structure check below.
+	$inserted = aafm_wpbakery_body_text( $replace );
+	if ( is_wp_error( $inserted ) ) {
+		return $inserted;
+	}
 	$new      = str_replace( $search, $inserted, $content );
 
 	$tags = aafm_wpbakery_shortcode_tags( $content, $new );

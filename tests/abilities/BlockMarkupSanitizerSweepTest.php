@@ -45,8 +45,7 @@ final class BlockMarkupSanitizerSweepTest extends TestCase {
 		),
 		'posts.php'                  => array( '$replace' => 'replace-in-post and replace-sitewide inserted text, text-only by design.' ),
 		'terms.php'                  => array( "(string) \$input['description']" => 'Term description (create and update).' ),
-		'wpbakery.php'               => array( 'aafm_wpbakery_decode_entities( $replace )' => 'Inserted text, text-only by design; entities are decoded first so the structure check sees what the editor will save.' ),
-		'wpbakery-elements.php'      => array( 'aafm_wpbakery_decode_entities( $value )' => 'Inner content of one WPBakery element, filtered for every user; a shortcode it adds, spelled with entities or not, is refused by the outline check.' ),
+		'wpbakery.php'               => array( '$decoded' => 'WPBakery body text (an element\'s inner content or a replace-text replacement) at its one choke point, aafm_wpbakery_body_text(): entities decoded to the editor\'s form, brackets refused without unfiltered_html, and the structure check after it.' ),
 		'woocommerce/products.php'   => array( "(string) \$input['short_description']" => 'Stored as post_excerpt, not block markup.' ),
 		'woocommerce/variations.php' => array( "(string) \$input['description']" => 'Stored in variation meta, not block markup.' ),
 	);
@@ -166,7 +165,7 @@ final class BlockMarkupSanitizerSweepTest extends TestCase {
 		}
 		sort( $expected );
 
-		$this->assertCount( 14, $expected, 'Fixture: fourteen excluded calls.' );
+		$this->assertCount( 13, $expected, 'Fixture: thirteen excluded calls.' );
 		$this->assertSame( $expected, self::calls_to( 'wp_kses_post' ), 'A wp_kses_post( call in includes/abilities/ is neither routed through aafm_kses_block_markup() nor on the exclusion list.' );
 	}
 

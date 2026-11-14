@@ -1091,6 +1091,32 @@ final class WpbakeryElementsTest extends TestCase {
 		$this->assertSame( '<p>a &amp; b &lt;c&gt; &lt;d&gt; ’</p>', $this->encode( 'vc_column_text', 'content', '<p>a &amp; b &lt;c&gt; &#60;d&#62; &#8217;</p>' ) );
 	}
 
+	/**
+	 * SEC-S9a-1-R3b: for a user without unfiltered_html, body text may hold no square bracket at all once entities are
+	 * decoded, whatever WPBakery's editor would later do to the rest of it.
+	 */
+	public function test_body_text_with_a_bracket_needs_unfiltered_html(): void {
+		$id = $this->page( $this->fixture() );
+		$this->act_as_restricted_editor();
+
+		foreach ( array( '<p>[<b></b>vc_raw_js]PHNjcmlwdD4=[/<b></b>vc_raw_js]</p>', '<p>[&#118;c_raw_js]x[/&#118;c_raw_js]</p>', '<p>Footnote [1]</p>', '<p>a &#91;b</p>' ) as $text ) {
+			$out = $this->update( $id, 8, array( 'text' => $text ) );
+			$this->assert_refused( $out, 'aafm_wpbakery_brackets_need_unfiltered_html', 400, $id, $this->fixture() );
+			$this->assertStringContainsString( 'unfiltered HTML', $out->get_error_message() );
+		}
+		$this->assertIsArray( $this->update( $id, 8, array( 'text' => '<p>No brackets here.</p>' ) ) );
+	}
+
+	public function test_body_text_with_a_bracket_keeps_todays_checks_for_unfiltered_html(): void {
+		$id = $this->page( $this->fixture() );
+		$this->acting_as( 'administrator' );
+		$this->assertTrue( current_user_can( 'unfiltered_html' ) );
+
+		$this->assertIsArray( $this->update( $id, 8, array( 'text' => '<p>[<b></b>vc_raw_js]PHNjcmlwdD4=[/<b></b>vc_raw_js]</p>' ) ), 'Someone who may post unfiltered HTML may write this in wp-admin too.' );
+		$this->assert_refused( $this->update( $id, 8, array( 'text' => '<p>[&#118;c_raw_js]x[/&#118;c_raw_js]</p>' ) ), 'aafm_builder_structure_changed', 400, $id, (string) get_post_field( 'post_content', $id, 'raw' ) );
+		$this->assert_refused( $this->update( $id, 8, array( 'text' => '<p>Footnote [1]</p>' ) ), 'aafm_builder_structure_changed', 400, $id, (string) get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
 	public function test_update_with_the_stored_design_options_saves_nothing(): void {
 		$id        = $this->page( $this->fixture() );
 		$revisions = count( wp_get_post_revisions( $id ) );
@@ -1474,6 +1500,7 @@ final class WpbakeryElementsTest extends TestCase {
 				$this->assertStringContainsString( $phrase, $text );
 			}
 		}
+		$this->assertStringContainsString( 'Square brackets in body text need a user who may post unfiltered HTML.', $row['description'] );
 		$this->assertStringContainsString( 'Only while WPBakery Page Builder is active', $row['description'] );
 	}
 }

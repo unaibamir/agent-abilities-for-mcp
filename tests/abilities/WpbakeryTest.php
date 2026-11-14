@@ -451,6 +451,21 @@ WPB;
 		}
 	}
 
+	public function test_replace_with_a_bracket_needs_unfiltered_html(): void {
+		$id     = $this->make_page( self::PAGE );
+		$editor = self::factory()->user->create( array( 'role' => 'editor' ) );
+		( new \WP_User( $editor ) )->add_cap( 'unfiltered_html', false );
+		wp_set_current_user( 0 );
+		wp_set_current_user( $editor );
+		$this->assertFalse( current_user_can( 'unfiltered_html' ) );
+
+		foreach ( array( '[<b></b>vc_raw_js]x[/<b></b>vc_raw_js]', '[&#118;c_raw_js]x[/&#118;c_raw_js]', 'Footnote [1]' ) as $replace ) {
+			$out = $this->replace( $id, 'Opening paragraph alpha.', $replace );
+			$this->assert_refused( $out, 'aafm_wpbakery_brackets_need_unfiltered_html', $id, self::PAGE, 400 );
+		}
+		$this->assertSame( 1, $this->replace( $id, 'Opening paragraph alpha.', 'Opening paragraph beta.' )['replacements'] );
+	}
+
 	public function test_replace_refuses_removing_a_closing_tag(): void {
 		$id = $this->make_page( self::PAGE );
 		$this->acting_as( 'editor' );
@@ -644,6 +659,7 @@ WPB;
 		}
 		$this->assertStringContainsString( 'heading', $row['description'] );
 		$this->assertStringContainsString( 'Only while WPBakery Page Builder is active', $row['description'] );
+		$this->assertStringContainsString( 'Square brackets in body text need a user who may post unfiltered HTML.', $row['description'] );
 	}
 
 	public function test_replace_contributor_is_refused_on_another_users_page_and_editor_allowed(): void {

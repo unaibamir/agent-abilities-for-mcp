@@ -61,7 +61,7 @@ function aafm_wpbakery_elements_registry_definitions(): array {
 		),
 		'aafm/wpbakery-update-element' => array(
 			'label'        => __( 'Update a WPBakery element', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Changes the settings or the inner text of one element on a WPBakery page or Grid Builder template, named by its index and by the tag and fingerprint wpbakery-get-page-content returned with include_structure. set_atts sets settings, each value in the form wpbakery-list-elements gives as its kind (a link as url, title, target and rel; an image as an attachment id; Design Options as fields such as margin_top, never as CSS); remove_atts returns settings to their default; text replaces the inner content of an element that has a content setting and no child elements. Only the element\'s opening tag and, for text, its inner content change; every other byte of the page stays as it was. Refused: a stale index or fingerprint, a setting the element does not have or that cannot be written, a value its kind does not accept, already encoded values, and any change that would add or remove an element. Design Options and settings that can carry script or raw HTML need a user who may post unfiltered HTML. A save that would change other content for this user is refused, and nothing is saved. When a revision is kept, restore_revision_id brings the page back through restore-revision; the response also returns the element\'s new fingerprint and the page fingerprint. The outline stops at 2,000 elements. Not undoable from this plugin\'s change history. Requires edit access to the post; WPBakery\'s Role Manager settings are not applied, though its own save filter still runs. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Changes the settings or the inner text of one element on a WPBakery page or Grid Builder template, named by its index and by the tag and fingerprint wpbakery-get-page-content returned with include_structure. set_atts sets settings, each value in the form wpbakery-list-elements gives as its kind (a link as url, title, target and rel; an image as an attachment id; Design Options as fields such as margin_top, never as CSS); remove_atts returns settings to their default; text replaces the inner content of an element that has a content setting and no child elements. Square brackets in body text need a user who may post unfiltered HTML. Only the element\'s opening tag and, for text, its inner content change; every other byte of the page stays as it was. Refused: a stale index or fingerprint, a setting the element does not have or that cannot be written, a value its kind does not accept, already encoded values, and any change that would add or remove an element. Design Options and settings that can carry script or raw HTML need a user who may post unfiltered HTML. A save that would change other content for this user is refused, and nothing is saved. When a revision is kept, restore_revision_id brings the page back through restore-revision; the response also returns the element\'s new fingerprint and the page fingerprint. The outline stops at 2,000 elements. Not undoable from this plugin\'s change history. Requires edit access to the post; WPBakery\'s Role Manager settings are not applied, though its own save filter still runs. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'wpbakery',
@@ -418,6 +418,10 @@ function aafm_wpbakery_encode_value( string $kind, $value, array $param ) {
 	$name  = isset( $param['param_name'] ) && is_string( $param['param_name'] ) ? $param['param_name'] : '';
 	$type  = isset( $param['type'] ) && is_string( $param['type'] ) ? $param['type'] : '';
 	$base  = aafm_wpbakery_type_kind( $type, $name );
+	if ( 'content' === $kind ) {
+		// Body text goes through the shared choke point, whose refusal is returned as it is.
+		return is_string( $value ) ? aafm_wpbakery_body_text( $value ) : aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $name );
+	}
 	$clean = 'raw' === $kind ? aafm_wpbakery_encode_raw( $base, $value, $param ) : aafm_wpbakery_encode_clean( $kind, $value, $param );
 	if ( null === $clean ) {
 		return aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $name );
@@ -494,9 +498,9 @@ function aafm_wpbakery_encode_clean( string $kind, $value, array $param ): ?stri
 			}
 			return aafm_wpbakery_escape_attribute( implode( ',', $items ) );
 		case 'content':
-			// Entities decoded to the form WPBakery's editor saves, so a shortcode spelled with them is refused by the
-			// structure check rather than created by the editor on its next save.
-			return is_string( $value ) ? wp_kses_post( aafm_wpbakery_decode_entities( $value ) ) : null;
+			// Reached only from aafm_wpbakery_encode_value(), which sends body text to the shared choke point first.
+			$body = is_string( $value ) ? aafm_wpbakery_body_text( $value ) : null;
+			return is_string( $body ) ? $body : null;
 		case 'link':
 			return aafm_wpbakery_encode_link( $value, 'href' === $type );
 		case 'image':

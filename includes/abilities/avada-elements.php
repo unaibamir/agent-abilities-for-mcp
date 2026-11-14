@@ -474,7 +474,11 @@ function aafm_avada_encode_clean( string $kind, $value, array $param ) {
 	}
 	if ( 'image' === $kind ) {
 		$id = is_int( $value ) || ( is_string( $value ) && 1 === preg_match( '/^[1-9][0-9]*$/', $value ) ) ? (int) $value : 0;
-		if ( $id < 1 || ! wp_attachment_is_image( $id ) ) {
+		if ( $id < 1 ) {
+			return null;
+		}
+		$attachment = aafm_exact_object( 'post', $id );
+		if ( ! $attachment instanceof WP_Post || 'attachment' !== $attachment->post_type || ! wp_attachment_is_image( $id ) ) {
 			return null;
 		}
 		$url = (string) wp_get_attachment_url( $id );

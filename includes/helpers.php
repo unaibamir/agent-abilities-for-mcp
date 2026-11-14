@@ -1004,6 +1004,10 @@ function aafm_recoverable_delete_abilities(): array {
 		// than 1, which core would prune the restore point to), so a saved removal always has the revision
 		// restore-revision brings back; a Grid Builder template keeps none and is refused.
 		'aafm/wpbakery-remove-element',
+		// The same rule for Avada: refuses before writing unless the post type keeps revisions, revisions are on and the
+		// limit is not 1, so a form or an off canvas panel (no revisions) is refused and a saved removal always has the
+		// revision restore-revision brings back.
+		'aafm/avada-remove-element',
 		// Undoing a create moves the post to the Trash, and it refuses when the Trash is off.
 		'aafm/undo-change',
 	);

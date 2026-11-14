@@ -1629,4 +1629,134 @@ final class AvadaElementsTest extends TestCase {
 		$this->assertFalse( $out['reversible'] );
 		$this->assertStringContainsString( 'keeps 1 revision per post', $out['reversible_reason'] );
 	}
+
+	// S10b: avada-remove-element.
+
+	/**
+	 * Remove input for the nth element with a tag.
+	 *
+	 * @param int    $id  Post.
+	 * @param string $tag Tag.
+	 * @param int    $nth Which one.
+	 * @return array<string,mixed>
+	 */
+	private function remove_input( int $id, string $tag, int $nth = 0 ): array {
+		return $this->addr( $id, $tag, array( 'page_fingerprint' => aafm_builder_page_fingerprint( (string) get_post( $id )->post_content ) ), $nth );
+	}
+
+	public function test_remove_works_on_a_section_with_revisions(): void {
+		$this->act_as_admin();
+		$content = $this->two_containers();
+		$id      = $this->avada_post( $content );
+		wp_save_post_revision( $id );
+		$out = aafm_exec_avada_remove_element( $this->remove_input( $id, 'fusion_builder_container', 0 ) );
+		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+		$this->assertSame( 4, $out['removed'] );
+		$stored = (string) get_post( $id )->post_content;
+		$this->assertSame( substr( $content, strlen( $content ) / 2 ), $stored );
+		$this->assertSame( aafm_builder_page_fingerprint( $stored ), $out['page_fingerprint'] );
+		$this->assertTrue( $out['reversible'] );
+		$this->assertSame( $content, get_post( $out['restore_revision_id'] )->post_content, 'The restore point holds the page before the removal.' );
+		$this->assertArrayNotHasKey( 'post_content', $out['post'] );
+	}
+
+	public function test_remove_keeps_siblings_for_first_and_last_children(): void {
+		$this->act_as_admin();
+		$content = '[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1"][fusion_title size="2"]A[/fusion_title][fusion_title size="2"]B[/fusion_title][fusion_title size="2"]C[/fusion_title][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]';
+		$id      = $this->avada_post( $content );
+		$this->assertIsArray( aafm_exec_avada_remove_element( $this->remove_input( $id, 'fusion_title', 2 ) ) );
+		$this->assertIsArray( aafm_exec_avada_remove_element( $this->remove_input( $id, 'fusion_title', 0 ) ) );
+		$this->assertSame( '[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1"][fusion_title size="2"]B[/fusion_title][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]', get_post( $id )->post_content );
+	}
+
+	public function test_remove_the_last_root_container_is_refused(): void {
+		$this->act_as_admin();
+		$content = '[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1"][fusion_title size="2"]A[/fusion_title][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]<p>after</p>';
+		$id      = $this->avada_post( $content );
+		$this->assert_refused( aafm_exec_avada_remove_element( $this->remove_input( $id, 'fusion_builder_container' ) ), 'aafm_builder_remove_last_root', 409, $id, $content );
+	}
+
+	public function test_remove_that_empties_a_column_row_is_refused(): void {
+		$this->act_as_admin();
+		$content = $this->two_containers();
+		$id      = $this->avada_post( $content );
+		$this->assert_refused( aafm_exec_avada_remove_element( $this->remove_input( $id, 'fusion_builder_column', 0 ) ), 'aafm_avada_layout_needs_child', 400, $id, $content );
+		$this->assert_refused( aafm_exec_avada_remove_element( $this->remove_input( $id, 'fusion_builder_row', 0 ) ), 'aafm_avada_layout_needs_child', 400, $id, $content );
+	}
+
+	public function test_remove_is_refused_on_a_form_and_an_off_canvas_panel(): void {
+		$this->act_as_admin();
+		foreach ( array( 'fusion_form', 'awb_off_canvas' ) as $type ) {
+			// A8: neither type keeps revisions.
+			register_post_type(
+				$type,
+				array(
+					'public'          => false,
+					'capability_type' => 'post',
+					'map_meta_cap'    => true,
+					'supports'        => array( 'title', 'editor' ),
+				)
+			);
+			$content = $this->two_containers();
+			$id      = $this->avada_post( $content, $type );
+			delete_post_meta( $id, 'fusion_builder_status' );
+			$this->assert_refused( aafm_exec_avada_remove_element( $this->remove_input( $id, 'fusion_title', 0 ) ), 'aafm_builder_remove_irreversible', 409, $id, $content );
+			unregister_post_type( $type );
+		}
+	}
+
+	public function test_remove_is_refused_when_the_site_keeps_one_revision_or_none(): void {
+		$this->act_as_admin();
+		$content = $this->two_containers();
+		$id      = $this->avada_post( $content );
+		foreach ( array( 1, 0 ) as $limit ) {
+			$keep = static fn(): int => $limit;
+			add_filter( 'wp_revisions_to_keep', $keep );
+			$out  = aafm_exec_avada_remove_element( $this->remove_input( $id, 'fusion_title', 0 ) );
+			remove_filter( 'wp_revisions_to_keep', $keep );
+			$this->assert_refused( $out, 'aafm_builder_remove_irreversible', 409, $id, $content );
+			if ( 1 === $limit ) {
+				$this->assertStringContainsString( 'keeps only 1 revision', $out->get_error_message() );
+			}
+		}
+	}
+
+	public function test_remove_inside_a_global_element_is_refused_but_the_global_itself_goes(): void {
+		$this->act_as_admin();
+		$half    = strlen( $this->two_containers() ) / 2;
+		$content = str_replace( '[fusion_builder_container type="flex"]', '[fusion_builder_container type="flex" fusion_global="14"]', substr( $this->two_containers(), 0, $half ) ) . substr( $this->two_containers(), $half );
+		$id      = $this->avada_post( $content );
+		$this->assert_refused( aafm_exec_avada_remove_element( $this->remove_input( $id, 'fusion_title', 0 ) ), 'aafm_avada_global_element', 409, $id, $content );
+		$this->assertIsArray( aafm_exec_avada_remove_element( $this->remove_input( $id, 'fusion_builder_container', 0 ) ) );
+	}
+
+	public function test_a_retried_remove_is_refused(): void {
+		$this->act_as_admin();
+		$id    = $this->avada_post( $this->two_containers() );
+		$input = $this->remove_input( $id, 'fusion_builder_container', 1 );
+		$this->assertIsArray( aafm_exec_avada_remove_element( $input ) );
+		$after = (string) get_post( $id )->post_content;
+		$this->assert_refused( aafm_exec_avada_remove_element( $input ), 'aafm_builder_page_changed', 409, $id, $after );
+	}
+
+	public function test_remove_permissions_discovery_audit_and_schema(): void {
+		$args = aafm_args_avada_remove_element();
+		$this->assertSame( 'aafm_perm_avada_post_object', $args['permission_callback'] );
+		$this->assertSame( array( 'post_id', 'page_fingerprint', 'index', 'expect' ), $args['input_schema']['required'] );
+		$this->assertTrue( $args['meta']['annotations']['destructive'] );
+		$this->assertSame( 'string', $args['output_schema']['properties']['reversible_reason']['type'] );
+		$this->assertSame( 'Ran an element removal on Avada page #%s', aafm_activity_detail_map()['aafm/avada-remove-element']['template'] );
+		$this->assertContains( 'aafm/avada-remove-element', aafm_recoverable_delete_abilities() );
+		$defs = aafm_register_avada_elements_definitions( array() );
+		$this->assertSame( 'destructive', $defs['aafm/avada-remove-element']['risk'] );
+	}
+
+	public function test_output_schemas_of_the_three_structural_writes_declare_reversible_reason(): void {
+		foreach ( array( 'aafm_args_avada_insert_element', 'aafm_args_avada_move_element', 'aafm_args_avada_remove_element' ) as $builder ) {
+			$schema = $builder()['output_schema'];
+			$this->assertSame( 'string', $schema['properties']['reversible_reason']['type'], $builder );
+			$this->assertSame( array( 'integer', 'null' ), $schema['properties']['restore_revision_id']['type'], $builder );
+			$this->assertSame( 'boolean', $schema['properties']['reversible']['type'], $builder );
+		}
+	}
 }

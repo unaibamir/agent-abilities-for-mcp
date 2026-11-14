@@ -83,6 +83,14 @@ function aafm_avada_elements_registry_definitions(): array {
 			'subject'      => 'avada',
 			'args_builder' => 'aafm_args_avada_move_element',
 		),
+		'aafm/avada-remove-element' => array(
+			'label'        => __( 'Remove an Avada element', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Removes one element, with its children, from an Avada page, layout section or library item, named by its index and fingerprint from avada-get-page-content with include_structure. Every other byte of the page stays as it was. Refused before anything is saved when no revision could bring the element back: a form or an off canvas panel (they keep no revisions), revisions switched off, or a site that keeps only 1 revision per post. Also refused: the page\'s last top level container, or a library item\'s only top level element, an element inside an element that shows a global library item, and a removal that would leave a container with no row or a row with no column. page_fingerprint must be the one from the last read or write; the response returns the new one and the number of elements removed. A save that would change other content for this user is refused, and nothing is saved. restore_revision_id brings the page back through restore-revision. Not undoable from this plugin\'s change history. Requires edit access to the post, and for a layout section a user who can manage site options; Avada\'s Role Manager settings are not applied. Only while Avada is active.', 'agent-abilities-for-mcp' ),
+			'group'        => 'writes',
+			'risk'         => 'destructive',
+			'subject'      => 'avada',
+			'args_builder' => 'aafm_args_avada_remove_element',
+		),
 	);
 }
 
@@ -2127,6 +2135,132 @@ function aafm_exec_avada_move_element( array $input ) {
 		'fingerprint'         => null === $moved ? '' : aafm_builder_fingerprint( $stored, $moved ),
 		'page_fingerprint'    => $result['page_fingerprint'],
 		'moved'               => ! $result['unchanged'],
+		'restore_revision_id' => $result['restore_revision_id'],
+		'reversible'          => $result['reversible'],
+	) + aafm_avada_reversible_reason( $result );
+}
+
+/**
+ * Args for aafm/avada-remove-element.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_avada_remove_element(): array {
+	return array(
+		'label'               => aafm_ability_label( 'aafm/avada-remove-element' ),
+		'description'         => aafm_ability_description( 'aafm/avada-remove-element' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => aafm_avada_structural_schema( true, false ),
+			'required'             => array( 'post_id', 'page_fingerprint', 'index', 'expect' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => aafm_avada_write_output_schema(
+			array(
+				'removed' => array(
+					'type'        => 'integer',
+					'description' => __( 'Number of elements removed, children included.', 'agent-abilities-for-mcp' ),
+				),
+			)
+		),
+		'execute_callback'    => 'aafm_exec_avada_remove_element',
+		'permission_callback' => 'aafm_perm_avada_post_object',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => true,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/avada-remove-element (design AV-7). Removes the element's stored bytes, children included. Refused
+ * before anything is written when no revision can bring it back (a type without revisions, such as a form or an off
+ * canvas panel (A8), revisions off, or a site that keeps only one), for the page's last top level container or its
+ * only top level element, inside an element that shows a global library item, and when a container or row would be
+ * left empty.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_avada_remove_element( array $input ) {
+	$id   = absint( $input['post_id'] ?? 0 );
+	$post = aafm_exact_object_chain( 'post', $id );
+	if ( ! $post instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	if ( ! aafm_builder_ownership_allows( 'avada', aafm_post_has_foreign_builder_ownership( $id ), $post ) ) {
+		return aafm_avada_not_owned_error();
+	}
+	$content = (string) $post->post_content;
+	$check   = aafm_builder_page_check( $content, (string) ( $input['page_fingerprint'] ?? '' ) );
+	if ( is_wp_error( $check ) ) {
+		return $check;
+	}
+	if ( ! post_type_supports( $post->post_type, 'revisions' ) || ! wp_revisions_enabled( $post ) ) {
+		return aafm_builder_error( 'aafm_builder_remove_irreversible' );
+	}
+	// Core prunes the oldest revisions inside the save; with one kept, the restore point would be deleted at once.
+	if ( 1 === wp_revisions_to_keep( $post ) ) {
+		return new WP_Error(
+			'aafm_builder_remove_irreversible',
+			__( 'This site keeps only 1 revision per post (WP_POST_REVISIONS or the wp_revisions_to_keep filter), so WordPress would delete the revision that brings the removed element back during the same save. Raise the limit to 2 or more, or remove the element in Avada\'s builder. Nothing was changed.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 409 )
+		);
+	}
+	$tags     = aafm_fusion_shortcode_tags();
+	$elements = aafm_builder_elements( $content, $tags );
+	if ( null === $elements ) {
+		return aafm_builder_error( 'aafm_builder_unparseable' );
+	}
+	$element = aafm_builder_resolve( $content, $tags, (int) ( $input['index'] ?? -1 ), is_array( $input['expect'] ?? null ) ? $input['expect'] : array() );
+	if ( is_wp_error( $element ) ) {
+		return $element;
+	}
+	$index  = (int) $element['index'];
+	$global = aafm_avada_global_ancestor( $elements, null === $element['parent'] ? null : (int) $element['parent'] );
+	if ( null !== $global ) {
+		return aafm_avada_inside_global_error( $global );
+	}
+	if ( null === $element['parent'] ) {
+		$roots = array();
+		foreach ( $elements as $other ) {
+			if ( null === $other['parent'] && (int) $other['index'] !== $index ) {
+				$roots[] = (string) $other['tag'];
+			}
+		}
+		// The page keeps reading as an Avada page only while a top level container, or for a library item its own top
+		// level element, is left.
+		if ( array() === $roots || ( 'fusion_builder_container' === $element['tag'] && ! in_array( 'fusion_builder_container', $roots, true ) ) ) {
+			return aafm_builder_error( 'aafm_builder_remove_last_root' );
+		}
+	}
+	if ( aafm_avada_empties_a_layout_parent( $elements, $index ) ) {
+		return aafm_avada_layout_needs_child_error();
+	}
+
+	$new  = substr( $content, 0, (int) $element['start'] ) . substr( $content, (int) $element['end'] );
+	$walk = aafm_builder_walk( $content, $tags );
+	if ( null === $walk ) {
+		return aafm_builder_error( 'aafm_builder_unparseable' );
+	}
+	$expected = aafm_builder_expected_walk(
+		$walk,
+		array(
+			'op'    => 'remove',
+			'index' => $index,
+		)
+	);
+	$result   = aafm_builder_commit( $post, $content, $new, $tags, $expected, null, 'avada' );
+	if ( is_wp_error( $result ) ) {
+		return $result;
+	}
+	return array(
+		'post'                => aafm_redact_post( $result['post'] ),
+		'removed'             => aafm_builder_subtree_size( $elements, $index ),
+		'page_fingerprint'    => $result['page_fingerprint'],
 		'restore_revision_id' => $result['restore_revision_id'],
 		'reversible'          => $result['reversible'],
 	) + aafm_avada_reversible_reason( $result );

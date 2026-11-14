@@ -443,6 +443,10 @@ function aafm_integration_ability_order(): array {
 				'name' => 'aafm/avada-move-element',
 				'risk' => 'write',
 			),
+			array(
+				'name' => 'aafm/avada-remove-element',
+				'risk' => 'destructive',
+			),
 		),
 		'wpbakery'      => array(
 			array(

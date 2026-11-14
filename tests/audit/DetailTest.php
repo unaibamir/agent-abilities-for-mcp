@@ -1756,4 +1756,20 @@ final class DetailTest extends TestCase {
 		$entry = aafm_activity_detail_map()['aafm/update-user'];
 		$this->assertSame( 1, substr_count( (string) $entry['fallback_template'], '%' ), 'The fallback takes the required id only.' );
 	}
+
+	/**
+	 * The three single-post replace tools log before the result is known, and a search that matches
+	 * nothing writes nothing, so the row must not claim text was replaced.
+	 */
+	public function test_single_post_replace_rows_do_not_claim_a_replacement(): void {
+		$expected = array(
+			'aafm/replace-in-post'       => 'Ran a text replace on post #7',
+			'aafm/avada-replace-text'    => 'Ran a text replace on Avada page #7',
+			'aafm/wpbakery-replace-text' => 'Ran a text replace on WPBakery page #7',
+		);
+		foreach ( $expected as $ability => $detail ) {
+			$this->assertSame( $detail, aafm_build_activity_detail( $ability, array( 'post_id' => 7 ) ) );
+			$this->assertSame( 'Attempted: ' . $detail, aafm_build_activity_detail( $ability, array( 'post_id' => 7 ), 'error' ) );
+		}
+	}
 }

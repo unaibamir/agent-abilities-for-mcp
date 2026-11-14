@@ -699,7 +699,7 @@ function aafm_activity_detail_map(): array {
 		// output schema by DetailTest.
 		'aafm/replace-in-post'             => array(
 			/* translators: %s: the post's numeric ID. */
-			'template' => __( 'Replaced text in post #%s', 'agent-abilities-for-mcp' ),
+			'template' => __( 'Ran a text replace on post #%s', 'agent-abilities-for-mcp' ),
 			'args'     => array(
 				array(
 					'key'  => 'post_id',
@@ -1241,7 +1241,7 @@ function aafm_activity_detail_map(): array {
 		),
 		'aafm/avada-replace-text'          => array(
 			/* translators: %s: the post's numeric ID. */
-			'template' => __( 'Replaced text in Avada page #%s', 'agent-abilities-for-mcp' ),
+			'template' => __( 'Ran a text replace on Avada page #%s', 'agent-abilities-for-mcp' ),
 			'args'     => array(
 				array(
 					'key'  => 'post_id',
@@ -1252,7 +1252,7 @@ function aafm_activity_detail_map(): array {
 		),
 		'aafm/wpbakery-replace-text'       => array(
 			/* translators: %s: the post's numeric ID. */
-			'template' => __( 'Replaced text in WPBakery page #%s', 'agent-abilities-for-mcp' ),
+			'template' => __( 'Ran a text replace on WPBakery page #%s', 'agent-abilities-for-mcp' ),
 			'args'     => array(
 				array(
 					'key'  => 'post_id',

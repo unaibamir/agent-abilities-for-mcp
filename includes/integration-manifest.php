@@ -481,6 +481,10 @@ function aafm_integration_ability_order(): array {
 				'name' => 'aafm/wpbakery-list-templates',
 				'risk' => 'read',
 			),
+			array(
+				'name' => 'aafm/wpbakery-insert-template',
+				'risk' => 'write',
+			),
 		),
 		'geodirectory'  => array(
 			array(

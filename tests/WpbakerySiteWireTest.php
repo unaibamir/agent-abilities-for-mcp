@@ -21,7 +21,7 @@ final class WpbakerySiteWireTest extends TestCase {
 
 	private const TEMPLATE = '[vc_row][vc_column][vc_column_text]<p>From the template</p>[/vc_column_text][/vc_column][/vc_row]';
 
-	private const TOOLS = array( 'aafm/wpbakery-list-templates' );
+	private const TOOLS = array( 'aafm/wpbakery-list-templates', 'aafm/wpbakery-insert-template' );
 
 	public function set_up(): void {
 		parent::set_up();
@@ -169,5 +169,88 @@ final class WpbakerySiteWireTest extends TestCase {
 				)
 			)['templates'][0]
 		);
+	}
+
+	/**
+	 * Insert-template arguments anchored after the page's only row.
+	 *
+	 * @param int $id Post.
+	 * @return array<string,mixed>
+	 */
+	private static function insert_args( int $id ): array {
+		return array(
+			'post_id'          => $id,
+			'page_fingerprint' => self::fp( self::PAGE ),
+			'template_id'      => 'hero_1',
+			'anchor_index'     => 0,
+			'anchor_expect'    => array(
+				'tag'         => 'vc_row',
+				'fingerprint' => self::fp( self::PAGE ),
+			),
+			'placement'        => 'after',
+		);
+	}
+
+	public function test_insert_template_round_trips_over_a_real_tools_call(): void {
+		list( $handler, $id ) = $this->wired( 'editor' );
+		$done                 = $this->wire(
+			$handler->call_tool(
+				array(
+					'name'      => aafm_mcp_tool_name( 'aafm/wpbakery-insert-template' ),
+					'arguments' => self::insert_args( $id ),
+				),
+				'req-wpb-template-insert-1'
+			)
+		);
+		$stored               = self::PAGE . self::TEMPLATE;
+		$this->assertSame( $stored, get_post_field( 'post_content', $id, 'raw' ) );
+		$this->assertSame( array( 'post', 'index', 'fingerprint', 'page_fingerprint', 'inserted', 'restore_revision_id', 'reversible', 'undo' ), array_keys( $done ) );
+		$this->assertSame( $id, $done['post']['id'] );
+		$this->assertArrayNotHasKey( 'post_content', $done['post'] );
+		$this->assertSame( 3, $done['index'] );
+		$this->assertSame( self::fp( self::TEMPLATE ), $done['fingerprint'] );
+		$this->assertSame( self::fp( $stored ), $done['page_fingerprint'] );
+		$this->assertSame( 3, $done['inserted'] );
+		$this->assertIsInt( $done['restore_revision_id'] );
+		$this->assertTrue( $done['reversible'] );
+		$this->assertSame(
+			array(
+				'undoable'   => false,
+				'change_ids' => array(),
+				'reason'     => 'not_covered',
+			),
+			$done['undo']
+		);
+
+		$refused = $handler->call_tool(
+			array(
+				'name'      => aafm_mcp_tool_name( 'aafm/wpbakery-insert-template' ),
+				'arguments' => self::insert_args( $id ),
+			),
+			'req-wpb-template-insert-2'
+		);
+		$this->assertTrue( $refused->getIsError() );
+		$this->assertSame( aafm_builder_error( 'aafm_builder_page_changed' )->get_error_message(), $refused->getContent()[0]->getText() );
+		$this->assertSame( $stored, get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
+	public function test_insert_template_reversible_reason_is_on_the_wire_only_when_the_restore_point_is_gone(): void {
+		list( $handler, $id ) = $this->wired( 'editor' );
+		$one                  = static fn(): int => 1;
+		add_filter( 'wp_revisions_to_keep', $one );
+		$done                 = $this->wire(
+			$handler->call_tool(
+				array(
+					'name'      => aafm_mcp_tool_name( 'aafm/wpbakery-insert-template' ),
+					'arguments' => self::insert_args( $id ),
+				),
+				'req-wpb-template-insert-limit'
+			)
+		);
+		remove_filter( 'wp_revisions_to_keep', $one );
+		$this->assertSame( array( 'post', 'index', 'fingerprint', 'page_fingerprint', 'inserted', 'restore_revision_id', 'reversible', 'reversible_reason', 'undo' ), array_keys( $done ) );
+		$this->assertNull( $done['restore_revision_id'] );
+		$this->assertFalse( $done['reversible'] );
+		$this->assertStringContainsString( 'no longer there after the save', $done['reversible_reason'] );
 	}
 }

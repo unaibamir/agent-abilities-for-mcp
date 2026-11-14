@@ -431,6 +431,17 @@ final class WpbakeryElementsTest extends TestCase {
 		$this->assertSame( 'a &gt; b &amp; c', $this->encode( 'wpb_btn', 'title', 'a > b & c' ) );
 	}
 
+	/**
+	 * R1-1: WPBakery's textarea type keeps a line break inside the attribute, stored as CRLF by its editor's form post,
+	 * and its editor saves it back byte for byte (smoke probe, scratchpad/1113/s9a-vendor/f1/twoline-*). A textfield
+	 * still refuses one.
+	 */
+	public function test_a_textarea_setting_keeps_a_line_break(): void {
+		$this->assertSame( "Line one\r\nLine two", $this->encode( 'vc_custom_heading', 'text', "Line one\nLine two" ) );
+		$this->assertSame( "Line one\r\nLine \"two\"", str_replace( '``', '"', (string) $this->encode( 'vc_custom_heading', 'text', "Line one\r\nLine \"two\"" ) ) );
+		$this->assert_error( $this->encode( 'wpb_btn', 'title', "two\nlines" ), 'aafm_builder_invalid_value', 400 );
+	}
+
 	public function test_text_refuses_a_line_break_and_a_pre_encoded_value(): void {
 		$this->assert_error( $this->encode( 'wpb_btn', 'title', "two\nlines" ), 'aafm_builder_invalid_value', 400 );
 		$this->assert_error( $this->encode( 'wpb_btn', 'title', '#E-8_PHNjcmlwdD4=' ), 'aafm_builder_invalid_value', 400 );
@@ -820,6 +831,15 @@ final class WpbakeryElementsTest extends TestCase {
 
 	public function test_update_keeps_a_leaf_without_a_closer_without_one(): void {
 		$this->test_update_sets_a_heading_with_quotes_and_brackets();
+	}
+
+	public function test_update_writes_a_two_line_heading(): void {
+		$content = '[vc_row][vc_column][vc_custom_heading text="One line"][/vc_column][/vc_row]';
+		$id      = $this->page( $content );
+		$this->act_as_restricted_editor();
+
+		$this->assertIsArray( $this->update( $id, 2, array( 'set_atts' => array( 'text' => "Line one\nLine two" ) ) ) );
+		$this->assertSame( "[vc_row][vc_column][vc_custom_heading text=\"Line one\r\nLine two\"][/vc_column][/vc_row]", get_post_field( 'post_content', $id, 'raw' ) );
 	}
 
 	public function test_update_keeps_a_stored_closer(): void {

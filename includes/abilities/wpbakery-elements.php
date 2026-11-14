@@ -475,7 +475,7 @@ function aafm_wpbakery_encode_clean( string $kind, $value, array $param ): ?stri
 	$type = (string) ( $param['type'] ?? '' );
 	switch ( $kind ) {
 		case 'text':
-			$text = aafm_wpbakery_plain_text( $value );
+			$text = aafm_wpbakery_plain_text( $value, 'textarea' === $type );
 			return null === $text ? null : aafm_wpbakery_escape_attribute( $text );
 		case 'safe_text':
 			return aafm_wpbakery_encode_safe_text( $value, 'exploded_textarea_safe' === $type );
@@ -518,18 +518,25 @@ function aafm_wpbakery_encode_clean( string $kind, $value, array $param ): ?stri
 }
 
 /**
- * Plain one-line text: the plugin's stored-text sanitizer, then entity normalisation (Ruling B9). A line break or
- * an encoded #E-8_ value is refused.
+ * Plain text: the plugin's stored-text sanitizer, then entity normalisation (Ruling B9). One line, unless the setting
+ * is WPBakery's textarea type, whose editor stores a line break as CRLF inside the attribute and keeps it on its next
+ * save (smoke probe, S9a fix round 1). An encoded #E-8_ value is refused.
  *
- * @param mixed $value Input.
+ * @param mixed $value     Input.
+ * @param bool  $multiline Whether line breaks are kept.
  * @return string|null
  */
-function aafm_wpbakery_plain_text( $value ): ?string {
+function aafm_wpbakery_plain_text( $value, bool $multiline = false ): ?string {
 	$text = aafm_wpbakery_scalar_text( $value );
-	if ( null === $text || 1 === preg_match( '/[\r\n]/', $text ) || 0 === strpos( $text, '#E-8_' ) ) {
+	if ( null === $text || ( ! $multiline && 1 === preg_match( '/[\r\n]/', $text ) ) || 0 === strpos( $text, '#E-8_' ) ) {
 		return null;
 	}
-	return aafm_wpbakery_editor_entities( wp_kses_normalize_entities( aafm_sanitize_plain_text( $text ) ) );
+	if ( ! $multiline ) {
+		return aafm_wpbakery_editor_entities( wp_kses_normalize_entities( aafm_sanitize_plain_text( $text ) ) );
+	}
+	// The editor's form post stores each line break as CRLF.
+	$clean = aafm_sanitize_multiline_text( str_replace( array( "\r\n", "\r" ), "\n", $text ) );
+	return str_replace( "\n", "\r\n", aafm_wpbakery_editor_entities( wp_kses_normalize_entities( $clean ) ) );
 }
 
 /**

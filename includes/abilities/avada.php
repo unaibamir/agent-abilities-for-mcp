@@ -146,15 +146,20 @@ function aafm_args_avada_get_page_content(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'post_id'           => array(
+				'post_id'              => array(
 					'type'        => 'integer',
 					'minimum'     => 1,
 					'description' => __( 'ID of the post/page to read. The current user must have edit access to it.', 'agent-abilities-for-mcp' ),
 				),
-				'include_structure' => array(
+				'include_structure'    => array(
 					'type'        => 'boolean',
 					'default'     => false,
 					'description' => __( 'When true, also returns structure: the Fusion Builder elements in document order with their nesting depth, attributes, decoded attributes, inner text and fingerprint, plus structure_status and page_fingerprint. Use it to find the element that holds the text you want to change before calling avada-replace-text.', 'agent-abilities-for-mcp' ),
+				),
+				'include_page_options' => array(
+					'type'        => 'boolean',
+					'default'     => false,
+					'description' => __( 'When true, also returns custom_css (the page CSS) and page_options (the stored Avada page options, limited to a fixed list). Needs the Avada theme active, and a post Avada owns, one of Avada\'s own types, or a page, post or portfolio item that no other builder owns.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id' ),
@@ -203,6 +208,14 @@ function aafm_args_avada_get_page_content(): array {
 					'type'        => 'string',
 					'description' => __( 'Only with include_structure: first 16 hex characters of the SHA-256 of the whole stored content.', 'agent-abilities-for-mcp' ),
 				),
+				'custom_css'       => array(
+					'type'        => 'string',
+					'description' => __( 'Only with include_page_options: the page CSS as stored.', 'agent-abilities-for-mcp' ),
+				),
+				'page_options'     => array(
+					'type'        => 'object',
+					'description' => __( 'Only with include_page_options: the stored page options whose ids are on Avada\'s fixed list of layout, title bar, sidebar, slider, header, footer, off canvas, form appearance, steps and confirmation, SEO and template settings. Form notification, submission and privacy settings and code fields are never returned. An option not stored is absent and Avada\'s default applies.', 'agent-abilities-for-mcp' ),
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_avada_get_page_content',
@@ -232,16 +245,52 @@ function aafm_exec_avada_get_page_content( array $input ) {
 		return aafm_generic_error();
 	}
 
+	$with_options = ! empty( $input['include_page_options'] );
+	if ( $with_options && ! aafm_avada_theme_active() ) {
+		return new WP_Error(
+			'aafm_avada_theme_inactive',
+			__( 'Page options can be read only while the Avada theme is active.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 409 )
+		);
+	}
+	// Read first, before the ownership check loads this post's meta outside the checked scope. _fusion is
+	// read directly, never through Avada's getter, which can write while it reads (A12).
+	$metas = aafm_with_checked_reads(
+		static function () use ( $id, $with_options ): array {
+			$metas = array();
+			if ( $with_options ) {
+				$css                   = aafm_meta_get( 'post', $id, '_fusion_builder_custom_css', true );
+				$fusion                = aafm_meta_get( 'post', $id, '_fusion', true );
+				$metas['custom_css']   = is_scalar( $css ) ? (string) $css : '';
+				$metas['page_options'] = (object) array_intersect_key( is_array( $fusion ) ? $fusion : array(), aafm_avada_page_option_keys() );
+			}
+			return $metas;
+		},
+		aafm_generic_error()
+	);
+	if ( is_wp_error( $metas ) ) {
+		return $metas;
+	}
+
+	$guard = aafm_post_has_foreign_builder_ownership( $id, true );
+	if ( $with_options && ! aafm_avada_page_options_post_allowed( $post, $guard ) ) {
+		return new WP_Error(
+			'aafm_not_avada_owned',
+			__( 'This post is not owned by Avada/Fusion Builder.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 409 )
+		);
+	}
+
 	$out = array(
 		'post_id'        => $id,
 		'content'        => (string) $post->post_content,
-		'is_avada_owned' => aafm_builder_ownership_allows( 'avada', aafm_post_has_foreign_builder_ownership( $id, true ), $post ),
+		'is_avada_owned' => aafm_builder_ownership_allows( 'avada', $guard, $post ),
 	);
 	if ( ! empty( $input['include_structure'] ) ) {
 		$out                     = array_merge( $out, aafm_avada_structure( (string) $post->post_content ) );
 		$out['page_fingerprint'] = aafm_builder_page_fingerprint( (string) $post->post_content );
 	}
-	return $out;
+	return array_merge( $out, $metas );
 }
 
 /**
@@ -404,6 +453,33 @@ function aafm_avada_encoded_settings(): array {
 function aafm_avada_decode_if_needed( string $value ): string {
 	$raw = base64_decode( $value ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- reading Avada's own base64 form back (A3), never executed.
 	return base64_encode( $raw ) === $value ? $raw : $value; // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- the round-trip test Avada itself applies.
+}
+
+/**
+ * Whether the Avada theme is active: its option name accessor is reachable through the seam.
+ *
+ * @return bool
+ */
+function aafm_avada_theme_active(): bool {
+	return null !== aafm_builder_vendor( 'avada_option_name' );
+}
+
+/**
+ * Whether a post's page options may be read (and, in S12, written) (Ruling B7). Page options are not
+ * builder content, so the post may be one Avada owns, one of Avada's own types, or a page, post or
+ * portfolio item no other builder owns. A post another builder owns is refused. The slide types join
+ * only after their own evidence (Ruling R3-PR2-13).
+ *
+ * @param WP_Post      $post         Post.
+ * @param string|false $guard_answer aafm_post_has_foreign_builder_ownership() as the caller read it.
+ * @return bool
+ */
+function aafm_avada_page_options_post_allowed( WP_Post $post, $guard_answer ): bool {
+	if ( 'avada' === $guard_answer ) {
+		return true;
+	}
+	return false === $guard_answer
+		&& in_array( $post->post_type, array_merge( aafm_builder_own_post_types( 'avada' ), array( 'page', 'post', 'avada_portfolio' ) ), true );
 }
 
 /**

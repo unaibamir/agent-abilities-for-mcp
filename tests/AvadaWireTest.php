@@ -127,4 +127,100 @@ final class AvadaWireTest extends TestCase {
 		$stored = get_post_field( 'post_content', $post->ID, 'raw' );
 		$this->assertStringContainsString( 'Greetings world', $stored );
 	}
+
+	public function test_avada_read_with_the_outline_and_page_options_round_trips_over_a_real_tools_call(): void {
+		$inner   = '[fusion_text]Hi &amp; you[/fusion_text]';
+		$content = '[fusion_builder_container]' . $inner . '[/fusion_builder_container]';
+		$post    = self::factory()->post->create_and_get(
+			array(
+				'post_type'    => 'page',
+				'post_content' => $content,
+			)
+		);
+		update_post_meta( $post->ID, 'fusion_builder_status', 'active' );
+		update_post_meta(
+			$post->ID,
+			'_fusion',
+			array(
+				'page_title_bar'          => 'no',
+				'pages_sidebar'           => 'Footer Widget Area 1',
+				'form_notification_email' => 'owner@example.invalid',
+			)
+		);
+		update_post_meta( $post->ID, '_fusion_builder_custom_css', '.s8b-page { color: #123456; }' );
+		add_filter(
+			'aafm_builder_vendor',
+			static fn( $resolved, string $entry ) => 'avada_option_name' === $entry ? static fn(): string => 'fusion_options' : $resolved,
+			10,
+			2
+		);
+
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		$this->register_enabled( array( 'aafm/avada-get-page-content', 'aafm/avada-replace-text' ) );
+		$this->acting_as( 'editor' );
+		$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $this->build_avada_server( \WP\MCP\Core\McpAdapter::instance() ) );
+		$call    = static function ( array $arguments, string $req ) use ( $handler, $post ) {
+			return $handler->call_tool(
+				array(
+					'name'      => aafm_mcp_tool_name( 'aafm/avada-get-page-content' ),
+					'arguments' => array_merge( array( 'post_id' => $post->ID ), $arguments ),
+				),
+				$req
+			);
+		};
+
+		$both = $call(
+			array(
+				'include_structure'    => true,
+				'include_page_options' => true,
+			),
+			'req-avada-s8b-1'
+		);
+		$this->assertNotInstanceOf( \AAFM\Tests\Support\McpProtocolError::class, $both );
+		$fp = static fn( string $source ): string => substr( hash( 'sha256', $source ), 0, 16 );
+		$this->assertSame(
+			array(
+				'post_id'          => $post->ID,
+				'content'          => $content,
+				'is_avada_owned'   => true,
+				'structure_status' => 'ok',
+				'structure'        => array(
+					array(
+						'index'        => 0,
+						'depth'        => 0,
+						'tag'          => 'fusion_builder_container',
+						'self_closing' => false,
+						'has_closer'   => true,
+						'atts'         => array(),
+						'fingerprint'  => $fp( $content ),
+						'atts_decoded' => array(),
+					),
+					array(
+						'index'        => 1,
+						'depth'        => 1,
+						'tag'          => 'fusion_text',
+						'self_closing' => false,
+						'has_closer'   => true,
+						'atts'         => array(),
+						'fingerprint'  => $fp( $inner ),
+						'atts_decoded' => array(),
+						'text'         => 'Hi &amp; you',
+					),
+				),
+				'page_fingerprint' => $fp( $content ),
+				'custom_css'       => '.s8b-page { color: #123456; }',
+				'page_options'     => array(
+					'page_title_bar' => 'no',
+					'pages_sidebar'  => 'Footer Widget Area 1',
+				),
+			),
+			json_decode( (string) wp_json_encode( $both->getStructuredContent() ), true )
+		);
+		$this->assertStringContainsString( '"atts_decoded":{}', $both->getContent()[0]->getText(), 'Decoded attributes travel as a JSON object.' );
+		$this->assertStringNotContainsString( 'owner@example.invalid', $both->getContent()[0]->getText() );
+
+		$plain = $call( array(), 'req-avada-s8b-2' );
+		$this->assertNotInstanceOf( \AAFM\Tests\Support\McpProtocolError::class, $plain );
+		$this->assertSame( array( 'post_id', 'content', 'is_avada_owned' ), array_keys( $plain->getStructuredContent() ) );
+	}
 }

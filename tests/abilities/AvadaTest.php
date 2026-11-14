@@ -641,6 +641,64 @@ final class AvadaTest extends TestCase {
 		return (string) file_get_contents( dirname( __DIR__ ) . '/Fixtures/Avada/page-elements.txt' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local fixture.
 	}
 
+	/**
+	 * The page fixture's stored _fusion meta, as Avada saved it.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private function s8b_page_options(): array {
+		return (array) json_decode( (string) file_get_contents( dirname( __DIR__ ) . '/Fixtures/Avada/page-options.json' ), true ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local fixture.
+	}
+
+	/**
+	 * Force the theme seam entry present (a closure standing in for Avada::get_option_name()) or absent.
+	 *
+	 * @param bool $present Whether Avada's theme counts as active.
+	 */
+	private function force_avada_theme( bool $present ): void {
+		remove_all_filters( 'aafm_builder_vendor' );
+		add_filter(
+			'aafm_builder_vendor',
+			static function ( $resolved, string $entry ) use ( $present ) {
+				if ( 'avada_option_name' !== $entry ) {
+					return $resolved;
+				}
+				return $present ? static fn(): string => 'fusion_options' : null;
+			},
+			10,
+			2
+		);
+	}
+
+	/**
+	 * A post holding the fixture's page options and page CSS.
+	 *
+	 * @param array<string,mixed> $args Post args.
+	 * @return int
+	 */
+	private function post_with_page_options( array $args ): int {
+		$id = self::factory()->post->create( $args );
+		update_post_meta( $id, '_fusion', $this->s8b_page_options() );
+		update_post_meta( $id, '_fusion_builder_custom_css', '.s8b-page { color: #123456; }' );
+		return $id;
+	}
+
+	/**
+	 * Read with include_page_options as an administrator.
+	 *
+	 * @param int $id Post id.
+	 * @return array<string,mixed>|WP_Error
+	 */
+	private function read_page_options( int $id ) {
+		$this->acting_as( 'administrator' );
+		return aafm_exec_avada_get_page_content(
+			array(
+				'post_id'              => $id,
+				'include_page_options' => true,
+			)
+		);
+	}
+
 	public function test_outline_items_carry_a_fingerprint_that_resolves(): void {
 		$content = $this->s8b_page();
 		$out     = $this->read_page( $this->make_avada_post( $content ), true );
@@ -1189,5 +1247,149 @@ final class AvadaTest extends TestCase {
 		foreach ( array( 'messages', 'member_only_form', 'user_roles', 'nonce_method' ) as $id ) {
 			$this->assertArrayNotHasKey( $id, $keys );
 		}
+	}
+
+	public function test_page_options_are_filtered_to_the_allowlist(): void {
+		$this->force_avada_theme( true );
+		$id   = $this->make_avada_post( '[fusion_builder_container][/fusion_builder_container]' );
+		$meta = $this->s8b_page_options();
+		update_post_meta( $id, '_fusion', array_merge( $meta, array( 'form_notification_email' => 'owner@example.invalid' ) ) );
+		update_post_meta( $id, '_fusion_builder_custom_css', '.s8b-page { color: #123456; }' );
+
+		$out = $this->read_page_options( $id );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( $meta, (array) $out['page_options'] );
+		$this->assertSame( 'no', ( (array) $out['page_options'] )['page_title_bar'] );
+		$this->assertSame( 'Footer Widget Area 1', ( (array) $out['page_options'] )['pages_sidebar'] );
+		$this->assertStringNotContainsString( 'owner@example.invalid', (string) wp_json_encode( $out ) );
+		$this->assertSame( '.s8b-page { color: #123456; }', $out['custom_css'] );
+	}
+
+	public function test_page_options_keys_are_absent_without_the_flag(): void {
+		$this->force_avada_theme( true );
+		$id = $this->post_with_page_options( array( 'post_type' => 'page' ) );
+		$this->acting_as( 'administrator' );
+		foreach ( array( array(), array( 'include_page_options' => false ) ) as $flag ) {
+			$out = aafm_exec_avada_get_page_content( array_merge( array( 'post_id' => $id ), $flag ) );
+			$this->assertArrayNotHasKey( 'page_options', $out );
+			$this->assertArrayNotHasKey( 'custom_css', $out );
+		}
+	}
+
+	public function test_page_options_need_the_avada_theme(): void {
+		$this->force_avada_theme( false );
+		$out = $this->read_page_options( $this->post_with_page_options( array( 'post_type' => 'page' ) ) );
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_avada_theme_inactive', $out->get_error_code() );
+		$this->assertSame( 409, $out->get_error_data()['status'] );
+		$this->assertStringNotContainsString( ' - ', $out->get_error_message() );
+		$this->assertFalse( aafm_avada_theme_active() );
+	}
+
+	public function test_page_options_work_on_a_classic_page(): void {
+		$this->force_avada_theme( true );
+		$id = $this->post_with_page_options(
+			array(
+				'post_type'    => 'page',
+				'post_content' => 'A classic page with no builder.',
+			)
+		);
+		$this->assertFalse( aafm_post_has_foreign_builder_ownership( $id, true ) );
+
+		$out = $this->read_page_options( $id );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( $this->s8b_page_options(), (array) $out['page_options'] );
+		$this->assertFalse( $out['is_avada_owned'] );
+		$this->assertTrue( aafm_avada_theme_active() );
+	}
+
+	public function test_page_options_are_refused_on_a_slide_until_the_type_is_allowed(): void {
+		$this->force_avada_theme( true );
+		register_post_type( 'slide', array( 'public' => true ) );
+		$id = $this->post_with_page_options( array( 'post_type' => 'slide' ) );
+
+		$out = $this->read_page_options( $id );
+		unregister_post_type( 'slide' );
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_not_avada_owned', $out->get_error_code() );
+		$this->assertSame( 409, $out->get_error_data()['status'] );
+		$this->assertArrayHasKey( 'caption_1', aafm_avada_page_option_keys(), 'The slide ids stay in the list, unreachable (R3-PR2-13).' );
+	}
+
+	public function test_page_options_are_refused_on_an_elementor_page(): void {
+		$this->force_avada_theme( true );
+		$id = $this->post_with_page_options( array( 'post_type' => 'page' ) );
+		update_post_meta( $id, '_elementor_data', '[]' );
+
+		$out = $this->read_page_options( $id );
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_not_avada_owned', $out->get_error_code() );
+		$post = get_post( $id );
+		$this->assertFalse( aafm_avada_page_options_post_allowed( $post, 'elementor' ) );
+		$this->assertFalse( aafm_avada_page_options_post_allowed( $post, 'unknown' ) );
+		$this->assertTrue( aafm_avada_page_options_post_allowed( $post, 'avada' ) );
+		$this->assertTrue( aafm_avada_page_options_post_allowed( $post, false ) );
+	}
+
+	public function test_page_options_read_never_calls_avadas_getter(): void {
+		$this->force_avada_theme( true );
+		$id     = $this->post_with_page_options( array( 'post_type' => 'page' ) );
+		$before = get_post_meta( $id, '_fusion', false );
+		$reads  = 0;
+		$writes = 0;
+		$count  = static function ( $value, $object_id, $key ) use ( $id, &$reads ) {
+			if ( (int) $object_id === $id && '_fusion' === $key ) {
+				++$reads;
+			}
+			return $value;
+		};
+		$block  = static function ( $check, $object_id, $key ) use ( $id, &$writes ) {
+			if ( (int) $object_id === $id && '_fusion' === $key ) {
+				++$writes;
+			}
+			return $check;
+		};
+		add_filter( 'get_post_metadata', $count, 10, 3 );
+		add_filter( 'update_post_metadata', $block, 10, 3 );
+
+		$out = $this->read_page_options( $id );
+		remove_filter( 'get_post_metadata', $count, 10 );
+		remove_filter( 'update_post_metadata', $block, 10 );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( 1, $reads, 'One read through core metadata.' );
+		$this->assertSame( 0, $writes );
+		clean_post_cache( $id );
+		$this->assertSame( $before, get_post_meta( $id, '_fusion', false ) );
+	}
+
+	public function test_page_options_fail_when_the_meta_read_fails(): void {
+		$this->force_avada_theme( true );
+		$id = $this->post_with_page_options( array( 'post_type' => 'page' ) );
+		$this->acting_as( 'administrator' );
+		aafm_exact_object( 'post', $id );
+		wp_cache_delete( $id, 'post_meta' );
+		QueryFaultInjector::reset_fired_count();
+
+		$out = QueryFaultInjector::break_query_with_real_error(
+			array( 'SELECT post_id, meta_key, meta_value FROM', 'postmeta' ),
+			static function () use ( $id ) {
+				return aafm_exec_avada_get_page_content(
+					array(
+						'post_id'              => $id,
+						'include_page_options' => true,
+					)
+				);
+			},
+			1
+		);
+		wp_cache_delete( $id, 'post_meta' );
+
+		$this->assertInstanceOf( WP_Error::class, $out, 'Never an empty value standing in for a failed read.' );
 	}
 }

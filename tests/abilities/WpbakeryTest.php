@@ -15,6 +15,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Abilities;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 use WP_Error;
 
@@ -919,6 +920,79 @@ WPB;
 		$this->assertSame( '', $this->item( $out, 'vc_custom_heading' )['text'] );
 	}
 
+	/**
+	 * A fixture page with WPBakery's page metas set, read with include_page_settings as a user.
+	 *
+	 * @param int $user User id.
+	 * @return array<string,mixed>
+	 */
+	private function read_settings_as( int $user ): array {
+		$id = $this->make_page( $this->elements_fixture() );
+		update_post_meta( $id, '_wpb_post_custom_css', '.s8a-page { color: #123456; }' );
+		update_post_meta( $id, '_wpb_vc_js_status', 'true' );
+		update_post_meta( $id, '_wpb_post_custom_js_header', 'window.s8aHeader = 1;' );
+		update_post_meta( $id, '_wpb_post_custom_js_footer', 'window.s8aFooter = 2;' );
+		wp_set_current_user( $user );
+		return $this->read(
+			array(
+				'post_id'               => $id,
+				'include_page_settings' => true,
+			)
+		);
+	}
+
+	public function test_page_settings_key_is_absent_without_the_flag(): void {
+		$out = $this->read_elements();
+		$this->assertArrayNotHasKey( 'page_settings', $out );
+	}
+
+	public function test_page_settings_returns_css_and_status(): void {
+		$editor = self::factory()->user->create( array( 'role' => 'editor' ) );
+		$out    = $this->read_settings_as( $editor );
+
+		$this->assertSame( '.s8a-page { color: #123456; }', $out['page_settings']['custom_css'] );
+		$this->assertSame( 'true', $out['page_settings']['editor_status'] );
+		$this->assertArrayNotHasKey( 'structure', $out );
+	}
+
+	public function test_page_js_keys_are_absent_without_unfiltered_html(): void {
+		$editor = self::factory()->user->create( array( 'role' => 'editor' ) );
+		get_userdata( $editor )->add_cap( 'unfiltered_html', false );
+		$this->assertFalse( user_can( $editor, 'unfiltered_html' ) );
+
+		$this->assertSame( array( 'custom_css', 'editor_status' ), array_keys( $this->read_settings_as( $editor )['page_settings'] ) );
+
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$this->assertTrue( user_can( $admin, 'unfiltered_html' ) );
+		$settings = $this->read_settings_as( $admin )['page_settings'];
+		$this->assertSame( 'window.s8aHeader = 1;', $settings['custom_js_header'] );
+		$this->assertSame( 'window.s8aFooter = 2;', $settings['custom_js_footer'] );
+	}
+
+	public function test_a_failed_meta_read_is_an_error_not_an_empty_value(): void {
+		$id = $this->make_page( $this->elements_fixture() );
+		update_post_meta( $id, '_wpb_post_custom_css', '.s8a-page { color: #123456; }' );
+		$this->acting_as( 'editor' );
+		wp_cache_delete( $id, 'post_meta' );
+		QueryFaultInjector::reset_fired_count();
+
+		$out = QueryFaultInjector::break_query_with_real_error(
+			array( 'SELECT post_id, meta_key, meta_value FROM', 'postmeta' ),
+			static function () use ( $id ) {
+				return aafm_exec_wpbakery_get_page_content(
+					array(
+						'post_id'               => $id,
+						'include_page_settings' => true,
+					)
+				);
+			}
+		);
+		wp_cache_delete( $id, 'post_meta' );
+
+		$this->assertGreaterThan( 0, QueryFaultInjector::fired_count() );
+		$this->assertInstanceOf( WP_Error::class, $out, (string) wp_json_encode( $out ) );
+	}
+
 	public function test_a_grid_item_is_readable_by_an_editor_and_refused_for_a_subscriber(): void {
 		register_post_type(
 			'vc_grid_item',
@@ -952,5 +1026,20 @@ WPB;
 
 		$this->acting_as( 'subscriber' );
 		$this->assertFalse( aafm_perm_avada_post_object( array( 'post_id' => $id ) ) );
+	}
+
+	public function test_read_schema_declares_include_page_settings_and_stays_closed(): void {
+		$args = aafm_args_wpbakery_get_page_content();
+
+		$this->assertFalse( $args['input_schema']['additionalProperties'] );
+		$this->assertSame( 'boolean', $args['input_schema']['properties']['include_page_settings']['type'] );
+		$this->assertFalse( $args['input_schema']['properties']['include_page_settings']['default'] );
+		$this->assertSame( array( 'post_id', 'include_structure', 'include_page_settings' ), array_keys( $args['input_schema']['properties'] ) );
+		foreach ( array( 'page_fingerprint', 'page_settings' ) as $key ) {
+			$this->assertArrayHasKey( $key, $args['output_schema']['properties'] );
+		}
+		foreach ( array( 'fingerprint', 'atts_decoded', 'text' ) as $key ) {
+			$this->assertArrayHasKey( $key, $args['output_schema']['properties']['structure']['items']['properties'] );
+		}
 	}
 }

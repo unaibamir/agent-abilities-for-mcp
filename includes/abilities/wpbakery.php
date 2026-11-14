@@ -87,15 +87,20 @@ function aafm_args_wpbakery_get_page_content(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'post_id'           => array(
+				'post_id'               => array(
 					'type'        => 'integer',
 					'minimum'     => 1,
 					'description' => __( 'ID of the post or page to read. The current user must have edit access to it.', 'agent-abilities-for-mcp' ),
 				),
-				'include_structure' => array(
+				'include_structure'     => array(
 					'type'        => 'boolean',
 					'default'     => false,
 					'description' => __( 'When true, also returns structure: the shortcode elements in document order with their nesting depth, attributes, decoded attributes, inner text and fingerprint, plus structure_status and page_fingerprint. Use it to find the element that holds the text you want to change before calling wpbakery-replace-text.', 'agent-abilities-for-mcp' ),
+				),
+				'include_page_settings' => array(
+					'type'        => 'boolean',
+					'default'     => false,
+					'description' => __( 'When true, also returns page_settings: the page custom CSS, the editor status and, for a user who may post unfiltered HTML, the page custom JS for the header and the footer.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id' ),
@@ -143,6 +148,16 @@ function aafm_args_wpbakery_get_page_content(): array {
 					'type'        => 'string',
 					'description' => __( 'Only with include_structure: first 16 hex characters of the SHA-256 of the whole stored content.', 'agent-abilities-for-mcp' ),
 				),
+				'page_settings'     => array(
+					'type'        => 'object',
+					'description' => __( 'Only with include_page_settings. custom_js_header and custom_js_footer are present only for a user who may post unfiltered HTML.', 'agent-abilities-for-mcp' ),
+					'properties'  => array(
+						'custom_css'       => array( 'type' => 'string' ),
+						'editor_status'    => array( 'type' => 'string' ),
+						'custom_js_header' => array( 'type' => 'string' ),
+						'custom_js_footer' => array( 'type' => 'string' ),
+					),
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_wpbakery_get_page_content',
@@ -160,7 +175,9 @@ function aafm_args_wpbakery_get_page_content(): array {
 /**
  * Execute aafm/wpbakery-get-page-content: raw post_content, unrendered, an ownership flag
  * decided from the content as the guard decides it, on request the outline the writes guard (with
- * fingerprints, decoded attributes and leaf text, design WB-1) and the page fingerprint.
+ * fingerprints, decoded attributes and leaf text, design WB-1) and the page fingerprint, and on
+ * request the page settings metas (WB-9 read side), read inside aafm_with_checked_reads() so a
+ * failed meta read is an error. Page custom JS goes only to a user with unfiltered_html (Ruling Q14).
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
@@ -170,6 +187,33 @@ function aafm_exec_wpbakery_get_page_content( array $input ) {
 	$post = aafm_exact_object( 'post', $id );
 	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
+	}
+
+	// Read first, before the ownership check loads this post's meta outside the checked scope.
+	$settings = null;
+	if ( ! empty( $input['include_page_settings'] ) ) {
+		$settings = aafm_with_checked_reads(
+			static function () use ( $id ): array {
+				$keys = array(
+					'custom_css'    => '_wpb_post_custom_css',
+					'editor_status' => '_wpb_vc_js_status',
+				);
+				if ( current_user_can( 'unfiltered_html' ) ) {
+					$keys['custom_js_header'] = '_wpb_post_custom_js_header';
+					$keys['custom_js_footer'] = '_wpb_post_custom_js_footer';
+				}
+				$settings = array();
+				foreach ( $keys as $field => $key ) {
+					$value              = aafm_meta_get( 'post', $id, $key, true );
+					$settings[ $field ] = is_scalar( $value ) ? (string) $value : '';
+				}
+				return $settings;
+			},
+			aafm_generic_error()
+		);
+		if ( is_wp_error( $settings ) ) {
+			return $settings;
+		}
 	}
 
 	$content = (string) $post->post_content;
@@ -185,6 +229,9 @@ function aafm_exec_wpbakery_get_page_content( array $input ) {
 			null === $tags ? array( 'structure_status' => 'unparseable' ) : aafm_wpbakery_structure( $content, $tags )
 		);
 		$out['page_fingerprint'] = aafm_builder_page_fingerprint( $content );
+	}
+	if ( null !== $settings ) {
+		$out['page_settings'] = $settings;
 	}
 	return $out;
 }

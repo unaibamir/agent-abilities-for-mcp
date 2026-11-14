@@ -251,4 +251,61 @@ final class WpbakeryWireTest extends TestCase {
 		);
 		$this->assertStringContainsString( 'Heading bravo', get_post_field( 'post_content', $id, 'raw' ) );
 	}
+	public function test_wpbakery_read_with_page_settings_round_trips_over_a_real_tools_call(): void {
+		list( $handler, $id ) = $this->wired();
+		update_post_meta( $id, '_wpb_post_custom_css', '.wire { color: #010203; }' );
+		update_post_meta( $id, '_wpb_vc_js_status', 'true' );
+		update_post_meta( $id, '_wpb_post_custom_js_header', 'window.wireHeader = 1;' );
+
+		$both = $this->wire(
+			$handler->call_tool(
+				array(
+					'name'      => aafm_mcp_tool_name( 'aafm/wpbakery-get-page-content' ),
+					'arguments' => array(
+						'post_id'               => $id,
+						'include_structure'     => true,
+						'include_page_settings' => true,
+					),
+				),
+				'req-wpb-get-3'
+			)
+		);
+		$this->assertSame(
+			array( 'post_id', 'content', 'is_wpbakery_owned', 'structure_status', 'structure', 'page_fingerprint', 'page_settings' ),
+			array_keys( $both )
+		);
+		$this->assertSame( self::fp( self::PAGE ), $both['page_fingerprint'] );
+		$this->assertCount( 4, $both['structure'] );
+		// The wire user is an editor, who holds unfiltered_html on a single site, so the JS keys are present.
+		$this->assertSame(
+			array(
+				'custom_css'       => '.wire { color: #010203; }',
+				'editor_status'    => 'true',
+				'custom_js_header' => 'window.wireHeader = 1;',
+				'custom_js_footer' => '',
+			),
+			$both['page_settings']
+		);
+
+		$off = $this->wire(
+			$handler->call_tool(
+				array(
+					'name'      => aafm_mcp_tool_name( 'aafm/wpbakery-get-page-content' ),
+					'arguments' => array(
+						'post_id'               => $id,
+						'include_page_settings' => false,
+					),
+				),
+				'req-wpb-get-4'
+			)
+		);
+		$this->assertSame(
+			array(
+				'post_id'           => $id,
+				'content'           => self::PAGE,
+				'is_wpbakery_owned' => true,
+			),
+			$off
+		);
+	}
 }

@@ -1233,8 +1233,13 @@ final class AvadaTest extends TestCase {
 	}
 
 	public function test_no_allowlisted_id_names_a_recipient_webhook_key_or_privacy_setting(): void {
-		$allowed = array(); // No allowlisted id matches the pattern; an exception would be listed here with its reason.
-		$named   = preg_grep( '/mail|recipient|notif|webhook|hook_url|api|secret|token|key|privacy|submission|entries|member_only|user_roles|nonce/', array_keys( aafm_avada_page_option_keys() ) );
+		// Ids the pattern catches that are in on purpose, each with its reason.
+		$allowed = array(
+			// Off canvas display rule (tab_off_canvas_rules.php): the role slugs that see the panel, no secret or
+			// visitor data (ruled IN in fix round 1).
+			'users_roles' => 'off canvas visibility roles',
+		);
+		$named   = preg_grep( '/mail|recipient|notif|webhook|hook_url|api|secret|token|key|privacy|submission|entries|member_only|users?_roles|nonce/', array_keys( aafm_avada_page_option_keys() ) );
 		$this->assertSame( array(), array_values( array_diff( (array) $named, array_keys( $allowed ) ) ) );
 	}
 

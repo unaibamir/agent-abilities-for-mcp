@@ -79,6 +79,11 @@ function aafm_integration_cards(): array {
 			// (Task 21 Step 7: active/not_installed only, no installed_inactive for this card).
 			'plugins' => array(),
 		),
+		'wpbakery'      => array(
+			'label'   => __( 'WPBakery Page Builder', 'agent-abilities-for-mcp' ),
+			'icon'    => 'integrations',
+			'plugins' => array( 'js_composer/js_composer.php' ),
+		),
 		'geodirectory'  => array(
 			'label'   => __( 'GeoDirectory', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',

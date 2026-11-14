@@ -336,6 +336,72 @@ final class BuilderShortcodesTest extends TestCase {
 		}
 	}
 
+	/**
+	 * The avada_map row runs the part of fusion_builder_map()'s editor pass that names settings: Avada's own params,
+	 * responsive and states filters, in its order, so a REST request sees the tablet, phone and hover settings the
+	 * editor writes (s10b-report.md, probe B: without them the editor's next save adds margin_top_small to a title).
+	 */
+	public function test_avada_map_row_adds_the_editors_responsive_and_state_settings(): void {
+		$before                                 = $GLOBALS['all_fusion_builder_elements'] ?? null;
+		$GLOBALS['all_fusion_builder_elements'] = array( // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- a stand-in for Avada's map global, restored below.
+			'fusion_title' => array(
+				'name'   => 'Title',
+				'params' => array(
+					array(
+						'type'       => 'radio_button_set',
+						'param_name' => 'content_align',
+						'default'    => 'left',
+						'responsive' => array( 'state' => 'large' ),
+					),
+					array(
+						'type'       => 'colorpickeralpha',
+						'param_name' => 'link_color',
+						'states'     => array( 'hover' => array( 'default' => '#fff' ) ),
+					),
+					array( 'heading' => 'A group with no setting name' ),
+				),
+			),
+		);
+		$seen                                   = array();
+		$responsive                             = static function ( $atts, $params, $tag ) use ( &$seen ) {
+			$seen[] = array( 'responsive', $tag, array_column( $atts, 'name' ), array_keys( $params ) );
+			$out    = array();
+			foreach ( $params as $name => $param ) {
+				if ( 'content_align' === $name ) {
+					$out['content_align_medium'] = array( 'param_name' => 'content_align_medium' ) + $param;
+				}
+				$out[ $name ] = $param;
+			}
+			return $out;
+		};
+		$states                                 = static function ( $atts, $params, $tag ) use ( &$seen ) {
+			$seen[] = array( 'states', $tag, array_column( $atts, 'name' ), array_keys( $params ) );
+			return $params + array(
+				'link_hover_color' => array(
+					'param_name' => 'link_hover_color',
+					'default'    => '#fff',
+				),
+			);
+		};
+		add_filter( 'fusion_builder_responsive_params', $responsive, 10, 3 );
+		add_filter( 'fusion_builder_states_params', $states, 10, 3 );
+		$target = aafm_builder_vendor_rows()['avada_map']['target'];
+		$map    = $target();
+		remove_filter( 'fusion_builder_responsive_params', $responsive, 10 );
+		remove_filter( 'fusion_builder_states_params', $states, 10 );
+		$GLOBALS['all_fusion_builder_elements'] = $before; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restoring the global.
+
+		$this->assertSame( array( 'content_align_medium', 'content_align', 'link_color', 'link_hover_color' ), array_keys( $map['fusion_title']['params'] ) );
+		$this->assertSame(
+			array(
+				array( 'responsive', 'fusion_title', array( 'content_align' ), array( 'content_align', 'link_color' ) ),
+				array( 'states', 'fusion_title', array( 'link_color' ), array( 'content_align_medium', 'content_align', 'link_color' ) ),
+			),
+			$seen,
+			'Responsive first, then states, each with params keyed by setting name, as fusion_builder_map() calls them.'
+		);
+	}
+
 	public function test_expected_walk_for_update_insert_move_and_remove(): void {
 		$walk = aafm_fusion_shortcode_walk( self::TREE, 0, self::TAGS );
 		$t    = static fn( string $tag, int $depth, array $atts = array() ) => array(

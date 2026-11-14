@@ -385,15 +385,49 @@ function aafm_builder_vendor_rows(): array {
 			'target'   => 'awb_maybe_init_element_maps',
 			'requires' => 'awb_maybe_init_element_maps',
 		),
-		// Avada Builder's element map, keyed by tag, as fusion_builder_map() left it, with each element's shared
-		// placeholders expanded by Avada's own filter (Fusion_Builder_Element_Helper::placeholders_to_params()).
+		// Avada Builder's element map, keyed by tag, as fusion_builder_map() left it, with the part of its editor pass
+		// that names settings run here too (A25 skips it outside wp-admin): each element's shared placeholders expanded
+		// (Fusion_Builder_Element_Helper::placeholders_to_params()), the params keyed by setting name, then the tablet,
+		// phone and hover settings added by Avada's own responsive and states filters, in that order. Without them an
+		// inserted element lacks settings the editor writes, and its next save adds them (s10b-report.md, probe B).
 		'avada_map'                  => array(
 			'target'   => static function (): array {
 				$map = $GLOBALS['all_fusion_builder_elements'] ?? array();
 				$out = array();
 				foreach ( is_array( $map ) ? $map : array() as $tag => $entry ) {
 					if ( is_array( $entry ) && isset( $entry['params'] ) && is_array( $entry['params'] ) ) {
-						$entry['params'] = (array) apply_filters( 'fusion_builder_element_params', $entry['params'], (string) $tag ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Avada Builder's own filter, applied as its editor applies it.
+						$tag    = (string) $tag;
+						$params = array();
+						$resp   = array();
+						$states = array();
+						foreach ( (array) apply_filters( 'fusion_builder_element_params', $entry['params'], $tag ) as $param ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Avada Builder's own filter, applied as its editor applies it.
+							if ( ! is_array( $param ) || ! isset( $param['param_name'] ) || ! is_string( $param['param_name'] ) ) {
+								continue;
+							}
+							$name = $param['param_name'];
+							if ( isset( $param['responsive'] ) && is_array( $param['responsive'] ) ) {
+								$resp[] = array(
+									'name'        => $name,
+									'description' => $param['description'] ?? '',
+									'args'        => $param['responsive'],
+								);
+							}
+							if ( isset( $param['states'] ) && is_array( $param['states'] ) ) {
+								$states[] = array(
+									'name'        => $name,
+									'description' => $param['description'] ?? '',
+									'states'      => $param['states'],
+								) + ( isset( $param['responsive'] ) ? array( 'responsive' => $param['responsive'] ) : array() );
+							}
+							$params[ $name ] = $param;
+						}
+						if ( array() !== $resp ) {
+							$params = (array) apply_filters( 'fusion_builder_responsive_params', $resp, $params, $tag ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Avada Builder's own filter, applied as its editor applies it.
+						}
+						if ( array() !== $states ) {
+							$params = (array) apply_filters( 'fusion_builder_states_params', $states, $params, $tag ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Avada Builder's own filter, applied as its editor applies it.
+						}
+						$entry['params'] = $params;
 					}
 					$out[ $tag ] = $entry;
 				}

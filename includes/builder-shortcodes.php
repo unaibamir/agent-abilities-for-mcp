@@ -380,6 +380,27 @@ function aafm_builder_vendor_rows(): array {
 			'target'   => array( 'Avada', 'get_option_name' ),
 			'requires' => 'Avada',
 		),
+		// Avada Builder 3.15.6+ builds its element map on demand; outside its editor screens nothing else builds it (A25).
+		'avada_map_loader'           => array(
+			'target'   => 'awb_maybe_init_element_maps',
+			'requires' => 'awb_maybe_init_element_maps',
+		),
+		// Avada Builder's element map, keyed by tag, as fusion_builder_map() left it, with each element's shared
+		// placeholders expanded by Avada's own filter (Fusion_Builder_Element_Helper::placeholders_to_params()).
+		'avada_map'                  => array(
+			'target'   => static function (): array {
+				$map = $GLOBALS['all_fusion_builder_elements'] ?? array();
+				$out = array();
+				foreach ( is_array( $map ) ? $map : array() as $tag => $entry ) {
+					if ( is_array( $entry ) && isset( $entry['params'] ) && is_array( $entry['params'] ) ) {
+						$entry['params'] = (array) apply_filters( 'fusion_builder_element_params', $entry['params'], (string) $tag ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Avada Builder's own filter, applied as its editor applies it.
+					}
+					$out[ $tag ] = $entry;
+				}
+				return $out;
+			},
+			'requires' => 'awb_maybe_init_element_maps',
+		),
 	);
 }
 

@@ -309,7 +309,13 @@ final class BuilderShortcodesTest extends TestCase {
 
 	public function test_every_seam_row_is_a_callable_shape(): void {
 		$rows = aafm_builder_vendor_rows();
-		$this->assertSame( array( 'wpbakery_css_rebuild', 'wpbakery_grid_post_type', 'wpbakery_param_type', 'wpbakery_map_all', 'wpbakery_map_one', 'wpbakery_grid_mapper', 'wpbakery_editor_post_types', 'avada_option_name' ), array_keys( $rows ) );
+		$this->assertSame( array( 'wpbakery_css_rebuild', 'wpbakery_grid_post_type', 'wpbakery_param_type', 'wpbakery_map_all', 'wpbakery_map_one', 'wpbakery_grid_mapper', 'wpbakery_editor_post_types', 'avada_option_name', 'avada_map_loader', 'avada_map' ), array_keys( $rows ) );
+		$this->assertSame( 'awb_maybe_init_element_maps', $rows['avada_map_loader']['target'] );
+		$this->assertSame( 'awb_maybe_init_element_maps', $rows['avada_map_loader']['requires'] );
+		$this->assertSame( 'awb_maybe_init_element_maps', $rows['avada_map']['requires'] );
+		foreach ( array( 'avada_map_loader', 'avada_map' ) as $absent ) {
+			$this->assertNull( aafm_builder_vendor( $absent ), $absent . ' is absent without Avada Builder loaded.' );
+		}
 		$this->assertSame( 'vc_editor_post_types', $rows['wpbakery_editor_post_types']['target'] );
 		$this->assertSame( 'vc_editor_post_types', $rows['wpbakery_editor_post_types']['requires'] );
 		$this->assertSame( 'vc_map', $rows['wpbakery_map_all']['requires'] );

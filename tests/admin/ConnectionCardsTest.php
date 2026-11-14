@@ -10,6 +10,7 @@ declare( strict_types=1 );
 namespace AAFM\Tests\Admin;
 
 use AAFM\Tests\Support\AjaxHarness;
+use AAFM\Tests\Support\SeedsGrants;
 use AAFM\Tests\TestCase;
 
 /**
@@ -19,6 +20,7 @@ use AAFM\Tests\TestCase;
 class ConnectionCardsTest extends TestCase {
 
 	use AjaxHarness;
+	use SeedsGrants;
 
 	private const CLIENT = 'client_cards';
 
@@ -313,44 +315,6 @@ class ConnectionCardsTest extends TestCase {
 	}
 
 	/**
-	 * Seed $count grants across five active clients, oldest first.
-	 *
-	 * @param int $count Grants to seed.
-	 * @return list<array{0:int,1:string}> [user_id, client_id] pairs, oldest first.
-	 */
-	private function seed_grants( int $count ): array {
-		global $wpdb;
-		$clients = array( 'pg_a', 'pg_b', 'pg_c', 'pg_d', 'pg_e' );
-		foreach ( $clients as $client ) {
-			$wpdb->insert(
-				$wpdb->prefix . 'aafm_oauth_clients',
-				array(
-					'client_id'   => $client,
-					'client_name' => 'Paged ' . $client,
-					'is_active'   => 1,
-				)
-			);
-		}
-		$pairs = array();
-		foreach ( self::factory()->user->create_many( (int) ceil( $count / 5 ) ) as $user ) {
-			foreach ( $clients as $client ) {
-				if ( count( $pairs ) === $count ) {
-					break 2;
-				}
-				$wpdb->insert(
-					$wpdb->prefix . 'aafm_oauth_consents',
-					array(
-						'wp_user_id' => (int) $user,
-						'client_id'  => $client,
-					)
-				);
-				$pairs[] = array( (int) $user, $client );
-			}
-		}
-		return $pairs;
-	}
-
-	/**
 	 * Seed one active access token with the given audience.
 	 *
 	 * @param string $audience Stored resource.
@@ -372,7 +336,7 @@ class ConnectionCardsTest extends TestCase {
 	}
 
 	public function test_grants_card_shows_page_2_of_3_with_links(): void {
-		$this->seed_grants( 105 );
+		$this->seed_grants( 105, 'pg_' );
 		$_GET['grants_page'] = '2';
 		$html                = $this->grants_html();
 
@@ -385,7 +349,7 @@ class ConnectionCardsTest extends TestCase {
 	}
 
 	public function test_grants_pager_is_reachable_before_the_rows(): void {
-		$this->seed_grants( 105 );
+		$this->seed_grants( 105, 'pg_' );
 		$_GET['grants_page'] = '2';
 		$html                = $this->grants_html();
 
@@ -396,7 +360,7 @@ class ConnectionCardsTest extends TestCase {
 	}
 
 	public function test_grants_page_junk_renders_page_1(): void {
-		$this->seed_grants( 105 );
+		$this->seed_grants( 105, 'pg_' );
 		foreach ( array( 'abc', '0', '-5', array( '2' ), '' ) as $junk ) {
 			$_GET['grants_page'] = $junk;
 			$this->assertSame( 1, aafm_connection_grants_data()['page'], wp_json_encode( $junk ) );
@@ -517,7 +481,7 @@ class ConnectionCardsTest extends TestCase {
 	}
 
 	public function test_save_and_pause_work_on_a_grant_beyond_page_1(): void {
-		$pairs = $this->seed_grants( 60 );
+		$pairs = $this->seed_grants( 60, 'pg_' );
 		$grant = $pairs[0]; // The oldest grant, number 60 newest first, on page 2.
 		$this->assertNull(
 			current( array_filter( aafm_connection_grants_data()['rows'], static fn( $r ) => $grant[0] === $r['user_id'] && $grant[1] === $r['client_id'] ) ) ?: null
@@ -605,7 +569,7 @@ class ConnectionCardsTest extends TestCase {
 	}
 
 	public function test_pager_links_name_the_target_page_on_a_middle_page(): void {
-		$this->seed_grants( 105 );
+		$this->seed_grants( 105, 'pg_' );
 		$_GET['grants_page'] = '2';
 		$html                = $this->grants_html();
 
@@ -614,7 +578,7 @@ class ConnectionCardsTest extends TestCase {
 	}
 
 	public function test_first_and_last_page_have_no_label_for_the_absent_link(): void {
-		$this->seed_grants( 105 );
+		$this->seed_grants( 105, 'pg_' );
 		$_GET['grants_page'] = '1';
 		$first               = $this->grants_html();
 		$this->assertStringNotContainsString( 'Previous page', $first );

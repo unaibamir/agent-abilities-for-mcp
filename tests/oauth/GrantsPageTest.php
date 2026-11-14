@@ -11,9 +11,12 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\OAuth;
 
+use AAFM\Tests\Support\SeedsGrants;
 use AAFM\Tests\TestCase;
 
 final class GrantsPageTest extends TestCase {
+
+	use SeedsGrants;
 
 	public function set_up(): void {
 		parent::set_up();
@@ -61,31 +64,6 @@ final class GrantsPageTest extends TestCase {
 			),
 			array( '%d', '%s' )
 		);
-	}
-
-	/**
-	 * Seed $count grants on active clients, five clients per user.
-	 *
-	 * @param int $count Grants to seed.
-	 * @return list<array{0:int,1:string}> The seeded [user_id, client_id] pairs, oldest first.
-	 */
-	private function seed_grants( int $count ): array {
-		$clients = array( 'app_a', 'app_b', 'app_c', 'app_d', 'app_e' );
-		foreach ( $clients as $client ) {
-			$this->seed_client( $client );
-		}
-		$pairs = array();
-		$users = self::factory()->user->create_many( (int) ceil( $count / count( $clients ) ) );
-		foreach ( $users as $user_id ) {
-			foreach ( $clients as $client ) {
-				if ( count( $pairs ) === $count ) {
-					break 2;
-				}
-				$this->seed_consent( (int) $user_id, $client );
-				$pairs[] = array( (int) $user_id, $client );
-			}
-		}
-		return $pairs;
 	}
 
 	/**

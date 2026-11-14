@@ -1054,6 +1054,23 @@ final class WpbakeryElementsTest extends TestCase {
 		$this->assert_refused( $this->update( $id, 8, array( 'text' => '<p>&#x5b;vc_raw_js&#x5D;x&#X5B;/vc_raw_js&#093;</p>' ) ), 'aafm_builder_structure_changed', 400, $id, $this->fixture() );
 	}
 
+	/**
+	 * SEC-S9a-1-R2: WPBakery's editor decodes every entity on its next save, including one inside a shortcode name or a
+	 * closer, so inner text is decoded to that form first and the structure check sees the element.
+	 */
+	public function test_update_refuses_inner_text_with_entities_inside_a_shortcode_name(): void {
+		$id = $this->page( $this->fixture() );
+		$this->acting_as( 'editor' );
+
+		foreach ( array( '<p>a [&#118;c_raw_js]PHNjcmlwdD4=[/&#118;c_raw_js] b</p>', '<p>a [&#47;vc_column_text] b</p>', '<p>[vc&#95;raw&#95;js]x[/vc&#95;raw&#95;js]</p>' ) as $text ) {
+			$this->assert_refused( $this->update( $id, 8, array( 'text' => $text ) ), 'aafm_builder_structure_changed', 400, $id, $this->fixture() );
+		}
+	}
+
+	public function test_inner_text_keeps_amp_lt_and_gt_entities(): void {
+		$this->assertSame( '<p>a &amp; b &lt;c&gt; &lt;d&gt; ’</p>', $this->encode( 'vc_column_text', 'content', '<p>a &amp; b &lt;c&gt; &#60;d&#62; &#8217;</p>' ) );
+	}
+
 	public function test_update_with_the_stored_design_options_saves_nothing(): void {
 		$id        = $this->page( $this->fixture() );
 		$revisions = count( wp_get_post_revisions( $id ) );

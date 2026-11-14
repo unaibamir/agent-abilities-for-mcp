@@ -442,6 +442,15 @@ WPB;
 		}
 	}
 
+	public function test_replace_refuses_entities_inside_a_shortcode_name(): void {
+		$id = $this->make_page( self::PAGE );
+		$this->acting_as( 'editor' );
+
+		foreach ( array( '[&#118;c_raw_js]PHNjcmlwdD4=[/&#118;c_raw_js]', 'x [&#47;vc_column_text] y' ) as $replace ) {
+			$this->assert_refused( $this->replace( $id, 'Opening paragraph alpha.', $replace ), 'aafm_replace_inside_shortcode', $id, self::PAGE, 400 );
+		}
+	}
+
 	public function test_replace_refuses_removing_a_closing_tag(): void {
 		$id = $this->make_page( self::PAGE );
 		$this->acting_as( 'editor' );

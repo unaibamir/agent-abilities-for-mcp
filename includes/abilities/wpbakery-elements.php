@@ -493,9 +493,9 @@ function aafm_wpbakery_encode_clean( string $kind, $value, array $param ): ?stri
 			}
 			return aafm_wpbakery_escape_attribute( implode( ',', $items ) );
 		case 'content':
-			// Bracket entities as brackets, so a shortcode spelled with them is refused by the structure check rather
-			// than created by WPBakery's editor on its next save.
-			return is_string( $value ) ? wp_kses_post( aafm_wpbakery_decode_bracket_entities( $value ) ) : null;
+			// Entities decoded to the form WPBakery's editor saves, so a shortcode spelled with them is refused by the
+			// structure check rather than created by the editor on its next save.
+			return is_string( $value ) ? wp_kses_post( aafm_wpbakery_decode_entities( $value ) ) : null;
 		case 'link':
 			return aafm_wpbakery_encode_link( $value, 'href' === $type );
 		case 'image':
@@ -1380,7 +1380,7 @@ function aafm_exec_wpbakery_update_element( array $input ) {
 			return $new_inner;
 		}
 		if ( $new_inner !== $inner ) {
-			if ( ! $element['has_closer'] || $element['self_closing'] ) {
+			if ( ! $element['has_closer'] || $element['self_closing'] || aafm_wpbakery_text_closes_a_tag( $new_inner, (array) aafm_wpbakery_shortcode_tags( $content, $new_inner ) ) ) {
 				return aafm_builder_error( 'aafm_builder_structure_changed' );
 			}
 			$changed[] = 'text';

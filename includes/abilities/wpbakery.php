@@ -379,15 +379,51 @@ function aafm_wpbakery_decode_raw( string $inner ): ?string {
 }
 
 /**
- * Bracket entities written as brackets: the named, decimal and hex forms of [ and ], any case, zero-padded.
- * WPBakery's backend editor reads the page through TinyMCE, which decodes every entity and re-encodes only & < and >,
- * so a bracket entity in stored text becomes a bare bracket, and can open or close a shortcode, on its next save.
+ * Text in the form WPBakery's backend editor saves it: every entity decoded except &amp;, &lt; and &gt;. The editor
+ * reads the page through TinyMCE, which decodes every entity in text and encodes only & < and > again (smoke probes,
+ * S9a fix rounds 1 and 2), so an entity that spells a bracket, a slash or a letter of a shortcode name becomes the
+ * real character on its next save. Decoding it first lets every check see what the editor will produce. An entity
+ * that decodes to & < or > is written as &amp;, &lt; or &gt;, and an unknown entity is left as it is.
  *
  * @param string $text Text.
  * @return string
  */
-function aafm_wpbakery_decode_bracket_entities( string $text ): string {
-	return (string) preg_replace( array( '/&(#0*91|#x0*5b|lsqb|lbrack);/i', '/&(#0*93|#x0*5d|rsqb|rbrack);/i' ), array( '[', ']' ), $text );
+function aafm_wpbakery_decode_entities( string $text ): string {
+	return (string) preg_replace_callback(
+		'/&(#[0-9]+|#x[0-9a-f]+|[a-z][a-z0-9]*);/i',
+		static function ( array $m ): string {
+			if ( in_array( strtolower( $m[1] ), array( 'amp', 'lt', 'gt' ), true ) ) {
+				return $m[0];
+			}
+			$char = html_entity_decode( $m[0], ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+			return $char === $m[0] ? $m[0] : strtr(
+				$char,
+				array(
+					'&' => '&amp;',
+					'<' => '&lt;',
+					'>' => '&gt;',
+				)
+			);
+		},
+		$text
+	);
+}
+
+/**
+ * Whether inserted text holds the closing tag of a shortcode on the page. A closer inside an element's text ends
+ * that element early without adding one, so the outline check alone does not see it.
+ *
+ * @param string        $text Inserted text, entities already decoded.
+ * @param array<string> $tags Shortcode names on the page.
+ * @return bool
+ */
+function aafm_wpbakery_text_closes_a_tag( string $text, array $tags ): bool {
+	foreach ( $tags as $tag ) {
+		if ( false !== strpos( $text, '[/' . $tag . ']' ) ) {
+			return true;
+		}
+	}
+	return false;
 }
 
 /**
@@ -516,9 +552,9 @@ function aafm_exec_wpbakery_replace_text( array $input ) {
 		);
 	}
 
-	// Bracket entities are decoded first: WPBakery's editor reads the page through TinyMCE, which decodes them, so
-	// they would become a real element on its next save. As brackets, the structure check below refuses them.
-	$inserted = wp_kses_post( aafm_wpbakery_decode_bracket_entities( $replace ) );
+	// Entities are decoded first to the form WPBakery's editor saves, so a shortcode spelled with them reaches the
+	// structure check below as a shortcode and is refused.
+	$inserted = wp_kses_post( aafm_wpbakery_decode_entities( $replace ) );
 	$new      = str_replace( $search, $inserted, $content );
 
 	$tags = aafm_wpbakery_shortcode_tags( $content, $new );
@@ -530,7 +566,7 @@ function aafm_exec_wpbakery_replace_text( array $input ) {
 		);
 	}
 
-	if ( ! aafm_fusion_shortcode_structure_preserved( $content, $new, $tags ) ) {
+	if ( ! aafm_fusion_shortcode_structure_preserved( $content, $new, $tags ) || aafm_wpbakery_text_closes_a_tag( $inserted, $tags ) ) {
 		return new WP_Error(
 			'aafm_replace_inside_shortcode',
 			__( 'That replacement would change a WPBakery element rather than the text between elements. WPBakery keeps heading text, button labels and other element settings inside the element itself, so change that text in WPBakery. Choose a search term that appears only in plain text, such as a text block. Nothing was changed.', 'agent-abilities-for-mcp' ),

@@ -2160,4 +2160,57 @@ final class WpbakeryElementsTest extends TestCase {
 		}
 	}
 
+	public function test_move_a_row_above_another_row(): void {
+		$id = $this->page( self::TWO_ROWS );
+		$this->acting_as( 'editor' );
+		$out = $this->move( $id, 3, 0, 'before' );
+		$this->assertIsArray( $out );
+		$this->assertTrue( $out['moved'] );
+		$this->assertSame( 0, $out['index'] );
+		list( $a, $b ) = array( substr( self::TWO_ROWS, 0, strpos( self::TWO_ROWS, '[vc_row el_id="b"]' ) ), substr( self::TWO_ROWS, strpos( self::TWO_ROWS, '[vc_row el_id="b"]' ) ) );
+		$this->assertSame( $b . $a, get_post_field( 'post_content', $id, 'raw' ) );
+		$this->assertSame( substr( hash( 'sha256', $b ), 0, 16 ), $out['fingerprint'] );
+		$this->assertIsInt( $out['restore_revision_id'] );
+	}
+
+	public function test_move_a_text_block_into_another_column(): void {
+		$id = $this->page( self::TWO_ROWS );
+		$this->acting_as( 'editor' );
+		$out = $this->move( $id, 2, 4, 'inside_start' );
+		$this->assertIsArray( $out );
+		$this->assertSame( '[vc_row el_id="a"][vc_column][/vc_column][/vc_row][vc_row el_id="b"][vc_column][vc_column_text]<p>A</p>[/vc_column_text][vc_column_text]<p>B</p>[/vc_column_text][/vc_column][/vc_row]', get_post_field( 'post_content', $id, 'raw' ) );
+		$this->assertSame( 4, $out['index'] );
+	}
+
+	public function test_move_into_its_own_child_is_refused(): void {
+		$id = $this->page( self::TWO_ROWS );
+		$this->acting_as( 'editor' );
+		$this->assert_refused( $this->move( $id, 0, 1, 'inside_end' ), 'aafm_builder_invalid_move', 400, $id, self::TWO_ROWS );
+		$this->assert_refused( $this->move( $id, 1, 1, 'inside_end' ), 'aafm_builder_invalid_move', 400, $id, self::TWO_ROWS );
+	}
+
+	public function test_move_to_a_wrong_parent_is_refused(): void {
+		$id = $this->page( self::TWO_ROWS );
+		$this->acting_as( 'editor' );
+		$this->assert_refused( $this->move( $id, 2, 3, 'after' ), 'aafm_builder_invalid_nesting', 400, $id, self::TWO_ROWS );
+	}
+
+	public function test_move_that_empties_a_row_is_refused(): void {
+		$id = $this->page( self::TWO_ROWS );
+		$this->acting_as( 'editor' );
+		$this->assert_refused( $this->move( $id, 1, 3, 'inside_end' ), 'aafm_builder_row_needs_column', 400, $id, self::TWO_ROWS );
+	}
+
+	public function test_move_to_the_same_place_saves_nothing(): void {
+		$id = $this->page( self::TWO_ROWS );
+		$this->acting_as( 'editor' );
+		$revisions = count( wp_get_post_revisions( $id ) );
+		$out       = $this->move( $id, 3, 0, 'after' );
+		$this->assertIsArray( $out );
+		$this->assertFalse( $out['moved'] );
+		$this->assertNull( $out['restore_revision_id'] );
+		$this->assertSame( self::TWO_ROWS, get_post_field( 'post_content', $id, 'raw' ) );
+		$this->assertSame( $revisions, count( wp_get_post_revisions( $id ) ) );
+	}
+
 }

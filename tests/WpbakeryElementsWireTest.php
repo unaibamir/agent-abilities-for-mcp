@@ -47,7 +47,7 @@ final class WpbakeryElementsWireTest extends TestCase {
 		++$counter;
 		$server_id = 'aafm-server-wpbakery-elements-wire-test-' . $counter;
 		$tools     = aafm_build_server_tools(
-			aafm_preflight_bound_server_tools_cached( array( 'aafm/wpbakery-list-elements', 'aafm/wpbakery-update-element', 'aafm/wpbakery-insert-element' ) )
+			aafm_preflight_bound_server_tools_cached( array( 'aafm/wpbakery-list-elements', 'aafm/wpbakery-update-element', 'aafm/wpbakery-insert-element', 'aafm/wpbakery-move-element' ) )
 		);
 		$this->in_action(
 			'mcp_adapter_init',
@@ -89,7 +89,7 @@ final class WpbakeryElementsWireTest extends TestCase {
 			)
 		);
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
-		$this->register_enabled( array( 'aafm/wpbakery-list-elements', 'aafm/wpbakery-update-element', 'aafm/wpbakery-insert-element' ) );
+		$this->register_enabled( array( 'aafm/wpbakery-list-elements', 'aafm/wpbakery-update-element', 'aafm/wpbakery-insert-element', 'aafm/wpbakery-move-element' ) );
 		$this->acting_as( 'editor' );
 		return array( new \AAFM\Tests\Support\McpToolsHandlerShim( $this->build_server( \WP\MCP\Core\McpAdapter::instance() ) ), $id );
 	}
@@ -272,5 +272,43 @@ final class WpbakeryElementsWireTest extends TestCase {
 		$this->assertTrue( $refused->getIsError() );
 		$this->assertSame( aafm_builder_error( 'aafm_builder_page_changed' )->get_error_message(), $refused->getContent()[0]->getText() );
 		$this->assertSame( $stored, get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
+	public function test_move_round_trips_over_a_real_tools_call(): void {
+		list( $handler, $id ) = $this->wired();
+		$text                 = '[vc_column_text]<p>Hello</p>[/vc_column_text]';
+		$done                 = $this->wire(
+			$handler->call_tool(
+				array(
+					'name'      => aafm_mcp_tool_name( 'aafm/wpbakery-move-element' ),
+					'arguments' => array(
+						'post_id'          => $id,
+						'page_fingerprint' => self::fp( self::PAGE ),
+						'index'            => 3,
+						'expect'           => array(
+							'tag'         => 'vc_column_text',
+							'fingerprint' => self::fp( $text ),
+						),
+						'anchor_index'     => 2,
+						'anchor_expect'    => array(
+							'tag'         => 'vc_custom_heading',
+							'fingerprint' => self::fp( self::HEADING ),
+						),
+						'placement'        => 'before',
+					),
+				),
+				'req-wpb-move-1'
+			)
+		);
+		$stored               = '[vc_row][vc_column]' . $text . self::HEADING . '[/vc_column][/vc_row]';
+		$this->assertSame( $stored, get_post_field( 'post_content', $id, 'raw' ) );
+		$this->assertSame( array( 'post', 'index', 'fingerprint', 'page_fingerprint', 'moved', 'restore_revision_id', 'reversible', 'undo' ), array_keys( $done ) );
+		$this->assertSame( 2, $done['index'] );
+		$this->assertSame( self::fp( $text ), $done['fingerprint'] );
+		$this->assertSame( self::fp( $stored ), $done['page_fingerprint'] );
+		$this->assertTrue( $done['moved'] );
+		$this->assertIsInt( $done['restore_revision_id'] );
+		$this->assertTrue( $done['reversible'] );
+		$this->assertSame( 'not_covered', $done['undo']['reason'] );
 	}
 }

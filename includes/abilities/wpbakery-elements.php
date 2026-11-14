@@ -75,6 +75,14 @@ function aafm_wpbakery_elements_registry_definitions(): array {
 			'subject'      => 'wpbakery',
 			'args_builder' => 'aafm_args_wpbakery_insert_element',
 		),
+		'aafm/wpbakery-move-element'   => array(
+			'label'        => __( 'Move a WPBakery element', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Moves one element, with everything inside it, on a WPBakery page or Grid Builder template to a new place named against another element from the outline of wpbakery-get-page-content: before or after it, or as its first or last child. The element\'s stored text moves byte for byte; nothing in it is rewritten. WPBakery\'s own nesting rules apply to the new place, and a move into the element\'s own children or one that leaves a row with no column is refused. Requires page_fingerprint from the last read or write and returns the new one; a changed page is refused and nothing is saved. A move to the place the element already has saves nothing and returns moved false. Other indexes may move, so read the outline again before the next structural change. When a revision is kept, restore_revision_id brings the page back through restore-revision. The page\'s generated CSS is rebuilt. Not undoable from this plugin\'s change history. Requires edit access to the post; WPBakery\'s Role Manager settings are not applied, though its own save filter still runs. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
+			'group'        => 'writes',
+			'risk'         => 'write',
+			'subject'      => 'wpbakery',
+			'args_builder' => 'aafm_args_wpbakery_move_element',
+		),
 	);
 }
 
@@ -2053,4 +2061,154 @@ function aafm_exec_wpbakery_insert_element( array $input ) {
 	}
 	$out['post'] = aafm_redact_post( $out['post'] );
 	return $out;
+}
+
+/**
+ * Whether taking the element at $index out of its parent would leave a row or inner row with no column.
+ *
+ * @param list<array<string,mixed>> $elements Outline.
+ * @param int                       $index    Element.
+ * @return bool
+ */
+function aafm_wpbakery_empties_a_row( array $elements, int $index ): bool {
+	$parent = $elements[ $index ]['parent'];
+	if ( null === $parent || ! in_array( $elements[ $parent ]['tag'], array( 'vc_row', 'vc_row_inner' ), true ) ) {
+		return false;
+	}
+	return 1 === count( array_keys( array_column( $elements, 'parent' ), $parent, true ) );
+}
+
+/**
+ * Args for aafm/wpbakery-move-element.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_wpbakery_move_element(): array {
+	return array(
+		'label'               => aafm_ability_label( 'aafm/wpbakery-move-element' ),
+		'description'         => aafm_ability_description( 'aafm/wpbakery-move-element' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => aafm_wpbakery_structural_schema( '' ) + aafm_wpbakery_structural_schema( 'anchor_' ),
+			'required'             => array( 'post_id', 'page_fingerprint', 'index', 'expect', 'anchor_index', 'anchor_expect', 'placement' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'post'                => array( 'type' => 'object' ),
+				'index'               => array( 'type' => 'integer' ),
+				'fingerprint'         => array( 'type' => 'string' ),
+				'page_fingerprint'    => array( 'type' => 'string' ),
+				'moved'               => array( 'type' => 'boolean' ),
+				'restore_revision_id' => array( 'type' => array( 'integer', 'null' ) ),
+				'reversible'          => array( 'type' => 'boolean' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_wpbakery_move_element',
+		'permission_callback' => 'aafm_perm_avada_post_object',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/wpbakery-move-element (design WB-5). Cuts the element's stored bytes, children included, and splices
+ * the same bytes in at the anchor; nothing is re-serialized or encoded. A move to the place it already has saves
+ * nothing and reports moved false (Ruling R3-PR2-8).
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_wpbakery_move_element( array $input ) {
+	$post = aafm_wpbakery_structural_post( $input, false );
+	if ( is_wp_error( $post ) ) {
+		return $post;
+	}
+	$content  = (string) $post->post_content;
+	$tags     = aafm_wpbakery_shortcode_tags( $content );
+	$elements = null === $tags ? null : aafm_builder_elements( $content, $tags );
+	if ( null === $tags || null === $elements ) {
+		return aafm_builder_error( 'aafm_builder_unparseable' );
+	}
+	$element = aafm_builder_resolve( $content, $tags, (int) ( $input['index'] ?? -1 ), is_array( $input['expect'] ?? null ) ? $input['expect'] : array() );
+	if ( is_wp_error( $element ) ) {
+		return $element;
+	}
+	$anchor = aafm_builder_resolve( $content, $tags, (int) ( $input['anchor_index'] ?? -1 ), is_array( $input['anchor_expect'] ?? null ) ? $input['anchor_expect'] : array() );
+	if ( is_wp_error( $anchor ) ) {
+		return $anchor;
+	}
+	$index     = (int) $element['index'];
+	$size      = aafm_builder_subtree_size( $elements, $index );
+	$placement = (string) ( $input['placement'] ?? '' );
+	$inside    = (int) $anchor['index'] > $index && (int) $anchor['index'] < $index + $size;
+	if ( $inside || ( (int) $anchor['index'] === $index && 0 === strpos( $placement, 'inside_' ) ) ) {
+		return aafm_builder_error( 'aafm_builder_invalid_move' );
+	}
+	$point = aafm_builder_anchor_point( $elements, $anchor, $placement );
+	if ( is_wp_error( $point ) ) {
+		return $point;
+	}
+	$tag        = (string) $element['tag'];
+	$parent_tag = null === $point['parent'] ? '' : (string) $elements[ $point['parent'] ]['tag'];
+	$context    = 'vc_grid_item' === $post->post_type ? 'grid' : 'page';
+	$map        = array();
+	foreach ( array_unique( array_filter( array( $tag, $parent_tag ) ) ) as $name ) {
+		$entry = aafm_wpbakery_map( $context, $name );
+		if ( is_array( $entry ) ) {
+			$map[ $name ] = $entry;
+		} elseif ( 'aafm_builder_unknown_element' !== $entry->get_error_code() ) {
+			return $entry;
+		}
+	}
+	$nesting = aafm_wpbakery_nesting_allows( $parent_tag, $tag, $map );
+	if ( is_wp_error( $nesting ) ) {
+		return $nesting;
+	}
+	if ( $point['parent'] !== $element['parent'] && aafm_wpbakery_empties_a_row( $elements, $index ) ) {
+		return aafm_wpbakery_row_needs_column_error();
+	}
+
+	$start  = (int) $element['start'];
+	$length = (int) $element['end'] - $start;
+	$source = substr( $content, $start, $length );
+	$cut    = substr( $content, 0, $start ) . substr( $content, $start + $length );
+	$offset = $point['offset'] > $start ? $point['offset'] - $length : $point['offset'];
+	$new    = substr( $cut, 0, $offset ) . $source . substr( $cut, $offset );
+	$walk   = aafm_builder_walk( $content, $tags );
+	if ( null === $walk ) {
+		return aafm_builder_error( 'aafm_builder_unparseable' );
+	}
+	$expected = aafm_builder_expected_walk(
+		$walk,
+		array(
+			'op'    => 'move',
+			'index' => $index,
+			'at'    => $point['at'],
+			'depth' => $point['depth'],
+		)
+	);
+	$result   = aafm_builder_commit( $post, $content, $new, $tags, $expected, 'aafm_wpbakery_rebuild_css', 'wpbakery' );
+	if ( is_wp_error( $result ) ) {
+		return $result;
+	}
+	$stored    = (string) $result['post']->post_content;
+	$new_index = $point['at'] > $index ? $point['at'] - $size : $point['at'];
+	$after     = aafm_builder_elements( $stored, (array) aafm_wpbakery_shortcode_tags( $stored ) );
+	$moved     = $after[ $new_index ] ?? null;
+	return array(
+		'post'                => aafm_redact_post( $result['post'] ),
+		'index'               => $new_index,
+		'fingerprint'         => null === $moved ? '' : aafm_builder_fingerprint( $stored, $moved ),
+		'page_fingerprint'    => $result['page_fingerprint'],
+		'moved'               => ! $result['unchanged'],
+		'restore_revision_id' => $result['restore_revision_id'],
+		'reversible'          => $result['reversible'],
+	);
 }

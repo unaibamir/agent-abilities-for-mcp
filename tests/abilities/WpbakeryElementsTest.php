@@ -1157,6 +1157,35 @@ final class WpbakeryElementsTest extends TestCase {
 		}
 	}
 
+	/**
+	 * R5-1: an incomplete tag stops the tag parser before it sees every attribute, so the check refuses instead of
+	 * passing what it could not read.
+	 */
+	public function test_body_text_refuses_an_incomplete_tag_without_unfiltered_html(): void {
+		$this->act_as_restricted_editor();
+		$out = aafm_wpbakery_body_text( '<p>Text</p><img src="https://x/a.png" alt="a' );
+		$this->assertWPError( $out );
+		$this->assertSame( 'aafm_wpbakery_incomplete_html_needs_unfiltered_html', $out->get_error_code() );
+		$this->assertSame( 400, $out->get_error_data()['status'] );
+
+		$this->acting_as( 'administrator' );
+		$this->assertIsString( aafm_wpbakery_body_text( '<p>Text</p><img src="https://x/a.png" alt="a' ) );
+	}
+
+	/**
+	 * R5-1: kses can join a percent-encoded bracket by removing a tag between its parts, so the stored form is checked
+	 * as well as the text as sent.
+	 */
+	public function test_body_text_refuses_an_encoded_bracket_kses_would_join_without_unfiltered_html(): void {
+		$this->act_as_restricted_editor();
+		$out = aafm_wpbakery_body_text( '<p>Plain %<acme></acme>5b text</p>' );
+		$this->assertWPError( $out );
+		$this->assertSame( 'aafm_wpbakery_encoded_brackets_need_unfiltered_html', $out->get_error_code() );
+
+		$this->acting_as( 'administrator' );
+		$this->assertIsString( aafm_wpbakery_body_text( '<p>Plain %<acme></acme>5b text</p>' ) );
+	}
+
 	public function test_body_text_with_a_bracket_keeps_todays_checks_for_unfiltered_html(): void {
 		$id = $this->page( $this->fixture() );
 		$this->acting_as( 'administrator' );

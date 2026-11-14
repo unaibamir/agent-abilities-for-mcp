@@ -444,7 +444,8 @@ function aafm_wpbakery_body_text( string $text ) {
 				array( 'status' => 400 )
 			);
 		}
-		if ( 1 === preg_match( '/%5[bd]/i', $decoded ) ) {
+		// The stored form is checked too: kses can join a bracket's parts by removing a tag between them.
+		if ( 1 === preg_match( '/%5[bd]/i', $decoded . "\n" . $clean ) ) {
 			return new WP_Error(
 				'aafm_wpbakery_encoded_brackets_need_unfiltered_html',
 				__( 'A percent-encoded square bracket in this text needs a user who may post unfiltered HTML, because WordPress\'s editor can decode it into an element the next time the page is saved in WPBakery. Remove it, or ask such a user to make the edit. Nothing was changed.', 'agent-abilities-for-mcp' ),
@@ -462,6 +463,14 @@ function aafm_wpbakery_body_text( string $text ) {
 						array( 'status' => 400 )
 					);
 				}
+			}
+			// A parser that stopped on an unfinished tag has not read every attribute, so refuse what it could not see.
+			if ( $tags->paused_at_incomplete_token() ) {
+				return new WP_Error(
+					'aafm_wpbakery_incomplete_html_needs_unfiltered_html',
+					__( 'This text ends inside an unfinished HTML tag, which needs a user who may post unfiltered HTML because the tag cannot be checked. Finish or remove the tag, or ask such a user to make the edit. Nothing was changed.', 'agent-abilities-for-mcp' ),
+					array( 'status' => 400 )
+				);
 			}
 		}
 	}

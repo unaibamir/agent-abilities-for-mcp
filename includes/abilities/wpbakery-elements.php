@@ -444,7 +444,7 @@ function aafm_wpbakery_encode_raw( string $base, $value, array $param ): ?string
 		if ( null === $text || 0 === strpos( $text, '#E-8_' ) || ( 'text' === $base && 1 === preg_match( '/[\r\n]/', $text ) ) ) {
 			return null;
 		}
-		return 'safe_text' === $base ? aafm_wpbakery_safe_form( $text ) : aafm_wpbakery_escape_attribute( aafm_wpbakery_unquote_entities( wp_kses_normalize_entities( $text ) ) );
+		return 'safe_text' === $base ? aafm_wpbakery_safe_form( $text ) : aafm_wpbakery_escape_attribute( aafm_wpbakery_editor_entities( wp_kses_normalize_entities( $text ) ) );
 	}
 	return '' === $base ? null : aafm_wpbakery_encode_clean( $base, $value, $param );
 }
@@ -460,7 +460,7 @@ function aafm_wpbakery_safe_form( string $text ): string {
 	if ( false !== strpos( $text, '"' ) || false !== strpos( $text, 'http' ) ) {
 		return '#E-8_' . base64_encode( aafm_wpbakery_uri_encode( $text ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- WPBakery's own safe text form (W17), built by the plugin from checked input.
 	}
-	return aafm_wpbakery_escape_attribute( aafm_wpbakery_unquote_entities( wp_kses_normalize_entities( $text ) ) );
+	return aafm_wpbakery_escape_attribute( aafm_wpbakery_editor_entities( wp_kses_normalize_entities( $text ) ) );
 }
 
 /**
@@ -529,21 +529,21 @@ function aafm_wpbakery_plain_text( $value ): ?string {
 	if ( null === $text || 1 === preg_match( '/[\r\n]/', $text ) || 0 === strpos( $text, '#E-8_' ) ) {
 		return null;
 	}
-	return aafm_wpbakery_unquote_entities( wp_kses_normalize_entities( aafm_sanitize_plain_text( $text ) ) );
+	return aafm_wpbakery_editor_entities( wp_kses_normalize_entities( aafm_sanitize_plain_text( $text ) ) );
 }
 
 /**
- * Quote and bracket entities written as the character itself. WPBakery 9.1's editor reads the page through TinyMCE,
- * which decodes every entity and re-encodes only & < and >, so &quot;, &#034;, &#039;, &#91; and &#93; in an
- * attribute value become bare characters on its next save and end the attribute or the tag (smoke runs S9-5a and
- * S9a fix round 1). The encoder stores the character and lets W2 escape a double quote or a bracket. Core's
- * sanitize_text_field() produces the quote entities for text after a lone <.
+ * Attribute text in the form WPBakery 9.1's editor saves it. The editor reads the page through TinyMCE, which decodes
+ * every entity and re-encodes only & < and > (smoke probes S9-5a and S9a fix round 1). Any other entity in stored
+ * attribute text changes on the editor's next save, and a quote or bracket entity ends the attribute or the tag. So
+ * every entity is decoded and only & < and > are encoded again; W2 then escapes a double quote or a bracket. Core's
+ * sanitize_text_field() produces quote entities for text after a lone <.
  *
  * @param string $text Text with entities normalised.
  * @return string
  */
-function aafm_wpbakery_unquote_entities( string $text ): string {
-	return aafm_wpbakery_decode_bracket_entities( (string) preg_replace( array( '/&(quot|#0*34|#x0*22);/i', '/&(apos|#0*39|#x0*27);/i' ), array( '"', "'" ), $text ) );
+function aafm_wpbakery_editor_entities( string $text ): string {
+	return str_replace( array( '&', '<', '>' ), array( '&amp;', '&lt;', '&gt;' ), html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) );
 }
 
 /**

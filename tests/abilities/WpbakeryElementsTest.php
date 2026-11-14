@@ -421,6 +421,16 @@ final class WpbakeryElementsTest extends TestCase {
 		$this->assertSame( '`{`x`}`', $this->encode( 'wpb_btn', 'custom_onclick_code', '&#91;x&#93;' ) );
 	}
 
+	/**
+	 * WPBakery's editor reads the page through TinyMCE, which decodes every entity and re-encodes only & < and >
+	 * (smoke probe, scratchpad/1113/s9a-vendor/f1/probe-13-*). Attribute text is written in that form, so the
+	 * editor's next save leaves the attribute as stored.
+	 */
+	public function test_text_is_written_the_way_the_editor_saves_it(): void {
+		$this->assertSame( "C \u{2019} D \u{201C}q\u{201D} E / F = G \$ H \u{00A0} I ` L &amp;#91; M &lt; N", $this->encode( 'wpb_btn', 'title', 'C &#8217; D &#8220;q&#8221; E &#47; F &#61; G &#36; H &nbsp; I &#96; L &amp;#91; M &lt; N' ) );
+		$this->assertSame( 'a &gt; b &amp; c', $this->encode( 'wpb_btn', 'title', 'a > b & c' ) );
+	}
+
 	public function test_text_refuses_a_line_break_and_a_pre_encoded_value(): void {
 		$this->assert_error( $this->encode( 'wpb_btn', 'title', "two\nlines" ), 'aafm_builder_invalid_value', 400 );
 		$this->assert_error( $this->encode( 'wpb_btn', 'title', '#E-8_PHNjcmlwdD4=' ), 'aafm_builder_invalid_value', 400 );

@@ -68,6 +68,7 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/block-guard.php|aafm_block_guard_is_strict|1' => 'G',
 		'includes/bridge-labels.php|aafm_bridge_active_plugin_name|1' => 'N',
 		'includes/bridge.php|aafm_get_stored_bridged_abilities_raw|1' => 'G',
+		'includes/builder-shortcodes.php|aafm_builder_serialize|1' => 'N',
 		'includes/default-server.php|aafm_default_server_mode|1' => 'G',
 		'includes/helpers.php|aafm_allowed_post_types|1'   => 'G',
 		'includes/helpers.php|aafm_scoped_allowed_meta_keys|1' => 'G',
@@ -361,7 +362,7 @@ final class OptionReadSweepTest extends TestCase {
 			array(
 				'G' => 21,
 				'L' => 3,
-				'N' => 37,
+				'N' => 38,
 			),
 			array(
 				'G' => count( array_keys( self::GET_OPTION, 'G', true ) ),

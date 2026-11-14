@@ -113,7 +113,7 @@ function aafm_avada_registry_definitions(): array {
  */
 function aafm_perm_avada_post_object( array $input ): bool {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	$post = $id ? aafm_exact_object( 'post', $id ) : null;
+	$post = $id ? aafm_exact_object_chain( 'post', $id ) : null;
 	if ( ! $post instanceof WP_Post ) {
 		return false;
 	}

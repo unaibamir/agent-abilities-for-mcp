@@ -581,6 +581,12 @@ function aafm_builder_commit( WP_Post $post, string $old, string $new, array $ta
 		return $replay;
 	}
 
+	// The post and its metadata are loaded fresh in a checked read before anything is written, as every
+	// content write does, so a failed load refuses instead of writing over a post that was not read.
+	if ( ! aafm_exact_object_chain( 'post', $id ) instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+
 	// Step 6 runs before step 5 so a refusal does not leave a revision behind.
 	if ( null !== $after && ! $after( $id, true ) ) {
 		return new WP_Error(

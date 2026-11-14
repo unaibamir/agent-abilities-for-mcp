@@ -451,6 +451,22 @@ function aafm_config_snippet_clients(): array {
 }
 
 /**
+ * How each OAuth client connects, as the second line on its picker card. Worded from the steps the
+ * picker shows: hosted apps add the site as a connector, the rest paste a config and then sign in.
+ *
+ * @return array<string,string> Client slug => method label.
+ */
+function aafm_client_method_labels(): array {
+	$labels = array();
+	foreach ( array_keys( aafm_quickstart_clients() ) as $slug ) {
+		$labels[ $slug ] = aafm_client_is_hosted_web_app( $slug )
+			? __( 'Added as a connector inside the app', 'agent-abilities-for-mcp' )
+			: __( 'Paste a config, then sign in', 'agent-abilities-for-mcp' );
+	}
+	return $labels;
+}
+
+/**
  * The one-line "where do I put this?" note for each quickstart client.
  *
  * Kept as plain prose with no markup so the render can escape each line wholesale.
@@ -878,10 +894,12 @@ function aafm_format_admin_datetime( string $utc ): string {
  *
  * @param string               $label_id Id of the OS label that names the tablist.
  * @param string               $grid_id  Id of the client grid.
- * @param array<string,string> $clients  Client slug => label, in display order.
+ * @param array<string,string> $clients       Client slug => label, in display order.
+ * @param array<string,string> $method_labels Client slug => how it connects, shown as a second line
+ *                                            inside the card (so it is part of the radio's name).
  * @return void
  */
-function aafm_render_client_picker( string $label_id, string $grid_id, array $clients ): void {
+function aafm_render_client_picker( string $label_id, string $grid_id, array $clients, array $method_labels = array() ): void {
 	echo '<div class="aafm-connect-os">';
 	echo '<div class="aafm-stat-label" id="' . esc_attr( $label_id ) . '">' . esc_html__( 'Your operating system', 'agent-abilities-for-mcp' ) . '</div>';
 	// The OS tabs are a cross-cutting filter over the per-client snippet pairs (one tablist,
@@ -914,7 +932,9 @@ function aafm_render_client_picker( string $label_id, string $grid_id, array $cl
 				$first ? ' on' : '',
 				esc_attr( $slug ),
 				aafm_icon( 'client-' . $slug ),
-				esc_html( $label ),
+				isset( $method_labels[ $slug ] )
+					? '<span class="aafm-client-text"><span class="aafm-client-name">' . esc_html( $label ) . '</span> <span class="aafm-client-method">' . esc_html( $method_labels[ $slug ] ) . '</span></span>'
+					: esc_html( $label ),
 				$first ? 'true' : 'false',
 				$first ? '0' : '-1'
 			),
@@ -1017,7 +1037,7 @@ function aafm_render_connection_tab(): void {
 
 		// OAuth client picker: OS tabs + client grid + per-client instructions and bridge snippet.
 		echo '<div class="aafm-connect-controls aafm-oauth-picker">';
-		aafm_render_client_picker( 'aafm-os-label-oauth', 'aafm-oauth-clients', aafm_quickstart_clients() );
+		aafm_render_client_picker( 'aafm-os-label-oauth', 'aafm-oauth-clients', aafm_quickstart_clients(), aafm_client_method_labels() );
 		echo '</div>'; // .aafm-oauth-picker
 
 		// Per-client OAuth instructions + bridge snippet: hidden data cards the JS swaps in.

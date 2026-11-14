@@ -1004,4 +1004,62 @@ final class ConnectionTest extends TestCase {
 		$this->assertSame( '', (string) get_user_meta( $uid, aafm_agent_user_marker_meta_key(), true ) );
 		$this->assertSame( '1', get_option( 'aafm_agent_user_marker_backfilled' ) );
 	}
+
+	/**
+	 * The client buttons of one picker grid, keyed by data-client, each with its full markup.
+	 *
+	 * @param string $html    Rendered tab.
+	 * @param string $grid_id Grid id.
+	 * @return array<string,string>
+	 */
+	private function picker_cards( string $html, string $grid_id ): array {
+		$start = strpos( $html, 'id="' . $grid_id . '"' );
+		$this->assertNotFalse( $start, $grid_id . ' not rendered.' );
+		$grid = substr( $html, (int) $start, (int) strpos( $html, '</div>', (int) $start ) - (int) $start );
+		preg_match_all( '/<button type="button" class="aafm-client[^"]*" data-client="([^"]+)".*?<\/button>/s', $grid, $m, PREG_SET_ORDER );
+		$cards = array();
+		foreach ( $m as $card ) {
+			$cards[ $card[1] ] = $card[0];
+		}
+		return $cards;
+	}
+
+	public function test_every_oauth_picker_card_has_a_method_label(): void {
+		$cards = $this->picker_cards( $this->render_connection_tab(), 'aafm-oauth-clients' );
+		$this->assertCount( 9, $cards );
+		foreach ( $cards as $slug => $card ) {
+			$this->assertMatchesRegularExpression( '/<span class="aafm-client-method">[^<]+<\/span>/', $card, $slug );
+		}
+	}
+
+	public function test_hosted_clients_say_connector_and_the_other_six_say_config_then_sign_in(): void {
+		$cards  = $this->picker_cards( $this->render_connection_tab(), 'aafm-oauth-clients' );
+		$hosted = 0;
+		foreach ( $cards as $slug => $card ) {
+			if ( aafm_client_is_hosted_web_app( $slug ) ) {
+				++$hosted;
+				$this->assertStringContainsString( 'Added as a connector inside the app', $card, $slug );
+			} else {
+				$this->assertStringContainsString( 'Paste a config, then sign in', $card, $slug );
+			}
+		}
+		$this->assertSame( 3, $hosted );
+	}
+
+	public function test_method_label_is_inside_the_radios_accessible_name(): void {
+		foreach ( $this->picker_cards( $this->render_connection_tab(), 'aafm-oauth-clients' ) as $slug => $card ) {
+			// The radio is named by its content, so the label must sit inside the button and carry no aria-hidden.
+			$this->assertStringNotContainsString( 'aria-label', $card, $slug );
+			$this->assertDoesNotMatchRegularExpression( '/aafm-client-method"[^>]*aria-hidden/', $card, $slug );
+			$this->assertStringContainsString( 'role="radio"', $card );
+		}
+	}
+
+	public function test_app_password_picker_has_no_method_line(): void {
+		$cards = $this->picker_cards( $this->render_connection_tab(), 'aafm-clients' );
+		$this->assertNotEmpty( $cards );
+		foreach ( $cards as $slug => $card ) {
+			$this->assertStringNotContainsString( 'aafm-client-method', $card, $slug );
+		}
+	}
 }

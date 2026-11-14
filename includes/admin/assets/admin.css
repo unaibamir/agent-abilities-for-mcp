@@ -2168,6 +2168,20 @@ body:is(.admin-color-light, .admin-color-blue, .admin-color-coffee, .admin-color
 			box-shadow: inset 0 0 0 1px var(--aafm-accent);
 		}
 
+		/* OAuth picker only: the name, then how the client connects, inside the radio's name. */
+		.aafm-client-text {
+			display: flex;
+			flex-direction: column;
+			gap: 2px;
+			min-inline-size: 0;
+		}
+
+		.aafm-client-method {
+			font-size: var(--aafm-fs-xs);
+			font-weight: 400;
+			color: var(--aafm-text-muted);
+		}
+
 		.ci {
 			inline-size: 26px;
 			block-size: 26px;

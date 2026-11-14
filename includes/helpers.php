@@ -1000,8 +1000,9 @@ function aafm_recoverable_delete_abilities(): array {
 		'aafm/trash-page',
 		'aafm/delete-block',
 		'aafm/tec-delete-event',
-		// Refuses unless the post keeps revisions (type support and wp_revisions_enabled()), so a saved removal
-		// always has the revision restore-revision brings back; a Grid Builder template keeps none and is refused.
+		// Refuses unless the post keeps at least two revisions (type support, wp_revisions_enabled() and a limit other
+		// than 1, which core would prune the restore point to), so a saved removal always has the revision
+		// restore-revision brings back; a Grid Builder template keeps none and is refused.
 		'aafm/wpbakery-remove-element',
 		// Undoing a create moves the post to the Trash, and it refuses when the Trash is off.
 		'aafm/undo-change',

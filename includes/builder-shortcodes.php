@@ -612,7 +612,8 @@ function aafm_builder_replay_check( string $builder, int $id, string $old, strin
  * @param list<array<string,mixed>> $expected Outline $new must have.
  * @param callable|null             $after    callable( int $post_id, bool $probe ): bool, or null.
  * @param string                    $builder  avada or wpbakery.
- * @return array{post:WP_Post,restore_revision_id:?int,reversible:bool,unchanged:bool,page_fingerprint:string}|WP_Error
+ * @return array{post:WP_Post,restore_revision_id:?int,reversible:bool,unchanged:bool,page_fingerprint:string,reversible_reason?:string}|WP_Error
+ *         reversible_reason is present only when the site's revision limit deleted the restore point.
  */
 function aafm_builder_commit( WP_Post $post, string $old, string $new, array $tags, array $expected, ?callable $after, string $builder ) { // phpcs:ignore Universal.NamingConventions.NoReservedKeywordParameterNames.newFound -- $new is the contracted parameter name (plan 326 S7-2).
 	$id         = (int) $post->ID;
@@ -720,6 +721,19 @@ function aafm_builder_commit( WP_Post $post, string $old, string $new, array $ta
 		return aafm_generic_error();
 	}
 
+	// Core saves its own revision inside the update and prunes the oldest down to wp_revisions_to_keep(); with one kept,
+	// that deletes the revision saved above. Never report a restore point that is gone.
+	$reversible_reason = null;
+	if ( null !== $restore_revision_id && ! aafm_exact_object( 'post', $restore_revision_id ) instanceof WP_Post ) {
+		$restore_revision_id = null;
+		$reversible          = false;
+		$reversible_reason   = sprintf(
+			/* translators: %d: the number of revisions the site keeps per post. */
+			_n( 'This site keeps only %d revision per post (WP_POST_REVISIONS or the wp_revisions_to_keep filter), so WordPress deleted the revision that held the page before this change. There is no way back from this plugin.', 'This site keeps only %d revisions per post (WP_POST_REVISIONS or the wp_revisions_to_keep filter), so WordPress deleted the revision that held the page before this change. There is no way back from this plugin.', max( 1, wp_revisions_to_keep( $post ) ), 'agent-abilities-for-mcp' ),
+			max( 1, wp_revisions_to_keep( $post ) )
+		);
+	}
+
 	// Step 8.
 	if ( ! aafm_post_field_confirm_logged( $id, 'post_content', $new, $old ) ) {
 		return new WP_Error(
@@ -745,11 +759,15 @@ function aafm_builder_commit( WP_Post $post, string $old, string $new, array $ta
 	if ( ! $fresh instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
-	return array(
+	$out = array(
 		'post'                => $fresh,
 		'restore_revision_id' => $restore_revision_id,
 		'reversible'          => $reversible,
 		'unchanged'           => false,
 		'page_fingerprint'    => aafm_builder_page_fingerprint( (string) $fresh->post_content ),
 	);
+	if ( null !== $reversible_reason ) {
+		$out['reversible_reason'] = $reversible_reason;
+	}
+	return $out;
 }

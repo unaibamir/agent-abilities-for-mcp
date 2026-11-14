@@ -2343,6 +2343,44 @@ final class WpbakeryElementsTest extends TestCase {
 		$this->assertSame( $flex, get_post_field( 'post_content', $mixed, 'raw' ) );
 	}
 
+	/**
+	 * R2-1: with one revision kept, core deletes the restore point inside the save. Remove refuses before writing; the
+	 * other writes save and say there is no way back, naming the limit. Two kept is enough.
+	 */
+	public function test_a_one_revision_limit_refuses_remove_and_is_reported_by_the_other_writes(): void {
+		$id = $this->page( self::TWO_ROWS );
+		$this->acting_as( 'editor' );
+		$one      = static fn(): int => 1;
+		add_filter( 'wp_revisions_to_keep', $one );
+		$removed  = $this->remove( $id, 2 );
+		$inserted = $this->insert( $id, 2, 'after', self::text_block( '<p>N</p>' ) );
+		$moved    = $this->move( $id, 3, 2, 'before' );
+		$updated  = $this->update( $id, 2, array( 'text' => '<p>U</p>' ) );
+		remove_filter( 'wp_revisions_to_keep', $one );
+
+		$this->assert_error( $removed, 'aafm_builder_remove_irreversible', 409 );
+		$this->assertStringContainsString( 'keeps only 1 revision', $removed->get_error_message() );
+		foreach ( array(
+			'insert' => $inserted,
+			'move'   => $moved,
+			'update' => $updated,
+		) as $tool => $out ) {
+			$this->assertIsArray( $out, $tool );
+			$this->assertFalse( $out['reversible'], $tool );
+			$this->assertNull( $out['restore_revision_id'], $tool );
+			$this->assertStringContainsString( 'keeps only 1 revision', $out['reversible_reason'], $tool );
+		}
+
+		$two    = static fn(): int => 2;
+		add_filter( 'wp_revisions_to_keep', $two );
+		$before = (string) get_post_field( 'post_content', $id, 'raw' );
+		$out    = $this->remove( $id, 2 );
+		remove_filter( 'wp_revisions_to_keep', $two );
+		$this->assertIsArray( $out );
+		$this->assertSame( $before, get_post( $out['restore_revision_id'] )->post_content );
+		$this->assertArrayNotHasKey( 'reversible_reason', $out );
+	}
+
 	public function test_remove_is_refused_when_revisions_are_off(): void {
 		$id = $this->page( self::TWO_ROWS );
 		$this->acting_as( 'editor' );

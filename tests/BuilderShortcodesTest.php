@@ -693,6 +693,67 @@ final class BuilderShortcodesTest extends TestCase {
 		$this->assertSame( 10, $kept );
 	}
 
+	/**
+	 * R2-1: core prunes revisions down to wp_revisions_to_keep() inside the update, oldest first. With one kept, the
+	 * revision saved before the write is deleted, so the commit reports no way back and names the limit; with two or
+	 * more (including a post already at its limit) it is the second newest and survives; -1 keeps all.
+	 *
+	 * @return array<string,array{0:int,1:bool}>
+	 */
+	public function revision_limits(): array {
+		return array(
+			'one kept'       => array( 1, false ),
+			'two kept'       => array( 2, true ),
+			'three kept'     => array( 3, true ),
+			'unlimited (-1)' => array( -1, true ),
+		);
+	}
+
+	/**
+	 * The restore point a commit returns still exists after the save, or none is returned.
+	 *
+	 * @dataProvider revision_limits
+	 *
+	 * @param int  $keep       Revisions kept.
+	 * @param bool $reversible Expected.
+	 */
+	public function test_commit_never_returns_a_revision_core_pruned( int $keep, bool $reversible ): void {
+		$post = $this->page( 'seed' );
+		foreach ( array( 'one', 'two', 'three' ) as $step ) {
+			wp_update_post(
+				wp_slash(
+					array(
+						'ID'           => $post->ID,
+						'post_content' => str_replace( 'Old text.', 'Old ' . $step . '.', self::PAGE ),
+					)
+				)
+			);
+		}
+		wp_update_post(
+			wp_slash(
+				array(
+					'ID'           => $post->ID,
+					'post_content' => self::PAGE,
+				)
+			)
+		);
+		$limit = static fn(): int => $keep;
+		add_filter( 'wp_revisions_to_keep', $limit );
+		$out   = $this->commit_text( get_post( $post->ID ), str_replace( 'Old text.', 'New text.', self::PAGE ) );
+		remove_filter( 'wp_revisions_to_keep', $limit );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( $reversible, $out['reversible'] );
+		if ( $reversible ) {
+			$this->assertIsInt( $out['restore_revision_id'] );
+			$this->assertSame( self::PAGE, get_post( $out['restore_revision_id'] )->post_content );
+			$this->assertArrayNotHasKey( 'reversible_reason', $out );
+		} else {
+			$this->assertNull( $out['restore_revision_id'] );
+			$this->assertStringContainsString( 'keeps only 1 revision', $out['reversible_reason'] );
+		}
+	}
+
 	public function test_commit_runs_without_a_way_back_when_revisions_are_off(): void {
 		$post = $this->page();
 		add_filter( 'wp_revisions_to_keep', '__return_zero' );

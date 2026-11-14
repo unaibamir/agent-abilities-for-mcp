@@ -85,7 +85,7 @@ function aafm_wpbakery_elements_registry_definitions(): array {
 		),
 		'aafm/wpbakery-remove-element' => array(
 			'label'        => __( 'Remove a WPBakery element', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Removes one element, with everything inside it, from a WPBakery page or Grid Builder template, named by its index and by the tag and fingerprint from the outline of wpbakery-get-page-content. The fingerprint covers the whole element, so one that gained content since the read is refused. Refused when the post keeps no revisions (a Grid Builder template keeps none), for the page\'s last row or section, and when a row would be left with no column. Requires page_fingerprint from the last read or write and returns the new one; a changed page is refused and nothing is saved. Other indexes may move, so read the outline again before the next structural change. restore_revision_id brings the page back through restore-revision. The page\'s generated CSS is rebuilt. Not undoable from this plugin\'s change history. Requires edit access to the post; WPBakery\'s Role Manager settings are not applied, though its own save filter still runs. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Removes one element, with everything inside it, from a WPBakery page or Grid Builder template, named by its index and by the tag and fingerprint from the outline of wpbakery-get-page-content. The fingerprint covers the whole element, so one that gained content since the read is refused. Refused when the post keeps no revisions (a Grid Builder template keeps none) or the site keeps only one, for the page\'s last row or section, and when a row would be left with no column. Requires page_fingerprint from the last read or write and returns the new one; a changed page is refused and nothing is saved. Other indexes may move, so read the outline again before the next structural change. restore_revision_id brings the page back through restore-revision. The page\'s generated CSS is rebuilt. Not undoable from this plugin\'s change history. Requires edit access to the post; WPBakery\'s Role Manager settings are not applied, though its own save filter still runs. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'destructive',
 			'subject'      => 'wpbakery',
@@ -1458,7 +1458,7 @@ function aafm_exec_wpbakery_update_element( array $input ) {
 		'changed'             => $result['unchanged'] ? array() : $changed,
 		'restore_revision_id' => $result['restore_revision_id'],
 		'reversible'          => $result['reversible'],
-	);
+	) + aafm_wpbakery_reversible_reason( $result );
 }
 
 /**
@@ -1925,7 +1925,7 @@ function aafm_wpbakery_insert_tree( WP_Post $post, array $tree, array $anchor, b
 		'inserted'            => (int) $stats['count'],
 		'restore_revision_id' => $result['restore_revision_id'],
 		'reversible'          => $result['reversible'],
-	);
+	) + aafm_wpbakery_reversible_reason( $result );
 }
 
 /**
@@ -2241,7 +2241,7 @@ function aafm_exec_wpbakery_move_element( array $input ) {
 		'moved'               => ! $result['unchanged'],
 		'restore_revision_id' => $result['restore_revision_id'],
 		'reversible'          => $result['reversible'],
-	);
+	) + aafm_wpbakery_reversible_reason( $result );
 }
 
 /**
@@ -2296,6 +2296,14 @@ function aafm_exec_wpbakery_remove_element( array $input ) {
 	if ( ! post_type_supports( $post->post_type, 'revisions' ) || ! wp_revisions_enabled( $post ) ) {
 		return aafm_builder_error( 'aafm_builder_remove_irreversible' );
 	}
+	// Core prunes the oldest revisions inside the save; with one kept, the restore point would be deleted at once.
+	if ( 1 === wp_revisions_to_keep( $post ) ) {
+		return new WP_Error(
+			'aafm_builder_remove_irreversible',
+			__( 'This site keeps only 1 revision per post (WP_POST_REVISIONS or the wp_revisions_to_keep filter), so WordPress would delete the revision that brings the removed element back during the same save. Raise the limit to 2 or more, or remove the element in WPBakery\'s editor. Nothing was changed.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 409 )
+		);
+	}
 	$content  = (string) $post->post_content;
 	$tags     = aafm_wpbakery_shortcode_tags( $content );
 	$elements = null === $tags ? null : aafm_builder_elements( $content, $tags );
@@ -2336,5 +2344,15 @@ function aafm_exec_wpbakery_remove_element( array $input ) {
 		'removed'             => aafm_builder_subtree_size( $elements, $index ),
 		'page_fingerprint'    => $result['page_fingerprint'],
 		'restore_revision_id' => $result['restore_revision_id'],
-	);
+	) + aafm_wpbakery_reversible_reason( $result );
+}
+
+/**
+ * The engine's reversible_reason, when the site's revision limit deleted the restore point, as an output fragment.
+ *
+ * @param array<string,mixed> $result aafm_builder_commit() result.
+ * @return array<string,string>
+ */
+function aafm_wpbakery_reversible_reason( array $result ): array {
+	return isset( $result['reversible_reason'] ) ? array( 'reversible_reason' => (string) $result['reversible_reason'] ) : array();
 }

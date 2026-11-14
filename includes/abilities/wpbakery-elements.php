@@ -579,7 +579,8 @@ function aafm_wpbakery_encode_safe_text( $value, bool $exploded ): ?string {
 		return null;
 	}
 	// Decoded first, so the encoded-value check, the scheme check and the #E-8_ choice see what the editor saves.
-	$value = aafm_wpbakery_decode_entities( $value );
+	// A control character spelled as an entity is a real one after the decode, so the unsafe ones are stripped here.
+	$value = str_replace( aafm_unsafe_text_characters(), '', aafm_wpbakery_decode_entities( $value ) );
 	if ( 0 === strpos( $value, '#E-8_' ) ) {
 		return null;
 	}

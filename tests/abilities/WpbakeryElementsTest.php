@@ -462,6 +462,15 @@ final class WpbakeryElementsTest extends TestCase {
 		$this->assertSame( 'https://example.com/x', aafm_wpbakery_decode_value( (string) $this->encode( 'vc_gallery', 'custom_links', array( '&#104;ttps://example.com/x' ) ), 'exploded_textarea_safe' ) );
 	}
 
+	/**
+	 * R3-2: a control character spelled as an entity is stripped from safe text after the decode.
+	 */
+	public function test_safe_text_strips_an_entity_spelled_control_character(): void {
+		$this->assertSame( 'ab', aafm_wpbakery_decode_value( (string) $this->encode( 'vc_gallery', 'custom_links', array( 'a&#1;b' ) ), 'exploded_textarea_safe' ) );
+		$this->assertStringNotContainsString( "\x01", (string) aafm_wpbakery_encode_safe_text( 'a&#x1;"b', false ) );
+		$this->assertSame( 'a"b', aafm_wpbakery_decode_value( (string) aafm_wpbakery_encode_safe_text( 'a&#x1;"b', false ), 'textarea_safe' ) );
+	}
+
 	public function test_text_refuses_a_line_break_and_a_pre_encoded_value(): void {
 		$this->assert_error( $this->encode( 'wpb_btn', 'title', "two\nlines" ), 'aafm_builder_invalid_value', 400 );
 		$this->assert_error( $this->encode( 'wpb_btn', 'title', '#E-8_PHNjcmlwdD4=' ), 'aafm_builder_invalid_value', 400 );

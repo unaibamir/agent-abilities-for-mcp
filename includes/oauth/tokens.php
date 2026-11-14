@@ -949,8 +949,23 @@ function aafm_oauth_stale_token_ids(): ?array {
  * @return int
  */
 function aafm_oauth_stale_token_count(): int {
-	$ids = aafm_oauth_stale_token_ids();
-	return null === $ids ? 0 : count( $ids );
+	global $wpdb;
+	// One row per distinct audience, grouped on its bytes so a case or trailing-space variant of an
+	// accepted address stays its own group, as aafm_oauth_audience_accepted() compares it.
+	$suppressed = $wpdb->suppress_errors();
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$view = aafm_wpdb_results( $wpdb->prepare( 'SELECT CAST(resource AS BINARY) AS audience, COUNT(*) AS n FROM %i WHERE is_active = 1 GROUP BY CAST(resource AS BINARY)', $wpdb->prefix . 'aafm_oauth_access_tokens' ) );
+	$wpdb->suppress_errors( $suppressed );
+	if ( ! $view['ok'] || ! is_array( $view['value'] ) ) {
+		return 0;
+	}
+	$count = 0;
+	foreach ( $view['value'] as $row ) {
+		if ( ! aafm_oauth_audience_accepted( (string) $row['audience'] ) ) {
+			$count += (int) $row['n'];
+		}
+	}
+	return $count;
 }
 
 /**

@@ -166,4 +166,56 @@ final class StaleTokenTest extends TestCase {
 		$this->assertSame( 0, aafm_oauth_stale_token_count() );
 		$this->assertSame( 0, aafm_oauth_revoke_stale_tokens() );
 	}
+
+	public function test_grouped_count_equals_the_id_list_count(): void {
+		$accepted = aafm_endpoint_url();
+		$this->seed_token( $accepted );
+		$this->seed_token( $accepted );
+		$this->seed_token( 'https://old.example/wp-json/aafm/v1/mcp' );
+		$this->seed_token( 'https://old.example/wp-json/aafm/v1/mcp' );
+		$this->seed_token( strtoupper( $accepted ) );
+		$this->seed_token( $accepted . ' ' );
+		$this->seed_token( $accepted, 0 );
+
+		$this->assertSame( 4, aafm_oauth_stale_token_count() );
+		$this->assertSame( count( (array) aafm_oauth_stale_token_ids() ), aafm_oauth_stale_token_count() );
+	}
+
+	public function test_count_runs_one_grouped_statement(): void {
+		$this->seed_token( aafm_endpoint_url() );
+		$this->seed_token( 'https://old.example/wp-json/aafm/v1/mcp' );
+		$seen = array();
+		$spy  = static function ( string $sql ) use ( &$seen ): string {
+			if ( false !== strpos( $sql, 'aafm_oauth_access_tokens' ) ) {
+				$seen[] = $sql;
+			}
+			return $sql;
+		};
+		add_filter( 'query', $spy );
+		$count = aafm_oauth_stale_token_count();
+		remove_filter( 'query', $spy );
+
+		$this->assertSame( 1, $count );
+		$this->assertCount( 1, $seen );
+		$this->assertStringContainsString( 'GROUP BY', $seen[0] );
+		$this->assertStringContainsString( 'COUNT(', $seen[0] );
+	}
+
+	public function test_failed_read_counts_zero(): void {
+		$this->seed_token( 'https://old.example/wp-json/aafm/v1/mcp' );
+		$break = static function ( string $sql ): string {
+			return false !== strpos( $sql, 'aafm_oauth_access_tokens' ) ? 'SELECT nope FROM no_such_table_aafm' : $sql;
+		};
+		add_filter( 'query', $break );
+		$count = aafm_oauth_stale_token_count();
+		remove_filter( 'query', $break );
+		$this->assertSame( 0, $count );
+	}
+
+	public function test_rows_with_an_empty_resource_count_as_stale(): void {
+		$this->seed_token( '' );
+		$this->seed_token( aafm_endpoint_url() );
+		$this->assertSame( 1, aafm_oauth_stale_token_count() );
+		$this->assertSame( count( (array) aafm_oauth_stale_token_ids() ), aafm_oauth_stale_token_count() );
+	}
 }

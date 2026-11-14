@@ -444,7 +444,7 @@ function aafm_wpbakery_encode_raw( string $base, $value, array $param ): ?string
 		if ( null === $text || 0 === strpos( $text, '#E-8_' ) || ( 'text' === $base && 1 === preg_match( '/[\r\n]/', $text ) ) ) {
 			return null;
 		}
-		return 'safe_text' === $base ? aafm_wpbakery_safe_form( $text ) : aafm_wpbakery_escape_attribute( wp_kses_normalize_entities( $text ) );
+		return 'safe_text' === $base ? aafm_wpbakery_safe_form( $text ) : aafm_wpbakery_escape_attribute( aafm_wpbakery_unquote_entities( wp_kses_normalize_entities( $text ) ) );
 	}
 	return '' === $base ? null : aafm_wpbakery_encode_clean( $base, $value, $param );
 }
@@ -460,7 +460,7 @@ function aafm_wpbakery_safe_form( string $text ): string {
 	if ( false !== strpos( $text, '"' ) || false !== strpos( $text, 'http' ) ) {
 		return '#E-8_' . base64_encode( aafm_wpbakery_uri_encode( $text ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- WPBakery's own safe text form (W17), built by the plugin from checked input.
 	}
-	return aafm_wpbakery_escape_attribute( wp_kses_normalize_entities( $text ) );
+	return aafm_wpbakery_escape_attribute( aafm_wpbakery_unquote_entities( wp_kses_normalize_entities( $text ) ) );
 }
 
 /**
@@ -527,7 +527,20 @@ function aafm_wpbakery_plain_text( $value ): ?string {
 	if ( null === $text || 1 === preg_match( '/[\r\n]/', $text ) || 0 === strpos( $text, '#E-8_' ) ) {
 		return null;
 	}
-	return wp_kses_normalize_entities( aafm_sanitize_plain_text( $text ) );
+	return aafm_wpbakery_unquote_entities( wp_kses_normalize_entities( aafm_sanitize_plain_text( $text ) ) );
+}
+
+/**
+ * Quote entities written as the quote itself. WPBakery 9.1's editor turns &quot;, &#034; and &#039; in an attribute
+ * value into bare quotes on its next save, which ends the attribute early and breaks the element (smoke run S9-5a),
+ * so the encoder stores the quote and lets W2 escape a double quote. Core's sanitize_text_field() produces these
+ * entities for text after a lone <.
+ *
+ * @param string $text Text with entities normalised.
+ * @return string
+ */
+function aafm_wpbakery_unquote_entities( string $text ): string {
+	return (string) preg_replace( array( '/&(quot|#0*34|#x0*22);/i', '/&(apos|#0*39|#x0*27);/i' ), array( '"', "'" ), $text );
 }
 
 /**

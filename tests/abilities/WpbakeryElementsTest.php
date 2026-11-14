@@ -400,6 +400,15 @@ final class WpbakeryElementsTest extends TestCase {
 		$this->assertSame( 'Tom &amp; Jerry', $this->encode( 'wpb_btn', 'title', 'Tom &amp; Jerry' ) );
 	}
 
+	/**
+	 * WPBakery 9.1's editor rewrites &quot;, &#034; and &#039; in an attribute value to bare quotes on its next save
+	 * (smoke run, scratchpad/1113/s9a-vendor/ev/probe-entities-*), which ends the attribute early. The encoder writes
+	 * them as the quote itself, so a double quote takes W2's escape.
+	 */
+	public function test_text_writes_quote_entities_as_the_quote_itself(): void {
+		$this->assertSame( 'A ``q`` \'s\' ``n`` ``x`` C &gt; D &lt; E &amp; F', $this->encode( 'wpb_btn', 'title', 'A &quot;q&quot; &#039;s&#39; &#034;n&#34; &#x22;x&#x22; C &gt; D &lt; E &amp; F' ) );
+	}
+
 	public function test_text_refuses_a_line_break_and_a_pre_encoded_value(): void {
 		$this->assert_error( $this->encode( 'wpb_btn', 'title', "two\nlines" ), 'aafm_builder_invalid_value', 400 );
 		$this->assert_error( $this->encode( 'wpb_btn', 'title', '#E-8_PHNjcmlwdD4=' ), 'aafm_builder_invalid_value', 400 );
@@ -1195,8 +1204,9 @@ final class WpbakeryElementsTest extends TestCase {
 		$out = $this->update( $id, 2, array( 'set_atts' => array( 'text' => 'A & B < C "D"' ) ) );
 
 		$this->assertIsArray( $out );
-		// Core's sanitize_text_field() escapes the run after a lone < (wp_pre_kses_less_than()), quotes included.
-		$this->assertStringContainsString( '[vc_custom_heading text="A &amp; B &lt; C &quot;D&quot;"]', get_post_field( 'post_content', $id, 'raw' ) );
+		// Core's sanitize_text_field() escapes the run after a lone < (wp_pre_kses_less_than()), quotes included;
+		// WPBakery's editor turns a stored quote entity back into a bare quote on save, so it is written as W2's escape.
+		$this->assertStringContainsString( '[vc_custom_heading text="A &amp; B &lt; C ``D``"]', get_post_field( 'post_content', $id, 'raw' ) );
 		$this->assertStringContainsString( '[vc_custom_heading text="Say ``D``"]', $this->stored_after( $id, 'Say "D"' ) );
 	}
 

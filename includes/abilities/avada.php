@@ -911,6 +911,7 @@ function aafm_args_avada_replace_text(): array {
 			'properties' => array(
 				'post'         => array( 'type' => 'object' ),
 				'replacements' => array( 'type' => 'integer' ),
+				'affects'      => array( 'type' => 'string' ),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_avada_replace_text',

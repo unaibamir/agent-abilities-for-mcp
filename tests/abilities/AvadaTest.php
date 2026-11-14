@@ -1440,4 +1440,8 @@ final class AvadaTest extends TestCase {
 			}
 		}
 	}
+
+	public function test_replace_output_schema_declares_affects(): void {
+		$this->assertSame( 'string', aafm_args_avada_replace_text()['output_schema']['properties']['affects']['type'] );
+	}
 }

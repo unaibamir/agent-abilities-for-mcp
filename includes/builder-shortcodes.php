@@ -693,7 +693,8 @@ function aafm_builder_commit( WP_Post $post, string $old, string $new, array $ta
 				add_filter( 'wp_save_post_revision_check_for_changes', '__return_false' );
 				$saved = wp_save_post_revision( $id );
 				remove_filter( 'wp_save_post_revision_check_for_changes', '__return_false' );
-				if ( is_int( $saved ) && $saved > 0 && get_post_field( 'post_content', $saved, 'raw' ) === $old ) {
+				$forced = is_int( $saved ) && $saved > 0 ? aafm_exact_object( 'post', $saved ) : null;
+				if ( $forced instanceof WP_Post && $forced->post_content === $old ) {
 					$restore_revision_id = $saved;
 				}
 			}

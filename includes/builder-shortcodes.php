@@ -318,7 +318,7 @@ function aafm_builder_ownership_allows( string $builder, $guard_answer, WP_Post 
  */
 function aafm_builder_vendor_rows(): array {
 	return array(
-		'wpbakery_css_rebuild'    => array(
+		'wpbakery_css_rebuild'       => array(
 			'target'   => static function ( int $id, string $type ): void {
 				$vc = call_user_func( 'wpbakery' ); // @phpstan-ignore-line argument.type (WPBakery's own accessor; this row is present only when the function exists, see requires)
 				if ( ! is_object( $vc ) || ! method_exists( $vc, 'buildShortcodesCss' ) ) {
@@ -330,7 +330,7 @@ function aafm_builder_vendor_rows(): array {
 		),
 		// W16: WPBakery registers vc_grid_item only inside is_admin(), so a REST request has no such type
 		// until its own registration runs (Ruling R-S8a-4). The vendor's class file defines classes only.
-		'wpbakery_grid_post_type' => array(
+		'wpbakery_grid_post_type'    => array(
 			'target'   => static function (): void {
 				$file = (string) call_user_func( 'vc_path_dir', 'PARAMS_DIR', 'vc_grid_item/editor/class-vc-grid-item-editor.php' ); // @phpstan-ignore-line argument.type (WPBakery's own path helper; this row is present only when it exists, see requires)
 				// A WPBakery release that moves the file or drops the method leaves the type unregistered, and the call is refused.
@@ -341,7 +341,7 @@ function aafm_builder_vendor_rows(): array {
 			'requires' => 'vc_path_dir',
 		),
 		// A setting's param type from WPBakery's element map, or null when the map does not know it.
-		'wpbakery_param_type'     => array(
+		'wpbakery_param_type'        => array(
 			'target'   => static function ( string $tag, string $name ): ?string {
 				$param = call_user_func( array( 'WPBMap', 'getParam' ), $tag, $name ); // @phpstan-ignore-line argument.type (WPBakery's own map; this row is present only when vc_map() exists, see requires)
 				return is_array( $param ) && isset( $param['type'] ) && is_string( $param['type'] ) ? $param['type'] : null;
@@ -350,14 +350,14 @@ function aafm_builder_vendor_rows(): array {
 		),
 		// Every element WPBakery has mapped, keyed by tag, each entry as registered (a lean-mapped entry is not
 		// resolved yet); wpbakery_map_one resolves one, so one entry that throws can be skipped on its own.
-		'wpbakery_map_all'        => array(
+		'wpbakery_map_all'           => array(
 			'target'   => static function (): array {
 				return (array) call_user_func( array( 'WPBMap', 'getShortCodes' ) ); // @phpstan-ignore-line argument.type (WPBakery's own map; this row is present only when vc_map() exists, see requires)
 			},
 			'requires' => 'vc_map',
 		),
 		// One element's resolved settings (WPBMap::getShortCode() includes its config file), or null.
-		'wpbakery_map_one'        => array(
+		'wpbakery_map_one'           => array(
 			'target'   => static function ( string $tag ): ?array {
 				$settings = call_user_func( array( 'WPBMap', 'getShortCode' ), $tag ); // @phpstan-ignore-line argument.type (WPBakery's own map; this row is present only when vc_map() exists, see requires)
 				return is_array( $settings ) ? $settings : null;
@@ -365,12 +365,18 @@ function aafm_builder_vendor_rows(): array {
 			'requires' => 'vc_map',
 		),
 		// W18: maps the Grid Builder's own elements, which WPBakery maps only inside a grid editor request.
-		'wpbakery_grid_mapper'    => array(
+		'wpbakery_grid_mapper'       => array(
 			'target'   => 'vc_grid_item_map_shortcodes',
 			'requires' => 'vc_grid_item_map_shortcodes',
 		),
+		// The post types WPBakery's editor is on for, as its own setting and the calling user's Role Manager say (W14,
+		// Ruling B15): the one check an insert on an empty post makes.
+		'wpbakery_editor_post_types' => array(
+			'target'   => 'vc_editor_post_types',
+			'requires' => 'vc_editor_post_types',
+		),
 		// The Global Options name of the active Avada theme; present only with the theme's own Avada() loaded.
-		'avada_option_name'       => array(
+		'avada_option_name'          => array(
 			'target'   => array( 'Avada', 'get_option_name' ),
 			'requires' => 'Avada',
 		),

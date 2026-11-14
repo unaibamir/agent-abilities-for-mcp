@@ -596,9 +596,10 @@ function aafm_notify_outbox( string $op, array $item = array() ): array {
  * @param string                         $pool   Which hourly pool to draw from, see aafm_notify_global_slot().
  * @param array<int,array<string,mixed>> $drain  Digest queue events to remove once, and only if, wp_mail() reports success.
  * @param string                         $bucket The throttle bucket whose slot this message already took, so a refusal can be counted against it.
+ * @param bool                           $inline Send in this request even on a host with no finish function, never through WP-Cron.
  * @return bool Whether a message was queued.
  */
-function aafm_notify_send_later( string $to, array $events, bool $digest, string $extra = '', string $pool = 'governance', array $drain = array(), string $bucket = '' ): bool {
+function aafm_notify_send_later( string $to, array $events, bool $digest, string $extra = '', string $pool = 'governance', array $drain = array(), string $bucket = '', bool $inline = false ): bool {
 	if ( ! aafm_notify_global_slot( $pool ) ) {
 		if ( '' !== $bucket ) {
 			aafm_notify_hold_back( $bucket, (int) ( $events[0]['suppressed'] ?? 0 ) );
@@ -613,6 +614,7 @@ function aafm_notify_send_later( string $to, array $events, bool $digest, string
 			'digest' => $digest,
 			'extra'  => $extra,
 			'drain'  => $drain,
+			'inline' => $inline,
 		)
 	);
 	add_action( 'shutdown', 'aafm_notify_flush_outbox' );
@@ -727,11 +729,15 @@ function aafm_notify_flush_outbox(): void {
 	if ( null !== $finish ) {
 		$finish();
 	} elseif ( ! wp_doing_cron() && ! ( defined( 'WP_CLI' ) && WP_CLI ) ) {
-		// Hand each message to cron. A cron run or a WP-CLI command skips this: nobody is waiting.
+		// Hand each message to cron. A cron run or a WP-CLI command skips this: nobody is waiting. A message
+		// marked inline (the old-address warning) stays here and is sent in this request.
 		$items = array_values(
 			array_filter(
 				$items,
 				static function ( array $item ): bool {
+					if ( ! empty( $item['inline'] ) ) {
+						return true;
+					}
 					return ! aafm_notify_schedule_item( $item + array( 'attempt' => 1 ), time() );
 				}
 			)

@@ -151,7 +151,8 @@ function aafm_notify_warn_old_address( string $email, string $kind, string $clos
 		'subtype' => $subtype,
 		'time'    => time(),
 	);
-	aafm_notify_send_later( $email, array_merge( array( $event ), $rides_along ), false, $closing, 'governance', array(), $bucket );
+	// Inline: an administrator who changed the address could deactivate the plugin before WP-Cron sends it.
+	aafm_notify_send_later( $email, array_merge( array( $event ), $rides_along ), false, $closing, 'governance', array(), $bucket, true );
 }
 
 /**

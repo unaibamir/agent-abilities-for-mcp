@@ -463,4 +463,69 @@ final class NotifyCronHandoffTest extends TestCase {
 		$this->assertSame( array(), $this->mail );
 		$this->assertCount( 1, $this->scheduled() );
 	}
+
+	/**
+	 * Queue the old-address warning the way a Settings save that changes the alert address does.
+	 *
+	 * @return void
+	 */
+	private function warn_old_address(): void {
+		aafm_notify_warn_old_address( 'old@example.com', 'settings:email_changed', 'If you did not make this change, review who can sign in.', true );
+	}
+
+	public function test_old_address_warning_sends_in_the_request_without_a_finish_function(): void {
+		$this->no_finish_function();
+		$this->warn_old_address();
+
+		aafm_notify_flush_outbox();
+
+		$this->assertCount( 1, $this->mail, 'The warning goes out before anyone can deactivate the plugin.' );
+		$this->assertSame( 'old@example.com', $this->mail[0]['to'] );
+		$this->assertSame( array(), $this->scheduled() );
+	}
+
+	public function test_old_address_warning_is_unchanged_with_a_finish_function(): void {
+		$finished = false;
+		add_filter(
+			'aafm_notify_finish_function',
+			static function () use ( &$finished ) {
+				return static function () use ( &$finished ): void {
+					$finished = true;
+				};
+			}
+		);
+		$this->warn_old_address();
+
+		aafm_notify_flush_outbox();
+
+		$this->assertTrue( $finished );
+		$this->assertCount( 1, $this->mail );
+		$this->assertSame( array(), $this->scheduled() );
+	}
+
+	public function test_other_messages_still_go_to_cron_on_the_same_host(): void {
+		$this->no_finish_function();
+		$this->warn_old_address();
+		$other = $this->item( 'read_only_on' );
+		aafm_notify_outbox( 'add', $other );
+
+		aafm_notify_flush_outbox();
+
+		$this->assertCount( 1, $this->mail, 'Only the old-address warning is sent in the request.' );
+		$this->assertSame( 'old@example.com', $this->mail[0]['to'] );
+		$this->assertSame( array( $other + array( 'attempt' => 1 ) ), wp_list_pluck( $this->scheduled(), 'item' ) );
+	}
+
+	public function test_failed_inline_send_is_logged(): void {
+		$this->no_finish_function();
+		$this->mail_ok = false;
+		$before        = $this->failure_rows();
+		$this->warn_old_address();
+
+		aafm_notify_flush_outbox();
+
+		$this->assertCount( 1, $this->mail );
+		$this->assertSame( array(), $this->scheduled() );
+		$this->assertGreaterThan( $before, $this->failure_rows() );
+	}
 }

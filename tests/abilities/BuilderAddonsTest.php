@@ -287,4 +287,107 @@ final class BuilderAddonsTest extends TestCase {
 		$this->assertSame( array(), $this->listed(), 'Each row still needs edit access to the template post.' );
 		$this->assertFalse( aafm_templatera_template_allowed( get_post( $page ) ), 'Only a templatera post is a template.' );
 	}
+
+	/**
+	 * A WPBakery page, created as an administrator.
+	 *
+	 * @param string $content Content.
+	 * @return int
+	 */
+	private function page( string $content = self::SIMPLE ): int {
+		$current = get_current_user_id();
+		$this->acting_as( 'administrator' );
+		$id = self::factory()->post->create(
+			array(
+				'post_type'    => 'page',
+				'post_content' => $content,
+			)
+		);
+		wp_set_current_user( $current );
+		return $id;
+	}
+
+	/**
+	 * Run the template insert after the element at $anchor, with anchor_expect and page_fingerprint filled in.
+	 *
+	 * @param int                 $id     Post.
+	 * @param string              $tid    Template id.
+	 * @param array<string,mixed> $extra  Extra input (source, mode).
+	 * @param int                 $anchor Anchor index.
+	 * @param string              $place  Placement.
+	 * @return array<string,mixed>|WP_Error
+	 */
+	private function insert( int $id, string $tid, array $extra = array(), int $anchor = 0, string $place = 'after' ) {
+		$content  = (string) get_post_field( 'post_content', $id, 'raw' );
+		$elements = aafm_builder_elements( $content, aafm_wpbakery_shortcode_tags( $content ) );
+		return aafm_exec_wpbakery_insert_template(
+			$extra + array(
+				'post_id'          => $id,
+				'page_fingerprint' => aafm_builder_page_fingerprint( $content ),
+				'template_id'      => $tid,
+				'source'           => 'templatera',
+				'anchor_index'     => $anchor,
+				'anchor_expect'    => array(
+					'tag'         => $elements[ $anchor ]['tag'],
+					'fingerprint' => aafm_builder_fingerprint( $content, $elements[ $anchor ] ),
+				),
+				'placement'        => $place,
+			)
+		);
+	}
+
+	public function test_copy_from_a_templatera_post(): void {
+		add_filter( 'aafm_templatera_active', '__return_true' );
+		$tid = $this->template( self::TEMPLATE );
+		$id  = $this->page();
+		$this->acting_as( 'editor' );
+		$out = $this->insert( $id, (string) $tid );
+		$this->assertIsArray( $out );
+		$this->assertSame( self::SIMPLE . self::TEMPLATE, get_post_field( 'post_content', $id, 'raw' ) );
+		$this->assertSame( 3, $out['inserted'] );
+		$this->assertSame( aafm_builder_page_fingerprint( self::SIMPLE . self::TEMPLATE ), $out['page_fingerprint'] );
+		$this->assertSame( aafm_redact_post( get_post( $id ) ), $out['post'] );
+		$this->assertArrayNotHasKey( 'post_content', $out['post'] );
+	}
+
+	public function test_a_template_the_user_may_not_use_or_that_is_not_published_reads_as_unknown(): void {
+		add_filter( 'aafm_templatera_active', '__return_true' );
+		$admins = $this->template( self::TEMPLATE, null, array( 'administrator' ) );
+		$posts  = $this->template( self::TEMPLATE, array( 'post' ) );
+		$draft  = $this->template( self::TEMPLATE );
+		wp_update_post(
+			array(
+				'ID'          => $draft,
+				'post_status' => 'draft',
+			)
+		);
+		$id = $this->page();
+		$this->acting_as( 'editor' );
+		foreach ( array( $admins, $posts, $draft ) as $tid ) {
+			$this->assert_error( $this->insert( $id, (string) $tid ), 'aafm_builder_unknown_template', 404 );
+			$this->assertSame( self::SIMPLE, get_post_field( 'post_content', $id, 'raw' ) );
+		}
+	}
+
+	public function test_a_reference_to_a_post_that_is_not_a_template_is_404(): void {
+		add_filter( 'aafm_templatera_active', '__return_true' );
+		$id    = $this->page();
+		$other = $this->page( self::TEMPLATE );
+		$this->acting_as( 'editor' );
+		foreach ( array( (string) $other, '0', 'abc', '999999' ) as $tid ) {
+			$this->assert_error( $this->insert( $id, $tid ), 'aafm_builder_unknown_template', 404 );
+		}
+		$this->assertSame( self::SIMPLE, get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
+	public function test_without_templatera_the_schema_still_validates_and_the_source_is_refused(): void {
+		$schema = aafm_args_wpbakery_insert_template()['input_schema'];
+		$this->assertContains( 'templatera', $schema['properties']['source']['enum'] );
+		$this->assertFalse( aafm_templatera_active() );
+		$tid = $this->template( self::TEMPLATE );
+		$id  = $this->page();
+		$this->acting_as( 'editor' );
+		$this->assert_error( $this->insert( $id, (string) $tid ), 'aafm_templatera_inactive', 409 );
+		$this->assertSame( self::SIMPLE, get_post_field( 'post_content', $id, 'raw' ) );
+	}
 }

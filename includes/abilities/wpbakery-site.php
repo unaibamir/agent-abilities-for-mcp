@@ -59,7 +59,7 @@ function aafm_wpbakery_site_registry_definitions(): array {
 		),
 		'aafm/wpbakery-insert-template'  => array(
 			'label'        => __( 'Insert a WPBakery template', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Copies a template saved in WPBakery\'s own library, named by its id from wpbakery-list-templates, into a WPBakery page or Grid Builder template, before or after an element from the outline of wpbakery-get-page-content or as its first or last child; on an empty post with no builder, leave out the anchor to start the page, where this one check follows WPBakery\'s own setting for which post types its editor is on for. The template\'s stored text is copied byte for byte. WPBakery\'s own nesting rules apply to its top level, and a template may hold at most 50 elements, nested at most 6 deep. A template holding raw HTML, raw JS, a map, a custom onclick setting or Design Options needs a user who may post unfiltered HTML, and for any other user its text may hold no square bracket, percent-encoded bracket, data-* attribute, unfinished tag or HTML that WordPress would remove. Requires page_fingerprint from the last read or write and returns the new one; a changed page is refused and nothing is saved. Other indexes may move, so read the outline again before the next structural change. When a revision is kept, restore_revision_id brings the page back through restore-revision. The page\'s generated CSS is rebuilt. Not undoable from this plugin\'s change history. Requires edit access to the post; WPBakery\'s Role Manager settings are not applied, though its own save filter still runs. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Copies a template, named by its id and source from wpbakery-list-templates (saved, from WPBakery\'s own library, or templatera, a published Templatera template post the user can edit and may use on this post by the template\'s own role and post type lists, only while Templatera is active), into a WPBakery page or Grid Builder template, before or after an element from the outline of wpbakery-get-page-content or as its first or last child; on an empty post with no builder, leave out the anchor to start the page, where this one check follows WPBakery\'s own setting for which post types its editor is on for. The template\'s stored text is copied byte for byte. WPBakery\'s own nesting rules apply to its top level, and a template may hold at most 50 elements, nested at most 6 deep. A template holding raw HTML, raw JS, a map, a custom onclick setting or Design Options needs a user who may post unfiltered HTML, and for any other user its text may hold no square bracket, percent-encoded bracket, data-* attribute, unfinished tag or HTML that WordPress would remove. Requires page_fingerprint from the last read or write and returns the new one; a changed page is refused and nothing is saved. Other indexes may move, so read the outline again before the next structural change. When a revision is kept, restore_revision_id brings the page back through restore-revision. The page\'s generated CSS is rebuilt. Not undoable from this plugin\'s change history. Requires edit access to the post; WPBakery\'s Role Manager settings are not applied, though its own save filter still runs. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'wpbakery',
@@ -335,9 +335,9 @@ function aafm_args_wpbakery_insert_template(): array {
 				),
 				'source'      => array(
 					'type'        => 'string',
-					'enum'        => array( 'saved' ),
+					'enum'        => array( 'saved', 'templatera' ),
 					'default'     => 'saved',
-					'description' => __( 'saved, a template in WPBakery\'s own library.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'saved, a template in WPBakery\'s own library; templatera, a Templatera template post, by the id wpbakery-list-templates gives while Templatera is active.', 'agent-abilities-for-mcp' ),
 				),
 			) + aafm_wpbakery_structural_schema( 'anchor_' ),
 			'required'             => array( 'post_id', 'page_fingerprint', 'template_id' ),
@@ -356,6 +356,47 @@ function aafm_args_wpbakery_insert_template(): array {
 }
 
 /**
+ * The stored shortcode text of the template an insert names: a saved option row, or with source templatera a
+ * published Templatera template post the user may use on this post (aafm_templatera_template_allowed()), read in the
+ * checked scope. Anything else is aafm_builder_unknown_template (404), so a template the user may not use reads
+ * the same as a missing one; source templatera while Templatera is off is aafm_templatera_inactive (409).
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @param WP_Post             $post  Post the template goes on.
+ * @return string|WP_Error
+ */
+function aafm_wpbakery_template_text( array $input, WP_Post $post ) {
+	$id = (string) ( $input['template_id'] ?? '' );
+	if ( 'templatera' === ( $input['source'] ?? 'saved' ) ) {
+		if ( ! aafm_templatera_active() ) {
+			return new WP_Error(
+				'aafm_templatera_inactive',
+				__( 'The Templatera add-on is not active, so there is no Templatera template to insert. Nothing was changed.', 'agent-abilities-for-mcp' ),
+				array( 'status' => 409 )
+			);
+		}
+		$template = 1 === preg_match( '/^[1-9][0-9]*$/', $id ) ? aafm_exact_object_chain( 'post', (int) $id ) : null;
+		if ( ! $template instanceof WP_Post || 'templatera' !== $template->post_type || 'publish' !== $template->post_status ) {
+			return aafm_builder_error( 'aafm_builder_unknown_template' );
+		}
+		$allowed = aafm_with_checked_reads(
+			static fn(): array => array( 'allowed' => aafm_templatera_template_allowed( $template, $post ) ),
+			aafm_generic_error()
+		);
+		if ( is_wp_error( $allowed ) ) {
+			return $allowed;
+		}
+		return true === $allowed['allowed'] ? (string) $template->post_content : aafm_builder_error( 'aafm_builder_unknown_template' );
+	}
+	foreach ( aafm_wpbakery_saved_templates() as $template ) {
+		if ( $template['id'] === $id ) {
+			return $template['content'];
+		}
+	}
+	return aafm_builder_error( 'aafm_builder_unknown_template' );
+}
+
+/**
  * Execute aafm/wpbakery-insert-template (design WB-8): copies a saved template through aafm_wpbakery_insert_tree()
  * with trusted_vendor_text, which keeps the stored bytes and applies the limits, nesting, the script gate, the
  * stored text checks (SEC-S9b-2) and the save replay. The guard call, ownership rule and page fingerprint check run
@@ -369,16 +410,9 @@ function aafm_exec_wpbakery_insert_template( array $input ) {
 	if ( is_wp_error( $post ) ) {
 		return $post;
 	}
-	$id   = (string) ( $input['template_id'] ?? '' );
-	$text = null;
-	foreach ( aafm_wpbakery_saved_templates() as $template ) {
-		if ( $template['id'] === $id ) {
-			$text = $template['content'];
-			break;
-		}
-	}
-	if ( null === $text || 'saved' !== ( $input['source'] ?? 'saved' ) ) {
-		return aafm_builder_error( 'aafm_builder_unknown_template' );
+	$text = aafm_wpbakery_template_text( $input, $post );
+	if ( is_wp_error( $text ) ) {
+		return $text;
 	}
 	$tags = aafm_wpbakery_shortcode_tags( $text );
 	$tree = null === $tags ? null : aafm_builder_tree( $text, $tags );

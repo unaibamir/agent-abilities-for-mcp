@@ -573,12 +573,12 @@ final class WpbakerySiteTest extends TestCase {
 		$this->assert_refused( $out, 'aafm_not_wpbakery_owned', 409, $id, $content );
 	}
 
-	public function test_the_schema_has_no_mode_and_one_source(): void {
+	public function test_the_schema_has_no_mode_and_two_sources(): void {
 		$args   = aafm_args_wpbakery_insert_template();
 		$schema = $args['input_schema'];
 		$this->assertFalse( $schema['additionalProperties'] );
 		$this->assertArrayNotHasKey( 'mode', $schema['properties'] );
-		$this->assertSame( array( 'saved' ), $schema['properties']['source']['enum'] );
+		$this->assertSame( array( 'saved', 'templatera' ), $schema['properties']['source']['enum'] );
 		$this->assertSame( array( 'post_id', 'page_fingerprint', 'template_id' ), $schema['required'] );
 		$this->assertSame( array( 'before', 'after', 'inside_start', 'inside_end' ), $schema['properties']['placement']['enum'] );
 		$this->assertSame( 'aafm-writes', $args['category'] );

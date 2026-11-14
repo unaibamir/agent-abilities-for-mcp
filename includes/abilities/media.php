@@ -77,7 +77,7 @@ function aafm_register_media_definitions( array $registry ): array {
 	);
 	$registry['aafm/delete-media']          = array(
 		'label'        => __( 'Delete media', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Permanently delete an attachment - the file and library entry are removed and cannot be recovered.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Permanently delete an attachment: the file and library entry are removed and cannot be recovered.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'media',

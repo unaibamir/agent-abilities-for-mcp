@@ -152,7 +152,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/delete-post']      = array(
 		'label'        => __( 'Delete post', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Permanently delete a post, bypassing the Trash. This cannot be undone - use trash-post to remove a post recoverably instead. Reaches a page or product only while that type\'s own tool is on.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Permanently delete a post, bypassing the Trash. This cannot be undone. Use trash-post to remove a post recoverably instead. Reaches a page or product only while that type\'s own tool is on.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'content',
@@ -672,7 +672,7 @@ function aafm_write_content_schema( bool $require_title ): array {
 			),
 			'status'         => array(
 				'type'        => 'string',
-				'description' => __( 'Status for the post. A status that makes content publicly visible now or on a future date - publish, future, private, or a custom public status - always requires this content type\'s publish capability; draft and pending need only the ability\'s base edit permission. any, trash, auto-draft, inherit, and unrecognized values are rejected; the operator\'s force-draft setting can still coerce such a request to draft. Omitting this field on update leaves the current status unchanged; create-draft defaults to draft, create-post and create-page default to publish.', 'agent-abilities-for-mcp' ),
+				'description' => __( 'Status for the post. A status that makes content publicly visible now or on a future date (publish, future, private, or a custom public status) always requires this content type\'s publish capability; draft and pending need only the ability\'s base edit permission. any, trash, auto-draft, inherit, and unrecognized values are rejected; the operator\'s force-draft setting can still coerce such a request to draft. Omitting this field on update leaves the current status unchanged; create-draft defaults to draft, create-post and create-page default to publish.', 'agent-abilities-for-mcp' ),
 			),
 			'slug'           => array(
 				'type'        => 'string',
@@ -728,7 +728,7 @@ function aafm_write_cpt_content_schema( bool $require_title ): array {
 	$schema['properties']['post_type'] = array(
 		'type'        => 'string',
 		'minLength'   => 1,
-		'description' => __( 'Slug of an agent-writable custom content type. Not every public type is writable - only types the operator has exposed to agents are accepted; others are rejected. Call aafm-get-post-types and use the writable flag to find valid slugs.', 'agent-abilities-for-mcp' ),
+		'description' => __( 'Slug of an agent-writable custom content type. Not every public type is writable: only types the operator has exposed to agents are accepted; others are rejected. Call aafm-get-post-types and use the writable flag to find valid slugs.', 'agent-abilities-for-mcp' ),
 	);
 	$required                          = $schema['required'] ?? array();
 	$required[]                        = 'post_type';
@@ -1814,7 +1814,7 @@ function aafm_exec_replace_in_post( array $input ) {
 	if ( ! aafm_replacement_preserves_structure( $content, $new ) ) {
 		return new WP_Error(
 			'aafm_replace_inside_markup',
-			__( 'That replacement would change the structure of the page rather than its text. Either the search term sits inside markup - a tag, an attribute value, an HTML comment, a script or style block, or an SVG - or the replacement introduces markup of its own. Nothing was changed. Choose a search term that appears in the visible body text and a replacement that is plain text, or edit the content directly. To change one whole block, use aafm-replace-block if it is enabled.', 'agent-abilities-for-mcp' ),
+			__( 'That replacement would change the structure of the page rather than its text. Either the search term sits inside markup (a tag, an attribute value, an HTML comment, a script or style block, or an SVG) or the replacement introduces markup of its own. Nothing was changed. Choose a search term that appears in the visible body text and a replacement that is plain text, or edit the content directly. To change one whole block, use aafm-replace-block if it is enabled.', 'agent-abilities-for-mcp' ),
 			array( 'status' => 400 )
 		);
 	}

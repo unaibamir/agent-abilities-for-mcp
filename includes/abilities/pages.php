@@ -64,7 +64,7 @@ function aafm_register_pages_definitions( array $registry ): array {
 	);
 	$registry['aafm/delete-page'] = array(
 		'label'        => __( 'Delete page', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Permanently delete a page, bypassing the Trash. This cannot be undone - use trash-page to remove a page recoverably instead.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Permanently delete a page, bypassing the Trash. This cannot be undone. Use trash-page to remove a page recoverably instead.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'content',

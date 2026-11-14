@@ -45,7 +45,7 @@ function aafm_register_comments_definitions( array $registry ): array {
 	);
 	$registry['aafm/get-comment']          = array(
 		'label'        => __( 'Get comment', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Read one comment by id (email and IP are never returned). status is usually approved/unapproved/spam/trash; a comment whose parent post is trashed reports status post-trashed - the comment itself was never trashed, its post was.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Read one comment by id (email and IP are never returned). status is usually approved/unapproved/spam/trash; a comment whose parent post is trashed reports status post-trashed. The comment itself was never trashed, its post was.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'comments',
@@ -61,7 +61,7 @@ function aafm_register_comments_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-comment']       = array(
 		'label'        => __( 'Update comment', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Edit a comment's content (requires edit access to that comment). The returned comment's status is usually approved/unapproved/spam/trash; because this ability re-reads the comment with no status filter, it can also report post-trashed when the comment's parent post is trashed - the comment itself was never trashed, its post was.", 'agent-abilities-for-mcp' ),
+		'description'  => __( "Edit a comment's content (requires edit access to that comment). The returned comment's status is usually approved/unapproved/spam/trash; because this ability re-reads the comment with no status filter, it can also report post-trashed when the comment's parent post is trashed. The comment itself was never trashed, its post was.", 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'comments',

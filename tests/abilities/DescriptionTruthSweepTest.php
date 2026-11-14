@@ -335,18 +335,66 @@ final class DescriptionTruthSweepTest extends TestCase {
 		}
 	}
 
-	public function test_no_avada_text_uses_a_spaced_hyphen_as_a_dash(): void {
+	public function test_no_ability_text_uses_a_spaced_hyphen_as_a_dash(): void {
 		$checked = 0;
-		foreach ( $this->texts() as $name => $texts ) {
-			if ( 0 !== strncmp( $name, 'aafm/avada-', 11 ) && 0 !== strncmp( $name, 'aafm/wpbakery-', 14 ) ) {
-				continue;
-			}
+		$found   = array();
+		foreach ( $this->texts() as $texts ) {
 			foreach ( $texts as $where => $text ) {
 				++$checked;
-				$this->assertStringNotContainsString( ' - ', $text, $where );
+				if ( false !== strpos( $text, ' - ' ) ) {
+					$found[] = $where;
+				}
 			}
 		}
-		$this->assertGreaterThan( 0, $checked );
+		$this->assertSame( array(), $found, 'Use a comma, a colon or a full stop, not " - ".' );
+		$this->assertGreaterThanOrEqual( count( aafm_get_abilities_registry_full() ), $checked );
+	}
+
+	/**
+	 * A source scan, so error messages and other strings no registry text reaches are covered too.
+	 */
+	public function test_no_translated_string_under_abilities_uses_a_spaced_hyphen(): void {
+		$functions = array( '__', '_e', '_x', '_ex', '_n', '_nx', 'esc_html__', 'esc_html_e', 'esc_html_x', 'esc_attr__', 'esc_attr_e', 'esc_attr_x' );
+		$files     = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( AAFM_PLUGIN_DIR . 'includes/abilities', \FilesystemIterator::SKIP_DOTS ) );
+		$found     = array();
+		$strings   = 0;
+		foreach ( $files as $file ) {
+			if ( 'php' !== $file->getExtension() ) {
+				continue;
+			}
+			$tokens = token_get_all( (string) file_get_contents( $file->getPathname() ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+			$count  = count( $tokens );
+			for ( $i = 0; $i < $count; $i++ ) {
+				if ( ! is_array( $tokens[ $i ] ) || T_STRING !== $tokens[ $i ][0] || ! in_array( $tokens[ $i ][1], $functions, true ) ) {
+					continue;
+				}
+				$j = $i + 1;
+				while ( $j < $count && is_array( $tokens[ $j ] ) && in_array( $tokens[ $j ][0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
+					++$j;
+				}
+				if ( '(' !== ( $tokens[ $j ] ?? null ) ) {
+					continue;
+				}
+				// Every literal directly inside the call: the text, and the plural and context of _n and _x.
+				for ( $depth = 1, ++$j; $j < $count && $depth > 0; $j++ ) {
+					if ( '(' === $tokens[ $j ] || '[' === $tokens[ $j ] ) {
+						++$depth;
+					} elseif ( ')' === $tokens[ $j ] || ']' === $tokens[ $j ] ) {
+						--$depth;
+					} elseif ( 1 === $depth ) {
+						$decoded = \AAFM\Tests\Support\PhpStringLiteral::decode_at( $tokens, $j );
+						if ( null !== $decoded ) {
+							++$strings;
+							if ( false !== strpos( $decoded[0], ' - ' ) ) {
+								$found[] = substr( $file->getPathname(), strlen( AAFM_PLUGIN_DIR ) ) . ':' . $tokens[ $i ][2];
+							}
+						}
+					}
+				}
+			}
+		}
+		$this->assertGreaterThan( 500, $strings, 'The scan reads the translated strings, so a pass is not vacuous.' );
+		$this->assertSame( array(), $found, 'Use a comma, a colon or a full stop, not " - ".' );
 	}
 
 	public function test_replace_sitewide_says_to_rerun_and_warns_when_the_new_text_contains_the_old(): void {

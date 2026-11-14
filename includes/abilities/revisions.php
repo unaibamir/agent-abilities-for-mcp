@@ -25,7 +25,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_revisions_definitions' );
 function aafm_register_revisions_definitions( array $registry ): array {
 	$registry['aafm/list-revisions']   = array(
 		'label'        => __( 'List revisions', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'List the revisions of a post the agent can edit (metadata only - no body content).', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'List the revisions of a post the agent can edit (metadata only, without the body content).', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',

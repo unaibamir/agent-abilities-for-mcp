@@ -1465,7 +1465,8 @@ function aafm_exec_wpbakery_update_element( array $input ) {
  * Whether WPBakery lets $child_tag sit inside $parent_tag (design WB-4). The fixed rules come first: the top level
  * ('') takes a row or a section, a section takes rows, a row takes columns, a column takes content elements or an
  * inner row, an inner row takes inner columns, an inner column takes content elements. Any other parent follows its
- * map entry's as_parent, and a parent with no readable rule is refused. Below the top level, the child's own
+ * map entry's as_parent; a container with no as_parent takes content elements; anything else is refused. An inner row
+ * also goes where allowed_container_element names vc_row. Below the top level, the child's own
  * as_child rule must allow the parent too.
  *
  * @param string                            $parent_tag Parent tag, '' for the top level.
@@ -1486,12 +1487,21 @@ function aafm_wpbakery_nesting_allows( string $parent_tag, string $child_tag, ar
 	} elseif ( 'vc_column' === $parent_tag || 'vc_column_inner' === $parent_tag ) {
 		$ok = ! in_array( $child_tag, $layout, true ) || ( 'vc_column' === $parent_tag && 'vc_row_inner' === $child_tag );
 	} else {
-		$raw  = $map[ $parent_tag ]['as_parent'] ?? null;
-		$rule = aafm_wpbakery_nesting_rule( $raw );
-		$ok   = is_array( $raw ) && ( array() !== $rule['only'] || array() !== $rule['except'] )
-			&& ! in_array( $child_tag, $layout, true )
-			&& ( array() === $rule['only'] || in_array( $child_tag, $rule['only'], true ) )
-			&& ! in_array( $child_tag, $rule['except'], true );
+		$entry = $map[ $parent_tag ] ?? array();
+		$raw   = $entry['as_parent'] ?? null;
+		$rule  = aafm_wpbakery_nesting_rule( $raw );
+		// A layout child is refused, except an inner row where the container's allowed_container_element names vc_row.
+		$layout_ok = ! in_array( $child_tag, $layout, true ) || ( 'vc_row_inner' === $child_tag && 'vc_row' === ( $entry['allowed_container_element'] ?? null ) );
+		if ( ! isset( $entry['as_parent'] ) ) {
+			// A container WPBakery maps with no as_parent (tab, accordion and toggle sections, flexbox and grid
+			// items) takes content elements, as its editor lets it.
+			$ok = ! empty( $entry['is_container'] ) && $layout_ok;
+		} else {
+			$ok = is_array( $raw ) && ( array() !== $rule['only'] || array() !== $rule['except'] )
+				&& $layout_ok
+				&& ( array() === $rule['only'] || in_array( $child_tag, $rule['only'], true ) )
+				&& ! in_array( $child_tag, $rule['except'], true );
+		}
 	}
 	if ( $ok && '' !== $parent_tag ) {
 		$rule = aafm_wpbakery_nesting_rule( $map[ $child_tag ]['as_child'] ?? null );
@@ -1499,6 +1509,19 @@ function aafm_wpbakery_nesting_allows( string $parent_tag, string $child_tag, ar
 	}
 	if ( $ok ) {
 		return true;
+	}
+	$fixed_parents = array( '', 'vc_section', 'vc_row', 'vc_column', 'vc_row_inner', 'vc_column_inner' );
+	if ( ! in_array( $parent_tag, $fixed_parents, true ) && ! isset( $map[ $parent_tag ] ) ) {
+		return new WP_Error(
+			'aafm_builder_invalid_nesting',
+			/* translators: 1: the parent tag, 2: the child tag. */
+			sprintf( __( 'WPBakery\'s element map on this site does not list %1$s outside its editor, so its nesting rule cannot be read and nothing can be placed inside it with this tool. Use WPBakery\'s editor for this container. Nothing was changed. Child: %2$s.', 'agent-abilities-for-mcp' ), $parent_tag, $child_tag ),
+			array(
+				'status' => 400,
+				'parent' => $parent_tag,
+				'child'  => $child_tag,
+			)
+		);
 	}
 	$error = aafm_builder_error(
 		'aafm_builder_invalid_nesting',

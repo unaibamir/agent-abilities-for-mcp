@@ -1734,6 +1734,73 @@ final class WpbakeryElementsTest extends TestCase {
 		}
 	}
 
+	/**
+	 * The containers WPBakery 9.1 maps with is_container and no as_parent, as its own configs give them.
+	 *
+	 * @return array<string,array<string,mixed>>
+	 */
+	private static function container_map(): array {
+		return WpbakeryMapStub::map() + array(
+			'vc_tta_tabs'               => array(
+				'is_container' => true,
+				'as_parent'    => array( 'only' => 'vc_tta_section' ),
+			),
+			'vc_tta_section'            => array(
+				'is_container'              => true,
+				'allowed_container_element' => 'vc_row',
+				'as_child'                  => array( 'only' => 'vc_tta_tour,vc_tta_tabs,vc_tta_accordion,vc_tta_pageable' ),
+			),
+			'vc_flexbox_container'      => array(
+				'is_container' => true,
+				'as_child'     => array( 'except' => 'vc_column,vc_flexbox_container_item,vc_row_inner,vc_column_inner,vc_grid_container_item' ),
+				'as_parent'    => array( 'only' => 'vc_flexbox_container_item' ),
+			),
+			'vc_flexbox_container_item' => array(
+				'is_container'    => true,
+				'content_element' => false,
+			),
+			'vc_grid_container_item'    => array(
+				'is_container'    => true,
+				'content_element' => false,
+			),
+		);
+	}
+
+	/**
+	 * R1-2: a container with no as_parent takes content elements, and an inner row only where allowed_container_element
+	 * names vc_row; the child's own as_child still applies.
+	 */
+	public function test_nesting_lets_containers_without_as_parent_take_content(): void {
+		$map = self::container_map();
+		foreach ( array( array( 'vc_tta_section', 'vc_column_text' ), array( 'vc_tta_section', 'vc_row_inner' ), array( 'vc_flexbox_container_item', 'vc_column_text' ), array( 'vc_grid_container_item', 'vc_custom_heading' ), array( 'vc_tta_tabs', 'vc_tta_section' ) ) as list( $parent, $child ) ) {
+			$this->assertTrue( aafm_wpbakery_nesting_allows( $parent, $child, $map ), "$parent > $child" );
+		}
+		foreach ( array( array( 'vc_flexbox_container_item', 'vc_flexbox_container' ), array( 'vc_flexbox_container_item', 'vc_row_inner' ), array( 'vc_flexbox_container_item', 'vc_column' ), array( 'vc_tta_section', 'vc_tta_section' ), array( 'vc_column', 'vc_tta_section' ), array( 'vc_flexbox_container', 'vc_column_text' ) ) as list( $parent, $child ) ) {
+			$this->assert_error( aafm_wpbakery_nesting_allows( $parent, $child, $map ), 'aafm_builder_invalid_nesting', 400 );
+		}
+		// A container the site's map does not list (WPBakery 9.1 resolves the flexbox and grid items only in its editor):
+		// refused, and the message says why.
+		$out = aafm_wpbakery_nesting_allows( 'vc_flexbox_container_item', 'vc_column_text', WpbakeryMapStub::map() );
+		$this->assert_error( $out, 'aafm_builder_invalid_nesting', 400 );
+		$this->assertStringContainsString( 'does not list vc_flexbox_container_item', $out->get_error_message() );
+	}
+
+	public function test_insert_move_and_reorder_inside_tab_sections(): void {
+		WpbakeryMapStub::install( self::container_map() );
+		$a    = '[vc_column_text]<p>A</p>[/vc_column_text]';
+		$b    = '[vc_column_text]<p>B</p>[/vc_column_text]';
+		$page = '[vc_row][vc_column][vc_tta_tabs][vc_tta_section title="One"]' . $a . '[/vc_tta_section][vc_tta_section title="Two"]' . $b . '[/vc_tta_section][/vc_tta_tabs][/vc_column][/vc_row]';
+		$id   = $this->page( $page );
+		$this->acting_as( 'editor' );
+		$this->assertIsArray( $this->insert( $id, 3, 'inside_end', self::text_block( '<p>C</p>' ) ) );
+		$c = '[vc_column_text]<p>C</p>[/vc_column_text]';
+		$this->assertSame( str_replace( $a, $a . $c, $page ), get_post_field( 'post_content', $id, 'raw' ) );
+		$this->assertIsArray( $this->move( $id, 5, 4, 'before' ), 'Reorder inside one section.' );
+		$this->assertSame( str_replace( $a, $c . $a, $page ), get_post_field( 'post_content', $id, 'raw' ) );
+		$this->assertIsArray( $this->move( $id, 4, 6, 'inside_start' ), 'Move into the other section.' );
+		$this->assertSame( str_replace( array( $a, $b ), array( $a, $c . $b ), $page ), get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
 	public function test_content_has_script_finds_every_script_kind(): void {
 		$this->assertFalse( aafm_wpbakery_content_has_script( self::SIMPLE ) );
 		foreach ( array(

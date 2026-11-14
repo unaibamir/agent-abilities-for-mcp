@@ -65,7 +65,7 @@ function aafm_wpbakery_registry_definitions(): array {
 		),
 		'aafm/wpbakery-replace-text'     => array(
 			'label'        => __( 'Replace text in a WPBakery page', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Replaces literal text within a WPBakery page while requiring the shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee). Text that WPBakery keeps in an element\'s settings, such as a heading or a button label, cannot be changed here and is refused, as is any replacement that would add, remove or alter an element. Square brackets in body text need a user who may post unfiltered HTML. If saving the page as this user would remove or change elements, or change other content on the page, the call is refused and nothing is saved. Not undoable from this plugin\'s change history; WordPress keeps a revision when revisions are on. Requires edit access to the post; WPBakery\'s Role Manager settings are not applied. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Replaces literal text within a WPBakery page while requiring the shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee). Text that WPBakery keeps in an element\'s settings, such as a heading or a button label, cannot be changed here and is refused, as is any replacement that would add, remove or alter an element. Square brackets, percent-encoded brackets and data-* attributes in body text need a user who may post unfiltered HTML. If saving the page as this user would remove or change elements, or change other content on the page, the call is refused and nothing is saved. Not undoable from this plugin\'s change history; WordPress keeps a revision when revisions are on. Requires edit access to the post; WPBakery\'s Role Manager settings are not applied. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'wpbakery',
@@ -425,21 +425,47 @@ function aafm_wpbakery_decode_entities( string $text, bool $keep_quotes = false 
  * Entities are decoded to the form WPBakery's editor saves (quote entities kept, so an attribute holding one keeps
  * its text), then, for a user who may not post unfiltered HTML, the text may hold no square bracket at all: the
  * editor rewrites body text on its next save in ways a check cannot all predict, and with no bracket no shortcode
- * can come of it. For a user who may, the structure and closer checks that follow still apply. Then wp_kses_post().
+ * can come of it. The same user may not send a percent-encoded bracket (%5B, %5D) or any data-* attribute either:
+ * WordPress's TinyMCE plugins replace an element carrying data-wp-media, data-wp-preserve, data-wpview-text or
+ * data-wpview-marker with the URL-decoded attribute value on the editor's save, so the whole class is refused rather
+ * than stripped. For a user who may, the structure and closer checks that follow still apply. Then wp_kses_post().
  *
  * @param string $text Text from the caller.
  * @return string|WP_Error
  */
 function aafm_wpbakery_body_text( string $text ) {
 	$decoded = aafm_wpbakery_decode_entities( $text, true );
-	if ( ! current_user_can( 'unfiltered_html' ) && false !== strpbrk( $decoded, '[]' ) ) {
-		return new WP_Error(
-			'aafm_wpbakery_brackets_need_unfiltered_html',
-			__( 'Square brackets in this text need a user who may post unfiltered HTML, because WPBakery can turn them into an element the next time the page is saved in its editor. Remove the brackets, or ask such a user to make the edit. Nothing was changed.', 'agent-abilities-for-mcp' ),
-			array( 'status' => 400 )
-		);
+	$clean   = wp_kses_post( $decoded );
+	if ( ! current_user_can( 'unfiltered_html' ) ) {
+		if ( false !== strpbrk( $decoded, '[]' ) ) {
+			return new WP_Error(
+				'aafm_wpbakery_brackets_need_unfiltered_html',
+				__( 'Square brackets in this text need a user who may post unfiltered HTML, because WPBakery can turn them into an element the next time the page is saved in its editor. Remove the brackets, or ask such a user to make the edit. Nothing was changed.', 'agent-abilities-for-mcp' ),
+				array( 'status' => 400 )
+			);
+		}
+		if ( 1 === preg_match( '/%5[bd]/i', $decoded ) ) {
+			return new WP_Error(
+				'aafm_wpbakery_encoded_brackets_need_unfiltered_html',
+				__( 'A percent-encoded square bracket in this text needs a user who may post unfiltered HTML, because WordPress\'s editor can decode it into an element the next time the page is saved in WPBakery. Remove it, or ask such a user to make the edit. Nothing was changed.', 'agent-abilities-for-mcp' ),
+				array( 'status' => 400 )
+			);
+		}
+		// Both the text as sent and the form kses would store are parsed, so neither can carry one past the check.
+		foreach ( array( $decoded, $clean ) as $html ) {
+			$tags = new WP_HTML_Tag_Processor( $html );
+			while ( $tags->next_tag() ) {
+				if ( array() !== (array) $tags->get_attribute_names_with_prefix( 'data-' ) ) {
+					return new WP_Error(
+						'aafm_wpbakery_data_attributes_need_unfiltered_html',
+						__( 'A data-* attribute in this text needs a user who may post unfiltered HTML, because WordPress\'s editor can turn one into page text the next time the page is saved in WPBakery. Remove the attribute, or ask such a user to make the edit. Nothing was changed.', 'agent-abilities-for-mcp' ),
+						array( 'status' => 400 )
+					);
+				}
+			}
+		}
 	}
-	return wp_kses_post( $decoded );
+	return $clean;
 }
 
 /**

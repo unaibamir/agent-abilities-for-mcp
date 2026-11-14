@@ -1126,6 +1126,37 @@ final class WpbakeryElementsTest extends TestCase {
 		$this->assertIsArray( $this->update( $id, 8, array( 'text' => '<p>No brackets here.</p>' ) ) );
 	}
 
+	/**
+	 * SEC-S9a-1-R4: without unfiltered_html, body text may carry no percent-encoded bracket and no data-* attribute,
+	 * since WordPress's TinyMCE plugins turn some data attributes into URL-decoded page text on the editor's save.
+	 */
+	public function test_body_text_refuses_encoded_brackets_and_data_attributes_without_unfiltered_html(): void {
+		$id = $this->page( $this->fixture() );
+		$this->act_as_restricted_editor();
+		$cases = array(
+			'<p><img src="https://x/a.png" data-wp-preserve="%5Bvc_raw_js%5DPHNjcmlwdD4=%5B%2Fvc_raw_js%5D"></p>' => 'aafm_wpbakery_encoded_brackets_need_unfiltered_html',
+			'<p>Plain %5b text</p>'                        => 'aafm_wpbakery_encoded_brackets_need_unfiltered_html',
+			'<p>Spelled &#37;5D here</p>'                  => 'aafm_wpbakery_encoded_brackets_need_unfiltered_html',
+			'<p><img src="https://x/a.png" data-wp-media="x" /></p>' => 'aafm_wpbakery_data_attributes_need_unfiltered_html',
+			'<p><img src="https://x/a.png" data-wp-preserve="x" /></p>' => 'aafm_wpbakery_data_attributes_need_unfiltered_html',
+			'<div data-wpview-text="x">v</div>'            => 'aafm_wpbakery_data_attributes_need_unfiltered_html',
+			'<p data-wpview-marker="x">v</p>'              => 'aafm_wpbakery_data_attributes_need_unfiltered_html',
+			'<p><span title="a>b" data-x="1">v</span></p>' => 'aafm_wpbakery_data_attributes_need_unfiltered_html',
+			'<p><IMG SRC="https://x/a.png" DATA-WP-PRESERVE="x"></p>' => 'aafm_wpbakery_data_attributes_need_unfiltered_html',
+		);
+		foreach ( $cases as $text => $code ) {
+			$out = $this->update( $id, 8, array( 'text' => $text ) );
+			$this->assert_refused( $out, $code, 400, $id, $this->fixture() );
+			$this->assertStringContainsString( 'unfiltered HTML', $out->get_error_message() );
+		}
+		$this->assertIsArray( $this->update( $id, 8, array( 'text' => '<p><img src="https://x/a.png" alt="A view" /> <a href="https://x/?a=1&amp;b=2">Link</a></p>' ) ) );
+
+		$this->acting_as( 'administrator' );
+		foreach ( array_keys( $cases ) as $text ) {
+			$this->assertIsArray( $this->update( $id, 8, array( 'text' => $text ) ), $text );
+		}
+	}
+
 	public function test_body_text_with_a_bracket_keeps_todays_checks_for_unfiltered_html(): void {
 		$id = $this->page( $this->fixture() );
 		$this->acting_as( 'administrator' );
@@ -1526,7 +1557,7 @@ final class WpbakeryElementsTest extends TestCase {
 				$this->assertStringContainsString( $phrase, $text );
 			}
 		}
-		$this->assertStringContainsString( 'Square brackets in body text need a user who may post unfiltered HTML.', $row['description'] );
+		$this->assertStringContainsString( 'Square brackets, percent-encoded brackets and data-* attributes in body text need a user who may post unfiltered HTML.', $row['description'] );
 		$this->assertStringContainsString( 'Only while WPBakery Page Builder is active', $row['description'] );
 	}
 }

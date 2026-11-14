@@ -466,6 +466,35 @@ WPB;
 		$this->assertSame( 1, $this->replace( $id, 'Opening paragraph alpha.', 'Opening paragraph beta.' )['replacements'] );
 	}
 
+	public function test_replace_refuses_encoded_brackets_and_data_attributes_without_unfiltered_html(): void {
+		$id     = $this->make_page( self::PAGE );
+		$editor = self::factory()->user->create( array( 'role' => 'editor' ) );
+		( new \WP_User( $editor ) )->add_cap( 'unfiltered_html', false );
+		wp_set_current_user( 0 );
+		wp_set_current_user( $editor );
+		$this->assertFalse( current_user_can( 'unfiltered_html' ) );
+		$cases = array(
+			'<p><img src="https://x/a.png" data-wp-preserve="%5Bvc_raw_js%5DPHNjcmlwdD4=%5B%2Fvc_raw_js%5D"></p>' => 'aafm_wpbakery_encoded_brackets_need_unfiltered_html',
+			'<p>Plain %5b text</p>'                        => 'aafm_wpbakery_encoded_brackets_need_unfiltered_html',
+			'<p>Spelled &#37;5D here</p>'                  => 'aafm_wpbakery_encoded_brackets_need_unfiltered_html',
+			'<p><img src="https://x/a.png" data-wp-media="x" /></p>' => 'aafm_wpbakery_data_attributes_need_unfiltered_html',
+			'<p><img src="https://x/a.png" data-wp-preserve="x" /></p>' => 'aafm_wpbakery_data_attributes_need_unfiltered_html',
+			'<div data-wpview-text="x">v</div>'            => 'aafm_wpbakery_data_attributes_need_unfiltered_html',
+			'<p data-wpview-marker="x">v</p>'              => 'aafm_wpbakery_data_attributes_need_unfiltered_html',
+			'<p><span title="a>b" data-x="1">v</span></p>' => 'aafm_wpbakery_data_attributes_need_unfiltered_html',
+			'<p><IMG SRC="https://x/a.png" DATA-WP-PRESERVE="x"></p>' => 'aafm_wpbakery_data_attributes_need_unfiltered_html',
+		);
+		foreach ( $cases as $replace => $code ) {
+			$this->assert_refused( $this->replace( $id, 'Opening paragraph alpha.', $replace ), $code, $id, self::PAGE, 400 );
+		}
+		$this->assertSame( 1, $this->replace( $id, 'Opening paragraph alpha.', '<img src="https://x/a.png" alt="A view" /> <a href="https://x/">Link</a>' )['replacements'] );
+
+		$this->acting_as( 'administrator' );
+		foreach ( array_keys( $cases ) as $replace ) {
+			$this->assertSame( 1, $this->replace( $id, 'Link', $replace . ' Link' )['replacements'], $replace );
+		}
+	}
+
 	public function test_replace_keeps_quote_entities_inside_attributes(): void {
 		$content = '[vc_row][vc_column][vc_column_text]<p>Swap me.</p>[/vc_column_text][/vc_column][/vc_row]';
 		$id      = $this->make_page( $content );
@@ -668,7 +697,7 @@ WPB;
 		}
 		$this->assertStringContainsString( 'heading', $row['description'] );
 		$this->assertStringContainsString( 'Only while WPBakery Page Builder is active', $row['description'] );
-		$this->assertStringContainsString( 'Square brackets in body text need a user who may post unfiltered HTML.', $row['description'] );
+		$this->assertStringContainsString( 'Square brackets, percent-encoded brackets and data-* attributes in body text need a user who may post unfiltered HTML.', $row['description'] );
 	}
 
 	public function test_replace_contributor_is_refused_on_another_users_page_and_editor_allowed(): void {

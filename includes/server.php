@@ -517,8 +517,10 @@ function aafm_ability_list_permission( string $name ): ?callable {
 				$page_floor = aafm_ability_list_permission( 'aafm/update-page' );
 				return null !== $page_floor && (bool) $page_floor();
 			};
-		// The same floor, plus unfiltered_html, which aafm_perm_wpbakery_page_code() requires for every field.
+		// The same floor, plus unfiltered_html, which aafm_perm_wpbakery_page_code() requires for every field and
+		// aafm_perm_avada_page_css() requires for page CSS.
 		case 'aafm/wpbakery-update-page-code':
+		case 'aafm/avada-update-page-css':
 			return static function (): bool {
 				if ( ! current_user_can( 'unfiltered_html' ) ) {
 					return false;

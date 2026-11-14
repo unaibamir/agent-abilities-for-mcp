@@ -481,4 +481,168 @@ final class AvadaSiteTest extends TestCase {
 		}
 		$this->assertStringContainsString( 'Only while Avada is active', $row['description'] );
 	}
+
+	// S12-2: avada-update-page-css.
+
+	/**
+	 * Run the page CSS tool.
+	 *
+	 * @param int    $id  Post.
+	 * @param string $css CSS.
+	 * @return array<string,mixed>|WP_Error
+	 */
+	private function page_css( int $id, string $css ) {
+		return aafm_exec_avada_update_page_css(
+			array(
+				'post_id'    => $id,
+				'custom_css' => $css,
+			)
+		);
+	}
+
+	public function test_css_is_set_and_read_back(): void {
+		$this->act_as_admin();
+		$id  = $this->avada_post();
+		$out = $this->page_css( $id, ".a > .b { color: red; }\n.c{}" );
+		$this->assertSame(
+			array(
+				'post_id'  => $id,
+				'changed'  => true,
+				'previous' => '',
+			),
+			$out
+		);
+		$this->assertSame( ".a > .b { color: red; }\n.c{}", get_post_meta( $id, '_fusion_builder_custom_css', true ) );
+		$read = aafm_exec_avada_get_page_content( array( 'post_id' => $id ) );
+		$this->assertIsArray( $read );
+		$this->assertSame( self::PAGE, $read['content'] );
+	}
+
+	public function test_css_is_stored_without_tags(): void {
+		$this->act_as_admin();
+		$id = $this->avada_post();
+		$this->assertTrue( $this->page_css( $id, '.a{}</style><script>x()</script>' )['changed'] );
+		$this->assertStringNotContainsString( '<', (string) get_post_meta( $id, '_fusion_builder_custom_css', true ) );
+	}
+
+	public function test_an_empty_value_deletes_the_meta(): void {
+		$this->act_as_admin();
+		$id = $this->avada_post();
+		update_post_meta( $id, '_fusion_builder_custom_css', '.old{}' );
+		$out = $this->page_css( $id, '' );
+		$this->assertTrue( $out['changed'] );
+		$this->assertSame( '.old{}', $out['previous'] );
+		$this->assertFalse( metadata_exists( 'post', $id, '_fusion_builder_custom_css' ) );
+	}
+
+	public function test_previous_holds_the_old_value(): void {
+		$this->act_as_admin();
+		$id = $this->avada_post();
+		update_post_meta( $id, '_fusion_builder_custom_css', '.old{}' );
+		$out = $this->page_css( $id, '.new{}' );
+		$this->assertSame( '.old{}', $out['previous'] );
+		$this->assertSame( '.new{}', get_post_meta( $id, '_fusion_builder_custom_css', true ) );
+	}
+
+	/**
+	 * Review Focus 3: writing what is stored changes nothing and writes no meta.
+	 */
+	public function test_writing_the_stored_css_changes_nothing(): void {
+		$this->act_as_admin();
+		$id = $this->avada_post();
+		update_post_meta( $id, '_fusion_builder_custom_css', '.a{}' );
+		$writes = 0;
+		$count  = static function ( $check ) use ( &$writes ) {
+			++$writes;
+			return $check;
+		};
+		add_filter( 'update_post_metadata', $count );
+		add_filter( 'delete_post_metadata', $count );
+		add_filter( 'add_post_metadata', $count );
+		$out  = $this->page_css( $id, '.a{}' );
+		$bare = self::factory()->post->create( array( 'post_type' => 'fusion_element' ) );
+		$none = $this->page_css( $bare, '' );
+		remove_filter( 'update_post_metadata', $count );
+		remove_filter( 'delete_post_metadata', $count );
+		remove_filter( 'add_post_metadata', $count );
+		$this->assertFalse( $out['changed'] );
+		$this->assertFalse( $none['changed'] );
+		$this->assertSame( 0, $writes );
+	}
+
+	public function test_the_permission_needs_edit_access_and_unfiltered_html(): void {
+		$this->act_as_admin();
+		$id = $this->avada_post();
+		$this->assertSame( 'aafm_perm_avada_page_css', aafm_args_avada_update_page_css()['permission_callback'] );
+		$this->assertTrue( aafm_perm_avada_page_css( array( 'post_id' => $id ) ) );
+		$this->act_as_restricted_editor();
+		$this->assertTrue( aafm_perm_avada_post_object( array( 'post_id' => $id ) ) );
+		$this->assertFalse( aafm_perm_avada_page_css( array( 'post_id' => $id ) ) );
+		$this->acting_as( 'contributor' );
+		$this->assertFalse( aafm_perm_avada_page_css( array( 'post_id' => $id ) ) );
+	}
+
+	public function test_page_css_is_refused_on_a_classic_page_and_allowed_on_a_library_element(): void {
+		$this->act_as_admin();
+		$classic = self::factory()->post->create(
+			array(
+				'post_type'    => 'page',
+				'post_content' => '<p>Classic</p>',
+			)
+		);
+		$this->assert_error( $this->page_css( $classic, '.a{}' ), 'aafm_not_avada_owned', 409 );
+		$this->assertFalse( metadata_exists( 'post', $classic, '_fusion_builder_custom_css' ) );
+		$item = $this->item( self::ELEMENT, 'elements' );
+		$this->assertTrue( $this->page_css( $item, '.a{}' )['changed'] );
+		$this->assertSame( '.a{}', get_post_meta( $item, '_fusion_builder_custom_css', true ) );
+	}
+
+	public function test_a_failed_css_write_is_an_error(): void {
+		$this->act_as_admin();
+		$id     = $this->avada_post();
+		$refuse = static fn( $check, $object_id, $key ) => '_fusion_builder_custom_css' === $key ? false : $check;
+		add_filter( 'update_post_metadata', $refuse, 10, 3 );
+		add_filter( 'add_post_metadata', $refuse, 10, 3 );
+		$out = $this->page_css( $id, '.a{}' );
+		remove_filter( 'update_post_metadata', $refuse, 10 );
+		remove_filter( 'add_post_metadata', $refuse, 10 );
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertFalse( metadata_exists( 'post', $id, '_fusion_builder_custom_css' ) );
+	}
+
+	public function test_page_css_discovery_schema_undo_audit_and_description(): void {
+		$name  = 'aafm/avada-update-page-css';
+		$check = aafm_ability_list_permission( $name );
+		$this->assertIsCallable( $check );
+		$this->act_as_admin();
+		$this->assertTrue( $check() );
+		$this->act_as_restricted_editor();
+		$this->assertFalse( $check(), 'Hidden without unfiltered_html.' );
+		$this->acting_as( 'subscriber' );
+		$this->assertFalse( $check() );
+		$args = aafm_args_avada_update_page_css();
+		$this->assertFalse( $args['input_schema']['additionalProperties'] );
+		$this->assertSame( array( 'post_id', 'custom_css' ), $args['input_schema']['required'] );
+		$this->assertSame( array( 'post_id', 'custom_css' ), array_keys( $args['input_schema']['properties'] ) );
+		$this->assertSame( array( 'post_id', 'changed', 'previous' ), array_keys( $args['output_schema']['properties'] ) );
+		$this->assertSame(
+			array(
+				'readonly'    => false,
+				'destructive' => false,
+				'idempotent'  => true,
+			),
+			$args['meta']['annotations']
+		);
+		$this->assertSame( 'not_covered', aafm_undo_refusals()[ $name ] );
+		$this->assertStringContainsString( 'Ran a page CSS update on Avada page #42', (string) aafm_build_activity_detail( $name, array( 'post_id' => 42 ) ) );
+		$row = aafm_get_abilities_registry_full()[ $name ];
+		$this->assertSame( 'write', $row['risk'] );
+		$this->assertSame( 'avada', $row['subject'] );
+		foreach ( array( $row['description'], aafm_ability_disclosures()[ $name ] ) as $text ) {
+			$this->assertStringNotContainsString( ' - ', $text );
+			foreach ( array( 'replaces', 'previous', 'unfiltered HTML', 'edit access' ) as $phrase ) {
+				$this->assertStringContainsString( $phrase, $text, $phrase );
+			}
+		}
+	}
 }

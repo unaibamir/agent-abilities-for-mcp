@@ -20,7 +20,7 @@ final class AvadaSiteWireTest extends TestCase {
 
 	private const SECTION = '[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1"][fusion_text]<p>Saved section</p>[/fusion_text][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]';
 
-	private const TOOLS = array( 'aafm/avada-insert-library-item' );
+	private const TOOLS = array( 'aafm/avada-insert-library-item', 'aafm/avada-update-page-css' );
 
 	public function set_up(): void {
 		parent::set_up();
@@ -242,5 +242,49 @@ final class AvadaSiteWireTest extends TestCase {
 		$this->assertNull( $done['restore_revision_id'] );
 		$this->assertFalse( $done['reversible'] );
 		$this->assertStringContainsString( 'no longer there after the save', $done['reversible_reason'] );
+	}
+
+	public function test_update_page_css_round_trips_over_a_real_tools_call(): void {
+		list( $handler, $id ) = $this->wired();
+		update_post_meta( $id, '_fusion_builder_custom_css', '.old{}' );
+		$call = fn( string $req ) => $handler->call_tool(
+			array(
+				'name'      => aafm_mcp_tool_name( 'aafm/avada-update-page-css' ),
+				'arguments' => array(
+					'post_id'    => $id,
+					'custom_css' => '.title{display:none}',
+				),
+			),
+			$req
+		);
+		$this->assertSame(
+			array(
+				'post_id'  => $id,
+				'changed'  => true,
+				'previous' => '.old{}',
+				'undo'     => array(
+					'undoable'   => false,
+					'change_ids' => array(),
+					'reason'     => 'not_covered',
+				),
+			),
+			$this->wire( $call( 'req-avada-css-1' ) )
+		);
+		$this->assertSame( '.title{display:none}', get_post_meta( $id, '_fusion_builder_custom_css', true ) );
+		$again = $this->wire( $call( 'req-avada-css-2' ) );
+		$this->assertFalse( $again['changed'] );
+		$this->assertSame( '.title{display:none}', $again['previous'] );
+	}
+
+	public function test_update_page_css_is_absent_from_tools_list_without_unfiltered_html(): void {
+		list( $handler, , $server ) = $this->wired( 'editor' );
+		$editor                     = wp_get_current_user();
+		$names                      = static fn(): array => array_map( static fn( $tool ) => $tool->getName(), aafm_filter_mcp_tools_list( $handler->list_tools()->getTools(), $server ) );
+		$this->assertContains( aafm_mcp_tool_name( 'aafm/avada-update-page-css' ), $names() );
+		$editor->add_cap( 'unfiltered_html', false );
+		$this->assertFalse( current_user_can( 'unfiltered_html' ) );
+		$visible = $names();
+		$this->assertNotContains( aafm_mcp_tool_name( 'aafm/avada-update-page-css' ), $visible );
+		$this->assertContains( aafm_mcp_tool_name( 'aafm/avada-insert-library-item' ), $visible );
 	}
 }

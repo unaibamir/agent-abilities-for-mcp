@@ -390,4 +390,138 @@ final class BuilderAddonsTest extends TestCase {
 		$this->assert_error( $this->insert( $id, (string) $tid ), 'aafm_templatera_inactive', 409 );
 		$this->assertSame( self::SIMPLE, get_post_field( 'post_content', $id, 'raw' ) );
 	}
+
+	/**
+	 * An editor whose unfiltered_html is set false at user level, as the smoke run's editor is.
+	 *
+	 * @return void
+	 */
+	private function act_as_restricted_editor(): void {
+		$editor = self::factory()->user->create( array( 'role' => 'editor' ) );
+		( new \WP_User( $editor ) )->add_cap( 'unfiltered_html', false );
+		wp_set_current_user( 0 );
+		wp_set_current_user( $editor );
+		$this->assertFalse( current_user_can( 'unfiltered_html' ) );
+	}
+
+	public function test_reference_inserts_the_templatera_element_into_a_column(): void {
+		add_filter( 'aafm_templatera_active', '__return_true' );
+		$tid = $this->template( self::TEMPLATE );
+		$id  = $this->page();
+		$this->acting_as( 'editor' );
+		$out = $this->insert( $id, (string) $tid, array( 'mode' => 'reference' ), 2, 'after' );
+		$this->assertIsArray( $out );
+		$element = '[templatera id="' . $tid . '"]';
+		$this->assertSame( '[vc_row][vc_column][vc_column_text]<p>One</p>[/vc_column_text]' . $element . '[/vc_column][/vc_row]', get_post_field( 'post_content', $id, 'raw' ) );
+		$this->assertSame( 1, $out['inserted'] );
+		$this->assertSame( 3, $out['index'] );
+		$this->assertSame( aafm_redact_post( get_post( $id ) ), $out['post'] );
+
+		$top = $this->page();
+		$this->assert_error( $this->insert( $top, (string) $tid, array( 'mode' => 'reference' ), 0, 'after' ), 'aafm_builder_invalid_nesting', 400 );
+		$this->assertSame( self::SIMPLE, get_post_field( 'post_content', $top, 'raw' ), 'A content element cannot sit beside a row.' );
+	}
+
+	public function test_reference_is_refused_with_the_saved_source(): void {
+		add_filter( 'aafm_templatera_active', '__return_true' );
+		update_option(
+			'wpb_js_templates',
+			array(
+				't_1' => array(
+					'name'     => 'Saved',
+					'template' => self::TEMPLATE,
+				),
+			),
+			false
+		);
+		$id = $this->page();
+		$this->acting_as( 'editor' );
+		$out = $this->insert(
+			$id,
+			't_1',
+			array(
+				'mode'   => 'reference',
+				'source' => 'saved',
+			),
+			2
+		);
+		$this->assert_error( $out, 'aafm_templatera_reference_needs_templatera', 400 );
+		$this->assertSame( self::SIMPLE, get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
+	/**
+	 * Section 4 item 4 (SEC-S9b-2, Ruling B11): a template any edit_posts user may write is untrusted text, so for a
+	 * user without unfiltered_html neither a copy nor a reference carries a script kind or unsafe body text onto a
+	 * page; the same template inserts for an administrator.
+	 */
+	public function test_a_reference_to_a_template_with_raw_html_needs_unfiltered_html(): void {
+		add_filter( 'aafm_templatera_active', '__return_true' );
+		$cases = array(
+			'[vc_row][vc_column][vc_raw_html]JTNDcCUzRXglM0MlMkZwJTNF[/vc_raw_html][/vc_column][/vc_row]' => array( 'aafm_builder_needs_unfiltered_html', 403 ),
+			'[vc_row][vc_column][vc_column_text]<script>alert(1)</script>[/vc_column_text][/vc_column][/vc_row]' => array( 'aafm_wpbakery_text_needs_unfiltered_html', 403 ),
+			'[vc_row][vc_column][vc_column_text]<p onclick="alert(1)">x</p>[/vc_column_text][/vc_column][/vc_row]' => array( 'aafm_wpbakery_text_needs_unfiltered_html', 403 ),
+			'[vc_row][vc_column][vc_column_text]<p data-x="1">x</p>[/vc_column_text][/vc_column][/vc_row]' => array( 'aafm_wpbakery_data_attributes_need_unfiltered_html', 400 ),
+			'[vc_row][vc_column][vc_column_text]<p>%5Bvc_raw_js%5D</p>[/vc_column_text][/vc_column][/vc_row]' => array( 'aafm_wpbakery_encoded_brackets_need_unfiltered_html', 400 ),
+			'[vc_row][vc_column][vc_column_text]<p>&#91;vc_raw_js&#93;</p>[/vc_column_text][/vc_column][/vc_row]' => array( 'aafm_wpbakery_brackets_need_unfiltered_html', 400 ),
+			'[vc_row][vc_column][vc_column_text]<p>x</p><img src="a" onerror=[/vc_column_text][/vc_column][/vc_row]' => array( 'aafm_wpbakery_incomplete_html_needs_unfiltered_html', 400 ),
+		);
+		foreach ( $cases as $text => list( $code, $status ) ) {
+			$tid   = (string) $this->template( $text );
+			$modes = array(
+				'copy'      => 0,
+				'reference' => 2,
+			);
+			foreach ( $modes as $mode => $anchor ) {
+				$id = $this->page();
+				$this->act_as_restricted_editor();
+				$this->assert_error( $this->insert( $id, $tid, array( 'mode' => $mode ), $anchor ), $code, $status );
+				$this->assertSame( self::SIMPLE, get_post_field( 'post_content', $id, 'raw' ), $mode . ' ' . $text );
+				$this->acting_as( 'administrator' );
+				$this->assertIsArray( $this->insert( $id, $tid, array( 'mode' => $mode ), $anchor ), $mode . ' ' . $text );
+			}
+		}
+	}
+
+	public function test_a_retried_reference_is_refused_and_placed_once(): void {
+		add_filter( 'aafm_templatera_active', '__return_true' );
+		$tid   = (string) $this->template( self::TEMPLATE );
+		$id    = $this->page();
+		$first = aafm_builder_page_fingerprint( self::SIMPLE );
+		$this->acting_as( 'editor' );
+		$this->assertIsArray( $this->insert( $id, $tid, array( 'mode' => 'reference' ), 2 ) );
+		$after    = (string) get_post_field( 'post_content', $id, 'raw' );
+		$elements = aafm_builder_elements( $after, aafm_wpbakery_shortcode_tags( $after ) );
+		$out      = aafm_exec_wpbakery_insert_template(
+			array(
+				'post_id'          => $id,
+				'page_fingerprint' => $first,
+				'template_id'      => $tid,
+				'source'           => 'templatera',
+				'mode'             => 'reference',
+				'anchor_index'     => 2,
+				'anchor_expect'    => array(
+					'tag'         => 'vc_column_text',
+					'fingerprint' => aafm_builder_fingerprint( $after, $elements[2] ),
+				),
+				'placement'        => 'after',
+			)
+		);
+		$this->assert_error( $out, 'aafm_builder_page_changed', 409 );
+		$this->assertSame( 1, substr_count( (string) get_post_field( 'post_content', $id, 'raw' ), '[templatera ' ) );
+	}
+
+	public function test_the_insert_schema_has_source_and_mode(): void {
+		$schema = aafm_args_wpbakery_insert_template()['input_schema'];
+		$this->assertFalse( $schema['additionalProperties'] );
+		$this->assertSame( array( 'saved', 'templatera' ), $schema['properties']['source']['enum'] );
+		$this->assertSame( array( 'copy', 'reference' ), $schema['properties']['mode']['enum'] );
+		$this->assertSame( 'copy', $schema['properties']['mode']['default'] );
+		$this->assertSame( array( 'post_id', 'page_fingerprint', 'template_id' ), $schema['required'] );
+		$row = aafm_get_abilities_registry_full()['aafm/wpbakery-insert-template'];
+		foreach ( array( $row['description'], aafm_ability_disclosures()['aafm/wpbakery-insert-template'] ) as $text ) {
+			$this->assertStringContainsString( 'Templatera', $text );
+			$this->assertStringContainsString( 'reference', $text );
+			$this->assertStringNotContainsString( ' - ', $text );
+		}
+	}
 }

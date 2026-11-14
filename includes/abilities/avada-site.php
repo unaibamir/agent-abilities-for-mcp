@@ -1,6 +1,7 @@
 <?php
 /**
- * Avada site tools: a library item placed on a page through the shared insert path, and a page's custom CSS.
+ * Avada site tools: a library item placed on a page through the shared insert path, a page's custom CSS and its page
+ * options.
  *
  * Design 325 AV-8, plan 326 Session 12. A copy and a global reference both go through aafm_avada_insert_tree() with
  * trusted_vendor_text, so they get the same limits, nesting rules, place checks, stored text gate and save replay as
@@ -64,6 +65,14 @@ function aafm_avada_site_registry_definitions(): array {
 			'risk'         => 'write',
 			'subject'      => 'avada',
 			'args_builder' => 'aafm_args_avada_update_page_css',
+		),
+		'aafm/avada-update-page-options' => array(
+			'label'        => __( 'Update Avada page options', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Sets or removes Avada page options on one post, the settings of Avada\'s page options panel: layout, title bar, sidebars, slider, header, footer, off canvas, form appearance, steps and confirmation, SEO and template settings from the fixed list avada-get-page-content returns with include_page_options. set maps option ids to values and remove lists ids to drop, so Avada\'s default applies; give at least one. Every other stored option is kept. A choice is its stored value, a colour a hex, rgba, hsla or Avada colour variable, an image an attachment id, and a multi choice a list. Text may hold no straight double quote or square bracket; for a user who may not post unfiltered HTML, a text area value WordPress would filter is refused, never stored altered. Option groups stored as several sub-values (dimensions, typography, sortable lists, media and display conditions) are not writable, and form notification, submission and privacy settings and code fields are never reachable. An empty value or default removes the option, as Avada\'s own save does. previous returns the old value of every option that changed, null where none was stored, which is the way back. A value equal to what is stored is left alone and not listed in changed. No revision is kept, and the change is not undoable from this plugin\'s change history. Needs the Avada theme active and a post Avada owns, one of Avada\'s own types, or a page, post or portfolio item that no other builder owns. Requires edit access to the post; layout sections need a user who can manage site options. Avada\'s Role Manager is not applied. Only while Avada is active.', 'agent-abilities-for-mcp' ),
+			'group'        => 'writes',
+			'risk'         => 'write',
+			'subject'      => 'avada',
+			'args_builder' => 'aafm_args_avada_update_page_options',
 		),
 	);
 }
@@ -307,5 +316,279 @@ function aafm_exec_avada_update_page_css( array $input ) {
 		return aafm_meta_write_error( $status, '' === $css ? 'delete' : 'write', 'post', $id, '_fusion_builder_custom_css' );
 	}
 	$out['changed'] = true;
+	return $out;
+}
+
+/**
+ * The encoder kind of a page option type from aafm_avada_page_option_keys(), or null when the type is not writable
+ * (design 4.7, s8b-page-option-ids.md): the choice types are validated as tokens, because the allowlist carries no
+ * choice lists (plan 326 Assumptions); a multiple select is a list of tokens and a checkbox set a comma joined list, as
+ * the panel stores them; an upload is an attachment id stored as Avada's url and id pair; a text area is body text
+ * (Ruling R-S12-4). The array types (dimensions, typography, sortable, media, layout_conditions) are not writable.
+ *
+ * @param string $type Theme metabox type.
+ * @return string|null
+ */
+function aafm_avada_page_option_kind( string $type ): ?string {
+	$kinds = array(
+		'radio-buttonset'    => 'token',
+		'select'             => 'token',
+		'iconpicker'         => 'token',
+		'multiple_select'    => 'tokens',
+		'checkbox-buttonset' => 'csv',
+		'color-alpha'        => 'colour',
+		'color'              => 'colour',
+		'text'               => 'text',
+		'link'               => 'link',
+		'slider'             => 'number',
+		'date_time_picker'   => 'date',
+		'textarea'           => 'content',
+		'upload'             => 'image',
+	);
+	return $kinds[ $type ] ?? null;
+}
+
+/**
+ * The stored form of one page option value, or a refusal naming the option. Every scalar kind goes through the one
+ * Avada encoder (aafm_avada_encode_value()); text keeps its attribute rule (Ruling R-S10b-1) and is stored with the
+ * entities that rule adds for an attribute read back, since the panel stores plain text in the meta. A text area goes
+ * through the body-text choke point and is refused when kses would change it for a user who may not post unfiltered
+ * HTML (Ruling R-S12-4).
+ *
+ * @param string $id    Option id.
+ * @param string $kind  Kind from aafm_avada_page_option_kind().
+ * @param mixed  $value Input.
+ * @return string|array<int|string,string>|WP_Error
+ */
+function aafm_avada_page_option_value( string $id, string $kind, $value ) {
+	$param = array( 'param_name' => $id );
+	if ( 'tokens' === $kind || 'csv' === $kind ) {
+		if ( ! is_array( $value ) || array_values( $value ) !== $value || array() === $value ) {
+			return aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $id );
+		}
+		$out = array();
+		foreach ( $value as $one ) {
+			$token = is_string( $one ) && '' !== $one ? aafm_avada_encode_value( 'token', $one, $param ) : null;
+			if ( ! is_string( $token ) ) {
+				return aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $id );
+			}
+			$out[] = $token;
+		}
+		return 'csv' === $kind ? implode( ',', $out ) : $out;
+	}
+	if ( is_array( $value ) || is_bool( $value ) || null === $value ) {
+		return aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $id );
+	}
+	if ( 'content' === $kind ) {
+		$text  = (string) $value;
+		$clean = aafm_avada_body_text( $text );
+		if ( is_wp_error( $clean ) ) {
+			return $clean;
+		}
+		if ( current_user_can( 'unfiltered_html' ) ) {
+			return $text;
+		}
+		if ( $clean !== $text ) {
+			return new WP_Error(
+				'aafm_avada_stored_text_needs_unfiltered_html',
+				/* translators: %s: the page option id. */
+				sprintf( __( 'The value of %s holds HTML that would be filtered out for this user, so it needs a user who may post unfiltered HTML. Nothing was changed.', 'agent-abilities-for-mcp' ), $id ),
+				array(
+					'status'  => 400,
+					'setting' => $id,
+				)
+			);
+		}
+		return $text;
+	}
+	$out = aafm_avada_encode_value( $kind, $value, $param );
+	if ( is_wp_error( $out ) ) {
+		return $out;
+	}
+	if ( 'image' === $kind ) {
+		return is_array( $out ) ? array(
+			'url' => htmlspecialchars_decode( (string) $out[ $id ], ENT_NOQUOTES ),
+			'id'  => (string) strtok( (string) $out[ $id . '_id' ], '|' ),
+		) : aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $id );
+	}
+	return is_string( $out ) ? htmlspecialchars_decode( $out, ENT_NOQUOTES ) : aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $id );
+}
+
+/**
+ * Args for aafm/avada-update-page-options.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_avada_update_page_options(): array {
+	return array(
+		'label'               => aafm_ability_label( 'aafm/avada-update-page-options' ),
+		'description'         => aafm_ability_description( 'aafm/avada-update-page-options' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'post_id' => array(
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the post whose Avada page options change.', 'agent-abilities-for-mcp' ),
+				),
+				'set'     => array(
+					'type'        => 'object',
+					'description' => __( 'Option id to value, ids from page_options of avada-get-page-content. A multi choice takes a list of values, an image an attachment id.', 'agent-abilities-for-mcp' ),
+				),
+				'remove'  => array(
+					'type'        => 'array',
+					'items'       => array( 'type' => 'string' ),
+					'description' => __( 'Option ids to drop, so Avada\'s default applies.', 'agent-abilities-for-mcp' ),
+				),
+			),
+			'required'             => array( 'post_id' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'post_id'  => array( 'type' => 'integer' ),
+				'changed'  => array(
+					'type'  => 'array',
+					'items' => array( 'type' => 'string' ),
+				),
+				'previous' => array(
+					'type'        => 'object',
+					'description' => __( 'The old value of each changed option, null where none was stored.', 'agent-abilities-for-mcp' ),
+				),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_avada_update_page_options',
+		'permission_callback' => 'aafm_perm_avada_post_object',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+				'idempotent'  => true,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/avada-update-page-options (design AV-9 write side, Ruling Q8). Needs the theme, then a post the page
+ * options rule admits (Ruling B7). Every id and value is checked before anything is read or written. The stored
+ * _fusion array is read with aafm_meta_get() and written back whole with aafm_meta_set() in its array form, never
+ * through Avada's own setter, which can write while it reads (A12); an equal result writes nothing (Review Focus 3).
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_avada_update_page_options( array $input ) {
+	$id   = absint( $input['post_id'] ?? 0 );
+	$post = aafm_exact_object_chain( 'post', $id );
+	if ( ! $post instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	if ( ! aafm_avada_theme_active() ) {
+		return new WP_Error(
+			'aafm_avada_theme_inactive',
+			__( 'Page options can be changed only while the Avada theme is active. Nothing was changed.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 409 )
+		);
+	}
+	if ( ! aafm_avada_page_options_post_allowed( $post, aafm_post_has_foreign_builder_ownership( $id ) ) ) {
+		return aafm_avada_not_owned_error();
+	}
+	$set    = $input['set'] ?? array();
+	$remove = $input['remove'] ?? array();
+	if ( ( ! is_array( $set ) && ! $set instanceof stdClass ) || ! is_array( $remove ) ) {
+		return aafm_builder_error( 'aafm_builder_invalid_value' );
+	}
+	$set = (array) $set;
+	if ( array() === $set && array() === $remove ) {
+		return new WP_Error(
+			'aafm_avada_page_options_empty',
+			__( 'Give at least one option in set or remove. Nothing was changed.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
+	}
+
+	$keys  = aafm_avada_page_option_keys();
+	$apply = array();
+	foreach ( $set as $key => $value ) {
+		$key  = (string) $key;
+		$kind = isset( $keys[ $key ] ) ? aafm_avada_page_option_kind( $keys[ $key ] ) : null;
+		if ( null === $kind ) {
+			return aafm_wpbakery_setting_error( 'aafm_builder_attribute_not_writable', $key );
+		}
+		// An empty value or default is no stored option at all, as Avada's own save treats it.
+		if ( '' === $value || 'default' === $value ) {
+			$apply[ $key ] = null;
+			continue;
+		}
+		$stored = aafm_avada_page_option_value( $key, $kind, $value );
+		if ( is_wp_error( $stored ) ) {
+			return $stored;
+		}
+		$apply[ $key ] = $stored;
+	}
+	foreach ( $remove as $key ) {
+		if ( ! is_string( $key ) || array_key_exists( $key, $apply ) ) {
+			return aafm_builder_error( 'aafm_builder_invalid_value' );
+		}
+		if ( ! isset( $keys[ $key ] ) || null === aafm_avada_page_option_kind( $keys[ $key ] ) ) {
+			return aafm_wpbakery_setting_error( 'aafm_builder_attribute_not_writable', $key );
+		}
+		$apply[ $key ] = null;
+	}
+
+	$old = aafm_with_checked_reads(
+		static fn(): array => array( 'fusion' => aafm_meta_get( 'post', $id, '_fusion', true ) ),
+		aafm_generic_error()
+	);
+	if ( is_wp_error( $old ) ) {
+		return $old;
+	}
+	$old = $old['fusion'];
+	if ( '' === $old ) {
+		$old = array();
+	}
+	if ( ! is_array( $old ) ) {
+		return aafm_generic_error();
+	}
+	$new      = $old;
+	$changed  = array();
+	$previous = array();
+	foreach ( $apply as $key => $value ) {
+		$before = $old[ $key ] ?? null;
+		if ( $before === $value ) {
+			continue;
+		}
+		if ( null === $value ) {
+			unset( $new[ $key ] );
+		} else {
+			$new[ $key ] = $value;
+		}
+		$changed[]        = $key;
+		$previous[ $key ] = $before;
+	}
+	$out = array(
+		'post_id'  => $id,
+		'changed'  => $changed,
+		// An empty previous goes out as {} so the wire shape matches the object the schema declares.
+		'previous' => array() === $previous ? new stdClass() : $previous,
+	);
+	if ( array() === $changed ) {
+		return $out;
+	}
+	if ( array() === $new ) {
+		$result = aafm_meta_delete( 'post', $id, '_fusion' );
+		$status = (string) ( $result['status'] ?? AAFM_WRITE_REFUSED );
+		$ok     = in_array( $status, array( AAFM_WRITE_DELETED, AAFM_WRITE_ABSENT ), true );
+	} else {
+		$result = aafm_meta_set( 'post', $id, '_fusion', $new, $post->post_type, false );
+		$status = (string) ( $result['status'] ?? AAFM_WRITE_REFUSED );
+		$ok     = in_array( $status, array( AAFM_WRITE_WRITTEN, AAFM_WRITE_UNCHANGED ), true );
+	}
+	if ( ! $ok ) {
+		return aafm_meta_write_error( $status, array() === $new ? 'delete' : 'write', 'post', $id, '_fusion' );
+	}
 	return $out;
 }

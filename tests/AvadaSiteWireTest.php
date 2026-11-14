@@ -20,7 +20,7 @@ final class AvadaSiteWireTest extends TestCase {
 
 	private const SECTION = '[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1"][fusion_text]<p>Saved section</p>[/fusion_text][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]';
 
-	private const TOOLS = array( 'aafm/avada-insert-library-item', 'aafm/avada-update-page-css' );
+	private const TOOLS = array( 'aafm/avada-insert-library-item', 'aafm/avada-update-page-css', 'aafm/avada-update-page-options' );
 
 	public function set_up(): void {
 		parent::set_up();
@@ -286,5 +286,65 @@ final class AvadaSiteWireTest extends TestCase {
 		$visible = $names();
 		$this->assertNotContains( aafm_mcp_tool_name( 'aafm/avada-update-page-css' ), $visible );
 		$this->assertContains( aafm_mcp_tool_name( 'aafm/avada-insert-library-item' ), $visible );
+	}
+
+	public function test_update_page_options_round_trips_over_a_real_tools_call(): void {
+		$theme                = static fn( $resolved, string $entry ) => 'avada_option_name' === $entry ? static fn(): string => 'fusion_options' : $resolved;
+		add_filter( 'aafm_builder_vendor', $theme, 30, 2 );
+		list( $handler, $id ) = $this->wired( 'editor' );
+		update_post_meta(
+			$id,
+			'_fusion',
+			array(
+				'page_title_bar' => 'no',
+				'main_padding'   => array(
+					'top'    => '',
+					'bottom' => '',
+				),
+			)
+		);
+		$call = fn( string $req ) => $handler->call_tool(
+			array(
+				'name'      => aafm_mcp_tool_name( 'aafm/avada-update-page-options' ),
+				'arguments' => array(
+					'post_id' => $id,
+					'set'     => array(
+						'page_title_bar'    => 'yes',
+						'slider_visibility' => array( 'small-visibility' ),
+					),
+				),
+			),
+			$req
+		);
+		$this->assertSame(
+			array(
+				'post_id'  => $id,
+				'changed'  => array( 'page_title_bar', 'slider_visibility' ),
+				'previous' => array(
+					'page_title_bar'    => 'no',
+					'slider_visibility' => null,
+				),
+				'undo'     => array(
+					'undoable'   => false,
+					'change_ids' => array(),
+					'reason'     => 'not_covered',
+				),
+			),
+			$this->wire( $call( 'req-avada-options-1' ) )
+		);
+		$this->assertSame(
+			array(
+				'page_title_bar'    => 'yes',
+				'main_padding'      => array(
+					'top'    => '',
+					'bottom' => '',
+				),
+				'slider_visibility' => 'small-visibility',
+			),
+			get_post_meta( $id, '_fusion', true )
+		);
+		$raw = $call( 'req-avada-options-2' );
+		$this->assertStringContainsString( '"changed":[],"previous":{}', (string) $raw->getContent()[0]->getText() );
+		remove_filter( 'aafm_builder_vendor', $theme, 30 );
 	}
 }

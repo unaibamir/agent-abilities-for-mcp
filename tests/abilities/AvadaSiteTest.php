@@ -645,4 +645,400 @@ final class AvadaSiteTest extends TestCase {
 			}
 		}
 	}
+
+	// S12-2: avada-update-page-options.
+
+	/**
+	 * Force the theme seam entry present (a closure standing in for Avada::get_option_name()) or absent, and record every
+	 * vendor entry the code asks for.
+	 *
+	 * @param bool          $present Whether Avada's theme counts as active.
+	 * @param array<string> $asked   Entries asked for, added to.
+	 * @return void
+	 */
+	private function force_avada_theme( bool $present, array &$asked = array() ): void {
+		add_filter(
+			'aafm_builder_vendor',
+			static function ( $resolved, string $entry ) use ( $present, &$asked ) {
+				$asked[] = $entry;
+				if ( 'avada_option_name' !== $entry ) {
+					return $resolved;
+				}
+				return $present ? static fn(): string => 'fusion_options' : null;
+			},
+			30,
+			2
+		);
+	}
+
+	/**
+	 * The S8b fixture's stored _fusion meta.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private function s8b_page_options(): array {
+		return (array) json_decode( (string) file_get_contents( dirname( __DIR__ ) . '/Fixtures/Avada/page-options.json' ), true ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local fixture.
+	}
+
+	/**
+	 * Run the page options tool.
+	 *
+	 * @param int                 $id    Post.
+	 * @param array<string,mixed> $input Extra input.
+	 * @return array<string,mixed>|WP_Error
+	 */
+	private function page_options( int $id, array $input ) {
+		return aafm_exec_avada_update_page_options( array( 'post_id' => $id ) + $input );
+	}
+
+	/**
+	 * The first allowlisted id of a type.
+	 *
+	 * @param string $type Theme type.
+	 * @return string
+	 */
+	private function option_of( string $type ): string {
+		$id = array_search( $type, aafm_avada_page_option_keys(), true );
+		$this->assertIsString( $id, $type );
+		return $id;
+	}
+
+	public function test_set_changes_only_the_named_keys_and_keeps_the_rest_of_the_array(): void {
+		$this->force_avada_theme( true );
+		$this->act_as_admin();
+		$id    = $this->avada_post();
+		$fixed = $this->s8b_page_options();
+		update_post_meta( $id, '_fusion', $fixed );
+		$out = $this->page_options( $id, array( 'set' => array( 'page_title_bar' => 'yes' ) ) );
+		$this->assertSame(
+			array(
+				'post_id'  => $id,
+				'changed'  => array( 'page_title_bar' ),
+				'previous' => array( 'page_title_bar' => 'no' ),
+			),
+			$out
+		);
+		$this->assertSame( array_merge( $fixed, array( 'page_title_bar' => 'yes' ) ), get_post_meta( $id, '_fusion', true ) );
+	}
+
+	public function test_remove_drops_a_key_and_an_empty_or_default_value_drops_it_too(): void {
+		$this->force_avada_theme( true );
+		$this->act_as_admin();
+		$id    = $this->avada_post();
+		$fixed = $this->s8b_page_options();
+		update_post_meta( $id, '_fusion', $fixed );
+		$out = $this->page_options(
+			$id,
+			array(
+				'remove' => array( 'page_title_bar' ),
+				'set'    => array(
+					'seo_index'      => 'default',
+					'displayed_menu' => '',
+				),
+			)
+		);
+		$this->assertSame( array( 'seo_index', 'displayed_menu', 'page_title_bar' ), $out['changed'] );
+		$this->assertSame(
+			array(
+				'seo_index'      => 'auto',
+				'displayed_menu' => 'default',
+				'page_title_bar' => 'no',
+			),
+			$out['previous']
+		);
+		$stored = get_post_meta( $id, '_fusion', true );
+		foreach ( array( 'page_title_bar', 'seo_index', 'displayed_menu' ) as $gone ) {
+			$this->assertArrayNotHasKey( $gone, $stored );
+		}
+		$this->assertSame( count( $fixed ) - 3, count( $stored ) );
+	}
+
+	public function test_removing_the_last_option_deletes_the_meta_and_previous_is_null_where_none_was_stored(): void {
+		$this->force_avada_theme( true );
+		$this->act_as_admin();
+		$id  = $this->avada_post();
+		$out = $this->page_options( $id, array( 'set' => array( 'page_title_bar' => 'yes' ) ) );
+		$this->assertSame( array( 'page_title_bar' => null ), $out['previous'] );
+		$this->assertSame( array( 'page_title_bar' => 'yes' ), get_post_meta( $id, '_fusion', true ) );
+		$this->page_options( $id, array( 'remove' => array( 'page_title_bar' ) ) );
+		$this->assertFalse( metadata_exists( 'post', $id, '_fusion' ) );
+	}
+
+	public function test_an_id_outside_the_allowlist_is_refused(): void {
+		$this->force_avada_theme( true );
+		$this->act_as_admin();
+		$id = $this->avada_post();
+		foreach ( array( array( 'set' => array( 'form_notification_email' => 'a@example.com' ) ), array( 'remove' => array( 'tracking_code' ) ) ) as $input ) {
+			$this->assert_error( $this->page_options( $id, $input ), 'aafm_builder_attribute_not_writable', 400 );
+		}
+		$this->assertFalse( metadata_exists( 'post', $id, '_fusion' ) );
+	}
+
+	public function test_an_id_of_a_type_that_is_not_writable_is_refused(): void {
+		$this->force_avada_theme( true );
+		$this->act_as_admin();
+		$id = $this->avada_post();
+		foreach ( array( 'dimensions', 'typography', 'sortable', 'media', 'layout_conditions' ) as $type ) {
+			$this->assertNull( aafm_avada_page_option_kind( $type ) );
+			$out = $this->page_options( $id, array( 'set' => array( $this->option_of( $type ) => 'x' ) ) );
+			$this->assert_error( $out, 'aafm_builder_attribute_not_writable', 400 );
+		}
+		$this->assertFalse( metadata_exists( 'post', $id, '_fusion' ) );
+	}
+
+	/**
+	 * One accepted and one refused value per writable type, with the stored form.
+	 *
+	 * @return array<string,array{0:string,1:mixed,2:mixed,3:mixed}>
+	 */
+	public static function typed_values(): array {
+		return array(
+			'radio-buttonset'    => array( 'radio-buttonset', 'yes', 'yes', 'a"b' ),
+			'select'             => array( 'select', 'left top', 'left top', 'x;y' ),
+			'iconpicker'         => array( 'iconpicker', 'fa-star fas', 'fa-star fas', '<b>' ),
+			'multiple_select'    => array( 'multiple_select', array( 'a', 'b' ), array( 'a', 'b' ), 'a' ),
+			'checkbox-buttonset' => array( 'checkbox-buttonset', array( 'small-visibility', 'large-visibility' ), 'small-visibility,large-visibility', array() ),
+			'color-alpha'        => array( 'color-alpha', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.5)', 'red;}' ),
+			'color'              => array( 'color', '#fff', '#fff', 'nope' ),
+			'text'               => array( 'text', 'Fish & chips <ok>', 'Fish & chips', 'a "quoted" word' ),
+			'link'               => array( 'link', 'https://example.com/?a=1&b=2', 'https://example.com/?a=1&b=2', 'javascript:alert(1)' ),
+			'slider'             => array( 'slider', 12, '12', 'abc' ),
+			'date_time_picker'   => array( 'date_time_picker', '2026-01-02 10:00', '2026-01-02 10:00:00', 'not a date' ),
+			'textarea'           => array( 'textarea', '<p>Hi &amp; bye</p>', '<p>Hi &amp; bye</p>', true ),
+		);
+	}
+
+	/**
+	 * Review Focus 1 and design 4.7: each writable type validates its value, and wrong JSON types are refused cleanly
+	 * or coerced.
+	 *
+	 * @dataProvider typed_values
+	 *
+	 * @param string $type   Theme type.
+	 * @param mixed  $good   Accepted input.
+	 * @param mixed  $stored Stored form.
+	 * @param mixed  $bad    Refused input.
+	 */
+	public function test_each_writable_type_validates_its_value( string $type, $good, $stored, $bad ): void {
+		$this->force_avada_theme( true );
+		$this->act_as_restricted_editor();
+		$id     = $this->avada_post();
+		$option = $this->option_of( $type );
+		$out    = $this->page_options( $id, array( 'set' => array( $option => $good ) ) );
+		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : $type );
+		$this->assertSame( array( $option => $stored ), get_post_meta( $id, '_fusion', true ) );
+		$refused = $this->page_options( $id, array( 'set' => array( $option => $bad ) ) );
+		$this->assert_error( $refused, 'aafm_builder_invalid_value', 400 );
+		$this->assertSame( array( $option => $stored ), get_post_meta( $id, '_fusion', true ) );
+	}
+
+	public function test_an_upload_takes_an_image_attachment_id(): void {
+		$this->force_avada_theme( true );
+		$this->act_as_admin();
+		$id     = $this->avada_post();
+		$image  = self::factory()->attachment->create_object( 'pic.jpg', 0, array( 'post_mime_type' => 'image/jpeg' ) );
+		$option = $this->option_of( 'upload' );
+		$this->assertIsArray( $this->page_options( $id, array( 'set' => array( $option => $image ) ) ) );
+		$this->assertSame(
+			array(
+				$option => array(
+					'url' => wp_get_attachment_url( $image ),
+					'id'  => (string) $image,
+				),
+			),
+			get_post_meta( $id, '_fusion', true )
+		);
+		$this->assert_error( $this->page_options( $id, array( 'set' => array( $option => 999999 ) ) ), 'aafm_builder_invalid_value', 400 );
+	}
+
+	/**
+	 * Ruling R-S12-4: a text area value kses would alter is refused for a restricted editor, meta unchanged.
+	 */
+	public function test_a_textarea_value_kses_would_alter_is_refused_for_an_editor_and_kept_for_an_admin(): void {
+		$this->force_avada_theme( true );
+		$option = $this->option_of( 'textarea' );
+		$this->act_as_restricted_editor();
+		$id = $this->avada_post();
+		update_post_meta( $id, '_fusion', array( $option => 'old' ) );
+		foreach ( array(
+			'<iframe src="https://example.com/v"></iframe>' => 'aafm_avada_stored_text_needs_unfiltered_html',
+			'<p onclick="x()">a</p>'       => 'aafm_avada_stored_text_needs_unfiltered_html',
+			'[fusion_text]x[/fusion_text]' => 'aafm_avada_brackets_need_unfiltered_html',
+			'<p data-x="1">a</p>'          => 'aafm_avada_data_attributes_need_unfiltered_html',
+		) as $value => $code ) {
+			$this->assert_error( $this->page_options( $id, array( 'set' => array( $option => $value ) ) ), $code, 400 );
+			$this->assertSame( array( $option => 'old' ), get_post_meta( $id, '_fusion', true ) );
+		}
+		$this->act_as_admin();
+		$embed = '<iframe src="https://example.com/v"></iframe>';
+		$this->assertIsArray( $this->page_options( $id, array( 'set' => array( $option => $embed ) ) ) );
+		$this->assertSame( array( $option => $embed ), get_post_meta( $id, '_fusion', true ) );
+	}
+
+	public function test_wrong_json_types_are_refused_cleanly_or_coerced(): void {
+		$this->force_avada_theme( true );
+		$this->act_as_admin();
+		$id = $this->avada_post();
+		$this->assert_error( $this->page_options( $id, array( 'set' => 'page_title_bar' ) ), 'aafm_builder_invalid_value', 400 );
+		$this->assert_error( $this->page_options( $id, array( 'remove' => 'page_title_bar' ) ), 'aafm_builder_invalid_value', 400 );
+		$this->assert_error( $this->page_options( $id, array( 'remove' => array( 7 ) ) ), 'aafm_builder_invalid_value', 400 );
+		$this->assert_error( $this->page_options( $id, array( 'set' => array( 'page_title_bar' => true ) ) ), 'aafm_builder_invalid_value', 400 );
+		$this->assert_error( $this->page_options( $id, array( 'set' => array( 'page_title_bar' => array( 'yes' ) ) ) ), 'aafm_builder_invalid_value', 400 );
+		$this->assert_error(
+			$this->page_options(
+				$id,
+				array(
+					'set'    => array( 'page_title_bar' => 'yes' ),
+					'remove' => array( 'page_title_bar' ),
+				)
+			),
+			'aafm_builder_invalid_value',
+			400
+		);
+		$this->assert_error( $this->page_options( $id, array() ), 'aafm_avada_page_options_empty', 400 );
+		$this->assertFalse( metadata_exists( 'post', $id, '_fusion' ) );
+		$slider = $this->option_of( 'slider' );
+		$this->assertIsArray( $this->page_options( $id, array( 'set' => (object) array( $slider => 7.5 ) ) ) );
+		$this->assertSame( array( $slider => '7.5' ), get_post_meta( $id, '_fusion', true ) );
+	}
+
+	public function test_page_options_work_on_a_classic_page_under_the_avada_theme(): void {
+		$this->force_avada_theme( true );
+		$this->act_as_admin();
+		$id = self::factory()->post->create(
+			array(
+				'post_type'    => 'page',
+				'post_content' => '<p>Classic</p>',
+			)
+		);
+		$this->assertIsArray( $this->page_options( $id, array( 'set' => array( 'page_title_bar' => 'yes' ) ) ) );
+		$this->assertSame( array( 'page_title_bar' => 'yes' ), get_post_meta( $id, '_fusion', true ) );
+	}
+
+	public function test_page_options_are_refused_without_the_avada_theme_and_on_an_elementor_page(): void {
+		$this->act_as_admin();
+		$id = $this->avada_post();
+		$this->force_avada_theme( false );
+		$this->assert_error( $this->page_options( $id, array( 'set' => array( 'page_title_bar' => 'yes' ) ) ), 'aafm_avada_theme_inactive', 409 );
+		$this->assertFalse( metadata_exists( 'post', $id, '_fusion' ) );
+		remove_all_filters( 'aafm_builder_vendor', 30 );
+		$this->force_avada_theme( true );
+		$elementor = self::factory()->post->create( array( 'post_type' => 'page' ) );
+		update_post_meta( $elementor, '_elementor_data', '[]' );
+		$this->assert_error( $this->page_options( $elementor, array( 'set' => array( 'page_title_bar' => 'yes' ) ) ), 'aafm_not_avada_owned', 409 );
+		$this->assertFalse( metadata_exists( 'post', $elementor, '_fusion' ) );
+	}
+
+	public function test_page_options_are_refused_on_a_slide_post_until_s14_allows_the_type(): void {
+		$this->force_avada_theme( true );
+		$this->act_as_admin();
+		register_post_type( 'slide', array( 'public' => true ) );
+		$id  = self::factory()->post->create( array( 'post_type' => 'slide' ) );
+		$out = $this->page_options( $id, array( 'set' => array( 'caption_1' => 'x' ) ) );
+		unregister_post_type( 'slide' );
+		$this->assert_error( $out, 'aafm_not_avada_owned', 409 );
+		$this->assertFalse( metadata_exists( 'post', $id, '_fusion' ) );
+	}
+
+	public function test_a_section_needs_manage_options(): void {
+		register_post_type(
+			'fusion_tb_section',
+			array(
+				'public'          => false,
+				'capability_type' => 'post',
+				'map_meta_cap'    => true,
+			)
+		);
+		$this->act_as_admin();
+		$section = self::factory()->post->create( array( 'post_type' => 'fusion_tb_section' ) );
+		$this->assertTrue( aafm_perm_avada_post_object( array( 'post_id' => $section ) ) );
+		$this->acting_as( 'editor' );
+		$this->assertFalse( aafm_perm_avada_post_object( array( 'post_id' => $section ) ) );
+		unregister_post_type( 'fusion_tb_section' );
+		$this->assertSame( 'aafm_perm_avada_post_object', aafm_args_avada_update_page_options()['permission_callback'] );
+	}
+
+	public function test_the_write_never_calls_avadas_setter(): void {
+		$asked = array();
+		$this->force_avada_theme( true, $asked );
+		$this->act_as_admin();
+		$id = $this->avada_post();
+		$this->assertIsArray( $this->page_options( $id, array( 'set' => array( 'page_title_bar' => 'yes' ) ) ) );
+		$this->assertSame( array( 'avada_option_name' ), array_values( array_unique( $asked ) ), 'Only the theme check reaches the vendor seam.' );
+		$this->assertSame( array( 'page_title_bar' => 'yes' ), get_post_meta( $id, '_fusion', true ) );
+	}
+
+	/**
+	 * Review Focus 3: setting the stored values changes nothing and writes no meta.
+	 */
+	public function test_setting_the_stored_values_changes_nothing(): void {
+		$this->force_avada_theme( true );
+		$this->act_as_admin();
+		$id = $this->avada_post();
+		update_post_meta( $id, '_fusion', $this->s8b_page_options() );
+		$writes = 0;
+		$count  = static function ( $check ) use ( &$writes ) {
+			++$writes;
+			return $check;
+		};
+		add_filter( 'update_post_metadata', $count );
+		add_filter( 'delete_post_metadata', $count );
+		add_filter( 'add_post_metadata', $count );
+		$out = $this->page_options(
+			$id,
+			array(
+				'set'    => array(
+					'page_title_bar'    => 'no',
+					'slider_visibility' => array( 'small-visibility', 'medium-visibility', 'large-visibility' ),
+				),
+				'remove' => array( 'aspect_ratio' ),
+			)
+		);
+		remove_filter( 'update_post_metadata', $count );
+		remove_filter( 'delete_post_metadata', $count );
+		remove_filter( 'add_post_metadata', $count );
+		$this->assertSame( array(), $out['changed'] );
+		$this->assertSame( '{}', wp_json_encode( $out['previous'] ) );
+		$this->assertSame( 0, $writes );
+	}
+
+	public function test_a_failed_page_options_write_is_an_error(): void {
+		$this->force_avada_theme( true );
+		$this->act_as_admin();
+		$id     = $this->avada_post();
+		$refuse = static fn( $check, $object_id, $key ) => '_fusion' === $key ? false : $check;
+		add_filter( 'update_post_metadata', $refuse, 10, 3 );
+		add_filter( 'add_post_metadata', $refuse, 10, 3 );
+		$out = $this->page_options( $id, array( 'set' => array( 'page_title_bar' => 'yes' ) ) );
+		remove_filter( 'update_post_metadata', $refuse, 10 );
+		remove_filter( 'add_post_metadata', $refuse, 10 );
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertFalse( metadata_exists( 'post', $id, '_fusion' ) );
+	}
+
+	public function test_page_options_discovery_schema_undo_audit_and_description(): void {
+		$name  = 'aafm/avada-update-page-options';
+		$check = aafm_ability_list_permission( $name );
+		$this->assertIsCallable( $check );
+		$this->acting_as( 'editor' );
+		$this->assertTrue( $check() );
+		$this->acting_as( 'subscriber' );
+		$this->assertFalse( $check() );
+		$args = aafm_args_avada_update_page_options();
+		$this->assertFalse( $args['input_schema']['additionalProperties'] );
+		$this->assertSame( array( 'post_id' ), $args['input_schema']['required'] );
+		$this->assertSame( array( 'post_id', 'set', 'remove' ), array_keys( $args['input_schema']['properties'] ) );
+		$this->assertSame( array( 'post_id', 'changed', 'previous' ), array_keys( $args['output_schema']['properties'] ) );
+		$this->assertSame( 'not_covered', aafm_undo_refusals()[ $name ] );
+		$this->assertStringContainsString( 'Ran a page options update on Avada post #42', (string) aafm_build_activity_detail( $name, array( 'post_id' => 42 ) ) );
+		$row = aafm_get_abilities_registry_full()[ $name ];
+		$this->assertSame( 'write', $row['risk'] );
+		$this->assertSame( 'avada', $row['subject'] );
+		foreach ( array( $row['description'], aafm_ability_disclosures()[ $name ] ) as $text ) {
+			$this->assertStringNotContainsString( ' - ', $text );
+			foreach ( array( 'previous', 'unfiltered HTML', 'edit access', 'Avada theme', 'never reachable', 'Role Manager' ) as $phrase ) {
+				$this->assertStringContainsString( $phrase, $text, $phrase );
+			}
+		}
+	}
 }

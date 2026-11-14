@@ -1,0 +1,1 @@
+[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1" layout="1_1" background_blend_mode="overlay" first="true" last="true" min_height="" hover_type="none" link="" border_position="all"][fusion_text]<p>S8b footer text.</p>[/fusion_text][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]

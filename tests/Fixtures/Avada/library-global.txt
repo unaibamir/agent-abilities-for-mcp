@@ -1,0 +1,3 @@
+[fusion_text]
+<p>Shared global text S8b.</p>
+[/fusion_text]

@@ -136,21 +136,30 @@ function aafm_wpbakery_saved_templates(): array {
  * Whether the current user may use a Templatera template (design 3.3 T3, plan S14-2): edit access to the template
  * post, and the template's own templatera meta lists, as Templatera's getTemplateList() applies them: post_type
  * (applied only when $for_post is given) and user_role (the user's first role). An empty list, or a user with no
- * role, means everyone. These lists are the template's data, not Role Manager settings. Reads the meta with
- * aafm_meta_get(), so the caller holds the checked scope (aafm_with_checked_reads()).
+ * role, means everyone. These lists are the template's data, not Role Manager settings. The meta is read with
+ * aafm_meta_get() in its own checked scope, after the capability check; a failed read refuses.
  *
  * @param WP_Post      $template Template post.
  * @param WP_Post|null $for_post Post the template would be used on.
  * @return bool
  */
 function aafm_templatera_template_allowed( WP_Post $template, ?WP_Post $for_post = null ): bool {
-	if ( 'templatera' !== $template->post_type || ! aafm_user_can_checked( 'edit_post', (int) $template->ID ) ) {
+	$loaded = aafm_exact_object_chain( 'post', $template->ID );
+	if ( ! $loaded instanceof WP_Post || 'templatera' !== $loaded->post_type || ! aafm_user_can_checked( 'edit_post', $loaded->ID ) ) {
 		return false;
 	}
-	$meta  = aafm_meta_get( 'post', (int) $template->ID, 'templatera', true );
-	$meta  = is_array( $meta ) ? $meta : array();
-	$types = is_array( $meta['post_type'] ?? null ) ? array_map( 'strval', $meta['post_type'] ) : array();
-	$roles = is_array( $meta['user_role'] ?? null ) ? array_map( 'strval', $meta['user_role'] ) : array();
+	$lists = aafm_with_checked_reads(
+		static function () use ( $loaded ): array {
+			$meta = aafm_meta_get( 'post', $loaded->ID, 'templatera', true );
+			return is_array( $meta ) ? $meta : array();
+		},
+		aafm_generic_error()
+	);
+	if ( is_wp_error( $lists ) ) {
+		return false;
+	}
+	$types = is_array( $lists['post_type'] ?? null ) ? array_map( 'strval', $lists['post_type'] ) : array();
+	$roles = is_array( $lists['user_role'] ?? null ) ? array_map( 'strval', $lists['user_role'] ) : array();
 	if ( null !== $for_post && array() !== $types && ! in_array( $for_post->post_type, $types, true ) ) {
 		return false;
 	}
@@ -161,7 +170,7 @@ function aafm_templatera_template_allowed( WP_Post $template, ?WP_Post $for_post
 
 /**
  * The published Templatera templates the current user may use, in Templatera's own order (get_posts() defaults:
- * newest first), each id, name and content; caller holds the checked scope.
+ * newest first), each id, name and content.
  *
  * @param WP_Post|null $for_post Post the templates would be used on.
  * @return list<array{id:string,name:string,content:string}>
@@ -278,18 +287,12 @@ function aafm_exec_wpbakery_list_templates( array $input ) {
 	$for_post = null;
 	if ( isset( $input['for_post_id'] ) ) {
 		$for_post = aafm_exact_object_chain( 'post', absint( $input['for_post_id'] ) );
-		if ( ! $for_post instanceof WP_Post || ! aafm_user_can_checked( 'edit_post', (int) $for_post->ID ) ) {
+		if ( ! $for_post instanceof WP_Post || ! aafm_user_can_checked( 'edit_post', $for_post->ID ) ) {
 			return aafm_generic_error();
 		}
 	}
 	// While Templatera is active its editor lists only its own template posts (T2), so the list does too.
-	$all = $active
-		? aafm_with_checked_reads( static fn(): array => array( 'rows' => aafm_templatera_templates( $for_post ) ), aafm_generic_error() )
-		: array( 'rows' => aafm_wpbakery_saved_templates() );
-	if ( is_wp_error( $all ) ) {
-		return $all;
-	}
-	$all    = $all['rows'];
+	$all    = $active ? aafm_templatera_templates( $for_post ) : aafm_wpbakery_saved_templates();
 	$paging = aafm_paginate_args( $input + array( 'per_page' => 20 ), 50 );
 	$rows   = array();
 	foreach ( array_slice( $all, ( $paging['page'] - 1 ) * $paging['per_page'], $paging['per_page'] ) as $template ) {
@@ -363,8 +366,8 @@ function aafm_args_wpbakery_insert_template(): array {
 
 /**
  * The stored shortcode text of the template an insert names: a saved option row, or with source templatera a
- * published Templatera template post the user may use on this post (aafm_templatera_template_allowed()), read in the
- * checked scope. Anything else is aafm_builder_unknown_template (404), so a template the user may not use reads
+ * published Templatera template post the user may use on this post (aafm_templatera_template_allowed()). Anything
+ * else is aafm_builder_unknown_template (404), so a template the user may not use reads
  * the same as a missing one; source templatera while Templatera is off is aafm_templatera_inactive (409).
  *
  * @param array<string,mixed> $input Validated input.
@@ -385,14 +388,7 @@ function aafm_wpbakery_template_text( array $input, WP_Post $post ) {
 		if ( ! $template instanceof WP_Post || 'templatera' !== $template->post_type || 'publish' !== $template->post_status ) {
 			return aafm_builder_error( 'aafm_builder_unknown_template' );
 		}
-		$allowed = aafm_with_checked_reads(
-			static fn(): array => array( 'allowed' => aafm_templatera_template_allowed( $template, $post ) ),
-			aafm_generic_error()
-		);
-		if ( is_wp_error( $allowed ) ) {
-			return $allowed;
-		}
-		return true === $allowed['allowed'] ? (string) $template->post_content : aafm_builder_error( 'aafm_builder_unknown_template' );
+		return aafm_templatera_template_allowed( $template, $post ) ? (string) $template->post_content : aafm_builder_error( 'aafm_builder_unknown_template' );
 	}
 	foreach ( aafm_wpbakery_saved_templates() as $template ) {
 		if ( $template['id'] === $id ) {

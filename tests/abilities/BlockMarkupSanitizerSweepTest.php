@@ -45,8 +45,8 @@ final class BlockMarkupSanitizerSweepTest extends TestCase {
 		),
 		'posts.php'                  => array( '$replace' => 'replace-in-post and replace-sitewide inserted text, text-only by design.' ),
 		'terms.php'                  => array( "(string) \$input['description']" => 'Term description (create and update).' ),
-		'wpbakery.php'               => array( '$replace' => 'Inserted text, text-only by design.' ),
-		'wpbakery-elements.php'      => array( '$value' => 'Inner content of one WPBakery element, filtered for every user; a shortcode it adds is refused by the outline check.' ),
+		'wpbakery.php'               => array( 'aafm_wpbakery_decode_bracket_entities( $replace )' => 'Inserted text, text-only by design; bracket entities are decoded first so the structure check sees them.' ),
+		'wpbakery-elements.php'      => array( 'aafm_wpbakery_decode_bracket_entities( $value )' => 'Inner content of one WPBakery element, filtered for every user; a shortcode it adds, bracket entities included, is refused by the outline check.' ),
 		'woocommerce/products.php'   => array( "(string) \$input['short_description']" => 'Stored as post_excerpt, not block markup.' ),
 		'woocommerce/variations.php' => array( "(string) \$input['description']" => 'Stored in variation meta, not block markup.' ),
 	);

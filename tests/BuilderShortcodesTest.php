@@ -512,6 +512,61 @@ final class BuilderShortcodesTest extends TestCase {
 		$this->assertSame( $post->ID, (int) get_post( $out['restore_revision_id'] )->post_parent );
 	}
 
+	/**
+	 * A page saved once holds its stored content in a revision already, so core saves no new one and
+	 * the commit returns that revision.
+	 */
+	public function test_commit_returns_the_existing_revision_when_the_page_was_updated_once(): void {
+		$post = $this->page( 'seed' );
+		wp_update_post(
+			wp_slash(
+				array(
+					'ID'           => $post->ID,
+					'post_content' => self::PAGE,
+				)
+			)
+		);
+		$revisions = wp_get_post_revisions( $post->ID );
+		$existing  = (int) array_key_first( $revisions );
+		$this->assertSame( self::PAGE, $revisions[ $existing ]->post_content );
+
+		$out = $this->commit_text( get_post( $post->ID ), str_replace( 'Old text.', 'New text.', self::PAGE ) );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( $existing, $out['restore_revision_id'] );
+		$this->assertTrue( $out['reversible'] );
+	}
+
+	/**
+	 * An abandoned autosave newer than the revision that holds the stored content must not hide it.
+	 */
+	public function test_commit_skips_an_autosave_when_it_looks_for_the_existing_revision(): void {
+		$post = $this->page( 'seed' );
+		wp_update_post(
+			wp_slash(
+				array(
+					'ID'           => $post->ID,
+					'post_content' => self::PAGE,
+				)
+			)
+		);
+		$existing = (int) array_key_first( wp_get_post_revisions( $post->ID ) );
+		$draft    = get_post( $post->ID, ARRAY_A );
+
+		$draft['post_content'] = str_replace( 'Old text.', 'Unsaved draft.', self::PAGE );
+		$autosave              = _wp_put_post_revision( $draft, true );
+		$this->assertIsInt( $autosave );
+		$this->assertGreaterThan( $existing, $autosave );
+		$this->assertNotFalse( wp_is_post_autosave( $autosave ) );
+
+		$out = $this->commit_text( get_post( $post->ID ), str_replace( 'Old text.', 'New text.', self::PAGE ) );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( $existing, $out['restore_revision_id'] );
+		$this->assertTrue( $out['reversible'] );
+		$this->assertSame( self::PAGE, get_post( $out['restore_revision_id'] )->post_content );
+	}
+
 	public function test_commit_runs_without_a_way_back_when_revisions_are_off(): void {
 		$post = $this->page();
 		add_filter( 'wp_revisions_to_keep', '__return_zero' );

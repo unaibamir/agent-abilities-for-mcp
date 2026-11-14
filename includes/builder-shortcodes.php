@@ -603,17 +603,16 @@ function aafm_builder_commit( WP_Post $post, string $old, string $new, array $ta
 		if ( is_int( $saved ) && $saved > 0 ) {
 			$restore_revision_id = $saved;
 		} else {
-			$latest = wp_get_post_revisions(
-				$id,
-				array(
-					'posts_per_page' => 1,
-					'orderby'        => 'ID',
-					'order'          => 'DESC',
-				)
-			);
-			$latest = reset( $latest );
-			if ( $latest instanceof WP_Post && $latest->post_content === $old ) {
-				$restore_revision_id = (int) $latest->ID;
+			// Core saved nothing because its newest real revision already equals the stored content.
+			// Find that revision the way wp_save_post_revision() does: newest first, autosaves skipped.
+			foreach ( wp_get_post_revisions( $id ) as $revision ) {
+				if ( ! $revision instanceof WP_Post || wp_is_post_autosave( $revision ) ) {
+					continue;
+				}
+				if ( $revision->post_content === $old ) {
+					$restore_revision_id = (int) $revision->ID;
+				}
+				break;
 			}
 		}
 		$reversible = null !== $restore_revision_id;

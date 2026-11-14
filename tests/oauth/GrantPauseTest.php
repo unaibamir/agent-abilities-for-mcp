@@ -301,6 +301,19 @@ class GrantPauseTest extends TestCase {
 		$this->assertFalse( aafm_rate_limit_consume( $this->user ) );
 	}
 
+	public function test_failure_sentence_is_present_for_a_paused_connection(): void {
+		update_option( 'aafm_enabled_abilities', array( 'aafm/get-site-info' ) );
+		if ( ! has_filter( 'mcp_adapter_initialize_response', 'aafm_filter_initialize_capabilities' ) ) {
+			add_filter( 'mcp_adapter_initialize_response', 'aafm_filter_initialize_capabilities', 10, 3 );
+		}
+		$this->set_paused( '2026-10-01 00:00:00' );
+		$this->resolve();
+		list( , $init ) = $this->handshake();
+		$instructions   = (string) ( $this->wire( $init )['result']['instructions'] ?? '' );
+		// The sentence is static, so a paused connection gets it like any other.
+		$this->assertStringContainsString( 'Connection Doctor', $instructions );
+	}
+
 	public function test_a_paused_connection_gets_no_pause_line_in_instructions(): void {
 		update_option( 'aafm_enabled_abilities', array( 'aafm/get-site-info' ) );
 		// The server is built once per process and the test library drops hooks added during a test,

@@ -78,7 +78,9 @@ final class PlaybookIndexTest extends TestCase {
 	 */
 	private function assert_unchanged(): void {
 		$this->assertSame( aafm_server_description(), $this->filtered_instructions() );
-		$this->assertSame( 'Curated, governed WordPress abilities for AI agents.', aafm_server_description() );
+		$this->assertStringStartsWith( 'Curated, governed WordPress abilities for AI agents. ', aafm_server_description() );
+		$this->assertStringContainsString( 'Connection Doctor', aafm_server_description() );
+		$this->assertStringNotContainsString( 'Rules from the site owner.', aafm_server_description() );
 		update_option( 'aafm_site_brief', 'British spelling.' );
 		$this->assertSame( aafm_server_description(), $this->filtered_instructions() );
 		$this->assertStringNotContainsString( 'playbook-1', aafm_server_description() );

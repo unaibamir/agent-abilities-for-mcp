@@ -51,7 +51,42 @@ final class SiteBriefTest extends TestCase {
 	}
 
 	public function test_description_is_the_plain_sentence_without_a_brief(): void {
-		$this->assertSame( 'Curated, governed WordPress abilities for AI agents.', aafm_server_description() );
+		$description = aafm_server_description();
+		$this->assertStringStartsWith( 'Curated, governed WordPress abilities for AI agents. ', $description );
+		$this->assertStringContainsString( 'Connection Doctor', $description );
+		$this->assertStringNotContainsString( 'Rules from the site owner.', $description );
+	}
+
+	public function test_failure_sentence_is_present_with_and_without_a_site_brief(): void {
+		$sentence = $this->failure_sentence();
+		$this->assertSame( 'Curated, governed WordPress abilities for AI agents. ' . $sentence, aafm_server_description() );
+
+		update_option( 'aafm_site_brief', 'British spelling.' );
+		$description = aafm_server_description();
+		$this->assertStringContainsString( $sentence, $description );
+		$this->assertLessThan( (int) strpos( $description, 'Rules from the site owner.' ), (int) strpos( $description, $sentence ) );
+	}
+
+	public function test_failure_sentence_is_under_forty_words(): void {
+		$sentence = $this->failure_sentence();
+		$this->assertLessThan( 40, str_word_count( $sentence ) );
+		$this->assertStringContainsString( 'Connection tab', $sentence );
+		foreach ( array( "\u{2014}", "\u{2013}", ' - ' ) as $dash ) {
+			$this->assertStringNotContainsString( $dash, $sentence );
+		}
+	}
+
+	/**
+	 * The fixed sentence: the description without a brief, minus the base sentence.
+	 *
+	 * @return string
+	 */
+	private function failure_sentence(): string {
+		delete_option( 'aafm_site_brief' );
+		$base = 'Curated, governed WordPress abilities for AI agents. ';
+		$full = aafm_server_description();
+		$this->assertStringStartsWith( $base, $full );
+		return substr( $full, strlen( $base ) );
 	}
 
 	public function test_description_appends_the_brief_after_the_sentence(): void {
@@ -104,7 +139,8 @@ final class SiteBriefTest extends TestCase {
 		$this->run_handler( 'aafm_ajax_save_settings' );
 
 		$this->assertSame( '', aafm_site_brief() );
-		$this->assertSame( 'Curated, governed WordPress abilities for AI agents.', aafm_server_description() );
+		$this->assertStringNotContainsString( 'Rules from the site owner.', aafm_server_description() );
+		$this->assertStringNotContainsString( 'Old rules.', aafm_server_description() );
 	}
 
 	public function test_a_non_admin_cannot_save_the_brief(): void {

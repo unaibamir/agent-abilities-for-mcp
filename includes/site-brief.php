@@ -50,12 +50,14 @@ function aafm_site_brief(): string {
 }
 
 /**
- * The MCP server description: the plain sentence, plus the owner's brief when there is one.
+ * The MCP server description: the plain sentence and what to do when a call fails, plus the owner's
+ * brief when there is one.
  *
  * @return string
  */
 function aafm_server_description(): string {
-	$base  = __( 'Curated, governed WordPress abilities for AI agents.', 'agent-abilities-for-mcp' );
+	$base  = __( 'Curated, governed WordPress abilities for AI agents.', 'agent-abilities-for-mcp' )
+		. ' ' . __( 'When a call fails and you cannot fix it, tell the site owner what failed and ask them to press Check my connection (the Connection Doctor) on the plugin\'s Connection tab and copy the report for support.', 'agent-abilities-for-mcp' );
 	$brief = aafm_site_brief();
 	if ( '' === $brief ) {
 		return $base;

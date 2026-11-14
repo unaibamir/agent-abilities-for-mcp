@@ -467,6 +467,35 @@ function aafm_client_method_labels(): array {
 }
 
 /**
+ * A one-click install link for the OAuth path: the endpoint URL and a server name, never a credential.
+ *
+ * Only clients with a documented link format get one. Cursor: cursor://anysphere.cursor-deeplink/mcp/install
+ * with `name` and a base64 JSON `config` (cursor.com/docs/mcp/install-links). VS Code: vscode:mcp/install
+ * followed by the URL-encoded JSON server config with its `name` (VS Code MCP extension guide). The
+ * client still runs the OAuth sign-in itself.
+ *
+ * @param string $client Client slug.
+ * @return string Raw link, or '' when the client has no documented format.
+ */
+function aafm_client_install_link( string $client ): string {
+	$url = aafm_endpoint_url();
+	switch ( $client ) {
+		case 'cursor':
+			$config = (string) wp_json_encode( array( 'url' => $url ), JSON_UNESCAPED_SLASHES );
+			return 'cursor://anysphere.cursor-deeplink/mcp/install?name=agent-abilities&config=' . rawurlencode( base64_encode( $config ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- the link format Cursor documents.
+		case 'vscode':
+			$config = array(
+				'name' => 'agent-abilities',
+				'type' => 'http',
+				'url'  => $url,
+			);
+			return 'vscode:mcp/install?' . rawurlencode( (string) wp_json_encode( $config, JSON_UNESCAPED_SLASHES ) );
+		default:
+			return '';
+	}
+}
+
+/**
  * The one-line "where do I put this?" note for each quickstart client.
  *
  * Kept as plain prose with no markup so the render can escape each line wholesale.
@@ -1084,6 +1113,22 @@ function aafm_render_connection_tab(): void {
 				// Native: lead with URL-paste instructions, offer bridge as secondary.
 				if ( '' !== $note ) {
 					echo '<p class="aafm-oauth-note">' . esc_html( $note ) . '</p>';
+				}
+				// One-click install where the client documents a link format. OAuth path only: the
+				// link carries the endpoint and a server name, and the client signs in itself.
+				$install = aafm_client_install_link( $slug );
+				if ( '' !== $install ) {
+					$protocol = (string) strtok( $install, ':' );
+					echo wp_kses(
+						sprintf(
+							'<p class="aafm-oauth-install"><a class="aafm-btn aafm-btn-secondary" href="%1$s">%2$s</a></p>',
+							esc_url( $install, array( $protocol ) ),
+							/* translators: %s: client name, e.g. "Cursor". */
+							esc_html( sprintf( __( 'Add to %s', 'agent-abilities-for-mcp' ), $label ) )
+						),
+						aafm_admin_allowed_html(),
+						array_merge( wp_allowed_protocols(), array( $protocol ) )
+					);
 				}
 				// Local cert notice for native-mode clients when the site is local.
 				if ( $is_local ) {

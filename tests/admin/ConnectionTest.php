@@ -1024,6 +1024,21 @@ final class ConnectionTest extends TestCase {
 		return $cards;
 	}
 
+	/**
+	 * One OAuth panel's markup.
+	 *
+	 * @param string $html   Rendered tab.
+	 * @param string $client Client slug.
+	 * @return string
+	 */
+	private function oauth_panel( string $html, string $client ): string {
+		$start = strpos( $html, 'aafm-oauth-panel" data-client="' . $client . '"' );
+		$this->assertNotFalse( $start, $client . ' panel not found.' );
+		$next = strpos( $html, 'aafm-oauth-panel" data-client=', (int) $start + 1 );
+		$end  = false === $next ? strpos( $html, 'aafm-oauth-panels', (int) $start ) : $next;
+		return substr( $html, (int) $start, (int) ( false === $end ? strlen( $html ) : $end ) - (int) $start );
+	}
+
 	public function test_every_oauth_picker_card_has_a_method_label(): void {
 		$cards = $this->picker_cards( $this->render_connection_tab(), 'aafm-oauth-clients' );
 		$this->assertCount( 9, $cards );
@@ -1061,5 +1076,94 @@ final class ConnectionTest extends TestCase {
 		foreach ( $cards as $slug => $card ) {
 			$this->assertStringNotContainsString( 'aafm-client-method', $card, $slug );
 		}
+	}
+
+	public function test_install_link_exists_only_for_documented_clients_and_holds_the_endpoint(): void {
+		foreach ( array_keys( aafm_quickstart_clients() ) as $slug ) {
+			$link = aafm_client_install_link( $slug );
+			if ( in_array( $slug, array( 'cursor', 'vscode' ), true ) ) {
+				$this->assertSame( aafm_endpoint_url(), $this->install_link_url( $link ), $slug );
+			} else {
+				$this->assertSame( '', $link, $slug );
+			}
+		}
+		$html = $this->render_connection_tab();
+		$this->assertStringContainsString( '>Add to Cursor</a>', $this->oauth_panel( $html, 'cursor' ) );
+		$this->assertStringContainsString( '>Add to VS Code</a>', $this->oauth_panel( $html, 'vscode' ) );
+		$this->assertStringNotContainsString( 'aafm-oauth-install', $this->oauth_panel( $html, 'windsurf' ) );
+	}
+
+	public function test_install_link_holds_no_password_or_token(): void {
+		foreach ( array( 'cursor', 'vscode' ) as $slug ) {
+			$config = $this->install_link_config( aafm_client_install_link( $slug ) );
+			$this->assertSame( array( 'url' ), array_values( array_diff( array_keys( $config ), array( 'name', 'type' ) ) ), $slug );
+			$raw = (string) wp_json_encode( $config );
+			foreach ( array( 'Authorization', 'Basic', 'Bearer', 'password', 'token', 'headers', 'env' ) as $secret ) {
+				$this->assertStringNotContainsStringIgnoringCase( $secret, $raw, $slug );
+			}
+		}
+	}
+
+	public function test_app_password_path_has_no_install_link(): void {
+		$html  = $this->render_connection_tab();
+		$start = strpos( $html, 'aafm-app-password-fallback' );
+		$this->assertNotFalse( $start );
+		$region = substr( $html, (int) $start );
+		$this->assertStringNotContainsString( 'cursor://', $region );
+		$this->assertStringNotContainsString( 'vscode:', $region );
+		$this->assertStringNotContainsString( 'aafm-oauth-install', $region );
+	}
+
+	public function test_install_link_keeps_its_protocol_after_kses(): void {
+		$html = $this->render_connection_tab();
+		$this->assertMatchesRegularExpression( '/<a class="aafm-btn aafm-btn-secondary" href="cursor:\/\/anysphere\.cursor-deeplink\/mcp\/install\?name=agent-abilities&(?:#038|amp);config=[^"]+">/', $this->oauth_panel( $html, 'cursor' ) );
+		$this->assertMatchesRegularExpression( '/<a class="aafm-btn aafm-btn-secondary" href="vscode:mcp\/install\?%7B[^"]+">/', $this->oauth_panel( $html, 'vscode' ) );
+	}
+
+	public function test_install_link_round_trips_a_plain_permalink_endpoint(): void {
+		add_filter(
+			'rest_url',
+			static function ( string $url, string $path ): string {
+				return 'https://example.com/sub/?rest_route=/' . ltrim( $path, '/' );
+			},
+			10,
+			2
+		);
+		$this->assertStringContainsString( '?rest_route=', aafm_endpoint_url() );
+		foreach ( array( 'cursor', 'vscode' ) as $slug ) {
+			$this->assertSame( aafm_endpoint_url(), $this->install_link_url( aafm_client_install_link( $slug ) ), $slug );
+		}
+		$this->assertStringContainsString( 'href="cursor://', $this->oauth_panel( $this->render_connection_tab(), 'cursor' ) );
+	}
+
+	/**
+	 * The server config an install link carries, decoded the way each client decodes it.
+	 *
+	 * @param string $link Install link.
+	 * @return array<string,mixed>
+	 */
+	private function install_link_config( string $link ): array {
+		if ( 0 === strpos( $link, 'cursor://anysphere.cursor-deeplink/mcp/install?' ) ) {
+			parse_str( (string) wp_parse_url( $link, PHP_URL_QUERY ), $query );
+			$this->assertSame( 'agent-abilities', $query['name'] ?? null );
+			$config = json_decode( (string) base64_decode( (string) ( $query['config'] ?? '' ), true ), true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decoding the link under test.
+		} else {
+			$this->assertStringStartsWith( 'vscode:mcp/install?', $link );
+			$config = json_decode( rawurldecode( substr( $link, strlen( 'vscode:mcp/install?' ) ) ), true );
+			$this->assertSame( 'agent-abilities', $config['name'] ?? null );
+			$this->assertSame( 'http', $config['type'] ?? null );
+		}
+		$this->assertIsArray( $config );
+		return $config;
+	}
+
+	/**
+	 * The endpoint an install link points at.
+	 *
+	 * @param string $link Install link.
+	 * @return string
+	 */
+	private function install_link_url( string $link ): string {
+		return (string) ( $this->install_link_config( $link )['url'] ?? '' );
 	}
 }

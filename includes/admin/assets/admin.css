@@ -3099,6 +3099,11 @@ body:is(.admin-color-light, .admin-color-blue, .admin-color-coffee, .admin-color
 			color: var(--aafm-text);
 		}
 
+		/* One-click install link for clients with a documented link format */
+		.aafm-oauth-install {
+			margin-block: 0 10px;
+		}
+
 		/* Local-cert advisory inside an OAuth panel */
 		.aafm-oauth-local-note {
 			margin-block: 0 10px;

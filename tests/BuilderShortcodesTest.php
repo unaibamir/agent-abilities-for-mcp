@@ -226,8 +226,13 @@ final class BuilderShortcodesTest extends TestCase {
 		$this->assertSame( 409, $out->get_error_data()['status'] );
 	}
 
-	public function test_serialize_wpbakery_always_writes_a_closing_tag(): void {
-		$this->assertSame( '[vc_btn title="Go"][/vc_btn]', aafm_builder_serialize( 'vc_btn', array( 'title' => 'Go' ), null, 'wpbakery' ) );
+	/**
+	 * Ruling R-S9a-0 / R-S9a-2: WPBakery's editor writes a leaf with no content param without a closer
+	 * (tests/Fixtures/Wpbakery/page-elements.txt), so null inner content writes none and '' an empty pair.
+	 */
+	public function test_serialize_wpbakery_writes_a_closer_only_when_inner_content_is_given(): void {
+		$this->assertSame( '[vc_btn title="Go"]', aafm_builder_serialize( 'vc_btn', array( 'title' => 'Go' ), null, 'wpbakery' ) );
+		$this->assertSame( '[vc_column][/vc_column]', aafm_builder_serialize( 'vc_column', array(), '', 'wpbakery' ) );
 		$this->assertSame( '[vc_column_text css=""]<p>x</p>[/vc_column_text]', aafm_builder_serialize( 'vc_column_text', array( 'css' => '' ), '<p>x</p>', 'wpbakery' ) );
 	}
 

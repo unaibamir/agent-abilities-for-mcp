@@ -240,8 +240,10 @@ function aafm_builder_resolve( string $content, array $tags, int $index, array $
  * @param string               $tag   Tag.
  * @param array<string,string> $atts  Attributes, encoded.
  * @param string|null          $inner Inner content, or null for none.
- * @param string               $form  wpbakery (always a closing tag), avada_closed (always a closing
- *                                    tag) or avada_void ([tag ... /]).
+ * @param string               $form  wpbakery (a closing tag only when $inner is a string, so null
+ *                                    writes a leaf the way WPBakery's editor stores one with no content
+ *                                    param, Ruling R-S9a-0), avada_closed (always a closing tag) or
+ *                                    avada_void ([tag ... /]).
  * @return string
  */
 function aafm_builder_serialize( string $tag, array $atts, ?string $inner, string $form ): string {
@@ -263,6 +265,9 @@ function aafm_builder_serialize( string $tag, array $atts, ?string $inner, strin
 	}
 	if ( 'avada_void' === $form ) {
 		return $open . ' /]';
+	}
+	if ( 'wpbakery' === $form && null === $inner ) {
+		return $open . ']';
 	}
 	return $open . ']' . (string) $inner . '[/' . $tag . ']';
 }

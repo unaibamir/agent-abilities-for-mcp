@@ -2567,6 +2567,70 @@ final class WpbakeryElementsTest extends TestCase {
 	}
 
 	/**
+	 * Insert stored vendor text through the trusted branch, as the template tool does.
+	 *
+	 * @param int    $id     Post.
+	 * @param string $source Stored shortcode text.
+	 * @return array<string,mixed>|WP_Error
+	 */
+	private function insert_trusted( int $id, string $source ) {
+		$tree = aafm_builder_tree( $source, (array) aafm_wpbakery_shortcode_tags( $source ) );
+		$this->assertIsArray( $tree );
+		return aafm_wpbakery_insert_tree(
+			get_post( $id ),
+			$tree,
+			array(
+				'index'     => 0,
+				'expect'    => $this->expect( $id, 0 ),
+				'placement' => 'after',
+			),
+			true
+		);
+	}
+
+	/**
+	 * SEC-S9b-2 (Ruling R-S11-1): stored template text is untrusted, since a contributor can save a template. For a
+	 * user without unfiltered_html, the trusted branch puts each element's own text through the body text checks and
+	 * refuses text kses would change; each refusal leaves the page byte-identical.
+	 */
+	public function test_trusted_text_gets_the_body_text_checks_without_unfiltered_html(): void {
+		$cases = array(
+			'<p>Hi</p><script>alert(1)</script>'      => 'aafm_wpbakery_text_needs_unfiltered_html',
+			'<p onclick="alert(1)">Hi</p>'            => 'aafm_wpbakery_text_needs_unfiltered_html',
+			'<p data-x="1">Hi</p>'                    => 'aafm_wpbakery_data_attributes_need_unfiltered_html',
+			'<p>%5Bvc_raw_js%5D</p>'                  => 'aafm_wpbakery_encoded_brackets_need_unfiltered_html',
+			'<p>&#91;vc_raw_js&#93;</p>'              => 'aafm_wpbakery_brackets_need_unfiltered_html',
+			'<p>Hi</p><img src="x" onerror="alert(1)' => 'aafm_wpbakery_incomplete_html_needs_unfiltered_html',
+		);
+		foreach ( $cases as $text => $code ) {
+			$id     = $this->page( self::SIMPLE );
+			$source = '[vc_row][vc_column][vc_column_text]' . $text . '[/vc_column_text][/vc_column][/vc_row]';
+			$this->act_as_restricted_editor();
+			$this->assert_refused( $this->insert_trusted( $id, $source ), $code, 'aafm_wpbakery_text_needs_unfiltered_html' === $code ? 403 : 400, $id, self::SIMPLE );
+
+			$this->acting_as( 'administrator' );
+			$this->assertIsArray( $this->insert_trusted( $id, $source ), $text );
+			$this->assertSame( self::SIMPLE . $source, get_post_field( 'post_content', $id, 'raw' ), $text );
+		}
+	}
+
+	public function test_trusted_text_between_children_is_checked_too(): void {
+		$id     = $this->page( self::SIMPLE );
+		$source = '[vc_row][vc_column]<script>alert(1)</script>[vc_column_text]<p>A</p>[/vc_column_text][/vc_column][/vc_row]';
+		$this->act_as_restricted_editor();
+		$this->assert_refused( $this->insert_trusted( $id, $source ), 'aafm_wpbakery_text_needs_unfiltered_html', 403, $id, self::SIMPLE );
+	}
+
+	public function test_clean_trusted_text_inserts_unchanged_for_a_restricted_editor(): void {
+		$id     = $this->page( self::SIMPLE );
+		$source = '[vc_row][vc_column][vc_column_text]<p style="text-align: center;">A &amp; B <a href="https://example.com/">link</a></p>[/vc_column_text][/vc_column][/vc_row]';
+		$this->act_as_restricted_editor();
+		$this->assertIsArray( $this->insert_trusted( $id, $source ) );
+		// Core's own save runs kses for this user, which drops the last semicolon of a style rule it keeps.
+		$this->assertSame( self::SIMPLE . str_replace( 'center;', 'center', $source ), get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
+	/**
 	 * CX-S9b-R2-1: every tool that can return reversible_reason declares it as an optional string.
 	 */
 	public function test_output_schemas_declare_reversible_reason(): void {

@@ -1767,6 +1767,80 @@ function aafm_wpbakery_serialize_nodes( array $nodes, array $map, array $tags, i
 }
 
 /**
+ * SEC-S9b-2 (Ruling R-S11-1), for a user without unfiltered_html: every run of body text in stored shortcode text
+ * (an element's inner content outside its child elements) goes through aafm_wpbakery_body_text(), and is refused
+ * when kses would remove a tag, an attribute, a style rule or text from it. Core's save runs kses for this user and
+ * the save replay compares only the outline, so a strip would otherwise be saved as a silent partial write.
+ *
+ * @param string        $text Stored shortcode text.
+ * @param array<string> $tags Shortcode names in it.
+ * @return true|WP_Error
+ */
+function aafm_wpbakery_stored_text_gate( string $text, array $tags ) {
+	$elements = aafm_builder_elements( $text, $tags );
+	if ( null === $elements ) {
+		return aafm_builder_error( 'aafm_builder_unparseable' );
+	}
+	foreach ( $elements as $element ) {
+		$from     = (int) $element['open_end'];
+		$segments = array();
+		foreach ( $elements as $child ) {
+			if ( $child['parent'] === $element['index'] ) {
+				$segments[] = substr( $text, $from, (int) $child['start'] - $from );
+				$from       = (int) $child['end'];
+			}
+		}
+		$segments[] = substr( $text, $from, max( 0, (int) $element['inner_end'] - $from ) );
+		foreach ( $segments as $segment ) {
+			if ( '' === trim( $segment ) ) {
+				continue;
+			}
+			$clean = aafm_wpbakery_body_text( $segment );
+			if ( is_wp_error( $clean ) ) {
+				return $clean;
+			}
+			if ( aafm_wpbakery_html_shape( aafm_wpbakery_decode_entities( $segment, true ) ) !== aafm_wpbakery_html_shape( $clean ) ) {
+				return new WP_Error(
+					'aafm_wpbakery_text_needs_unfiltered_html',
+					__( 'Text in this template holds HTML that WordPress removes for a user who may not post unfiltered HTML, such as a script, an event attribute or a link protocol it does not allow. Remove it from the template, or ask such a user to insert it. Nothing was changed.', 'agent-abilities-for-mcp' ),
+					array( 'status' => 403 )
+				);
+			}
+		}
+	}
+	return true;
+}
+
+/**
+ * The parts of an HTML fragment kses can remove: each tag and closer with its attributes and decoded values (a
+ * style value as its list of rules, since kses rewrites the spacing and the last semicolon of a rule it keeps),
+ * then the text without tags.
+ *
+ * @param string $html Fragment.
+ * @return list<string>
+ */
+function aafm_wpbakery_html_shape( string $html ): array {
+	$shape = array();
+	$tags  = new WP_HTML_Tag_Processor( $html );
+	while ( $tags->next_tag( array( 'tag_closers' => 'visit' ) ) ) {
+		$row   = ( $tags->is_tag_closer() ? '/' : '' ) . $tags->get_tag();
+		$names = (array) $tags->get_attribute_names_with_prefix( '' );
+		sort( $names );
+		foreach ( $names as $name ) {
+			$value = $tags->get_attribute( $name );
+			$value = true === $value ? '' : (string) $value;
+			if ( 'style' === $name ) {
+				$value = implode( ';', array_filter( array_map( static fn( string $rule ): string => (string) preg_replace( '/\s*:\s*/', ':', trim( $rule ) ), explode( ';', $value ) ), static fn( string $rule ): bool => '' !== $rule ) );
+			}
+			$row .= ' ' . $name . '=' . $value;
+		}
+		$shape[] = $row;
+	}
+	$shape[] = html_entity_decode( wp_strip_all_tags( $html ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+	return $shape;
+}
+
+/**
  * The shared insert path (design WB-4, Ruling B3, handover 2). Checks the limits and every tag against the map,
  * checks nesting, gates script content, serializes (untrusted) or splices the stored sources (trusted), and saves
  * through aafm_builder_commit() with a CSS rebuild. The caller has already made the guard call, applied
@@ -1893,7 +1967,15 @@ function aafm_wpbakery_insert_tree( WP_Post $post, array $tree, array $anchor, b
 			return aafm_builder_error( 'aafm_builder_needs_unfiltered_html' );
 		}
 		$source_tags = aafm_wpbakery_shortcode_tags( $text );
-		$tuples      = null === $source_tags ? null : aafm_builder_walk( $text, $source_tags );
+		// SEC-S9b-2 (Ruling R-S11-1): stored template text is not administrator text, since WPBakery lets any user
+		// with template access save one, so its body text gets the checks typed text gets.
+		if ( ! current_user_can( 'unfiltered_html' ) && null !== $source_tags ) {
+			$gate = aafm_wpbakery_stored_text_gate( $text, $source_tags );
+			if ( is_wp_error( $gate ) ) {
+				return $gate;
+			}
+		}
+		$tuples = null === $source_tags ? null : aafm_builder_walk( $text, $source_tags );
 		if ( null === $tuples || count( $tuples ) !== $stats['count'] ) {
 			return aafm_builder_error( 'aafm_builder_unparseable' );
 		}

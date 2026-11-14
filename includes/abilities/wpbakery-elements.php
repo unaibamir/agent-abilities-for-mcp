@@ -1436,3 +1436,447 @@ function aafm_exec_wpbakery_update_element( array $input ) {
 		'reversible'          => $result['reversible'],
 	);
 }
+
+/**
+ * Whether WPBakery lets $child_tag sit inside $parent_tag (design WB-4). The fixed rules come first: the top level
+ * ('') takes a row or a section, a section takes rows, a row takes columns, a column takes content elements or an
+ * inner row, an inner row takes inner columns, an inner column takes content elements. Any other parent follows its
+ * map entry's as_parent, and a parent with no readable rule is refused. Below the top level, the child's own
+ * as_child rule must allow the parent too.
+ *
+ * @param string                            $parent_tag Parent tag, '' for the top level.
+ * @param string                            $child_tag  Child tag.
+ * @param array<string,array<string,mixed>> $map        Map entries keyed by tag (those known; a missing parent is refused).
+ * @return true|WP_Error aafm_builder_invalid_nesting (400) naming parent and child.
+ */
+function aafm_wpbakery_nesting_allows( string $parent_tag, string $child_tag, array $map ) {
+	$layout = array( 'vc_section', 'vc_row', 'vc_column', 'vc_row_inner', 'vc_column_inner' );
+	$fixed  = array(
+		''             => array( 'vc_row', 'vc_section' ),
+		'vc_section'   => array( 'vc_row' ),
+		'vc_row'       => array( 'vc_column' ),
+		'vc_row_inner' => array( 'vc_column_inner' ),
+	);
+	if ( isset( $fixed[ $parent_tag ] ) ) {
+		$ok = in_array( $child_tag, $fixed[ $parent_tag ], true );
+	} elseif ( 'vc_column' === $parent_tag || 'vc_column_inner' === $parent_tag ) {
+		$ok = ! in_array( $child_tag, $layout, true ) || ( 'vc_column' === $parent_tag && 'vc_row_inner' === $child_tag );
+	} else {
+		$raw  = $map[ $parent_tag ]['as_parent'] ?? null;
+		$rule = aafm_wpbakery_nesting_rule( $raw );
+		$ok   = is_array( $raw ) && ( array() !== $rule['only'] || array() !== $rule['except'] )
+			&& ! in_array( $child_tag, $layout, true )
+			&& ( array() === $rule['only'] || in_array( $child_tag, $rule['only'], true ) )
+			&& ! in_array( $child_tag, $rule['except'], true );
+	}
+	if ( $ok && '' !== $parent_tag ) {
+		$rule = aafm_wpbakery_nesting_rule( $map[ $child_tag ]['as_child'] ?? null );
+		$ok   = ( array() === $rule['only'] || in_array( $parent_tag, $rule['only'], true ) ) && ! in_array( $parent_tag, $rule['except'], true );
+	}
+	if ( $ok ) {
+		return true;
+	}
+	$error = aafm_builder_error(
+		'aafm_builder_invalid_nesting',
+		array(
+			'parent' => $parent_tag,
+			'child'  => $child_tag,
+		)
+	);
+	return new WP_Error(
+		'aafm_builder_invalid_nesting',
+		/* translators: 1: the refusal, 2: the parent tag or "top level", 3: the child tag. */
+		sprintf( __( '%1$s Parent: %2$s. Child: %3$s.', 'agent-abilities-for-mcp' ), $error->get_error_message(), '' === $parent_tag ? __( 'top level', 'agent-abilities-for-mcp' ) : $parent_tag, $child_tag ),
+		$error->get_error_data()
+	);
+}
+
+/**
+ * Whether stored WPBakery shortcode text holds anything on the design section 9 script list: an element on the
+ * custom HTML list, a custom onclick setting, a Design Options value, or any setting or content whose kind is raw.
+ * Text that cannot be parsed counts as holding one. S11 and S14 call this (handover 2).
+ *
+ * @param string $content Stored shortcode text.
+ * @return bool
+ */
+function aafm_wpbakery_content_has_script( string $content ): bool {
+	$tags = aafm_wpbakery_shortcode_tags( $content );
+	if ( null === $tags ) {
+		return true;
+	}
+	$elements = aafm_builder_elements( $content, $tags );
+	if ( null === $elements ) {
+		return true;
+	}
+	$parents = array_column( $elements, 'parent' );
+	foreach ( $elements as $element ) {
+		$tag  = (string) $element['tag'];
+		$name = array_map( 'strval', array_keys( (array) $element['atts'] ) );
+		if ( ! in_array( (int) $element['index'], $parents, true ) && (int) $element['inner_end'] > (int) $element['open_end'] ) {
+			$name[] = 'content';
+		}
+		foreach ( $name as $setting ) {
+			if ( 'css' === $setting || in_array( aafm_wpbakery_param_kind( $tag, array( 'param_name' => $setting ) )['kind'], array( 'design', 'raw' ), true ) ) {
+				return true;
+			}
+		}
+		if ( in_array( $tag, aafm_wpbakery_custom_html_elements(), true ) ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * The refusal for an insert over its limits: depth 6 and 50 elements per call.
+ *
+ * @return WP_Error
+ */
+function aafm_wpbakery_insert_limit_error(): WP_Error {
+	return new WP_Error(
+		'aafm_builder_insert_limit',
+		__( 'One insert may add at most 50 elements, nested at most 6 deep. Split the change into smaller inserts. Nothing was changed.', 'agent-abilities-for-mcp' ),
+		array( 'status' => 400 )
+	);
+}
+
+/**
+ * The refusal for a change that would leave a row or inner row with no column.
+ *
+ * @return WP_Error
+ */
+function aafm_wpbakery_row_needs_column_error(): WP_Error {
+	return new WP_Error(
+		'aafm_builder_row_needs_column',
+		__( 'A row must keep at least one column, so this change would break the layout. Remove or move the whole row instead. Nothing was changed.', 'agent-abilities-for-mcp' ),
+		array( 'status' => 400 )
+	);
+}
+
+/**
+ * Count, depth and tags of a tree of nodes, each a well-formed array{tag,atts?,text?,children?}.
+ *
+ * @param array<int,mixed> $nodes Nodes.
+ * @param int              $depth Depth of these nodes, 1 for the roots.
+ * @param array<string>    $tags  Tags seen, added to.
+ * @return array{count:int,depth:int}|WP_Error aafm_builder_invalid_value for a malformed node.
+ */
+function aafm_wpbakery_tree_stats( array $nodes, int $depth, array &$tags ) {
+	$count = 0;
+	$max   = 0;
+	foreach ( $nodes as $node ) {
+		if ( ! is_array( $node ) || ! is_string( $node['tag'] ?? null ) || 1 !== preg_match( '/^[A-Za-z0-9_\-]+$/', $node['tag'] )
+			|| ! is_array( $node['atts'] ?? array() ) || ! is_array( $node['children'] ?? array() )
+			|| ( isset( $node['text'] ) && ! is_string( $node['text'] ) ) ) {
+			return aafm_builder_error( 'aafm_builder_invalid_value' );
+		}
+		$tags[] = $node['tag'];
+		$inner  = aafm_wpbakery_tree_stats( array_values( (array) ( $node['children'] ?? array() ) ), $depth + 1, $tags );
+		if ( is_wp_error( $inner ) ) {
+			return $inner;
+		}
+		$count += 1 + $inner['count'];
+		$max    = max( $max, $depth, $inner['depth'] );
+	}
+	return array(
+		'count' => $count,
+		'depth' => $max,
+	);
+}
+
+/**
+ * Checks nesting through a tree: each node inside its parent, then its own children inside it.
+ *
+ * @param array<int,array<string,mixed>>    $nodes      Nodes.
+ * @param string                            $parent_tag Parent tag, '' for the top level.
+ * @param array<string,array<string,mixed>> $map        Map entries keyed by tag.
+ * @return true|WP_Error
+ */
+function aafm_wpbakery_tree_nesting( array $nodes, string $parent_tag, array $map ) {
+	foreach ( $nodes as $node ) {
+		$ok = aafm_wpbakery_nesting_allows( $parent_tag, (string) $node['tag'], $map );
+		if ( true === $ok ) {
+			$ok = aafm_wpbakery_tree_nesting( array_values( (array) ( $node['children'] ?? array() ) ), (string) $node['tag'], $map );
+		}
+		if ( is_wp_error( $ok ) ) {
+			return $ok;
+		}
+	}
+	return true;
+}
+
+/**
+ * Serializes untrusted nodes through the encoder (attribute values) and the body text choke point (text, inside
+ * aafm_wpbakery_encode_value()), gating every script kind before it encodes, and predicts each node's outline tuple
+ * from the values it wrote. A node gets a closer when the map makes it a container or gives it a content param
+ * (Ruling R-S9a-0).
+ *
+ * @param array<int,array<string,mixed>>    $nodes   Nodes.
+ * @param array<string,array<string,mixed>> $map     Map entries keyed by tag.
+ * @param array<string>                     $tags    Shortcode names on the page, for the closer check.
+ * @param int                               $depth   Depth of these nodes relative to the insert, 0 for the roots.
+ * @param list<array<string,mixed>>         $tuples  Predicted tuples, appended to.
+ * @return string|WP_Error
+ */
+function aafm_wpbakery_serialize_nodes( array $nodes, array $map, array $tags, int $depth, array &$tuples ) {
+	$out = '';
+	foreach ( $nodes as $node ) {
+		$tag      = (string) $node['tag'];
+		$entry    = $map[ $tag ];
+		$children = array_values( (array) ( $node['children'] ?? array() ) );
+		$params   = array();
+		foreach ( (array) ( $entry['params'] ?? array() ) as $param ) {
+			if ( is_array( $param ) && isset( $param['param_name'] ) && is_string( $param['param_name'] ) ) {
+				$params[ $param['param_name'] ] = $param;
+			}
+		}
+		$set   = (array) ( $node['atts'] ?? array() );
+		$kinds = array();
+		foreach ( array_map( 'strval', array_keys( $set ) ) as $name ) {
+			if ( 1 !== preg_match( '/^[a-z0-9_]+$/', $name ) || 'content' === $name || ! isset( $params[ $name ] ) ) {
+				return aafm_wpbakery_setting_error( 'aafm_builder_attribute_not_writable', $name );
+			}
+			$kind = aafm_wpbakery_param_kind( $tag, $params[ $name ] );
+			if ( ! $kind['writable'] ) {
+				return aafm_wpbakery_setting_error( 'aafm_builder_attribute_not_writable', $name );
+			}
+			$gate = aafm_wpbakery_script_gate( $kind['kind'] );
+			if ( is_wp_error( $gate ) ) {
+				return $gate;
+			}
+			$kinds[ $name ] = $kind['kind'];
+		}
+		$text_kind = null;
+		if ( isset( $node['text'] ) ) {
+			$text_kind = isset( $params['content'] ) && array() === $children ? aafm_wpbakery_param_kind( $tag, $params['content'] ) : null;
+			if ( null === $text_kind || ! $text_kind['writable'] ) {
+				return aafm_wpbakery_setting_error( 'aafm_builder_attribute_not_writable', 'text' );
+			}
+			$gate = aafm_wpbakery_script_gate( $text_kind['kind'] );
+			if ( is_wp_error( $gate ) ) {
+				return $gate;
+			}
+		}
+
+		$atts = array();
+		foreach ( $set as $name => $value ) {
+			$name          = (string) $name;
+			$param         = $params[ $name ];
+			$param['type'] = aafm_wpbakery_param_type( $tag, $name );
+			$encoded       = aafm_wpbakery_encode_value( $kinds[ $name ], $value, $param );
+			if ( is_wp_error( $encoded ) ) {
+				return $encoded;
+			}
+			$atts[ $name ] = $encoded;
+		}
+		// The prediction: each value as shortcode_parse_atts() reads it alone, so a value that leaves its quotes
+		// changes the outline and the commit refuses it.
+		$predicted = array();
+		foreach ( $atts as $name => $encoded ) {
+			$parsed = shortcode_parse_atts( $name . '="' . $encoded . '"' );
+			if ( ! is_array( $parsed ) || array( $name ) !== array_map( 'strval', array_keys( $parsed ) ) ) {
+				return aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $name );
+			}
+			$predicted[ $name ] = $parsed[ $name ];
+		}
+
+		$container = ! empty( $entry['is_container'] ) || isset( $entry['as_parent'] );
+		$inner     = $container || isset( $params['content'] ) ? '' : null;
+		$tuples[]  = array(
+			'tag'          => $tag,
+			'self_closing' => false,
+			'has_closer'   => null !== $inner,
+			'atts'         => $predicted,
+			'depth'        => $depth,
+		);
+		if ( null !== $text_kind ) {
+			$param         = $params['content'];
+			$param['type'] = aafm_wpbakery_param_type( $tag, 'content' );
+			$inner         = aafm_wpbakery_encode_value( $text_kind['kind'], $node['text'], $param );
+			if ( is_wp_error( $inner ) ) {
+				return $inner;
+			}
+			if ( aafm_wpbakery_text_closes_a_tag( $inner, array_merge( $tags, (array) aafm_wpbakery_shortcode_tags( $inner ) ) ) ) {
+				return aafm_builder_error( 'aafm_builder_structure_changed' );
+			}
+		} elseif ( array() !== $children ) {
+			$inner = aafm_wpbakery_serialize_nodes( $children, $map, $tags, $depth + 1, $tuples );
+			if ( is_wp_error( $inner ) ) {
+				return $inner;
+			}
+		}
+		$out .= aafm_builder_serialize( $tag, $atts, $inner, 'wpbakery' );
+	}
+	return $out;
+}
+
+/**
+ * The shared insert path (design WB-4, Ruling B3, handover 2). Checks the limits and every tag against the map,
+ * checks nesting, gates script content, serializes (untrusted) or splices the stored sources (trusted), and saves
+ * through aafm_builder_commit() with a CSS rebuild. The caller has already made the guard call, applied
+ * aafm_builder_ownership_allows() and run aafm_builder_page_check().
+ *
+ * With $trusted_vendor_text the nodes come from aafm_builder_tree() and each root carries source, spliced in byte
+ * for byte; tag and children are read only for the limits, the map, nesting and the script gate. Without it each
+ * atts value is the input form of its kind and goes through the encoder, and text through the body text choke point.
+ *
+ * $anchor is array{index:?int,expect:?array,placement:?string}; all null for an empty post, which also needs empty
+ * content and a type WPBakery's editor is on for (Ruling Q7, B15).
+ *
+ * @param WP_Post                        $post                Post.
+ * @param array<int,array<string,mixed>> $tree                Root nodes.
+ * @param array<string,mixed>            $anchor              Anchor.
+ * @param bool                           $trusted_vendor_text Whether the nodes are stored vendor text.
+ * @return array{post:WP_Post,index:int,fingerprint:string,page_fingerprint:string,inserted:int,restore_revision_id:?int,reversible:bool}|WP_Error
+ */
+function aafm_wpbakery_insert_tree( WP_Post $post, array $tree, array $anchor, bool $trusted_vendor_text ) {
+	$tree    = array_values( $tree );
+	$content = (string) $post->post_content;
+	$seen    = array();
+	$stats   = aafm_wpbakery_tree_stats( $tree, 1, $seen );
+	if ( is_wp_error( $stats ) ) {
+		return $stats;
+	}
+	if ( 0 === $stats['count'] ) {
+		return aafm_builder_error( 'aafm_builder_invalid_value' );
+	}
+	if ( $stats['count'] > 50 || $stats['depth'] > 6 ) {
+		return aafm_wpbakery_insert_limit_error();
+	}
+	if ( $trusted_vendor_text ) {
+		foreach ( $tree as $root ) {
+			if ( ! is_string( $root['source'] ?? null ) ) {
+				return aafm_builder_error( 'aafm_builder_invalid_value' );
+			}
+		}
+	}
+
+	$tags = aafm_wpbakery_shortcode_tags( $content );
+	if ( null === $tags ) {
+		return aafm_builder_error( 'aafm_builder_unparseable' );
+	}
+	$elements = aafm_builder_elements( $content, $tags );
+	if ( null === $elements ) {
+		return aafm_builder_error( 'aafm_builder_unparseable' );
+	}
+	$index     = $anchor['index'] ?? null;
+	$expect    = $anchor['expect'] ?? null;
+	$placement = $anchor['placement'] ?? null;
+	if ( null === $index && null === $expect && null === $placement ) {
+		if ( '' !== trim( $content ) ) {
+			return new WP_Error(
+				'aafm_wpbakery_anchor_required',
+				__( 'Give anchor_index, anchor_expect and placement together. Only an empty post takes an insert without them. Nothing was changed.', 'agent-abilities-for-mcp' ),
+				array( 'status' => 400 )
+			);
+		}
+		$types = aafm_builder_vendor( 'wpbakery_editor_post_types' );
+		try {
+			$on = null !== $types && in_array( $post->post_type, (array) $types(), true );
+		} catch ( Throwable $e ) {
+			$on = false;
+		}
+		if ( ! $on ) {
+			return new WP_Error(
+				'aafm_wpbakery_editor_off',
+				__( 'WPBakery\'s editor is not switched on for this post type for this user, so a WPBakery page cannot be started here. Nothing was changed.', 'agent-abilities-for-mcp' ),
+				array( 'status' => 409 )
+			);
+		}
+		$point = array(
+			'offset' => strlen( $content ),
+			'at'     => count( $elements ),
+			'depth'  => 0,
+			'parent' => null,
+		);
+	} else {
+		if ( ! is_int( $index ) || ! is_array( $expect ) || ! is_string( $placement ) ) {
+			return new WP_Error(
+				'aafm_wpbakery_anchor_required',
+				__( 'Give anchor_index, anchor_expect and placement together. Only an empty post takes an insert without them. Nothing was changed.', 'agent-abilities-for-mcp' ),
+				array( 'status' => 400 )
+			);
+		}
+		$anchor_element = aafm_builder_resolve( $content, $tags, $index, $expect );
+		if ( is_wp_error( $anchor_element ) ) {
+			return $anchor_element;
+		}
+		$point = aafm_builder_anchor_point( $elements, $anchor_element, $placement );
+		if ( is_wp_error( $point ) ) {
+			return $point;
+		}
+	}
+	$parent_tag = null === $point['parent'] ? '' : (string) $elements[ $point['parent'] ]['tag'];
+
+	// Every tag must be in the map; the parent is looked up too, and a parent the map does not know is left out, so
+	// only a fixed rule can place anything inside it.
+	$context = 'vc_grid_item' === $post->post_type ? 'grid' : 'page';
+	$map     = array();
+	foreach ( array_unique( $seen ) as $tag ) {
+		$entry = aafm_wpbakery_map( $context, $tag );
+		if ( is_wp_error( $entry ) ) {
+			return $entry;
+		}
+		$map[ $tag ] = $entry;
+	}
+	if ( '' !== $parent_tag && ! isset( $map[ $parent_tag ] ) ) {
+		$entry = aafm_wpbakery_map( $context, $parent_tag );
+		if ( is_array( $entry ) ) {
+			$map[ $parent_tag ] = $entry;
+		}
+	}
+	$nesting = aafm_wpbakery_tree_nesting( $tree, $parent_tag, $map );
+	if ( is_wp_error( $nesting ) ) {
+		return $nesting;
+	}
+
+	if ( $trusted_vendor_text ) {
+		$text = implode( '', array_column( $tree, 'source' ) );
+		// Ruling B11: stored text that carries a script kind needs unfiltered_html, as typed input would.
+		if ( ! current_user_can( 'unfiltered_html' ) && aafm_wpbakery_content_has_script( $text ) ) {
+			return aafm_builder_error( 'aafm_builder_needs_unfiltered_html' );
+		}
+		$source_tags = aafm_wpbakery_shortcode_tags( $text );
+		$tuples      = null === $source_tags ? null : aafm_builder_walk( $text, $source_tags );
+		if ( null === $tuples || count( $tuples ) !== $stats['count'] ) {
+			return aafm_builder_error( 'aafm_builder_unparseable' );
+		}
+	} else {
+		$tuples = array();
+		$text   = aafm_wpbakery_serialize_nodes( $tree, $map, $tags, 0, $tuples );
+		if ( is_wp_error( $text ) ) {
+			return $text;
+		}
+	}
+
+	$new  = substr( $content, 0, $point['offset'] ) . $text . substr( $content, $point['offset'] );
+	$walk = aafm_builder_walk( $content, (array) aafm_wpbakery_shortcode_tags( $content, $text ) );
+	if ( null === $walk ) {
+		return aafm_builder_error( 'aafm_builder_unparseable' );
+	}
+	$expected = aafm_builder_expected_walk(
+		$walk,
+		array(
+			'op'     => 'insert',
+			'at'     => $point['at'],
+			'depth'  => $point['depth'],
+			'tuples' => $tuples,
+		)
+	);
+	$result   = aafm_builder_commit( $post, $content, $new, $tags, $expected, 'aafm_wpbakery_rebuild_css', 'wpbakery' );
+	if ( is_wp_error( $result ) ) {
+		return $result;
+	}
+	$stored = (string) $result['post']->post_content;
+	$after  = aafm_builder_elements( $stored, (array) aafm_wpbakery_shortcode_tags( $stored ) );
+	$root   = $after[ $point['at'] ] ?? null;
+	return array(
+		'post'                => $result['post'],
+		'index'               => (int) $point['at'],
+		'fingerprint'         => null === $root ? '' : aafm_builder_fingerprint( $stored, $root ),
+		'page_fingerprint'    => $result['page_fingerprint'],
+		'inserted'            => (int) $stats['count'],
+		'restore_revision_id' => $result['restore_revision_id'],
+		'reversible'          => $result['reversible'],
+	);
+}

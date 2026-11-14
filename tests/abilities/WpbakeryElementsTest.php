@@ -1589,4 +1589,217 @@ final class WpbakeryElementsTest extends TestCase {
 		$this->assertStringContainsString( 'Only a user who may post unfiltered HTML can put square brackets, percent-encoded brackets or data-* attributes in body text, and even then text that would add an element is refused.', $row['description'] );
 		$this->assertStringContainsString( 'Only while WPBakery Page Builder is active', $row['description'] );
 	}
+
+	/*
+	 * S9b: insert, move and remove (WB-4, WB-5, WB-6).
+	 */
+
+	private const SIMPLE = '[vc_row][vc_column][vc_column_text]<p>One</p>[/vc_column_text][/vc_column][/vc_row]';
+
+	private const TWO_ROWS = '[vc_row el_id="a"][vc_column][vc_column_text]<p>A</p>[/vc_column_text][/vc_column][/vc_row][vc_row el_id="b"][vc_column][vc_column_text]<p>B</p>[/vc_column_text][/vc_column][/vc_row]';
+
+	private const SECTION = '[vc_section][vc_row][vc_column][vc_column_text]<p>A</p>[/vc_column_text][vc_row_inner][vc_column_inner][vc_column_text]<p>B</p>[/vc_column_text][/vc_column_inner][/vc_row_inner][/vc_column][/vc_row][/vc_section]';
+
+	/**
+	 * The page fingerprint of a post as stored now.
+	 *
+	 * @param int $id Post.
+	 * @return string
+	 */
+	private function page_fp( int $id ): string {
+		return aafm_builder_page_fingerprint( (string) get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
+	/**
+	 * Run the insert with anchor_expect and page_fingerprint filled in.
+	 *
+	 * @param int                 $id        Post.
+	 * @param int|null            $anchor    Anchor index, or null for an empty post.
+	 * @param string              $placement Placement.
+	 * @param array<string,mixed> $element   Element.
+	 * @param string|null         $page      Page fingerprint, or null for the stored one.
+	 * @return array<string,mixed>|WP_Error
+	 */
+	private function insert( int $id, ?int $anchor, string $placement, array $element, ?string $page = null ) {
+		$input = array(
+			'post_id'          => $id,
+			'page_fingerprint' => $page ?? $this->page_fp( $id ),
+			'element'          => $element,
+		);
+		if ( null !== $anchor ) {
+			$input += array(
+				'anchor_index'  => $anchor,
+				'anchor_expect' => $this->expect( $id, $anchor ),
+				'placement'     => $placement,
+			);
+		}
+		return aafm_exec_wpbakery_insert_element( $input );
+	}
+
+	/**
+	 * Run the move with both expects and page_fingerprint filled in.
+	 *
+	 * @param int         $id        Post.
+	 * @param int         $index     Element.
+	 * @param int         $anchor    Anchor.
+	 * @param string      $placement Placement.
+	 * @param string|null $page      Page fingerprint, or null for the stored one.
+	 * @return array<string,mixed>|WP_Error
+	 */
+	private function move( int $id, int $index, int $anchor, string $placement, ?string $page = null ) {
+		return aafm_exec_wpbakery_move_element(
+			array(
+				'post_id'          => $id,
+				'page_fingerprint' => $page ?? $this->page_fp( $id ),
+				'index'            => $index,
+				'expect'           => $this->expect( $id, $index ),
+				'anchor_index'     => $anchor,
+				'anchor_expect'    => $this->expect( $id, $anchor ),
+				'placement'        => $placement,
+			)
+		);
+	}
+
+	/**
+	 * Run the remove with expect and page_fingerprint filled in.
+	 *
+	 * @param int                       $id     Post.
+	 * @param int                       $index  Element.
+	 * @param string|null               $page   Page fingerprint, or null for the stored one.
+	 * @param array<string,string>|null $expect Expect, or null for the stored one.
+	 * @return array<string,mixed>|WP_Error
+	 */
+	private function remove( int $id, int $index, ?string $page = null, ?array $expect = null ) {
+		return aafm_exec_wpbakery_remove_element(
+			array(
+				'post_id'          => $id,
+				'page_fingerprint' => $page ?? $this->page_fp( $id ),
+				'index'            => $index,
+				'expect'           => $expect ?? $this->expect( $id, $index ),
+			)
+		);
+	}
+
+	/**
+	 * A text block node.
+	 *
+	 * @param string $text Text.
+	 * @return array<string,mixed>
+	 */
+	private static function text_block( string $text ): array {
+		return array(
+			'tag'  => 'vc_column_text',
+			'text' => $text,
+		);
+	}
+
+	/**
+	 * The stored outline's tags in order.
+	 *
+	 * @param int $id Post.
+	 * @return array<string>
+	 */
+	private function tags_of( int $id ): array {
+		$content = (string) get_post_field( 'post_content', $id, 'raw' );
+		return array_column( (array) aafm_builder_elements( $content, (array) aafm_wpbakery_shortcode_tags( $content ) ), 'tag' );
+	}
+
+	/**
+	 * Makes the editor seam answer the given post types.
+	 *
+	 * @param array<string> $types Types.
+	 * @return callable The filter, to remove.
+	 */
+	private function editor_types( array $types ): callable {
+		$filter = static function ( $resolved, string $entry ) use ( $types ) {
+			return 'wpbakery_editor_post_types' === $entry ? static fn(): array => $types : $resolved;
+		};
+		add_filter( 'aafm_builder_vendor', $filter, 20, 2 );
+		return $filter;
+	}
+
+	public function test_nesting_allows_the_fixed_rules_and_reads_the_map_for_other_containers(): void {
+		$map = WpbakeryMapStub::map() + array(
+			'acme_tabs' => array( 'as_parent' => array( 'only' => 'acme_tab' ) ),
+			'acme_tab'  => array( 'as_child' => array( 'only' => 'acme_tabs' ) ),
+		);
+		foreach ( array( array( '', 'vc_row' ), array( '', 'vc_section' ), array( 'vc_section', 'vc_row' ), array( 'vc_row', 'vc_column' ), array( 'vc_column', 'vc_column_text' ), array( 'vc_column', 'vc_row_inner' ), array( 'vc_row_inner', 'vc_column_inner' ), array( 'vc_column_inner', 'vc_column_text' ), array( 'acme_tabs', 'acme_tab' ) ) as list( $parent, $child ) ) {
+			$this->assertTrue( aafm_wpbakery_nesting_allows( $parent, $child, $map ), "$parent > $child" );
+		}
+		foreach ( array( array( '', 'vc_column' ), array( 'vc_row', 'vc_column_text' ), array( 'vc_column_inner', 'vc_row_inner' ), array( 'vc_column_text', 'vc_column_text' ), array( 'acme_tabs', 'vc_column_text' ), array( 'vc_column', 'acme_tab' ), array( 'acme_unread', 'vc_column_text' ) ) as list( $parent, $child ) ) {
+			$out = aafm_wpbakery_nesting_allows( $parent, $child, $map );
+			$this->assert_error( $out, 'aafm_builder_invalid_nesting', 400 );
+			$this->assertSame( $child, $out->get_error_data()['child'] );
+			$this->assertStringContainsString( $child, $out->get_error_message() );
+		}
+	}
+
+	public function test_content_has_script_finds_every_script_kind(): void {
+		$this->assertFalse( aafm_wpbakery_content_has_script( self::SIMPLE ) );
+		foreach ( array(
+			'[vc_raw_html]PGI+[/vc_raw_html]',
+			'[vc_raw_js]PGI+[/vc_raw_js]',
+			'[vc_gmaps title="Map"]',
+			'[wpb_btn title="Go" custom_onclick="true"]',
+			'[wpb_btn title="Go" btn_custom_onclick_code="alert(1)"]',
+			'[vc_column_text css=".vc_custom_1{margin:0 !important;}"]x[/vc_column_text]',
+			'[acme_embed code="x"]',
+		) as $source ) {
+			$this->assertTrue( aafm_wpbakery_content_has_script( $source ), $source );
+		}
+	}
+
+	public function test_insert_tree_keeps_stored_attribute_text_when_trusted(): void {
+		$source = '[vc_row gap="0px"][vc_column width="1/2"][vc_custom_heading text="Say ``hi`` `{`x`}`"  ][vc_column_text]
+
+<p>Kept</p>
+
+[/vc_column_text][/vc_column][/vc_row]';
+		$tree   = aafm_builder_tree( $source, (array) aafm_wpbakery_shortcode_tags( $source ) );
+		$id     = $this->page( self::SIMPLE );
+		$this->acting_as( 'editor' );
+		$content = (string) get_post_field( 'post_content', $id, 'raw' );
+		$out     = aafm_wpbakery_insert_tree(
+			get_post( $id ),
+			$tree,
+			array(
+				'index'     => 0,
+				'expect'    => $this->expect( $id, 0 ),
+				'placement' => 'after',
+			),
+			true
+		);
+		$this->assertIsArray( $out );
+		$this->assertSame( $content . $source, get_post_field( 'post_content', $id, 'raw' ) );
+		$this->assertSame( 4, $out['inserted'] );
+		$this->assertSame( 3, $out['index'] );
+	}
+
+	public function test_insert_tree_still_gates_script_content_when_trusted(): void {
+		foreach ( array(
+			'[vc_raw_html]PGI+[/vc_raw_html]',
+			'[vc_raw_js]PGI+[/vc_raw_js]',
+			'[vc_gmaps title="Map"]',
+			'[wpb_btn title="Go" custom_onclick="true"]',
+			'[wpb_btn title="Go" btn_custom_onclick_code="alert(1)"]',
+			'[vc_column_text css=".vc_custom_1{margin:0 !important;}"]x[/vc_column_text]',
+			'[acme_embed code="x"]',
+		) as $element ) {
+			$source = '[vc_row][vc_column]' . $element . '[/vc_column][/vc_row]';
+			$id     = $this->page( self::SIMPLE );
+			$this->act_as_restricted_editor();
+			$out = aafm_wpbakery_insert_tree(
+				get_post( $id ),
+				(array) aafm_builder_tree( $source, (array) aafm_wpbakery_shortcode_tags( $source ) ),
+				array(
+					'index'     => 0,
+					'expect'    => $this->expect( $id, 0 ),
+					'placement' => 'after',
+				),
+				true
+			);
+			$this->assert_refused( $out, 'aafm_builder_needs_unfiltered_html', 403, $id, self::SIMPLE );
+		}
+	}
+
 }

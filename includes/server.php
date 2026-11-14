@@ -490,15 +490,23 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/tec-get-organizer':
 			return static fn(): bool => current_user_can( 'read' );
 
-		// Avada (added 1.7.4): both abilities gate per-object on aafm_can_edit_post_object() via
-		// aafm_perm_avada_post_object() (includes/abilities/avada.php) - false with empty input,
-		// the same shape as update-post/replace-in-post, so both need the identical
-		// aafm_can_edit_post_family() floor.
+		// Avada (added 1.7.4) and WPBakery (1.11.3): these gate per-object on
+		// aafm_can_edit_post_object() via aafm_perm_avada_post_object() (includes/abilities/avada.php),
+		// which resolves the post type's own edit cap, so a post OR a page the caller can edit
+		// passes. The floor is therefore the post family OR the page floor update-page already
+		// derives from the page post type object (reused, not copied), so a role holding
+		// edit_pages without edit_posts still sees the tools it can call.
 		case 'aafm/avada-get-page-content':
 		case 'aafm/avada-replace-text':
 		case 'aafm/wpbakery-get-page-content':
 		case 'aafm/wpbakery-replace-text':
-			return static fn(): bool => aafm_can_edit_post_family();
+			return static function (): bool {
+				if ( aafm_can_edit_post_family() ) {
+					return true;
+				}
+				$page_floor = aafm_ability_list_permission( 'aafm/update-page' );
+				return null !== $page_floor && (bool) $page_floor();
+			};
 
 		// GeoDirectory (added 1.7.4, default-off): gd_place registers with the literal
 		// 'capability_type' => 'post', so its mapped caps are the SAME primitive names as the

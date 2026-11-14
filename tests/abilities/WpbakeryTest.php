@@ -687,4 +687,39 @@ WPB;
 			(string) aafm_build_activity_detail( 'aafm/wpbakery-replace-text', array( 'post_id' => 42 ) )
 		);
 	}
+
+	public function test_discovery_lists_the_builder_page_tools_to_a_page_only_editor(): void {
+		add_role(
+			'aafm_page_only_editor',
+			'Page only editor',
+			array(
+				'read'                 => true,
+				'edit_pages'           => true,
+				'edit_published_pages' => true,
+			)
+		);
+		add_role( 'aafm_reader_only', 'Reader only', array( 'read' => true ) );
+		try {
+			$page_editor = self::factory()->user->create( array( 'role' => 'aafm_page_only_editor' ) );
+			$reader      = self::factory()->user->create( array( 'role' => 'aafm_reader_only' ) );
+			$page        = $this->make_page( self::PAGE, $page_editor );
+
+			wp_set_current_user( $page_editor );
+			$this->assertFalse( current_user_can( 'edit_posts' ) );
+			$this->assertTrue( aafm_perm_avada_post_object( array( 'post_id' => $page ) ), 'The page only editor can call the tools on their page.' );
+			foreach ( array( 'aafm/wpbakery-get-page-content', 'aafm/wpbakery-replace-text', 'aafm/avada-get-page-content', 'aafm/avada-replace-text' ) as $name ) {
+				$check = aafm_ability_list_permission( $name );
+				$this->assertIsCallable( $check );
+				$this->assertTrue( $check(), $name . ' is listed for a user who can call it on a page.' );
+			}
+
+			wp_set_current_user( $reader );
+			foreach ( array( 'aafm/wpbakery-get-page-content', 'aafm/wpbakery-replace-text', 'aafm/avada-get-page-content', 'aafm/avada-replace-text' ) as $name ) {
+				$this->assertFalse( aafm_ability_list_permission( $name )(), $name . ' stays hidden from a user who can edit nothing.' );
+			}
+		} finally {
+			remove_role( 'aafm_page_only_editor' );
+			remove_role( 'aafm_reader_only' );
+		}
+	}
 }

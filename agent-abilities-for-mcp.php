@@ -457,6 +457,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/builder-shortcodes.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/avada.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/avada-elements.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/avada-site.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/wpbakery.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/wpbakery-elements.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/wpbakery-site.php';

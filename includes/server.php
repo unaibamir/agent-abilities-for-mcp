@@ -502,6 +502,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/avada-insert-element':
 		case 'aafm/avada-move-element':
 		case 'aafm/avada-remove-element':
+		case 'aafm/avada-insert-library-item':
 		case 'aafm/wpbakery-get-page-content':
 		case 'aafm/wpbakery-replace-text':
 		case 'aafm/wpbakery-update-element':

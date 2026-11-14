@@ -447,6 +447,10 @@ function aafm_integration_ability_order(): array {
 				'name' => 'aafm/avada-remove-element',
 				'risk' => 'destructive',
 			),
+			array(
+				'name' => 'aafm/avada-insert-library-item',
+				'risk' => 'write',
+			),
 		),
 		'wpbakery'      => array(
 			array(

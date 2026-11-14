@@ -451,6 +451,17 @@ final class WpbakeryElementsTest extends TestCase {
 		$this->assertSame( "one\r\ntwo", $this->encode( 'vc_custom_heading', 'text', 'one&#10;two' ) );
 	}
 
+	/**
+	 * R2-2: the safe-text form and the URL check read the decoded value.
+	 */
+	public function test_safe_text_checks_the_decoded_value(): void {
+		foreach ( array( 'javascript&#58;alert(1)', 'jav&#97;script:alert(1)' ) as $link ) {
+			$this->assert_error( $this->encode( 'vc_gallery', 'custom_links', array( $link ) ), 'aafm_builder_invalid_value', 400 );
+		}
+		$this->assertStringStartsWith( '#E-8_', (string) $this->encode( 'vc_gallery', 'custom_links', array( '&#104;ttps://example.com/x' ) ) );
+		$this->assertSame( 'https://example.com/x', aafm_wpbakery_decode_value( (string) $this->encode( 'vc_gallery', 'custom_links', array( '&#104;ttps://example.com/x' ) ), 'exploded_textarea_safe' ) );
+	}
+
 	public function test_text_refuses_a_line_break_and_a_pre_encoded_value(): void {
 		$this->assert_error( $this->encode( 'wpb_btn', 'title', "two\nlines" ), 'aafm_builder_invalid_value', 400 );
 		$this->assert_error( $this->encode( 'wpb_btn', 'title', '#E-8_PHNjcmlwdD4=' ), 'aafm_builder_invalid_value', 400 );

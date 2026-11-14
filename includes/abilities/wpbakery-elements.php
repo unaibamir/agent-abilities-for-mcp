@@ -571,7 +571,12 @@ function aafm_wpbakery_encode_safe_text( $value, bool $exploded ): ?string {
 		}
 		$value = implode( ',', $value );
 	}
-	if ( ! is_string( $value ) || 0 === strpos( $value, '#E-8_' ) ) {
+	if ( ! is_string( $value ) ) {
+		return null;
+	}
+	// Decoded first, so the encoded-value check, the scheme check and the #E-8_ choice see what the editor saves.
+	$value = aafm_wpbakery_decode_entities( $value );
+	if ( 0 === strpos( $value, '#E-8_' ) ) {
 		return null;
 	}
 	$text = wp_strip_all_tags( $exploded ? (string) preg_replace( '/\r\n|\r|\n/', ',', $value ) : $value );

@@ -338,7 +338,7 @@ final class DescriptionTruthSweepTest extends TestCase {
 	public function test_no_avada_text_uses_a_spaced_hyphen_as_a_dash(): void {
 		$checked = 0;
 		foreach ( $this->texts() as $name => $texts ) {
-			if ( 0 !== strncmp( $name, 'aafm/avada-', 11 ) ) {
+			if ( 0 !== strncmp( $name, 'aafm/avada-', 11 ) && 0 !== strncmp( $name, 'aafm/wpbakery-', 14 ) ) {
 				continue;
 			}
 			foreach ( $texts as $where => $text ) {

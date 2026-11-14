@@ -1325,18 +1325,19 @@ final class AvadaTest extends TestCase {
 		$this->assertTrue( aafm_avada_theme_active() );
 	}
 
-	public function test_page_options_are_refused_on_a_slide_until_the_type_is_allowed(): void {
+	public function test_page_options_are_read_on_a_slide_once_the_type_is_allowed(): void {
 		$this->force_avada_theme( true );
 		register_post_type( 'slide', array( 'public' => true ) );
 		$id = $this->post_with_page_options( array( 'post_type' => 'slide' ) );
 
 		$out = $this->read_page_options( $id );
+		$this->assertTrue( aafm_avada_page_options_post_allowed( get_post( $id ), false ) );
 		unregister_post_type( 'slide' );
 
-		$this->assertInstanceOf( WP_Error::class, $out );
-		$this->assertSame( 'aafm_not_avada_owned', $out->get_error_code() );
-		$this->assertSame( 409, $out->get_error_data()['status'] );
-		$this->assertArrayHasKey( 'caption_1', aafm_avada_page_option_keys(), 'The slide ids stay in the list, unreachable (R3-PR2-13).' );
+		$this->assertIsArray( $out, 'The slide types joined after the S14 slide evidence (R3-PR2-13).' );
+		$this->assertArrayHasKey( 'page_options', $out );
+		$this->assertArrayHasKey( 'caption_1', aafm_avada_page_option_keys() );
+		$this->assertFalse( aafm_avada_page_options_post_allowed( get_post( $id ), 'elementor' ), 'A slide another builder owns is still refused.' );
 	}
 
 	public function test_page_options_are_refused_on_an_elementor_page(): void {

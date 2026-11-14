@@ -929,15 +929,15 @@ final class AvadaSiteTest extends TestCase {
 		$this->assertFalse( metadata_exists( 'post', $elementor, '_fusion' ) );
 	}
 
-	public function test_page_options_are_refused_on_a_slide_post_until_s14_allows_the_type(): void {
+	public function test_page_options_are_written_on_a_slide_post_now_s14_allows_the_type(): void {
 		$this->force_avada_theme( true );
 		$this->act_as_admin();
 		register_post_type( 'slide', array( 'public' => true ) );
 		$id  = self::factory()->post->create( array( 'post_type' => 'slide' ) );
-		$out = $this->page_options( $id, array( 'set' => array( 'caption_1' => 'x' ) ) );
+		$out = $this->page_options( $id, array( 'set' => array( 'caption' => 'x' ) ) );
 		unregister_post_type( 'slide' );
-		$this->assert_error( $out, 'aafm_not_avada_owned', 409 );
-		$this->assertFalse( metadata_exists( 'post', $id, '_fusion' ) );
+		$this->assertIsArray( $out, 'The slide types joined after the S14 slide evidence (R3-PR2-13).' );
+		$this->assertSame( 'x', get_post_meta( $id, '_fusion', true )['caption'] );
 	}
 
 	public function test_a_section_needs_manage_options(): void {

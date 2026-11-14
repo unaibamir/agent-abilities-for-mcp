@@ -938,4 +938,40 @@ final class BuilderAddonsTest extends TestCase {
 		}
 		$this->assertStringContainsString( 'first read', $row['description'] );
 	}
+
+	public function test_page_options_work_on_a_slide_post_once_the_type_is_allowed(): void {
+		$name = static fn(): string => 'fusion_options';
+		$seam = static fn( $resolved, string $entry ) => 'avada_option_name' === $entry ? $name : $resolved;
+		add_filter( 'aafm_builder_vendor', $seam, 30, 2 );
+		add_filter( 'aafm_integration_active_avada', '__return_true' );
+		register_post_type( 'slide', array( 'public' => true ) );
+		register_post_type( 'themefusion_elastic', array( 'public' => true ) );
+		$this->acting_as( 'administrator' );
+		$slide   = self::factory()->post->create( array( 'post_type' => 'slide' ) );
+		$elastic = self::factory()->post->create( array( 'post_type' => 'themefusion_elastic' ) );
+		$out     = aafm_exec_avada_update_page_options(
+			array(
+				'post_id' => $slide,
+				'set'     => array(
+					'heading'   => 'Slide heading',
+					'link_type' => 'button',
+				),
+			)
+		);
+		$this->assertIsArray( $out );
+		$this->assertSame( array( 'heading', 'link_type' ), $out['changed'] );
+		$this->assertSame( 'Slide heading', get_post_meta( $slide, '_fusion', true )['heading'] );
+		$this->assertIsArray(
+			aafm_exec_avada_update_page_options(
+				array(
+					'post_id' => $elastic,
+					'set'     => array( 'caption_1' => 'Elastic caption' ),
+				)
+			)
+		);
+		$this->assertSame( 'Elastic caption', get_post_meta( $elastic, '_fusion', true )['caption_1'] );
+		remove_filter( 'aafm_builder_vendor', $seam, 30 );
+		remove_filter( 'aafm_integration_active_avada', '__return_true' );
+		unregister_post_type( 'themefusion_elastic' );
+	}
 }

@@ -58,7 +58,7 @@ function aafm_avada_registry_definitions(): array {
 	return array(
 		'aafm/avada-get-page-content'   => array(
 			'label'        => __( 'Get Avada page content', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads the raw post content of an Avada/Fusion Builder page, unchanged. Fusion Builder shortcodes are returned exactly as stored, never rendered or stripped. Also returns is_avada_owned, true when Avada owns the content or the post is one of Avada\'s own types, and affects when an edit to this post reaches other pages (a layout section or a global library element). With include_structure it also returns an outline of the Fusion Builder elements (tag, nesting depth, attributes as stored and as Avada reads them, the inner text of an element with no child element, the library item id of a global element, and a fingerprint per element) plus a page fingerprint, to find the element that holds the text before calling avada-replace-text. The outline stops at 2,000 elements. With include_page_options it also returns the page CSS and the stored page options from a fixed list of layout, title bar, sidebar, slider, header, footer, off canvas, form appearance, steps and confirmation, SEO and template settings; form notification, submission and privacy settings and code fields are never returned. Page options are read only while the Avada theme is active, on an Avada page, one of Avada\'s own types, or a page, post or portfolio item that no other builder owns. Requires edit access to the post; layout sections are open only to users who can manage site options. Avada\'s Role Manager is not applied. Only while Avada is active.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Reads the raw post content of an Avada/Fusion Builder page, unchanged. Fusion Builder shortcodes are returned exactly as stored, never rendered or stripped. Also returns is_avada_owned, true when Avada owns the content or the post is one of Avada\'s own types, and affects when an edit to this post reaches other pages (a layout section or a global library element). With include_structure it also returns an outline of the Fusion Builder elements (tag, nesting depth, attributes as stored and as Avada reads them, the inner text of an element with no child element, the library item id of a global element, and a fingerprint per element) plus a page fingerprint, to find the element that holds the text before calling avada-replace-text. The outline stops at 2,000 elements. With include_page_options it also returns the page CSS and the stored page options from a fixed list of layout, title bar, sidebar, slider, header, footer, off canvas, form appearance, steps and confirmation, SEO and template settings; form notification, submission and privacy settings and code fields are never returned. Page options are read only while the Avada theme is active, on an Avada page, one of Avada\'s own types, or a page, post, portfolio item, Avada Slider slide or Elastic Slider slide that no other builder owns. Requires edit access to the post; layout sections are open only to users who can manage site options. Avada\'s Role Manager is not applied. Only while Avada is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'avada',
@@ -187,7 +187,7 @@ function aafm_args_avada_get_page_content(): array {
 				'include_page_options' => array(
 					'type'        => 'boolean',
 					'default'     => false,
-					'description' => __( 'When true, also returns custom_css (the page CSS) and page_options (the stored Avada page options, limited to a fixed list). Needs the Avada theme active, and a post Avada owns, one of Avada\'s own types, or a page, post or portfolio item that no other builder owns.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'When true, also returns custom_css (the page CSS) and page_options (the stored Avada page options, limited to a fixed list). Needs the Avada theme active, and a post Avada owns, one of Avada\'s own types, or a page, post, portfolio item, Avada Slider slide or Elastic Slider slide that no other builder owns.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id' ),
@@ -526,9 +526,10 @@ function aafm_avada_theme_active(): bool {
 
 /**
  * Whether a post's page options may be read (and, in S12, written) (Ruling B7). Page options are not
- * builder content, so the post may be one Avada owns, one of Avada's own types, or a page, post or
- * portfolio item no other builder owns. A post another builder owns is refused. The slide types join
- * only after their own evidence (Ruling R3-PR2-13).
+ * builder content, so the post may be one Avada owns, one of Avada's own types, or a page, post,
+ * portfolio item, Avada Slider slide or Elastic Slider slide no other builder owns. A post another
+ * builder owns is refused. The two slide types joined after every slide id round-tripped on a real
+ * slide (Ruling R3-PR2-13, scratchpad/1113/s14-vendor/ev/slide-roundtrip.log).
  *
  * @param WP_Post      $post         Post.
  * @param string|false $guard_answer aafm_post_has_foreign_builder_ownership() as the caller read it.
@@ -539,7 +540,7 @@ function aafm_avada_page_options_post_allowed( WP_Post $post, $guard_answer ): b
 		return true;
 	}
 	return false === $guard_answer
-		&& in_array( $post->post_type, array_merge( aafm_builder_own_post_types( 'avada' ), array( 'page', 'post', 'avada_portfolio' ) ), true );
+		&& in_array( $post->post_type, array_merge( aafm_builder_own_post_types( 'avada' ), array( 'page', 'post', 'avada_portfolio', 'slide', 'themefusion_elastic' ) ), true );
 }
 
 /**
@@ -550,8 +551,8 @@ function aafm_avada_page_options_post_allowed( WP_Post $post, $guard_answer ): b
  * (design AV-9, Ruling R3-P1; redirect_url is the link kind). Never a form notification, submission,
  * privacy, general or Studio setting, a code field, a notice or a button. Built by hand from
  * themes/Avada/includes/metaboxes/ (scratchpad/1113/s8b-page-option-ids.md); a fixed list, never a
- * prefix scan. The slide ids stay unreachable until aafm_avada_page_options_post_allowed() admits the
- * slide types (Ruling R3-PR2-13).
+ * prefix scan. The slide ids are reachable on slide and themefusion_elastic posts, which
+ * aafm_avada_page_options_post_allowed() admits (Ruling R3-PR2-13).
  *
  * @return array<string,string> Option id to type.
  */

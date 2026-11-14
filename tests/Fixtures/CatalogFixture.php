@@ -125,6 +125,8 @@ final class CatalogFixture {
 		'aafm/wpbakery-get-page-content',
 		'aafm/wpbakery-list-elements',
 		'aafm/wpbakery-list-templates',
+		'aafm/wpbakery-get-settings',
+		'aafm/avada-list-studio-items',
 		'aafm/geodirectory-get-listings',
 		'aafm/geodirectory-get-listing',
 	);
@@ -240,6 +242,10 @@ final class CatalogFixture {
 		'aafm/avada-insert-library-item',
 		'aafm/avada-update-page-css',
 		'aafm/avada-update-page-options',
+		'aafm/wpbakery-update-settings',
+		'aafm/avada-update-global-options',
+		'aafm/avada-update-layout',
+		'aafm/avada-import-studio-item',
 		'aafm/geodirectory-create-listing',
 		'aafm/geodirectory-update-listing',
 	);
@@ -266,6 +272,9 @@ final class CatalogFixture {
 	 * delete-menu and delete-menu-item are permanent: navigation menus and their items have no
 	 * Trash, so removing a menu (and every item inside it) or a single item cannot be undone, and
 	 * the agent is told so.
+	 *
+	 * wpbakery-update-settings, avada-update-global-options and avada-update-layout are destructive on the same basis as
+	 * update-site-settings (Ruling R-S13-1): each overwrites site-wide settings with no per-setting undo, and returns previous.
 	 *
 	 * wc-delete-product is permanent: it removes a WooCommerce product through the WC data store
 	 * (bypassing the Trash), so the agent is told the removal cannot be undone. wc-delete-product-
@@ -298,5 +307,8 @@ final class CatalogFixture {
 		'aafm/undo-change',
 		'aafm/wpbakery-remove-element',
 		'aafm/avada-remove-element',
+		'aafm/wpbakery-update-settings',
+		'aafm/avada-update-global-options',
+		'aafm/avada-update-layout',
 	);
 }

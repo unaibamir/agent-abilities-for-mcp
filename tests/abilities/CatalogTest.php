@@ -68,7 +68,10 @@ final class CatalogTest extends TestCase {
 		// structural writes (aafm/avada-insert-element, aafm/avada-move-element, aafm/avada-remove-element), making 203,
 		// plus the three 1.11.3 WPBakery site tools (aafm/wpbakery-list-templates, aafm/wpbakery-insert-template,
 		// aafm/wpbakery-update-page-code), making 206, plus the three 1.11.3 Avada site writes
-		// (aafm/avada-insert-library-item, aafm/avada-update-page-css, aafm/avada-update-page-options), making 209.
+		// (aafm/avada-insert-library-item, aafm/avada-update-page-css, aafm/avada-update-page-options), making 209,
+		// plus the six 1.11.3 site-wide and Studio tools (aafm/wpbakery-get-settings, aafm/wpbakery-update-settings,
+		// aafm/avada-update-global-options, aafm/avada-update-layout, aafm/avada-list-studio-items,
+		// aafm/avada-import-studio-item), making 215.
 		add_filter( 'aafm_integration_active_yoast', '__return_true' );
 		add_filter( 'aafm_integration_active_rankmath', '__return_true' );
 		add_filter( 'aafm_integration_active_aioseo', '__return_true' );
@@ -84,7 +87,7 @@ final class CatalogTest extends TestCase {
 	}
 
 	/**
-	 * Enable the entire catalog (all 209) and register categories + abilities.
+	 * Enable the entire catalog (all 215) and register categories + abilities.
 	 */
 	private function register_whole_catalog(): void {
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
@@ -116,9 +119,9 @@ final class CatalogTest extends TestCase {
 	public function test_registry_has_the_exact_expected_count(): void {
 		$registry = aafm_get_abilities_registry();
 		$this->assertCount(
-			209,
+			215,
 			$registry,
-			'The catalog must contain exactly 209 abilities - 102 reads + 107 writes.'
+			'The catalog must contain exactly 215 abilities - 104 reads + 111 writes.'
 		);
 	}
 
@@ -158,7 +161,7 @@ final class CatalogTest extends TestCase {
 		// Every catalog key is one of the known names - no stray ability slipped in.
 		$known = array_merge( self::READS, self::WRITES );
 		foreach ( array_keys( $registry ) as $name ) {
-			$this->assertContains( $name, $known, $name . ' is not one of the 209 sanctioned abilities.' );
+			$this->assertContains( $name, $known, $name . ' is not one of the 215 sanctioned abilities.' );
 		}
 
 		// And every group is one of exactly two values.
@@ -172,9 +175,9 @@ final class CatalogTest extends TestCase {
 
 		// reads + writes accounts for the whole catalog.
 		$this->assertSame(
-			209,
+			215,
 			count( self::READS ) + count( self::WRITES ),
-			'reads(102) + writes(107) must equal the full catalog (209).'
+			'reads(104) + writes(111) must equal the full catalog (215).'
 		);
 	}
 

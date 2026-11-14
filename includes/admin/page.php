@@ -1621,15 +1621,33 @@ function aafm_activity_log_headers(): array {
  * a short key-shaped string, never its message, so there is no free text to strip beyond that.
  *
  * @param array<int,array<string,mixed>> $rows Rows from aafm_query_activity().
- * @return array<int,array{id:int,time:string,principal:string,connection:string,ability:string,detail:string,detail_link:?array<string,mixed>,status:string,variant:string,duration:string,ip:string,arg_keys:string}>
+ * @return array<int,array{id:int,time:string,time_title:string,principal:string,connection:string,ability:string,detail:string,detail_link:?array<string,mixed>,status:string,variant:string,duration:string,ip:string,arg_keys:string}>
  */
 function aafm_activity_rows_data( array $rows ): array {
 	$names = aafm_activity_connection_names( array_column( $rows, 'client_id' ) );
 	$out   = array();
 	foreach ( $rows as $row ) {
-		$out[] = aafm_activity_row_view( $row, $names );
+		$view               = aafm_activity_row_view( $row, $names );
+		$view['time_title'] = aafm_activity_time_title( $view['time'] );
+		$out[]              = $view;
 	}
 	return $out;
+}
+
+/**
+ * The log time cell's title: the stored UTC time plus the same moment in the site's timezone, so
+ * the PHP rows and the script-built rows (paging, Live) show one preformatted value.
+ *
+ * @param string $utc Stored UTC datetime.
+ * @return string '' for an empty value; the value alone when it cannot be read as a date.
+ */
+function aafm_activity_time_title( string $utc ): string {
+	$local = aafm_format_admin_datetime( $utc );
+	if ( '' === $local || $local === $utc ) {
+		return $utc;
+	}
+	/* translators: 1: stored UTC date and time, 2: the same moment in the site's timezone. */
+	return sprintf( __( '%1$s UTC, %2$s site time', 'agent-abilities-for-mcp' ), $utc, $local );
 }
 
 /**
@@ -3107,7 +3125,7 @@ function aafm_activity_rows_html( array $rows, bool $filtered = false ): string 
 		$v     = aafm_activity_row_view( $row, $names );
 		$html .= sprintf(
 			// The short columns clip with an ellipsis, so each carries its full text as a title.
-			'<tr><td>%1$s</td><td title="%2$s">%2$s</td><td title="%3$s">%3$s</td><td title="%4$s">%4$s</td><td class="aafm-log-detail%12$s" title="%13$s"><span class="aafm-log-detail-text">%5$s</span></td><td><span class="aafm-pill aafm-pill-%6$s aafm-status aafm-status-%7$s">%8$s</span></td><td>%9$s</td><td title="%10$s">%10$s</td><td title="%11$s">%11$s</td></tr>',
+			'<tr><td title="%14$s">%1$s</td><td title="%2$s">%2$s</td><td title="%3$s">%3$s</td><td title="%4$s">%4$s</td><td class="aafm-log-detail%12$s" title="%13$s"><span class="aafm-log-detail-text">%5$s</span></td><td><span class="aafm-pill aafm-pill-%6$s aafm-status aafm-status-%7$s">%8$s</span></td><td>%9$s</td><td title="%10$s">%10$s</td><td title="%11$s">%11$s</td></tr>',
 			esc_html( $v['time'] ),
 			esc_html( $v['principal'] ),
 			esc_html( $v['connection'] ),
@@ -3120,7 +3138,8 @@ function aafm_activity_rows_html( array $rows, bool $filtered = false ): string 
 			esc_html( $v['ip'] ),
 			esc_html( $v['arg_keys'] ),
 			1 === preg_match( '/^\s*[\[{]/', (string) $v['detail'] ) ? ' is-json' : '',
-			esc_attr( (string) $v['detail'] )
+			esc_attr( (string) $v['detail'] ),
+			esc_attr( aafm_activity_time_title( $v['time'] ) )
 		);
 	}
 	return $html;

@@ -3019,7 +3019,10 @@
 					return td;
 				};
 
-				tr.append( cell( row.time ) );
+				// The title carries the site-local time, preformatted by the server: no date maths here.
+				const timeTd = cell( row.time );
+				timeTd.title = row.time_title ?? timeTd.textContent;
+				tr.append( timeTd );
 				tr.append( cell( row.principal ) );
 				tr.append( cell( row.connection ) );
 				tr.append( cell( row.ability ) );

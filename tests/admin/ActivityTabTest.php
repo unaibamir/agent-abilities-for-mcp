@@ -550,4 +550,65 @@ final class ActivityTabTest extends TestCase {
 		$this->assertStringContainsString( '<button type="button" class="aafm-btn aafm-btn-danger" id="aafm-clear-log">', $html );
 		$this->assertMatchesRegularExpression( '/class="aafm-btn aafm-btn-secondary" id="aafm-export-log"/', $html );
 	}
+
+	public function test_log_rows_carry_a_time_title_with_the_site_local_time(): void {
+		update_option( 'timezone_string', 'Asia/Karachi' );
+		$row  = array(
+			'created_at' => '2026-11-14 10:00:00',
+			'ability'    => 'aafm/get-post',
+			'status'     => 'success',
+		);
+		$data = aafm_activity_rows_data( array( $row ) );
+		$this->assertSame( aafm_activity_time_title( '2026-11-14 10:00:00' ), $data[0]['time_title'] );
+		$this->assertStringContainsString( '2026-11-14 10:00:00 UTC', $data[0]['time_title'] );
+		$this->assertStringContainsString( aafm_format_admin_datetime( '2026-11-14 10:00:00' ), $data[0]['time_title'] );
+		$this->assertStringContainsString( '3:00', $data[0]['time_title'], 'Karachi is UTC+5.' );
+	}
+
+	public function test_php_and_ajax_rows_give_the_same_time_title(): void {
+		update_option( 'timezone_string', 'Europe/Berlin' );
+		$rows = array(
+			array(
+				'created_at' => '2026-06-01 08:30:00',
+				'ability'    => 'aafm/get-post',
+				'status'     => 'success',
+			),
+			array(
+				'created_at' => '',
+				'ability'    => 'aafm/get-post',
+				'status'     => 'error',
+			),
+		);
+		$data = aafm_activity_rows_data( $rows );
+		preg_match_all( '/<tr><td title="([^"]*)">/', aafm_activity_rows_html( $rows ), $m );
+		$this->assertCount( 2, $m[1] );
+		$this->assertSame( array_map( 'esc_attr', array_column( $data, 'time_title' ) ), $m[1] );
+	}
+
+	public function test_script_copies_time_title_into_the_cell_title(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$js = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
+		$this->assertMatchesRegularExpression( '/\.title = row\.time_title \?\? /', $js );
+	}
+
+	public function test_time_title_with_a_manual_utc_offset_and_an_empty_timestamp(): void {
+		update_option( 'timezone_string', '' );
+		update_option( 'gmt_offset', 5.5 );
+		$title = aafm_activity_time_title( '2026-11-14 10:00:00' );
+		$this->assertStringContainsString( '2026-11-14 10:00:00 UTC', $title );
+		$this->assertStringContainsString( '3:30', $title, 'UTC+5:30 shifts 10:00 to 15:30.' );
+
+		$this->assertSame( '', aafm_activity_time_title( '' ) );
+		$this->assertSame( 'not a date', aafm_activity_time_title( 'not a date' ) );
+		$data = aafm_activity_rows_data(
+			array(
+				array(
+					'created_at' => '',
+					'ability'    => 'x',
+					'status'     => 'success',
+				),
+			)
+		);
+		$this->assertSame( '', $data[0]['time_title'] );
+	}
 }

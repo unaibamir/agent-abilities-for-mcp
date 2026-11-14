@@ -604,7 +604,8 @@ function aafm_wpbakery_encode_safe_text( $value, bool $exploded ): ?string {
  */
 function aafm_wpbakery_encode_link( $value, bool $href ): ?string {
 	if ( $href ) {
-		$url = is_string( $value ) ? aafm_wpbakery_link_url( $value ) : null;
+		// Stored bare, so decoded first (the editor's next save would decode an entity) and any bracket percent-encoded.
+		$url = is_string( $value ) ? aafm_wpbakery_link_url( str_replace( array( '[', ']' ), array( '%5B', '%5D' ), aafm_wpbakery_decode_entities( $value ) ) ) : null;
 		return null === $url ? null : aafm_wpbakery_escape_attribute( $url );
 	}
 	if ( ! is_array( $value ) || array() !== array_diff( array_keys( $value ), array( 'url', 'title', 'target', 'rel' ) ) ) {

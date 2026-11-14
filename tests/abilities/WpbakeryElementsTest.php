@@ -471,6 +471,16 @@ final class WpbakeryElementsTest extends TestCase {
 		$this->assertSame( 'a"b', aafm_wpbakery_decode_value( (string) aafm_wpbakery_encode_safe_text( 'a&#x1;"b', false ), 'textarea_safe' ) );
 	}
 
+	/**
+	 * SEC-S9a-1-R3a: an href URL is stored bare, so its entities are decoded and its brackets percent-encoded.
+	 */
+	public function test_href_url_decodes_entities_and_encodes_brackets(): void {
+		$this->assertSame( 'https://a/%5D%5Bvc_raw_js%5D', aafm_wpbakery_encode_link( 'https://a/&#93;&#91;vc_raw_js&#93;', true ) );
+		$this->assertSame( 'https://a/x%5B1%5D', aafm_wpbakery_encode_link( 'https://a/x[1]', true ) );
+		$this->assertNull( aafm_wpbakery_encode_link( 'https://a/&#34;x', true ) );
+		$this->assertSame( 'https://a/?x=1&amp;y=2', aafm_wpbakery_encode_link( 'https://a/?x=1&amp;y=2', true ) );
+	}
+
 	public function test_text_refuses_a_line_break_and_a_pre_encoded_value(): void {
 		$this->assert_error( $this->encode( 'wpb_btn', 'title', "two\nlines" ), 'aafm_builder_invalid_value', 400 );
 		$this->assert_error( $this->encode( 'wpb_btn', 'title', '#E-8_PHNjcmlwdD4=' ), 'aafm_builder_invalid_value', 400 );

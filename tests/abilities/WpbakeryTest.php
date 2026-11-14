@@ -1221,4 +1221,15 @@ WPB;
 		$this->assertSame( $expect, aafm_wpbakery_decode_atts( 'vc_custom_heading', $atts ) );
 		remove_filter( 'aafm_builder_vendor', $filter, 10 );
 	}
+	public function test_a_legacy_link_with_empty_segments_still_decodes(): void {
+		$expect = array(
+			'url'    => '#',
+			'title'  => '',
+			'target' => '',
+			'rel'    => '',
+		);
+		$this->assertSame( array( 'link' => $expect ), aafm_wpbakery_decode_atts( 'vc_btn', array( 'link' => 'url:%23|||' ) ) );
+		$this->assertSame( array( 'link' => $expect ), aafm_wpbakery_decode_atts( 'vc_btn', array( 'link' => 'url:%23|' ) ) );
+		$this->assertSame( array( 'link' => 'url:%23|||plain' ), aafm_wpbakery_decode_atts( 'vc_btn', array( 'link' => 'url:%23|||plain' ) ), 'A segment that names no link key is not a link.' );
+	}
 }

@@ -154,7 +154,7 @@ function aafm_args_avada_get_page_content(): array {
 				'include_structure' => array(
 					'type'        => 'boolean',
 					'default'     => false,
-					'description' => __( 'When true, also returns structure: the Fusion Builder elements in document order with their nesting depth and attributes, and structure_status. Use it to find the element that holds the text you want to change before calling avada-replace-text.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'When true, also returns structure: the Fusion Builder elements in document order with their nesting depth, attributes, decoded attributes, inner text and fingerprint, plus structure_status and page_fingerprint. Use it to find the element that holds the text you want to change before calling avada-replace-text.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id' ),
@@ -184,8 +184,24 @@ function aafm_args_avada_get_page_content(): array {
 							'has_closer'   => array( 'type' => 'boolean' ),
 							'atts'         => array( 'type' => 'object' ),
 							'global_id'    => array( 'type' => 'integer' ),
+							'fingerprint'  => array(
+								'type'        => 'string',
+								'description' => __( 'First 16 hex characters of the SHA-256 of the element\'s stored source, children included. A later element write names the element by index, tag and this fingerprint.', 'agent-abilities-for-mcp' ),
+							),
+							'atts_decoded' => array(
+								'type'        => 'object',
+								'description' => __( 'The attributes as Avada reads them: the entities its settings dialog writes turned back into characters, and a value Avada stores base64 encoded decoded.', 'agent-abilities-for-mcp' ),
+							),
+							'text'         => array(
+								'type'        => 'string',
+								'description' => __( 'Only on an element with no child element: its inner content as stored, decoded for a code block that Avada stores base64 encoded.', 'agent-abilities-for-mcp' ),
+							),
 						),
 					),
+				),
+				'page_fingerprint' => array(
+					'type'        => 'string',
+					'description' => __( 'Only with include_structure: first 16 hex characters of the SHA-256 of the whole stored content.', 'agent-abilities-for-mcp' ),
 				),
 			),
 		),
@@ -222,7 +238,8 @@ function aafm_exec_avada_get_page_content( array $input ) {
 		'is_avada_owned' => aafm_builder_ownership_allows( 'avada', aafm_post_has_foreign_builder_ownership( $id, true ), $post ),
 	);
 	if ( ! empty( $input['include_structure'] ) ) {
-		$out = array_merge( $out, aafm_avada_structure( (string) $post->post_content ) );
+		$out                     = array_merge( $out, aafm_avada_structure( (string) $post->post_content ) );
+		$out['page_fingerprint'] = aafm_builder_page_fingerprint( (string) $post->post_content );
 	}
 	return $out;
 }
@@ -235,7 +252,7 @@ function aafm_exec_avada_get_page_content( array $input ) {
  * @param string             $content Post content.
  * @param array<string>|null $tags    Shortcode tags to walk; null keeps the Fusion list. With a
  *                                    list passed, no global_id is added (it is a Fusion concept).
- * @return array{structure_status:string,structure?:list<array<string,mixed>>}
+ * @return array<string,mixed> structure_status, and structure when the walk parsed.
  */
 function aafm_avada_structure( string $content, ?array $tags = null ): array {
 	$walk = aafm_fusion_shortcode_walk( $content, 0, $tags );
@@ -259,10 +276,134 @@ function aafm_avada_structure( string $content, ?array $tags = null ): array {
 		}
 		$items[] = $item;
 	}
-	return array(
+	$out = array(
 		'structure_status' => count( $walk ) > $max ? 'truncated' : 'ok',
 		'structure'        => $items,
 	);
+	return null === $tags ? aafm_avada_outline_keys( $content, $out ) : $out;
+}
+
+/**
+ * The Avada page read's outline keys (design AV-9), added only to the Fusion outline so the WPBakery read
+ * that shares aafm_avada_structure() keeps its own: each item's fingerprint and its attributes decoded as
+ * Avada reads them, and on an element with no child element its text. The offsets come from
+ * aafm_builder_elements() with the walker's own tag list; an outline that does not line up with it item
+ * for item is reported unparseable rather than with fingerprints of the wrong element.
+ *
+ * @param string              $content Content.
+ * @param array<string,mixed> $out     aafm_avada_structure()'s result.
+ * @return array<string,mixed>
+ */
+function aafm_avada_outline_keys( string $content, array $out ): array {
+	$elements = aafm_builder_elements( $content, aafm_fusion_shortcode_tags() );
+	if ( null === $elements ) {
+		return array( 'structure_status' => 'unparseable' );
+	}
+	$parents = array_flip( array_filter( array_column( $elements, 'parent' ), 'is_int' ) );
+	foreach ( $out['structure'] as $i => $item ) {
+		$element = $elements[ $item['index'] ] ?? null;
+		if ( null === $element || $element['tag'] !== $item['tag'] ) {
+			return array( 'structure_status' => 'unparseable' );
+		}
+		$item['fingerprint']  = aafm_builder_fingerprint( $content, $element );
+		$item['atts_decoded'] = (object) aafm_avada_decode_atts( $element['tag'], $element['atts'] );
+		if ( ! isset( $parents[ $element['index'] ] ) ) {
+			$inner        = substr( $content, $element['open_end'], $element['inner_end'] - $element['open_end'] );
+			$item['text'] = in_array( $element['tag'], array( 'fusion_code', 'fusion_syntax_highlighter' ), true ) ? aafm_avada_decode_if_needed( $inner ) : $inner;
+		}
+		$out['structure'][ $i ] = $item;
+	}
+	return $out;
+}
+
+/**
+ * Attribute values as Avada 7.16.1 reads them. A setting Avada's renderer base64-decodes is decoded by
+ * Avada's own rule, fusion_decode_if_needed(): only when the value round-trips exactly (A3). Every other
+ * value has the six entities Avada's settings dialog writes with _.escape() reversed in one pass (A2); a
+ * raw text field is escaped by the dialog before it is encoded, so it gets both. Which settings are
+ * encoded is fixed by where Avada's renderers decode (aafm_avada_encoded_settings()), never by the
+ * value's shape. S10's encoder is the inverse.
+ *
+ * @param string              $tag  Shortcode tag.
+ * @param array<string,mixed> $atts Stored attributes.
+ * @return array<string,mixed>
+ */
+function aafm_avada_decode_atts( string $tag, array $atts ): array {
+	$encoded  = aafm_avada_encoded_settings();
+	$entities = array(
+		'&amp;'  => '&',
+		'&lt;'   => '<',
+		'&gt;'   => '>',
+		'&quot;' => '"',
+		'&#x27;' => "'",
+		'&#x60;' => '`',
+	);
+	$decoded  = array();
+	foreach ( $atts as $name => $value ) {
+		if ( ! is_string( $value ) ) {
+			$decoded[ $name ] = $value;
+			continue;
+		}
+		$kind             = $encoded[ $tag ][ $name ] ?? $encoded['*'][ $name ] ?? null;
+		$decoded[ $name ] = null === $kind ? strtr( $value, $entities ) : aafm_avada_decode_if_needed( $value );
+		if ( 'raw_text' === $kind ) {
+			$decoded[ $name ] = strtr( $decoded[ $name ], $entities );
+		}
+	}
+	return $decoded;
+}
+
+/**
+ * The settings Avada's renderers base64-decode (fusion-builder 3.16.1: the fusion_decode_if_needed() and
+ * base64_decode() calls under shortcodes/ and inc/), by tag, with '*' for the settings any element can
+ * carry. raw_text marks a text input the dialog escapes before it encodes; the rest are raw_textarea,
+ * repeater or JSON values stored as encoded.
+ *
+ * @return array<string,array<string,string>>
+ */
+function aafm_avada_encoded_settings(): array {
+	return array(
+		'*'                           => array(
+			'dynamic_params'    => 'json',
+			'html_attributes'   => 'repeater',
+			'render_logics'     => 'json',
+			'conditional_logic' => 'json',
+			'logics'            => 'json',
+			'motion_effects'    => 'json',
+		),
+		'fusion_image_hotspot_point'  => array( 'long_text' => 'raw_textarea' ),
+		'fusion_tagline_box'          => array(
+			'title'       => 'raw_textarea',
+			'description' => 'raw_textarea',
+		),
+		'fusion_openstreetmap_marker' => array( 'tooltip_content' => 'raw_textarea' ),
+		'fusion_sharing'              => array( 'description' => 'raw_textarea' ),
+		'fusion_map'                  => array( 'infobox_content' => 'raw_textarea' ),
+		'fusion_popover'              => array( 'content' => 'raw_textarea' ),
+		'fusion_form_notice'          => array(
+			'success' => 'raw_textarea',
+			'error'   => 'raw_textarea',
+		),
+		'fusion_form_consent'         => array( 'description' => 'raw_textarea' ),
+		'fusion_form_select'          => array( 'options' => 'json' ),
+		'fusion_form_checkbox'        => array( 'options' => 'json' ),
+		'fusion_form_email'           => array( 'pattern' => 'raw_text' ),
+		'fusion_form_phone_number'    => array( 'pattern' => 'raw_text' ),
+		'fusion_form_password'        => array( 'pattern' => 'raw_text' ),
+		'fusion_form_text'            => array( 'custom_pattern' => 'raw_text' ),
+	);
+}
+
+/**
+ * Avada's own fusion_decode_if_needed() rule (inc/lib/inc/functions.php:1365): decode with
+ * base64_decode() and keep the result only when base64_encode() of it gives the value back.
+ *
+ * @param string $value Stored value.
+ * @return string
+ */
+function aafm_avada_decode_if_needed( string $value ): string {
+	$raw = base64_decode( $value ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- reading Avada's own base64 form back (A3), never executed.
+	return base64_encode( $raw ) === $value ? $raw : $value; // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- the round-trip test Avada itself applies.
 }
 
 /**

@@ -27,7 +27,9 @@ final class AvadaTest extends TestCase {
 
 	public function tear_down(): void {
 		remove_filter( 'aafm_integration_active_avada', '__return_true' );
-		remove_shortcode( 'fusion_global' );
+		foreach ( array( 'fusion_global', 'fusion_title', 'fusion_button', 'fusion_imageframe', 'fusion_code', 'fusion_tabs', 'fusion_tab' ) as $tag ) {
+			remove_shortcode( $tag );
+		}
 		parent::tear_down();
 	}
 
@@ -622,5 +624,121 @@ final class AvadaTest extends TestCase {
 		$this->assertFalse( aafm_post_has_foreign_builder_ownership( $id, true ) );
 
 		$this->assertTrue( aafm_exec_avada_get_page_content( array( 'post_id' => $id ) )['is_avada_owned'] );
+	}
+
+	// S8b: the decoded outline, page options and affects (design AV-9, AV-2).
+
+	/**
+	 * The page fixture, with the Avada elements it holds registered the way Avada registers them,
+	 * so the walker and the outline see them (PHPUnit loads no Avada code).
+	 *
+	 * @return string
+	 */
+	private function s8b_page(): string {
+		foreach ( array( 'fusion_title', 'fusion_button', 'fusion_imageframe', 'fusion_code', 'fusion_tabs', 'fusion_tab', 'fusion_global' ) as $tag ) {
+			add_shortcode( $tag, '__return_empty_string' );
+		}
+		return (string) file_get_contents( dirname( __DIR__ ) . '/Fixtures/Avada/page-elements.txt' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local fixture.
+	}
+
+	public function test_outline_items_carry_a_fingerprint_that_resolves(): void {
+		$content = $this->s8b_page();
+		$out     = $this->read_page( $this->make_avada_post( $content ), true );
+
+		$this->assertSame( 'ok', $out['structure_status'] );
+		$this->assertCount( 13, $out['structure'] );
+		foreach ( $out['structure'] as $item ) {
+			$this->assertMatchesRegularExpression( '/^[0-9a-f]{16}$/', $item['fingerprint'] );
+			$element = aafm_builder_resolve(
+				$content,
+				aafm_fusion_shortcode_tags(),
+				$item['index'],
+				array(
+					'tag'         => $item['tag'],
+					'fingerprint' => $item['fingerprint'],
+				)
+			);
+			$this->assertIsArray( $element, (string) $item['index'] );
+			$this->assertSame( $item['index'], $element['index'] );
+		}
+	}
+
+	public function test_the_read_returns_the_page_fingerprint_with_the_outline(): void {
+		$content = $this->s8b_page();
+		$id      = $this->make_avada_post( $content );
+
+		$this->assertSame( aafm_builder_page_fingerprint( $content ), $this->read_page( $id, true )['page_fingerprint'] );
+		foreach ( array( null, false ) as $flag ) {
+			$this->assertArrayNotHasKey( 'page_fingerprint', $this->read_page( $id, $flag ) );
+		}
+	}
+
+	public function test_decoded_text_reverses_the_six_entities(): void {
+		$out    = $this->read_page( $this->make_avada_post( $this->s8b_page() ), true );
+		$button = $out['structure'][5];
+
+		$this->assertSame( 'fusion_button', $button['tag'] );
+		$this->assertSame( 'Docs &amp; &quot;guides&quot; &lt;start&gt; it&#x27;s &#x60;now&#x60;', ( (array) $button['atts'] )['title'], 'atts stays as stored.' );
+		$decoded = (array) $button['atts_decoded'];
+		$this->assertSame( 'Docs & "guides" <start> it\'s `now`', $decoded['title'] );
+		$this->assertSame( 'data-track=\'cta\' data-note="a & b"', $decoded['link_attributes'] );
+		$this->assertSame( 'https://example.com/docs', $decoded['link'] );
+		$this->assertSame( '[]', $decoded['html_attributes'], 'A repeater value is base64 JSON (A3).' );
+		$once = aafm_avada_decode_atts(
+			'fusion_title',
+			array(
+				'title' => 'a &amp;lt; b',
+				'id'    => '&amp;amp;',
+			)
+		);
+		$this->assertSame(
+			array(
+				'title' => 'a &lt; b',
+				'id'    => '&amp;',
+			),
+			$once,
+			'One pass: an escaped entity stays an entity.'
+		);
+	}
+
+	public function test_decoded_code_block_is_decoded_only_when_it_round_trips(): void {
+		$out  = $this->read_page( $this->make_avada_post( $this->s8b_page() ), true );
+		$code = $out['structure'][8];
+		$this->assertSame( 'fusion_code', $code['tag'] );
+		$this->assertSame( '<div class="s8b-code">Code block output</div>', $code['text'] );
+
+		$plain = $this->read_page( $this->make_avada_post( '[fusion_code]<p>Not base64, kept as stored.</p>[/fusion_code]' ), true );
+		$this->assertSame( '<p>Not base64, kept as stored.</p>', $plain['structure'][0]['text'] );
+
+		$this->assertSame(
+			array(
+				'title'           => 'dGVzdA==',
+				'dynamic_params'  => '{"a":1}',
+				'html_attributes' => 'W10',
+				'pattern'         => 'a&b',
+			),
+			aafm_avada_decode_atts(
+				'fusion_form_email',
+				array(
+					'title'           => 'dGVzdA==', // Base64 shaped, but Avada never decodes this setting: stays as stored.
+					'dynamic_params'  => base64_encode( '{"a":1}' ), // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- builds Avada's stored form.
+					'html_attributes' => 'W10', // Does not round trip (no padding): stays as stored.
+					'pattern'         => base64_encode( 'a&amp;b' ), // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- a raw_text field is escaped, then encoded.
+				)
+			)
+		);
+	}
+
+	public function test_text_is_present_only_on_a_leaf(): void {
+		$out  = $this->read_page( $this->make_avada_post( $this->s8b_page() ), true );
+		$tags = array_column( $out['structure'], 'tag' );
+
+		foreach ( $out['structure'] as $item ) {
+			$parent = in_array( $item['tag'], array( 'fusion_builder_container', 'fusion_builder_row', 'fusion_builder_column', 'fusion_tabs' ), true );
+			$this->assertSame( ! $parent, array_key_exists( 'text', $item ), $item['tag'] );
+		}
+		$this->assertSame( 'First tab body.', $out['structure'][ array_search( 'fusion_tab', $tags, true ) ]['text'] );
+		$this->assertSame( 'S8b page title', $out['structure'][3]['text'] );
+		$this->assertSame( '', $out['structure'][12]['text'], 'A global element with no content.' );
 	}
 }

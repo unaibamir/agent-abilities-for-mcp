@@ -20,7 +20,7 @@ final class AvadaSiteWireTest extends TestCase {
 
 	private const SECTION = '[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1"][fusion_text]<p>Saved section</p>[/fusion_text][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]';
 
-	private const TOOLS = array( 'aafm/avada-insert-library-item', 'aafm/avada-update-page-css', 'aafm/avada-update-page-options', 'aafm/avada-update-global-options' );
+	private const TOOLS = array( 'aafm/avada-insert-library-item', 'aafm/avada-update-page-css', 'aafm/avada-update-page-options', 'aafm/avada-update-global-options', 'aafm/avada-update-layout' );
 
 	public function set_up(): void {
 		parent::set_up();
@@ -395,5 +395,70 @@ final class AvadaSiteWireTest extends TestCase {
 		$this->assertSame( 1, $resets );
 		$this->assertSame( 'boxed', get_option( 'fusion_options' )['layout'] );
 		delete_option( 'fusion_options' );
+	}
+
+	public function test_update_layout_round_trips_over_a_real_tools_call(): void {
+		register_post_type( 'fusion_tb_section', array( 'public' => false ) );
+		register_taxonomy( 'fusion_tb_category', array( 'fusion_tb_section' ) );
+		$footer = self::factory()->post->create(
+			array(
+				'post_type'   => 'fusion_tb_section',
+				'post_status' => 'publish',
+			)
+		);
+		wp_set_object_terms( $footer, 'footer', 'fusion_tb_category' );
+		update_option(
+			'fusion_tb_layout_default',
+			wp_slash(
+				(string) wp_json_encode(
+					array(
+						'conditions'     => array(),
+						'template_terms' => array(),
+					)
+				)
+			)
+		);
+		$resets = 0;
+		$filter = static function ( $resolved, string $entry ) use ( &$resets ) {
+			return 'avada_cache_reset' === $entry ? static function () use ( &$resets ): void {
+				++$resets;
+			} : $resolved;
+		};
+		add_filter( 'aafm_builder_vendor', $filter, 20, 2 );
+		list( $handler ) = $this->wired();
+		$done            = $this->wire(
+			$handler->call_tool(
+				array(
+					'name'      => aafm_mcp_tool_name( 'aafm/avada-update-layout' ),
+					'arguments' => array(
+						'layout_id' => 'global',
+						'sections'  => array( 'footer' => $footer ),
+					),
+				),
+				'req-avada-layout-1'
+			)
+		);
+		remove_filter( 'aafm_builder_vendor', $filter, 20 );
+		$this->assertSame(
+			array(
+				'layout_id' => 'global',
+				'changed'   => true,
+				'previous'  => array(
+					'sections'   => array(),
+					'conditions' => array(),
+				),
+				'undo'      => array(
+					'undoable'   => false,
+					'change_ids' => array(),
+					'reason'     => 'not_covered',
+				),
+			),
+			$done
+		);
+		$this->assertSame( 1, $resets );
+		$this->assertSame( '{"conditions":[],"template_terms":{"footer":' . $footer . '}}', wp_unslash( get_option( 'fusion_tb_layout_default' ) ) );
+		delete_option( 'fusion_tb_layout_default' );
+		unregister_taxonomy( 'fusion_tb_category' );
+		unregister_post_type( 'fusion_tb_section' );
 	}
 }

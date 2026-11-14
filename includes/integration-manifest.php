@@ -463,6 +463,10 @@ function aafm_integration_ability_order(): array {
 				'name' => 'aafm/avada-update-global-options',
 				'risk' => 'destructive',
 			),
+			array(
+				'name' => 'aafm/avada-update-layout',
+				'risk' => 'destructive',
+			),
 		),
 		'wpbakery'      => array(
 			array(

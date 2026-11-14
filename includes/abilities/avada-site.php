@@ -82,6 +82,14 @@ function aafm_avada_site_registry_definitions(): array {
 			'subject'      => 'avada',
 			'args_builder' => 'aafm_args_avada_update_global_options',
 		),
+		'aafm/avada-update-layout'         => array(
+			'label'        => __( 'Update an Avada layout', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Overwrites the sections and conditions of one Avada layout, named by its id from avada-list-layouts or "global" for the Global Layout. sections assigns a published layout section of the matching type to header, page_title_bar, content or footer, or 0 to clear that slot; the other slots are kept. conditions replaces the whole stored list: each condition takes mode (include or exclude), type, and under the key named by type a condition id that Avada\'s Layouts screen offers, plus an optional parent naming another condition in the list. Give at least one of sections and conditions. Pages pick their layout from these conditions, so the change applies site-wide at once. previous returns the old sections and conditions, which is the way back. A layout is never created or deleted. A change equal to what is stored is left alone and changed is false. Not undoable from this plugin\'s change history. Requires a user who can manage site options. Only while Avada is active.', 'agent-abilities-for-mcp' ),
+			'group'        => 'writes',
+			'risk'         => 'destructive',
+			'subject'      => 'avada',
+			'args_builder' => 'aafm_args_avada_update_layout',
+		),
 	);
 }
 
@@ -940,5 +948,309 @@ function aafm_exec_avada_update_global_options( array $input ) {
 		);
 	}
 	aafm_avada_reset_caches();
+	return $out;
+}
+
+/**
+ * The layout slots Avada's Layouts screen has (Fusion_Template_Builder::set_template_terms()).
+ *
+ * @return list<string>
+ */
+function aafm_avada_layout_slots(): array {
+	return array( 'header', 'page_title_bar', 'content', 'footer' );
+}
+
+/**
+ * Args for aafm/avada-update-layout.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_avada_update_layout(): array {
+	$slots = array();
+	foreach ( aafm_avada_layout_slots() as $slot ) {
+		$slots[ $slot ] = array(
+			'type'    => 'integer',
+			'minimum' => 0,
+		);
+	}
+	return array(
+		'label'               => aafm_ability_label( 'aafm/avada-update-layout' ),
+		'description'         => aafm_ability_description( 'aafm/avada-update-layout' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'layout_id'  => array(
+					'type'        => array( 'integer', 'string' ),
+					'description' => __( 'The layout post id from avada-list-layouts, or "global" for the Global Layout.', 'agent-abilities-for-mcp' ),
+				),
+				'sections'   => array(
+					'type'                 => 'object',
+					'properties'           => $slots,
+					'additionalProperties' => false,
+					'description'          => __( 'Slot to a published layout section id of that type, or 0 to clear the slot.', 'agent-abilities-for-mcp' ),
+				),
+				'conditions' => array(
+					'type'        => 'array',
+					'maxItems'    => 100,
+					'items'       => array( 'type' => 'object' ),
+					'description' => __( 'The full new list of conditions, each with mode, type and the condition id under the key named by type.', 'agent-abilities-for-mcp' ),
+				),
+			),
+			'required'             => array( 'layout_id' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'layout_id' => array( 'type' => array( 'integer', 'string' ) ),
+				'changed'   => array( 'type' => 'boolean' ),
+				'previous'  => array(
+					'type'        => 'object',
+					'description' => __( 'The sections and conditions stored before this call.', 'agent-abilities-for-mcp' ),
+				),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_avada_update_layout',
+		'permission_callback' => 'aafm_perm_manage_options',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => true,
+				'idempotent'  => true,
+			),
+		),
+	);
+}
+
+/**
+ * The conditions Avada's Layouts screen offers, type => id => label, from Avada's own get_layout_conditions() on the
+ * Fusion_Template_Builder instance (A15), or null when the entry is missing or answers no list.
+ *
+ * @return array<string,array<string,string>>|null
+ */
+function aafm_avada_layout_condition_list(): ?array {
+	$builder = aafm_builder_vendor( 'avada_template_builder' );
+	try {
+		$object   = null !== $builder ? $builder() : null;
+		$sections = is_object( $object ) && method_exists( $object, 'get_layout_conditions' ) ? $object->get_layout_conditions() : null;
+	} catch ( Throwable $e ) {
+		unset( $e );
+		return null;
+	}
+	if ( ! is_array( $sections ) ) {
+		return null;
+	}
+	$out = array();
+	foreach ( $sections as $section ) {
+		foreach ( is_array( $section ) && is_array( $section['conditions'] ?? null ) ? $section['conditions'] : array() as $condition ) {
+			if ( is_array( $condition ) && is_string( $condition['id'] ?? null ) && is_string( $condition['type'] ?? null ) ) {
+				$out[ $condition['type'] ][ $condition['id'] ] = is_string( $condition['label'] ?? null ) ? $condition['label'] : $condition['id'];
+			}
+		}
+	}
+	return $out;
+}
+
+/**
+ * The stored conditions for an input list, keyed by condition id in the shape Avada's Layouts screen saves (label,
+ * type, mode, the id under the key named by type, parent), or WP_Error aafm_builder_invalid_value. Avada validates
+ * none of this (A15), so every condition must name a mode, a type and an id its own list offers.
+ *
+ * @param mixed $conditions Input.
+ * @return array<string,array<string,string>>|WP_Error
+ */
+function aafm_avada_layout_conditions( $conditions ) {
+	$bad = aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', 'conditions' );
+	if ( ! is_array( $conditions ) || array_values( $conditions ) !== $conditions ) {
+		return $bad;
+	}
+	$offered = array() === $conditions ? array() : aafm_avada_layout_condition_list();
+	if ( null === $offered ) {
+		return $bad;
+	}
+	$out     = array();
+	$parents = array();
+	foreach ( $conditions as $condition ) {
+		$condition = $condition instanceof stdClass ? (array) $condition : $condition;
+		$type      = is_array( $condition ) && is_string( $condition['type'] ?? null ) ? $condition['type'] : '';
+		$id        = '' !== $type && is_string( $condition[ $type ] ?? null ) ? $condition[ $type ] : '';
+		$mode      = $condition['mode'] ?? null;
+		if ( '' === $id || ! in_array( $mode, array( 'include', 'exclude' ), true ) || ! isset( $offered[ $type ][ $id ] ) || isset( $out[ $id ] )
+			|| array() !== array_diff( array_keys( $condition ), array( 'mode', 'type', $type, 'label', 'parent' ) )
+			|| ( isset( $condition['label'] ) && ! is_string( $condition['label'] ) ) ) {
+			return $bad;
+		}
+		$out[ $id ] = array(
+			'label' => $offered[ $type ][ $id ],
+			'type'  => $type,
+			'mode'  => $mode,
+			$type   => $id,
+		);
+		if ( array_key_exists( 'parent', $condition ) ) {
+			if ( ! is_string( $condition['parent'] ) ) {
+				return $bad;
+			}
+			$parents[ $id ]       = $condition['parent'];
+			$out[ $id ]['parent'] = $condition['parent'];
+		}
+	}
+	foreach ( $parents as $id => $parent ) {
+		if ( $parent === $id || ! isset( $out[ $parent ] ) ) {
+			return $bad;
+		}
+	}
+	return $out;
+}
+
+/**
+ * Execute aafm/avada-update-layout (design AV-13). Every input is checked before anything is written. The layout is
+ * decoded the way Avada reads it and written back in the exact form Fusion_Template_Builder::update_layout_content()
+ * writes (A15): a layout post's content through wp_update_post() and the confirmed-write check, the Global Layout's
+ * option through aafm_update_option_verified(). Then the narrow cache reset; Avada's own updater, which calls the bare
+ * reset, is never called, and nothing is created or deleted (Ruling Q16).
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_avada_update_layout( array $input ) {
+	$layout_id = $input['layout_id'] ?? null;
+	$global    = 'global' === $layout_id;
+	$id        = is_int( $layout_id ) && $layout_id > 0 ? $layout_id : 0;
+	$unknown   = new WP_Error(
+		'aafm_avada_unknown_layout',
+		__( 'No Avada layout has that id. Use an id from avada-list-layouts, or "global". Nothing was changed.', 'agent-abilities-for-mcp' ),
+		array( 'status' => 404 )
+	);
+	if ( ! $global && 0 === $id ) {
+		return $unknown;
+	}
+	$sections   = $input['sections'] ?? null;
+	$sections   = $sections instanceof stdClass ? (array) $sections : $sections;
+	$conditions = $input['conditions'] ?? null;
+	if ( null === $sections && null === $conditions ) {
+		return new WP_Error(
+			'aafm_avada_layout_empty',
+			__( 'Give at least one of sections and conditions. Nothing was changed.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
+	}
+
+	$post = null;
+	if ( ! $global ) {
+		$post = aafm_exact_object_chain( 'post', $id );
+		if ( ! $post instanceof WP_Post || 'fusion_tb_layout' !== $post->post_type ) {
+			return $unknown;
+		}
+		$guard = aafm_post_has_foreign_builder_ownership( $id );
+		if ( false !== $guard && 'avada' !== $guard ) {
+			return aafm_avada_not_owned_error();
+		}
+	}
+
+	$slots = array();
+	if ( null !== $sections ) {
+		if ( ! is_array( $sections ) || array() === $sections ) {
+			return aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', 'sections' );
+		}
+		foreach ( $sections as $slot => $section_id ) {
+			if ( ! in_array( $slot, aafm_avada_layout_slots(), true ) || ! is_int( $section_id ) || $section_id < 0 ) {
+				return aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', 'sections' );
+			}
+			if ( $section_id > 0 ) {
+				$section = aafm_exact_object( 'post', $section_id );
+				$terms   = $section instanceof WP_Post ? get_the_terms( $section, 'fusion_tb_category' ) : false;
+				$kinds   = is_array( $terms ) ? array_merge( wp_list_pluck( $terms, 'slug' ), wp_list_pluck( $terms, 'name' ) ) : array();
+				if ( ! $section instanceof WP_Post || 'fusion_tb_section' !== $section->post_type || 'publish' !== $section->post_status || ! in_array( $slot, $kinds, true ) ) {
+					return new WP_Error(
+						'aafm_avada_layout_section_invalid',
+						/* translators: %s: the layout slot, such as footer. */
+						sprintf( __( 'The %s slot takes a published layout section of that type. Nothing was changed.', 'agent-abilities-for-mcp' ), $slot ),
+						array( 'status' => 400 )
+					);
+				}
+			}
+			$slots[ $slot ] = $section_id;
+		}
+	}
+	$new_conditions = null;
+	if ( null !== $conditions ) {
+		$new_conditions = aafm_avada_layout_conditions( $conditions );
+		if ( is_wp_error( $new_conditions ) ) {
+			return $new_conditions;
+		}
+	}
+
+	// Decoded as Fusion_Template_Builder::get_default_layout() and set_overrides() decode it.
+	$stored  = $global ? get_option( 'fusion_tb_layout_default' ) : (string) $post->post_content;
+	$current = $global
+		? ( false === $stored ? array() : ( is_string( $stored ) ? json_decode( wp_unslash( $stored ), true ) : null ) )
+		: json_decode( str_replace( "'", "\'", wp_unslash( $stored ) ), true );
+	if ( ! is_array( $current ) ) {
+		return new WP_Error(
+			'aafm_avada_layout_unparseable',
+			__( 'Avada cannot read this layout\'s stored data, so it was not changed.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 409 )
+		);
+	}
+	$terms = is_array( $current['template_terms'] ?? null ) ? $current['template_terms'] : array();
+	$old   = array(
+		'sections'   => $terms,
+		'conditions' => is_array( $current['conditions'] ?? null ) ? $current['conditions'] : array(),
+	);
+	foreach ( $slots as $slot => $section_id ) {
+		if ( 0 === $section_id ) {
+			unset( $terms[ $slot ] );
+		} else {
+			$terms[ $slot ] = $section_id;
+		}
+	}
+	$new = array(
+		'conditions'     => null !== $new_conditions ? $new_conditions : $old['conditions'],
+		'template_terms' => $terms,
+	) + $current;
+
+	$out = array(
+		'layout_id' => $global ? 'global' : $id,
+		'changed'   => false,
+		'previous'  => array(
+			// An empty map goes out as {} so a client can send it straight back.
+			'sections'   => array() === $old['sections'] ? new stdClass() : $old['sections'],
+			'conditions' => array_values( $old['conditions'] ),
+		),
+	);
+	if ( $new['conditions'] === $old['conditions'] && $new['template_terms'] === $old['sections'] ) {
+		return $out;
+	}
+
+	if ( $global ) {
+		if ( ! aafm_update_option_verified( 'fusion_tb_layout_default', wp_slash( (string) wp_json_encode( $new ) ) ) ) {
+			return new WP_Error(
+				'aafm_avada_layout_not_saved',
+				__( 'The Global Layout could not be saved. Nothing was changed.', 'agent-abilities-for-mcp' ),
+				array( 'status' => 500 )
+			);
+		}
+	} else {
+		$content = wp_slash( str_replace( "\'", "'", (string) wp_json_encode( $new, JSON_UNESCAPED_UNICODE ) ) );
+		$updated = wp_update_post(
+			wp_slash(
+				array(
+					'ID'           => $id,
+					'post_content' => $content,
+				)
+			),
+			true
+		);
+		if ( is_wp_error( $updated ) || ! aafm_post_field_confirm_logged( $id, 'post_content', $content, $stored ) ) {
+			return new WP_Error(
+				'aafm_avada_layout_not_saved',
+				__( 'The layout could not be confirmed as saved.', 'agent-abilities-for-mcp' ),
+				array( 'status' => 500 )
+			);
+		}
+	}
+	aafm_avada_reset_caches();
+	$out['changed'] = true;
 	return $out;
 }

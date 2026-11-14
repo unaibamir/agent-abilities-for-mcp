@@ -1350,4 +1350,438 @@ final class AvadaSiteTest extends TestCase {
 		}
 		$this->assertStringContainsString( 'page cache', $row['description'] );
 	}
+
+	/**
+	 * Layout fixtures: the two post types and the category, three published sections (header, footer, a second footer),
+	 * a draft footer and a layout post stored as layout-blog.txt with its header id swapped in (layout-shop.txt holds
+	 * an apostrophe Avada's own decode cannot read, so it is the unparseable case).
+	 *
+	 * @return array<string,int>
+	 */
+	private function layout_fixture(): array {
+		register_post_type( 'fusion_tb_layout', array( 'public' => false ) );
+		register_post_type( 'fusion_tb_section', array( 'public' => false ) );
+		register_taxonomy( 'fusion_tb_category', array( 'fusion_tb_section' ) );
+		$ids = array();
+		foreach ( array(
+			'header'  => array( 'header', 'publish' ),
+			'footer'  => array( 'footer', 'publish' ),
+			'footer2' => array( 'footer', 'publish' ),
+			'draft'   => array( 'footer', 'draft' ),
+		) as $name => $spec ) {
+			$ids[ $name ] = self::factory()->post->create(
+				array(
+					'post_type'   => 'fusion_tb_section',
+					'post_status' => $spec[1],
+					'post_title'  => $name,
+				)
+			);
+			wp_set_object_terms( $ids[ $name ], $spec[0], 'fusion_tb_category' );
+		}
+		$ids['page']   = self::factory()->post->create( array( 'post_type' => 'page' ) );
+		$ids['layout'] = self::factory()->post->create(
+			array(
+				'post_type'   => 'fusion_tb_layout',
+				'post_status' => 'publish',
+			)
+		);
+		// Stored exactly as Avada stored it: a direct row update, since wp_update_post() would unslash.
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local fixture.
+		$raw = str_replace( ':13', ':' . $ids['header'], (string) file_get_contents( dirname( __DIR__ ) . '/Fixtures/Avada/layout-blog.txt' ) );
+		global $wpdb;
+		$wpdb->update( $wpdb->posts, array( 'post_content' => $raw ), array( 'ID' => $ids['layout'] ) );
+		clean_post_cache( $ids['layout'] );
+		return $ids;
+	}
+
+	/**
+	 * The layout seam: Avada's condition list from a stub get_layout_conditions(), and a recording cache reset.
+	 *
+	 * @return callable
+	 */
+	private function layout_seam(): callable {
+		self::$resets = array();
+		$builder      = new class() {
+			/**
+			 * The shape Avada's own method returns (class-fusion-template-builder.php:2903).
+			 *
+			 * @return array<string,mixed>
+			 */
+			public function get_layout_conditions(): array {
+				return array(
+					'page'    => array(
+						'label'      => 'Pages',
+						'conditions' => array(
+							array(
+								'id'    => 'singular_page',
+								'label' => 'All Pages',
+								'type'  => 'singular',
+							),
+							array(
+								'id'    => 'front_page',
+								'label' => 'Front Page',
+								'type'  => 'singular',
+							),
+						),
+					),
+					'archive' => array(
+						'conditions' => array(
+							array(
+								'id'    => 'all_archives',
+								'label' => 'All Archives',
+								'type'  => 'archives',
+							),
+						),
+					),
+				);
+			}
+		};
+		$filter       = static function ( $resolved, string $entry ) use ( $builder ) {
+			if ( 'avada_template_builder' === $entry ) {
+				return static fn() => $builder;
+			}
+			if ( 'avada_cache_reset' === $entry ) {
+				return static function ( $args = null ): void {
+					AvadaSiteTest::$resets[] = $args;
+				};
+			}
+			return $resolved;
+		};
+		add_filter( 'aafm_builder_vendor', $filter, 20, 2 );
+		return $filter;
+	}
+
+	/**
+	 * Run the layout write as an administrator.
+	 *
+	 * @param array<string,mixed> $input Input.
+	 * @return array<string,mixed>|WP_Error
+	 */
+	private function layout_write( array $input ) {
+		$filter = $this->layout_seam();
+		$this->acting_as( 'administrator' );
+		$out = aafm_exec_avada_update_layout( $input );
+		remove_filter( 'aafm_builder_vendor', $filter, 20 );
+		return $out;
+	}
+
+	/**
+	 * A layout post decoded the way Avada reads it.
+	 *
+	 * @param int $id Layout.
+	 * @return mixed
+	 */
+	private static function layout_data( int $id ) {
+		return json_decode( str_replace( "'", "\'", wp_unslash( get_post_field( 'post_content', $id, 'raw' ) ) ), true );
+	}
+
+	public function test_a_footer_section_is_assigned_and_the_rest_of_the_layout_is_kept(): void {
+		$ids    = $this->layout_fixture();
+		$before = self::layout_data( $ids['layout'] );
+		$out    = $this->layout_write(
+			array(
+				'layout_id' => $ids['layout'],
+				'sections'  => array( 'footer' => $ids['footer2'] ),
+			)
+		);
+		$this->assertIsArray( $out, $out instanceof WP_Error ? $out->get_error_code() . ' ' . $out->get_error_message() : '' );
+		$this->assertTrue( $out['changed'] );
+		$after = self::layout_data( $ids['layout'] );
+		$this->assertSame( $before['conditions'], $after['conditions'] );
+		$this->assertSame(
+			array(
+				'header'  => $ids['header'],
+				'content' => 999999,
+				'footer'  => $ids['footer2'],
+			),
+			$after['template_terms']
+		);
+		$this->assertSame(
+			array(
+				'sections'   => array(
+					'header'  => $ids['header'],
+					'content' => 999999,
+				),
+				'conditions' => array_values( $before['conditions'] ),
+			),
+			$out['previous']
+		);
+		$listed = aafm_exec_avada_list_layouts( array() );
+		$this->assertSame( $ids['footer2'], $listed['layouts'][0]['sections']->footer['id'] );
+	}
+
+	public function test_the_written_json_has_avadas_own_shape(): void {
+		$ids = $this->layout_fixture();
+		$raw = get_post_field( 'post_content', $ids['layout'], 'raw' );
+		// A slot assigned and then cleared again leaves Avada's own stored bytes.
+		$this->layout_write(
+			array(
+				'layout_id' => $ids['layout'],
+				'sections'  => array( 'footer' => $ids['footer2'] ),
+			)
+		);
+		$this->assertNotSame( $raw, get_post_field( 'post_content', $ids['layout'], 'raw' ) );
+		$this->layout_write(
+			array(
+				'layout_id' => $ids['layout'],
+				'sections'  => array( 'footer' => 0 ),
+			)
+		);
+		$this->assertSame( $raw, get_post_field( 'post_content', $ids['layout'], 'raw' ) );
+	}
+
+	public function test_zero_clears_a_slot_and_a_wrong_draft_or_non_section_is_refused(): void {
+		$ids = $this->layout_fixture();
+		$out = $this->layout_write(
+			array(
+				'layout_id' => $ids['layout'],
+				'sections'  => array( 'header' => 0 ),
+			)
+		);
+		$this->assertTrue( $out['changed'] );
+		$this->assertSame( array( 'content' => 999999 ), self::layout_data( $ids['layout'] )['template_terms'] );
+		$raw = get_post_field( 'post_content', $ids['layout'], 'raw' );
+		foreach ( array(
+			array( 'header' => $ids['footer'] ),
+			array( 'footer' => $ids['draft'] ),
+			array( 'footer' => $ids['page'] ),
+		) as $sections ) {
+			$err = $this->layout_write(
+				array(
+					'layout_id' => $ids['layout'],
+					'sections'  => $sections,
+				)
+			);
+			$this->assertSame( 'aafm_avada_layout_section_invalid', $err->get_error_code() );
+		}
+		foreach ( array( array( 'sidebar' => 1 ), array( 'footer' => '5' ), array() ) as $sections ) {
+			$err = $this->layout_write(
+				array(
+					'layout_id' => $ids['layout'],
+					'sections'  => $sections,
+				)
+			);
+			$this->assertSame( 'aafm_builder_invalid_value', $err->get_error_code() );
+		}
+		$this->assertSame( $raw, get_post_field( 'post_content', $ids['layout'], 'raw' ) );
+	}
+
+	public function test_conditions_replace_the_stored_list(): void {
+		$ids = $this->layout_fixture();
+		$out = $this->layout_write(
+			array(
+				'layout_id'  => $ids['layout'],
+				'conditions' => array(
+					array(
+						'mode'     => 'include',
+						'type'     => 'singular',
+						'singular' => 'front_page',
+					),
+					array(
+						'mode'     => 'exclude',
+						'type'     => 'archives',
+						'archives' => 'all_archives',
+						'parent'   => 'front_page',
+					),
+				),
+			)
+		);
+		$this->assertTrue( $out['changed'] );
+		$this->assertSame(
+			array(
+				'front_page'   => array(
+					'label'    => 'Front Page',
+					'type'     => 'singular',
+					'mode'     => 'include',
+					'singular' => 'front_page',
+				),
+				'all_archives' => array(
+					'label'    => 'All Archives',
+					'type'     => 'archives',
+					'mode'     => 'exclude',
+					'archives' => 'all_archives',
+					'parent'   => 'front_page',
+				),
+			),
+			self::layout_data( $ids['layout'] )['conditions']
+		);
+		$this->assertTrue(
+			$this->layout_write(
+				array(
+					'layout_id'  => $ids['layout'],
+					'conditions' => array(),
+				)
+			)['changed']
+		);
+		$this->assertSame( array(), self::layout_data( $ids['layout'] )['conditions'] );
+	}
+
+	public function test_a_condition_with_an_unknown_mode_type_or_value_key_is_refused(): void {
+		$ids = $this->layout_fixture();
+		$raw = get_post_field( 'post_content', $ids['layout'], 'raw' );
+		foreach ( array(
+			array(
+				'mode'     => 'maybe',
+				'type'     => 'singular',
+				'singular' => 'front_page',
+			),
+			array(
+				'mode'     => 'include',
+				'type'     => 'taxonomy',
+				'taxonomy' => 'front_page',
+			),
+			array(
+				'mode'     => 'include',
+				'type'     => 'singular',
+				'singular' => 'page_99',
+			),
+			array(
+				'mode'     => 'include',
+				'type'     => 'singular',
+				'archives' => 'all_archives',
+			),
+			array(
+				'mode'     => 'include',
+				'type'     => 'singular',
+				'singular' => 'front_page',
+				'parent'   => 'nowhere',
+			),
+			array(
+				'mode'     => 'include',
+				'type'     => 'singular',
+				'singular' => 'front_page',
+				'onclick'  => 'x',
+			),
+		) as $condition ) {
+			$err = $this->layout_write(
+				array(
+					'layout_id'  => $ids['layout'],
+					'conditions' => array( $condition ),
+				)
+			);
+			$this->assertSame( 'aafm_builder_invalid_value', $err->get_error_code(), (string) wp_json_encode( $condition ) );
+		}
+		$this->assertSame( $raw, get_post_field( 'post_content', $ids['layout'], 'raw' ) );
+		$this->assertSame( array(), self::$resets );
+	}
+
+	public function test_the_global_layout_is_written_to_its_option_and_verified(): void {
+		$ids = $this->layout_fixture();
+		update_option(
+			'fusion_tb_layout_default',
+			wp_slash(
+				(string) wp_json_encode(
+					array(
+						'conditions'     => array(),
+						'template_terms' => array( 'header' => $ids['header'] ),
+					)
+				)
+			)
+		);
+		$out = $this->layout_write(
+			array(
+				'layout_id' => 'global',
+				'sections'  => array( 'footer' => $ids['footer'] ),
+			)
+		);
+		$this->assertSame( 'global', $out['layout_id'] );
+		$this->assertTrue( $out['changed'] );
+		$this->assertSame(
+			array(
+				'conditions'     => array(),
+				'template_terms' => array(
+					'header' => $ids['header'],
+					'footer' => $ids['footer'],
+				),
+			),
+			json_decode( wp_unslash( get_option( 'fusion_tb_layout_default' ) ), true )
+		);
+		$keep = static fn( $value, $old ) => $old;
+		add_filter( 'pre_update_option_fusion_tb_layout_default', $keep, 10, 2 );
+		$err  = $this->layout_write(
+			array(
+				'layout_id' => 'global',
+				'sections'  => array( 'footer' => 0 ),
+			)
+		);
+		remove_filter( 'pre_update_option_fusion_tb_layout_default', $keep, 10 );
+		$this->assertSame( 'aafm_avada_layout_not_saved', $err->get_error_code() );
+		$this->assertSame( array(), self::$resets );
+		delete_option( 'fusion_tb_layout_default' );
+	}
+
+	public function test_an_unknown_layout_id_and_an_empty_call_are_refused(): void {
+		$ids = $this->layout_fixture();
+		foreach ( array( $ids['page'], 999999, 0, 'other' ) as $layout_id ) {
+			$err = $this->layout_write(
+				array(
+					'layout_id' => $layout_id,
+					'sections'  => array( 'footer' => 0 ),
+				)
+			);
+			$this->assertSame( 'aafm_avada_unknown_layout', $err->get_error_code() );
+		}
+		$this->assertSame( 'aafm_avada_layout_empty', $this->layout_write( array( 'layout_id' => $ids['layout'] ) )->get_error_code() );
+	}
+
+	public function test_the_cache_call_is_the_narrow_one_and_assigning_the_stored_sections_changes_nothing(): void {
+		$ids = $this->layout_fixture();
+		$raw = get_post_field( 'post_content', $ids['layout'], 'raw' );
+		$out = $this->layout_write(
+			array(
+				'layout_id' => $ids['layout'],
+				'sections'  => array( 'header' => $ids['header'] ),
+			)
+		);
+		$this->assertFalse( $out['changed'] );
+		$this->assertSame( array(), self::$resets );
+		$this->assertSame( $raw, get_post_field( 'post_content', $ids['layout'], 'raw' ) );
+		$this->layout_write(
+			array(
+				'layout_id' => $ids['layout'],
+				'sections'  => array( 'footer' => $ids['footer2'] ),
+			)
+		);
+		$this->assertCount( 1, self::$resets );
+		$this->assertSame( array( 'compiled_assets', 'transients', 'gfonts', 'fa_font', 'demo_data', 'po_export', 'patcher_messages', 'other_caches' ), array_keys( self::$resets[0] ) );
+		$this->assertSame( array( true, true, false, false, false, false, false, false ), array_values( self::$resets[0] ) );
+	}
+
+	public function test_layout_schema_permission_audit_and_description(): void {
+		$name = 'aafm/avada-update-layout';
+		$args = aafm_args_avada_update_layout();
+		$this->assertSame( 'aafm_perm_manage_options', $args['permission_callback'] );
+		$this->assertFalse( $args['input_schema']['additionalProperties'] );
+		$this->assertSame( array( 'layout_id' ), $args['input_schema']['required'] );
+		$this->assertTrue( $args['meta']['annotations']['destructive'] );
+		$this->acting_as( 'editor' );
+		$this->assertFalse( aafm_perm_manage_options() );
+		$this->assertContains( $name, aafm_non_removal_destructive_abilities() );
+		$this->assertSame( 'Ran an Avada layout update on layout #42', aafm_build_activity_detail( $name, array( 'layout_id' => 42 ) ) );
+		$this->assertSame( 'Ran an Avada layout update on the Global Layout', aafm_build_activity_detail( $name, array( 'layout_id' => 'global' ) ) );
+		$row = aafm_get_abilities_registry_full()[ $name ];
+		$this->assertSame( 'destructive', $row['risk'] );
+		foreach ( array( $row['description'], aafm_ability_disclosures()[ $name ] ) as $text ) {
+			$this->assertStringNotContainsString( ' - ', $text );
+			foreach ( array( 'site-wide', 'previous', 'never created or deleted', 'manage site options' ) as $phrase ) {
+				$this->assertStringContainsString( $phrase, $text, $phrase );
+			}
+		}
+	}
+
+	public function test_a_layout_avada_cannot_decode_is_refused(): void {
+		$ids = $this->layout_fixture();
+		global $wpdb;
+		$raw = (string) file_get_contents( dirname( __DIR__ ) . '/Fixtures/Avada/layout-shop.txt' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local fixture.
+		$wpdb->update( $wpdb->posts, array( 'post_content' => $raw ), array( 'ID' => $ids['layout'] ) );
+		clean_post_cache( $ids['layout'] );
+		$err = $this->layout_write(
+			array(
+				'layout_id' => $ids['layout'],
+				'sections'  => array( 'footer' => $ids['footer'] ),
+			)
+		);
+		$this->assertSame( 'aafm_avada_layout_unparseable', $err->get_error_code() );
+		$this->assertSame( $raw, get_post_field( 'post_content', $ids['layout'], 'raw' ) );
+	}
 }

@@ -1404,6 +1404,18 @@ function aafm_activity_detail_map(): array {
 				),
 			),
 		),
+		'aafm/avada-update-layout'         => array(
+			/* translators: %s: the layout's numeric ID. */
+			'template'          => __( 'Ran an Avada layout update on layout #%s', 'agent-abilities-for-mcp' ),
+			'fallback_template' => __( 'Ran an Avada layout update on the Global Layout', 'agent-abilities-for-mcp' ),
+			'args'              => array(
+				array(
+					'key'      => 'layout_id',
+					'type'     => 'id',
+					'optional' => true,
+				),
+			),
+		),
 		'aafm/wpbakery-update-page-code'   => array(
 			/* translators: %s: the post's numeric ID. */
 			'template' => __( 'Ran a page code update on WPBakery page #%s', 'agent-abilities-for-mcp' ),

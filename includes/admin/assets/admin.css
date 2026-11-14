@@ -23,6 +23,8 @@
   --aafm-text-muted:#50575e; --aafm-text-subtle:#646970;
   --aafm-border:#dcdcde; --aafm-border-strong:#c3c4c7;
   --aafm-accent:#2271b1; --aafm-accent-hover:#135e96; --aafm-accent-tint:#f0f6fc;
+  /* Accent text and icons, the pressed state, and the accent as rgb parts for translucent rings. */
+  --aafm-accent-text:var(--aafm-accent); --aafm-accent-active:#0a4b78; --aafm-accent-rgb:34, 113, 177;
   --aafm-green:#00a32a; --aafm-green-text:#007017; --aafm-green-tint:#edfaef;
   --aafm-amber:#dba617; --aafm-amber-text:#815f00; --aafm-amber-tint:#fcf9e8;
   --aafm-red:#d63638; --aafm-red-text:#b32d2e; --aafm-red-tint:#fcf0f1;
@@ -45,6 +47,20 @@
 
   /* Control geometry, so a form control and a button can never disagree again. */
   --aafm-control-h:34px;
+}
+
+/* Admin colour schemes. The seven schemes a user picks on purpose carry their colour into the
+   plugin accent; fresh, modern and any scheme another plugin adds keep the plugin blue. Core sets
+   these variables on body.admin-color-* (base-styles/admin-schemes.css), so the rule sits on body
+   and the .aafm-wrap re-point of core's variables below reads the result without a cycle. Accent
+   text and icons use core's darker-10, which keeps 4.5:1 on the quiet surface and the tint. */
+body:is(.admin-color-light, .admin-color-blue, .admin-color-coffee, .admin-color-ectoplasm, .admin-color-midnight, .admin-color-ocean, .admin-color-sunrise) {
+  --aafm-accent: var(--wp-admin-theme-color, #2271b1);
+  --aafm-accent-hover: var(--wp-admin-theme-color-darker-10, #135e96);
+  --aafm-accent-tint: rgba( var(--wp-admin-theme-color--rgb, 34, 113, 177), 0.08 );
+  --aafm-accent-text: var(--wp-admin-theme-color-darker-10, #135e96);
+  --aafm-accent-active: var(--wp-admin-theme-color-darker-20, #0a4b78);
+  --aafm-accent-rgb: var(--wp-admin-theme-color--rgb, 34, 113, 177);
 }
 
 /* Shared disclosure chevron: the solid-triangle affordance every <details>/<summary>
@@ -89,7 +105,7 @@
 	   plugin accent so they match the toggles and buttons beside them. */
 	--wp-admin-theme-color: var(--aafm-accent);
 	--wp-admin-theme-color-darker-10: var(--aafm-accent-hover);
-	--wp-admin-theme-color-darker-20: #0a4b78;
+	--wp-admin-theme-color-darker-20: var(--aafm-accent-active);
 
 	/* Base size for every inline SVG icon. Specific contexts (pills, card-heads,
 	   stat cards, client cards, buttons) override this with their own dimensions;
@@ -185,7 +201,7 @@
 
 			&:hover,
 			&:focus {
-				color: var(--aafm-accent);
+				color: var(--aafm-accent-text);
 			}
 
 			&:focus-visible {
@@ -238,18 +254,18 @@
 			color: #fff;
 		}
 
-		&:active { background: #0a4b78; }
+		&:active { background: var(--aafm-accent-active); }
 	}
 
 	.aafm-btn-secondary {
 		background: var(--aafm-surface);
-		color: var(--aafm-accent);
+		color: var(--aafm-accent-text);
 		border-color: var(--aafm-border-strong);
 
 		&:hover {
 			background: var(--aafm-accent-tint);
 			border-color: var(--aafm-accent);
-			color: var(--aafm-accent);
+			color: var(--aafm-accent-text);
 		}
 	}
 
@@ -732,7 +748,7 @@
 			flex: 0 0 auto;
 			margin-block-start: 1px;
 			display: flex;
-			color: var(--aafm-accent);
+			color: var(--aafm-accent-text);
 
 			.aafm-icon {
 				inline-size: 17px;
@@ -751,7 +767,7 @@
 			background: var(--aafm-accent-tint);
 			color: #0a4b78;
 
-			& .aafm-notice-ic { color: var(--aafm-accent); }
+			& .aafm-notice-ic { color: var(--aafm-accent-text); }
 		}
 
 		&.aafm-notice-warning {
@@ -852,7 +868,7 @@
 
 			&:hover,
 			&:focus {
-				color: var(--aafm-accent);
+				color: var(--aafm-accent-text);
 				background: transparent;
 			}
 
@@ -880,7 +896,7 @@
 		.nav-tab-active,
 		.nav-tab-active:hover,
 		.nav-tab-active:focus {
-			color: var(--aafm-accent);
+			color: var(--aafm-accent-text);
 			border-block-end-color: var(--aafm-accent);
 			font-weight: 600;
 			background: transparent;
@@ -920,7 +936,7 @@
 
 			&:hover {
 				border-color: var(--aafm-accent);
-				color: var(--aafm-accent);
+				color: var(--aafm-accent-text);
 			}
 
 			&:focus-visible {
@@ -1608,7 +1624,7 @@
 			user-select: none;
 			font-size: 12.5px;
 			font-weight: 600;
-			color: var(--aafm-accent);
+			color: var(--aafm-accent-text);
 
 			&::marker,
 			&::-webkit-details-marker { display: none; }
@@ -1961,7 +1977,7 @@
 		#aafm-log-live.is-active {
 			background: var(--aafm-accent-tint);
 			border-color: var(--aafm-accent);
-			color: var(--aafm-accent);
+			color: var(--aafm-accent-text);
 		}
 
 		.aafm-log-live-note {
@@ -2379,7 +2395,7 @@
 
 				/* The leading question glyph carries the accent, like the mockup's .qic. */
 				.aafm-icon {
-					color: var(--aafm-accent);
+					color: var(--aafm-accent-text);
 				}
 
 				/* Hide the browser-default disclosure triangle; the chevron
@@ -2391,7 +2407,7 @@
 				}
 
 				&:hover {
-					color: var(--aafm-accent);
+					color: var(--aafm-accent-text);
 				}
 
 				/* Right-aligned chevron affordance: shape and rotate-on-open come from the
@@ -2468,7 +2484,7 @@
 			&:hover {
 				background: #f0f0f1;
 				border-color: var(--aafm-accent);
-				color: var(--aafm-accent);
+				color: var(--aafm-accent-text);
 			}
 
 			&:focus-visible {
@@ -3090,7 +3106,7 @@
 				gap: 6px;
 				cursor: pointer;
 				font-size: 12px;
-				color: var(--aafm-accent);
+				color: var(--aafm-accent-text);
 				list-style: none;
 				padding-block: 2px;
 
@@ -3146,8 +3162,8 @@
    ============================================================================ */
 .aafm-qc-overlay {
 	--qc-ease: cubic-bezier(0.22, 1, 0.36, 1);
-	--qc-accent-tint: #f0f6fc;
-	--qc-accent-ring: rgba(34, 113, 177, 0.25);
+	--qc-accent-tint: var(--aafm-accent-tint);
+	--qc-accent-ring: rgba(var(--aafm-accent-rgb), 0.25);
 	--qc-amber-line: #c99a00;
 	--qc-amber-tint: #fcf9e8;
 	--qc-surface-3: #fbfbfc;
@@ -3210,7 +3226,7 @@
 		border: 1px solid #cfe0f2;
 		display: grid;
 		place-items: center;
-		color: var(--aafm-accent);
+		color: var(--aafm-accent-text);
 	}
 	& .aafm-qc-brandmark svg { width: 21px; height: 21px; display: block; }
 	& .aafm-qc-brandtext {
@@ -3268,7 +3284,7 @@
 		margin-block-end: 7px;
 	}
 	& .aafm-qc-count { font-size: 12px; font-weight: 600; color: var(--aafm-text-muted); }
-	& .aafm-qc-count b { color: var(--aafm-accent); font-variant-numeric: tabular-nums; }
+	& .aafm-qc-count b { color: var(--aafm-accent-text); font-variant-numeric: tabular-nums; }
 	& .aafm-qc-pct { font-size: 11.5px; color: var(--aafm-text-subtle); font-variant-numeric: tabular-nums; }
 	& .aafm-qc-meter-track { display: flex; gap: 5px; }
 	& .aafm-qc-seg {
@@ -3346,7 +3362,7 @@
 		background: var(--aafm-surface);
 		transition: all 0.3s var(--qc-ease);
 	}
-	& .aafm-qc-job.is-current .aafm-qc-marker { border-color: var(--aafm-accent); color: var(--aafm-accent); box-shadow: 0 0 0 4px var(--qc-accent-ring); }
+	& .aafm-qc-job.is-current .aafm-qc-marker { border-color: var(--aafm-accent); color: var(--aafm-accent-text); box-shadow: 0 0 0 4px var(--qc-accent-ring); }
 	& .aafm-qc-job.is-done .aafm-qc-marker { border-color: var(--aafm-green); background: var(--aafm-green); color: #fff; }
 	& .aafm-qc-marker svg { width: 15px; height: 15px; }
 	& .aafm-qc-marker .check { display: none; }
@@ -3410,7 +3426,7 @@
 		line-height: 1.45;
 		color: var(--aafm-text-subtle);
 	}
-	& .aafm-qc-byline svg { width: 13px; height: 13px; flex: 0 0 auto; margin-top: 1px; color: var(--aafm-accent); opacity: 0.8; }
+	& .aafm-qc-byline svg { width: 13px; height: 13px; flex: 0 0 auto; margin-top: 1px; color: var(--aafm-accent-text); opacity: 0.8; }
 
 /* ---- Endpoint URL field ---- */
 	& .aafm-qc-urlwrap { margin-top: 12px; }
@@ -3456,7 +3472,7 @@
 		gap: 6px;
 		transition: color 0.2s ease, background 0.15s ease;
 	}
-	& .aafm-qc-urlfield.is-live .aafm-qc-ucopy { color: var(--aafm-accent); cursor: pointer; }
+	& .aafm-qc-urlfield.is-live .aafm-qc-ucopy { color: var(--aafm-accent-text); cursor: pointer; }
 	& .aafm-qc-urlfield.is-live .aafm-qc-ucopy:hover { background: var(--qc-accent-tint); }
 	& .aafm-qc-ucopy svg { width: 14px; height: 14px; }
 
@@ -3469,7 +3485,7 @@
 		color: var(--aafm-text-muted);
 		transition: opacity 0.3s ease, color 0.3s ease;
 	}
-	& .aafm-qc-nextline svg { width: 15px; height: 15px; flex: 0 0 auto; margin-top: 1px; color: var(--aafm-accent); }
+	& .aafm-qc-nextline svg { width: 15px; height: 15px; flex: 0 0 auto; margin-top: 1px; color: var(--aafm-accent-text); }
 	& .aafm-qc-nextline b { color: var(--aafm-text); font-weight: 600; }
 	& .aafm-qc-nextline.is-hidden { display: none; }
 	& .aafm-qc-nextline.is-locked { color: var(--aafm-text-subtle); }
@@ -3528,7 +3544,7 @@
 		border-radius: 4px;
 		border: 1px solid var(--aafm-border);
 	}
-	& .aafm-qc-substep .sd a { color: var(--aafm-accent); }
+	& .aafm-qc-substep .sd a { color: var(--aafm-accent-text); }
 
 	& .aafm-qc-userrow { display: flex; align-items: center; gap: 9px; margin-top: 9px; flex-wrap: wrap; }
 	& .aafm-qc-uinput {
@@ -3543,7 +3559,7 @@
 	}
 	& .aafm-qc-userstatus { font-size: 12px; color: var(--aafm-text-muted); }
 	& .aafm-qc-userstatus.is-ok { color: var(--aafm-green-text); font-weight: 600; }
-	& .aafm-qc-userstatus a { color: var(--aafm-accent); }
+	& .aafm-qc-userstatus a { color: var(--aafm-accent-text); }
 	& .aafm-qc-substep .sc > .aafm-codeblock { margin-block-start: 10px; }
 
 /* ---- Content access extras ---- */
@@ -3590,7 +3606,7 @@
 		font-size: 12.5px;
 		color: var(--aafm-text-subtle);
 	}
-	& .aafm-qc-settingslink a { color: var(--aafm-accent); text-decoration: none; font-weight: 500; }
+	& .aafm-qc-settingslink a { color: var(--aafm-accent-text); text-decoration: none; font-weight: 500; }
 	& .aafm-qc-settingslink a:hover { color: var(--aafm-accent-hover); text-decoration: underline; }
 	& .aafm-qc-settingslink svg { width: 14px; height: 14px; color: var(--aafm-text-subtle); flex: 0 0 auto; }
 

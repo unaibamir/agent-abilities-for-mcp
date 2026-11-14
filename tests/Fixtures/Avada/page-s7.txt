@@ -1,0 +1,9 @@
+[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_2" layout="1_2" background_blend_mode="overlay" first="true" last="false" min_height="" hover_type="none" link="" border_position="all"][fusion_title size="2"]S7 fixture title[/fusion_title][fusion_text]
+
+Paragraph alpha.
+
+<iframe src="https://www.youtube.com/embed/aqz-KE-bpKQ" width="560" height="315"></iframe>[/fusion_text][fusion_button link="https://example.com/" target="_self"]Read more[/fusion_button][/fusion_builder_column][fusion_builder_column type="1_2" layout="1_2" background_blend_mode="overlay" first="false" last="true" min_height="" hover_type="none" link="" border_position="all"][fusion_text]
+
+Paragraph bravo.
+
+[/fusion_text][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]

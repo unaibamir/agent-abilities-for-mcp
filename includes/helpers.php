@@ -1049,6 +1049,8 @@ function aafm_non_removal_destructive_abilities(): array {
 		'aafm/update-site-settings',
 		// Overwrites WPBakery's site-wide settings in place; previous is the way back, nothing is removed.
 		'aafm/wpbakery-update-settings',
+		// Overwrites Avada's Global Options array in place; previous is the way back, nothing is removed.
+		'aafm/avada-update-global-options',
 	);
 
 	/**

@@ -42,6 +42,7 @@ final class BlockMarkupSanitizerSweepTest extends TestCase {
 			'$decoded' => 'Avada body text (an element\'s inner content) at its one choke point, aafm_avada_body_text(): entities decoded to the editor\'s form, brackets, encoded brackets and data-* refused without unfiltered_html, and the structure check after it.',
 			'$text'    => 'A textarea setting stored as a shortcode attribute, not post content; the attribute rule refuses quotes and brackets after it.',
 		),
+		'avada-site.php'             => array( '$value' => 'The Avada footer_text Global Option, HTML printed in the footer bar, not post content.' ),
 		'comments.php'               => array( "(string) \$input['content']" => 'Comment content (create and update).' ),
 		'media.php'                  => array(
 			'$sideloaded_content'             => 'Attachment description.',
@@ -169,7 +170,7 @@ final class BlockMarkupSanitizerSweepTest extends TestCase {
 		}
 		sort( $expected );
 
-		$this->assertCount( 15, $expected, 'Fixture: fifteen excluded calls.' );
+		$this->assertCount( 16, $expected, 'Fixture: sixteen excluded calls.' );
 		$this->assertSame( $expected, self::calls_to( 'wp_kses_post' ), 'A wp_kses_post( call in includes/abilities/ is neither routed through aafm_kses_block_markup() nor on the exclusion list.' );
 	}
 

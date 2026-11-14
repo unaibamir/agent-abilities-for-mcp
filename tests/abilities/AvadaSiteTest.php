@@ -1041,4 +1041,313 @@ final class AvadaSiteTest extends TestCase {
 			}
 		}
 	}
+
+	/**
+	 * Arguments the stub cache reset received, one entry per call.
+	 *
+	 * @var list<mixed>
+	 */
+	public static array $resets = array();
+
+	/**
+	 * Supply the Avada option name and a recording cache reset through the seam (Ruling B14; the AvadaStandIn class is
+	 * not relied on, Ruling R3-PR2-7).
+	 *
+	 * @param string|null $name Option name, or null for the theme inactive.
+	 * @return callable
+	 */
+	private function avada_options_seam( ?string $name = 'fusion_options' ): callable {
+		self::$resets = array();
+		$filter       = static function ( $resolved, string $entry ) use ( $name ) {
+			if ( 'avada_option_name' === $entry ) {
+				return null === $name ? null : static fn(): string => $name;
+			}
+			if ( 'avada_cache_reset' === $entry ) {
+				return static function ( $args = null ): void {
+					AvadaSiteTest::$resets[] = $args;
+				};
+			}
+			return $resolved;
+		};
+		add_filter( 'aafm_builder_vendor', $filter, 20, 2 );
+		return $filter;
+	}
+
+	/**
+	 * Run the Global Options write as an administrator against a stored array.
+	 *
+	 * @param array<string,mixed>      $set    Set.
+	 * @param array<string,mixed>|null $stored Stored option, or null to keep what is stored.
+	 * @return array<string,mixed>|WP_Error
+	 */
+	private function global_write( array $set, ?array $stored = array( 'primary_color' => '#111111' ) ) {
+		if ( null !== $stored ) {
+			update_option( 'fusion_options', $stored );
+		}
+		$filter = $this->avada_options_seam();
+		$this->acting_as( 'administrator' );
+		$out = aafm_exec_avada_update_global_options( array( 'set' => $set ) );
+		remove_filter( 'aafm_builder_vendor', $filter, 20 );
+		return $out;
+	}
+
+	public function test_the_writable_list_is_the_read_list_minus_maintenance_mode(): void {
+		$this->assertSame(
+			array( 'site_width', 'layout', 'primary_color', 'color_palette', 'link_color', 'body_typography', 'h1_typography', 'h2_typography', 'h3_typography', 'h4_typography', 'h5_typography', 'h6_typography', 'header_position', 'header_layout', 'logo', 'page_title_bar', 'footer_widgets', 'footer_copyright', 'footer_text', 'responsive' ),
+			aafm_avada_global_option_writable()
+		);
+		$this->assertCount( 20, aafm_avada_global_option_writable() );
+		$this->assertSame( aafm_avada_global_option_writable(), array_keys( array_intersect_key( array_flip( aafm_avada_global_option_writable() ), aafm_avada_global_option_rules() ) ) );
+	}
+
+	public function test_maintenance_mode_and_an_unlisted_key_are_refused(): void {
+		foreach ( array( 'maintenance_mode', 'smtp_password', 'custom_css' ) as $key ) {
+			$out = $this->global_write( array( $key => '1' ) );
+			$this->assertInstanceOf( WP_Error::class, $out );
+			$this->assertSame( 'aafm_builder_attribute_not_writable', $out->get_error_code() );
+		}
+		$this->assertSame( array( 'primary_color' => '#111111' ), get_option( 'fusion_options' ) );
+		$this->assertSame( array(), self::$resets );
+	}
+
+	public function test_each_rule_refuses_what_it_should(): void {
+		$cases = array(
+			array( 'primary_color' => 'red;}body{x' ),
+			array( 'primary_color' => '' ),
+			array( 'layout' => 'stretched' ),
+			array( 'footer_widgets' => 1 ),
+			array( 'site_width' => '1200' ),
+			array( 'body_typography' => array( 'font-family' => 'Inter{}' ) ),
+			array( 'body_typography' => array( 'font-family' => 'url(x)' ) ),
+			array( 'body_typography' => array( 'font-size' => '16' ) ),
+			array( 'body_typography' => array( 'font-weight' => '450' ) ),
+			array( 'body_typography' => array( 'font-face' => 'x' ) ),
+			array( 'h1_typography' => 'Inter' ),
+			array( 'color_palette' => array( 'color1' => array( 'color' => 'blue;' ) ) ),
+			array( 'color_palette' => array( 'colour1' => array( 'color' => '#fff' ) ) ),
+			array( 'color_palette' => array( 'color1' => array( 'label' => '<b>x</b>' ) ) ),
+			array( 'logo' => 'https://example.org/logo.png' ),
+		);
+		foreach ( $cases as $set ) {
+			$out = $this->global_write( $set );
+			$this->assertInstanceOf( WP_Error::class, $out, (string) wp_json_encode( $set ) );
+			$this->assertSame( 'aafm_builder_invalid_value', $out->get_error_code(), (string) wp_json_encode( $set ) );
+		}
+		$this->assertSame( array( 'primary_color' => '#111111' ), get_option( 'fusion_options' ) );
+	}
+
+	public function test_footer_text_loses_a_script_tag(): void {
+		$out = $this->global_write( array( 'footer_text' => 'Copyright <a href="https://example.org">Us</a><script>alert(1)</script>' ) );
+		$this->assertSame( array( 'footer_text' ), $out['changed'] );
+		$this->assertSame( 'Copyright <a href="https://example.org">Us</a>alert(1)', get_option( 'fusion_options' )['footer_text'] );
+	}
+
+	public function test_logo_writes_url_and_id_together_and_refuses_a_non_image(): void {
+		$image = self::factory()->attachment->create_upload_object( DIR_TESTDATA . '/images/canola.jpg' );
+		$text  = self::factory()->attachment->create( array( 'post_mime_type' => 'text/plain' ) );
+		$out   = $this->global_write( array( 'logo' => $text ) );
+		$this->assertSame( 'aafm_builder_invalid_value', $out->get_error_code() );
+		$out  = $this->global_write( array( 'logo' => $image ) );
+		$logo = get_option( 'fusion_options' )['logo'];
+		$this->assertSame( array( 'logo' ), $out['changed'] );
+		$this->assertSame( (string) $image, $logo['id'] );
+		$this->assertSame( wp_get_attachment_url( $image ), $logo['url'] );
+		$this->assertSame( array( 'url', 'id', 'height', 'width', 'thumbnail' ), array_keys( $logo ) );
+	}
+
+	public function test_typography_and_palette_change_only_the_named_sub_values(): void {
+		$stored = array(
+			'body_typography' => array(
+				'font-family' => 'Inter',
+				'font-size'   => '16px',
+				'line-height' => 'var(--awb-typography4-line-height)',
+			),
+			'color_palette'   => array(
+				'color1' => array(
+					'color' => '#ffffff',
+					'label' => 'Color 1',
+				),
+				'color2' => array(
+					'color' => '#000000',
+					'label' => 'Color 2',
+				),
+			),
+		);
+		$out    = $this->global_write(
+			array(
+				'body_typography' => array(
+					'font-size'   => '18px',
+					'line-height' => '1.6',
+				),
+				'color_palette'   => (object) array( 'color2' => (object) array( 'color' => 'rgba(1,2,3,0.5)' ) ),
+			),
+			$stored
+		);
+		$this->assertSame( array( 'body_typography', 'color_palette' ), $out['changed'] );
+		$now = get_option( 'fusion_options' );
+		$this->assertSame(
+			array(
+				'font-family' => 'Inter',
+				'font-size'   => '18px',
+				'line-height' => '1.6',
+			),
+			$now['body_typography']
+		);
+		$this->assertSame(
+			array(
+				'color' => 'rgba(1,2,3,0.5)',
+				'label' => 'Color 2',
+			),
+			$now['color_palette']['color2']
+		);
+		$this->assertSame( $stored['color_palette']['color1'], $now['color_palette']['color1'] );
+		$this->assertSame( $stored, (array) $out['previous'] );
+	}
+
+	public function test_only_the_named_keys_change_and_previous_holds_the_old_values(): void {
+		$stored = array(
+			'primary_color' => '#111111',
+			'smtp_password' => 'planted-secret',
+			'layout'        => 'wide',
+		);
+		$out    = $this->global_write(
+			array(
+				'primary_color'    => 'var(--awb-color5)',
+				'footer_copyright' => '0',
+			),
+			$stored
+		);
+		$this->assertSame( 'fusion_options', $out['option_name'] );
+		$this->assertSame( array( 'primary_color', 'footer_copyright' ), $out['changed'] );
+		$this->assertSame(
+			array(
+				'primary_color'    => '#111111',
+				'footer_copyright' => null,
+			),
+			$out['previous']
+		);
+		$this->assertSame(
+			array(
+				'primary_color'    => 'var(--awb-color5)',
+				'smtp_password'    => 'planted-secret',
+				'layout'           => 'wide',
+				'footer_copyright' => '0',
+			),
+			get_option( 'fusion_options' )
+		);
+		$this->assertStringNotContainsString( 'planted-secret', (string) wp_json_encode( $out ) );
+	}
+
+	public function test_the_cache_call_gets_exactly_the_narrow_argument_and_no_object_cache_flush(): void {
+		wp_cache_set( 'aafm-planted', 'still-here', 'aafm-unrelated-group' );
+		$this->global_write( array( 'layout' => 'boxed' ) );
+		$this->assertSame(
+			array(
+				array(
+					'compiled_assets'  => true,
+					'transients'       => true,
+					'gfonts'           => false,
+					'fa_font'          => false,
+					'demo_data'        => false,
+					'po_export'        => false,
+					'patcher_messages' => false,
+					'other_caches'     => false,
+				),
+			),
+			self::$resets
+		);
+		$this->assertSame( 'still-here', wp_cache_get( 'aafm-planted', 'aafm-unrelated-group' ) );
+	}
+
+	public function test_a_failed_verified_write_is_an_error_and_makes_no_cache_call(): void {
+		update_option( 'fusion_options', array( 'primary_color' => '#111111' ) );
+		$keep = static fn( $value, $old ) => $old;
+		add_filter( 'pre_update_option_fusion_options', $keep, 10, 2 );
+		$out  = $this->global_write( array( 'layout' => 'boxed' ), null );
+		remove_filter( 'pre_update_option_fusion_options', $keep, 10 );
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_avada_options_not_saved', $out->get_error_code() );
+		$this->assertSame( array(), self::$resets );
+		$this->assertSame( array( 'primary_color' => '#111111' ), get_option( 'fusion_options' ) );
+	}
+
+	public function test_the_theme_must_be_active(): void {
+		update_option( 'fusion_options', array( 'layout' => 'wide' ) );
+		$filter = $this->avada_options_seam( null );
+		$this->acting_as( 'administrator' );
+		$out = aafm_exec_avada_update_global_options( array( 'set' => array( 'layout' => 'boxed' ) ) );
+		remove_filter( 'aafm_builder_vendor', $filter, 20 );
+		$this->assertSame( 'aafm_avada_theme_inactive', $out->get_error_code() );
+		$this->assertSame( 409, $out->get_error_data()['status'] );
+		$this->assertSame( array( 'layout' => 'wide' ), get_option( 'fusion_options' ) );
+	}
+
+	public function test_global_options_wrong_json_types_are_refused_and_equal_values_write_nothing(): void {
+		foreach ( array( array(), 'layout' ) as $set ) {
+			update_option( 'fusion_options', array( 'layout' => 'wide' ) );
+			$filter = $this->avada_options_seam();
+			$this->acting_as( 'administrator' );
+			$out = aafm_exec_avada_update_global_options( array( 'set' => $set ) );
+			remove_filter( 'aafm_builder_vendor', $filter, 20 );
+			$this->assertSame( 'aafm_builder_invalid_value', $out->get_error_code() );
+		}
+		$writes = 0;
+		$count  = static function ( $value ) use ( &$writes ) {
+			++$writes;
+			return $value;
+		};
+		update_option(
+			'fusion_options',
+			array(
+				'layout'          => 'wide',
+				'body_typography' => array( 'font-size' => '16px' ),
+			)
+		);
+		add_filter( 'pre_update_option_fusion_options', $count );
+		$out = $this->global_write(
+			array(
+				'layout'          => 'wide',
+				'body_typography' => array( 'font-size' => '16px' ),
+			),
+			null
+		);
+		remove_filter( 'pre_update_option_fusion_options', $count );
+		$this->assertSame( 0, $writes );
+		$this->assertSame( array(), $out['changed'] );
+		$this->assertSame( array(), self::$resets );
+	}
+
+	public function test_global_options_schema_permission_audit_and_description(): void {
+		$name = 'aafm/avada-update-global-options';
+		$args = aafm_args_avada_update_global_options();
+		$this->assertSame( 'aafm_perm_manage_options', $args['permission_callback'] );
+		$this->assertFalse( $args['input_schema']['additionalProperties'] );
+		$this->assertTrue( $args['meta']['annotations']['destructive'] );
+		$this->assertNull( aafm_ability_list_permission( $name ) );
+		$this->acting_as( 'editor' );
+		$this->assertFalse( aafm_perm_manage_options() );
+		$this->assertContains( $name, aafm_non_removal_destructive_abilities() );
+		$this->assertSame(
+			'Ran an Avada Global Options update: layout, primary_color',
+			aafm_build_activity_detail(
+				$name,
+				array(
+					'set' => array(
+						'primary_color' => 'x',
+						'layout'        => 'y',
+						'smtp_password' => 'z',
+					),
+				)
+			)
+		);
+		$row = aafm_get_abilities_registry_full()[ $name ];
+		$this->assertSame( 'destructive', $row['risk'] );
+		foreach ( array( $row['description'], aafm_ability_disclosures()[ $name ] ) as $text ) {
+			$this->assertStringNotContainsString( ' - ', $text );
+			foreach ( array( 'site-wide', 'previous', 'maintenance', 'manage site options' ) as $phrase ) {
+				$this->assertStringContainsString( $phrase, $text, $phrase );
+			}
+		}
+		$this->assertStringContainsString( 'page cache', $row['description'] );
+	}
 }

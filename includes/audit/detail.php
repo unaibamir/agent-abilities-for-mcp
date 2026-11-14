@@ -1393,6 +1393,17 @@ function aafm_activity_detail_map(): array {
 			),
 			'link'     => 'post',
 		),
+		'aafm/avada-update-global-options' => array(
+			/* translators: %s: comma-separated list of the Avada Global Option keys in the call. */
+			'template' => __( 'Ran an Avada Global Options update: %s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'set',
+					'type' => 'keys',
+					'enum' => 'aafm_avada_global_option_keys',
+				),
+			),
+		),
 		'aafm/wpbakery-update-page-code'   => array(
 			/* translators: %s: the post's numeric ID. */
 			'template' => __( 'Ran a page code update on WPBakery page #%s', 'agent-abilities-for-mcp' ),

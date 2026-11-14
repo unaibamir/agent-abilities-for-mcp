@@ -459,6 +459,10 @@ function aafm_integration_ability_order(): array {
 				'name' => 'aafm/avada-update-page-options',
 				'risk' => 'write',
 			),
+			array(
+				'name' => 'aafm/avada-update-global-options',
+				'risk' => 'destructive',
+			),
 		),
 		'wpbakery'      => array(
 			array(

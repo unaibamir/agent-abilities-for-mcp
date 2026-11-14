@@ -149,6 +149,11 @@ final class AvadaGlobalOptionsTest extends TestCase {
 		$this->assertSame( $keys, $args['input_schema']['properties']['keys']['items']['enum'] );
 	}
 
+	public function test_the_write_list_holds_nothing_secret_either(): void {
+		$this->assertSame( array(), $this->secret_like_keys( aafm_avada_global_option_writable() ), 'A writable key looks like a secret or code setting.' );
+		$this->assertSame( array(), array_diff( aafm_avada_global_option_writable(), aafm_avada_global_option_keys() ) );
+	}
+
 	public function test_the_descriptions_do_not_promise_that_no_code_comes_back(): void {
 		// footer_text is an approved key and is Avada's HTML code field, returned as stored.
 		foreach ( array( aafm_ability_description( 'aafm/avada-get-global-options' ), aafm_ability_disclosures()['aafm/avada-get-global-options'] ) as $text ) {

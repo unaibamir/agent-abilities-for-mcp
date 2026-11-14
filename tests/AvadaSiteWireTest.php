@@ -20,7 +20,7 @@ final class AvadaSiteWireTest extends TestCase {
 
 	private const SECTION = '[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1"][fusion_text]<p>Saved section</p>[/fusion_text][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]';
 
-	private const TOOLS = array( 'aafm/avada-insert-library-item', 'aafm/avada-update-page-css', 'aafm/avada-update-page-options' );
+	private const TOOLS = array( 'aafm/avada-insert-library-item', 'aafm/avada-update-page-css', 'aafm/avada-update-page-options', 'aafm/avada-update-global-options' );
 
 	public function set_up(): void {
 		parent::set_up();
@@ -346,5 +346,54 @@ final class AvadaSiteWireTest extends TestCase {
 		$raw = $call( 'req-avada-options-2' );
 		$this->assertStringContainsString( '"changed":[],"previous":{}', (string) $raw->getContent()[0]->getText() );
 		remove_filter( 'aafm_builder_vendor', $theme, 30 );
+	}
+
+	public function test_update_global_options_round_trips_over_a_real_tools_call(): void {
+		update_option(
+			'fusion_options',
+			array(
+				'layout'        => 'wide',
+				'smtp_password' => 'planted-wire-secret',
+			)
+		);
+		$resets = 0;
+		$filter = static function ( $resolved, string $entry ) use ( &$resets ) {
+			if ( 'avada_option_name' === $entry ) {
+				return static fn(): string => 'fusion_options';
+			}
+			if ( 'avada_cache_reset' === $entry ) {
+				return static function () use ( &$resets ): void {
+					++$resets;
+				};
+			}
+			return $resolved;
+		};
+		add_filter( 'aafm_builder_vendor', $filter, 20, 2 );
+		list( $handler ) = $this->wired();
+		$raw             = $handler->call_tool(
+			array(
+				'name'      => aafm_mcp_tool_name( 'aafm/avada-update-global-options' ),
+				'arguments' => array( 'set' => array( 'layout' => 'boxed' ) ),
+			),
+			'req-avada-global-1'
+		);
+		remove_filter( 'aafm_builder_vendor', $filter, 20 );
+		$this->assertStringNotContainsString( 'planted-wire-secret', (string) $raw->getContent()[0]->getText() );
+		$this->assertSame(
+			array(
+				'option_name' => 'fusion_options',
+				'changed'     => array( 'layout' ),
+				'previous'    => array( 'layout' => 'wide' ),
+				'undo'        => array(
+					'undoable'   => false,
+					'change_ids' => array(),
+					'reason'     => 'not_covered',
+				),
+			),
+			$this->wire( $raw )
+		);
+		$this->assertSame( 1, $resets );
+		$this->assertSame( 'boxed', get_option( 'fusion_options' )['layout'] );
+		delete_option( 'fusion_options' );
 	}
 }

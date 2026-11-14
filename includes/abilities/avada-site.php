@@ -50,7 +50,7 @@ function aafm_register_avada_site_full_definitions( array $registry ): array {
  */
 function aafm_avada_site_registry_definitions(): array {
 	return array(
-		'aafm/avada-insert-library-item' => array(
+		'aafm/avada-insert-library-item'   => array(
 			'label'        => __( 'Insert an Avada library item', 'agent-abilities-for-mcp' ),
 			'description'  => __( 'Places an item from Avada\'s library, named by its id from avada-list-library, on an Avada page, layout section or library item, before or after an element from the outline of avada-get-page-content or as its first or last child. A saved section goes at the top level, a saved column inside a row and a saved element inside a column, by Avada\'s own nesting rules. An ordinary item is copied byte for byte; a global item is placed as a reference to the item, as Avada\'s builder does, so every page that shows it keeps showing the item itself, and placing one needs a user who can edit private posts. An item may hold at most 50 elements, nested at most 6 deep. An item holding a code block, a raw setting or a setting named like an event handler needs a user who may post unfiltered HTML, and for any other user its text may hold no square bracket, percent-encoded bracket, data-* attribute, unfinished tag or HTML that WordPress would remove, for a copy and for a reference alike. Requires page_fingerprint from the last read or write and returns the new one; a changed page is refused and nothing is saved. Other indexes may move, so read the outline again before the next structural change. When a revision is kept, restore_revision_id brings the page back through restore-revision. Not undoable from this plugin\'s change history. Requires edit access to the page and to the item; Avada\'s Role Manager is not applied. Only while Avada is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
@@ -58,7 +58,7 @@ function aafm_avada_site_registry_definitions(): array {
 			'subject'      => 'avada',
 			'args_builder' => 'aafm_args_avada_insert_library_item',
 		),
-		'aafm/avada-update-page-css'     => array(
+		'aafm/avada-update-page-css'       => array(
 			'label'        => __( 'Update Avada page CSS', 'agent-abilities-for-mcp' ),
 			'description'  => __( 'Sets the custom CSS of one Avada page, layout section or library item, the CSS field of Avada\'s builder settings for that page. The value given replaces the page\'s existing CSS, and an empty string removes it; previous returns the old CSS, which is the way back. CSS is stored without HTML tags. A value equal to what is stored is left alone and changed is false. No revision is kept, and the change is not undoable from this plugin\'s change history. Requires edit access to the post and a user who may post unfiltered HTML; Avada\'s Role Manager is not applied. Only while Avada is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
@@ -66,13 +66,21 @@ function aafm_avada_site_registry_definitions(): array {
 			'subject'      => 'avada',
 			'args_builder' => 'aafm_args_avada_update_page_css',
 		),
-		'aafm/avada-update-page-options' => array(
+		'aafm/avada-update-page-options'   => array(
 			'label'        => __( 'Update Avada page options', 'agent-abilities-for-mcp' ),
 			'description'  => __( 'Sets or removes Avada page options on one post, the settings of Avada\'s page options panel: layout, title bar, sidebars, slider, header, footer, off canvas, form appearance, steps and confirmation, SEO and template settings from the fixed list avada-get-page-content returns with include_page_options. set maps option ids to values and remove lists ids to drop, so Avada\'s default applies; give at least one. Every other stored option is kept. A choice is its stored value, a colour a hex, rgba, hsla or Avada colour variable, an image an attachment id, and a multi choice a list. Text may hold no straight double quote or square bracket; for a user who may not post unfiltered HTML, a text area value WordPress would filter is refused, never stored altered. Option groups stored as several sub-values (dimensions, typography, sortable lists, media and display conditions) are not writable, and form notification, submission and privacy settings and code fields are never reachable. An empty value or default removes the option, as Avada\'s own save does. previous returns the old value of every option that changed, null where none was stored, which is the way back. A value equal to what is stored is left alone and not listed in changed. No revision is kept, and the change is not undoable from this plugin\'s change history. Needs the Avada theme active and a post Avada owns, one of Avada\'s own types, or a page, post or portfolio item that no other builder owns. Requires edit access to the post; layout sections need a user who can manage site options. Avada\'s Role Manager is not applied. Only while Avada is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'avada',
 			'args_builder' => 'aafm_args_avada_update_page_options',
+		),
+		'aafm/avada-update-global-options' => array(
+			'label'        => __( 'Update Avada Global Options', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Overwrites site-wide Avada Global Options from the fixed list avada-get-global-options returns, apart from maintenance_mode, which stays read only. set maps option keys to values: a colour as a hex, rgba, hsla or Avada colour variable; site_width as a number with px or %; layout, header_position, header_layout, page_title_bar, footer_widgets, footer_copyright and responsive as one of their stored choices; logo as an image attachment id, whose URL and size are written with it; footer_text as HTML with unsafe tags removed; a typography option as an object of the sub-values to change (font-family, font-size, line-height, letter-spacing, font-weight, font-style, text-transform, color); color_palette as an object of the colour slots to change, each with a color and a label. A value that fits no rule is refused and nothing is written. Every other stored option is kept. previous returns the old value of every option that changed, null where none was stored, which is the way back. The change applies to the whole site at once, and Avada\'s compiled CSS is rebuilt; a page cache plugin keeps serving its cached pages until the owner purges it. Not undoable from this plugin\'s change history. Needs the Avada theme active and a user who can manage site options. Only while Avada is active.', 'agent-abilities-for-mcp' ),
+			'group'        => 'writes',
+			'risk'         => 'destructive',
+			'subject'      => 'avada',
+			'args_builder' => 'aafm_args_avada_update_global_options',
 		),
 	);
 }
@@ -590,5 +598,347 @@ function aafm_exec_avada_update_page_options( array $input ) {
 	if ( ! $ok ) {
 		return aafm_meta_write_error( $status, array() === $new ? 'delete' : 'write', 'post', $id, '_fusion' );
 	}
+	return $out;
+}
+
+/**
+ * The Avada Global Options aafm/avada-update-global-options may write: the read allowlist minus maintenance_mode,
+ * which stays read only because one wrong value closes the site to visitors (Ruling Q15). 20 keys.
+ *
+ * @return list<string>
+ */
+function aafm_avada_global_option_writable(): array {
+	return array_values( array_diff( aafm_avada_global_option_keys(), array( 'maintenance_mode' ) ) );
+}
+
+/**
+ * The rule each writable Global Option gets (design AV-12; themes/Avada/includes/options/*.php, 7.16.1): a fixed
+ * list of stored choices, or the name of a value rule. scratchpad/1113/s13-confirm.md records the source of each.
+ *
+ * @return array<string,string|list<string>>
+ */
+function aafm_avada_global_option_rules(): array {
+	$rules = array(
+		'site_width'       => 'width',
+		'layout'           => array( 'boxed', 'wide' ),
+		'primary_color'    => 'colour',
+		'color_palette'    => 'palette',
+		'link_color'       => 'colour',
+		'header_position'  => array( 'top', 'left', 'right' ),
+		'header_layout'    => array( 'v1', 'v2', 'v3', 'v4', 'v5', 'v6', 'v7' ),
+		'logo'             => 'image',
+		'page_title_bar'   => array( 'bar_and_content', 'content_only', 'hide' ),
+		'footer_widgets'   => array( '0', '1' ),
+		'footer_copyright' => array( '0', '1' ),
+		'footer_text'      => 'html',
+		'responsive'       => array( '0', '1' ),
+	);
+	foreach ( array( 'body', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6' ) as $level ) {
+		$rules[ $level . '_typography' ] = 'typography';
+	}
+	return $rules;
+}
+
+/**
+ * Whether a value is an Avada colour: hex, rgb(a), hsl(a) or a global colour variable, by the one colour pattern the
+ * element tools use (aafm_avada_encode_value() colour kind).
+ *
+ * @param mixed  $value Value.
+ * @param string $name  Name for the refusal.
+ * @return string|null
+ */
+function aafm_avada_global_colour( $value, string $name ): ?string {
+	if ( ! is_string( $value ) || '' === $value ) {
+		return null;
+	}
+	$out = aafm_avada_encode_value( 'colour', $value, array( 'param_name' => $name ) );
+	return is_string( $out ) ? $out : null;
+}
+
+/**
+ * The stored form of one Global Option value, or WP_Error aafm_builder_invalid_value naming the key (design AV-12).
+ * Avada's own setter validates nothing (A14), and these values land in Avada's compiled CSS, where an administrator on
+ * multisite has manage_options without unfiltered_html, so every rule is explicit. A typography or palette value is the
+ * set of sub-values to change; the executor merges it into the stored array.
+ *
+ * @param string $key   Option key.
+ * @param mixed  $value Input.
+ * @return mixed|WP_Error
+ */
+function aafm_avada_validate_global_option( string $key, $value ) {
+	$rules = aafm_avada_global_option_rules();
+	$rule  = $rules[ $key ] ?? null;
+	$bad   = aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $key );
+	if ( is_array( $rule ) ) {
+		return is_string( $value ) && in_array( $value, $rule, true ) ? $value : $bad;
+	}
+	switch ( $rule ) {
+		case 'width':
+			return is_string( $value ) && 1 === preg_match( '/^\d{1,5}(\.\d{1,3})?(px|%)$/', $value ) ? $value : $bad;
+		case 'colour':
+			return aafm_avada_global_colour( $value, $key ) ?? $bad;
+		case 'html':
+			return is_string( $value ) ? wp_kses_post( $value ) : $bad;
+		case 'image':
+			$id         = is_int( $value ) && $value > 0 ? $value : 0;
+			$attachment = $id ? aafm_exact_object( 'post', $id ) : null;
+			$src        = $attachment instanceof WP_Post && 'attachment' === $attachment->post_type && wp_attachment_is_image( $id ) ? wp_get_attachment_image_src( $id, 'full' ) : false;
+			return is_array( $src ) ? array(
+				'url'       => (string) $src[0],
+				'id'        => (string) $id,
+				'height'    => (string) $src[2],
+				'width'     => (string) $src[1],
+				'thumbnail' => '',
+			) : $bad;
+		case 'typography':
+			return aafm_avada_global_typography( $key, $value ) ?? $bad;
+		case 'palette':
+			if ( $value instanceof stdClass ) {
+				$value = (array) $value;
+			}
+			if ( ! is_array( $value ) || array() === $value ) {
+				return $bad;
+			}
+			$out = array();
+			foreach ( $value as $slot => $entry ) {
+				$entry = $entry instanceof stdClass ? (array) $entry : $entry;
+				if ( ! is_string( $slot ) || 1 !== preg_match( '/^color\d{1,2}$/', $slot ) || ! is_array( $entry ) || array() === $entry || array() !== array_diff( array_keys( $entry ), array( 'color', 'label' ) ) ) {
+					return $bad;
+				}
+				$clean = array();
+				if ( array_key_exists( 'color', $entry ) ) {
+					$colour = aafm_avada_global_colour( $entry['color'], $key );
+					if ( null === $colour ) {
+						return $bad;
+					}
+					$clean['color'] = $colour;
+				}
+				if ( array_key_exists( 'label', $entry ) ) {
+					if ( ! is_string( $entry['label'] ) || sanitize_text_field( $entry['label'] ) !== $entry['label'] || strlen( $entry['label'] ) > 64 ) {
+						return $bad;
+					}
+					$clean['label'] = $entry['label'];
+				}
+				$out[ $slot ] = $clean;
+			}
+			return $out;
+	}
+	return $bad;
+}
+
+/**
+ * The sub-values of one typography option, each to its explicit rule, or null when any is refused: a font family from
+ * a character class without ; { } < ( or a backslash; a size as a number and a unit; line height and letter spacing as a
+ * number with an optional unit (a unitless line height is the CSS default form); weight, style and text transform from
+ * fixed lists; colour by the colour pattern. An Avada global typography variable is accepted for any of them, since
+ * Avada's own defaults are stored that way.
+ *
+ * @param string $key   Option key.
+ * @param mixed  $value Input.
+ * @return array<string,string>|null
+ */
+function aafm_avada_global_typography( string $key, $value ): ?array {
+	if ( $value instanceof stdClass ) {
+		$value = (array) $value;
+	}
+	if ( ! is_array( $value ) || array() === $value ) {
+		return null;
+	}
+	$patterns = array(
+		'font-family'    => '/^[A-Za-z0-9 ,\'"_-]{1,100}$/',
+		'font-size'      => '/^\d{1,4}(\.\d{1,3})?(px|em|rem|%|vw|vh|pt)$/',
+		'line-height'    => '/^\d{1,4}(\.\d{1,3})?(px|em|rem|%)?$/',
+		'letter-spacing' => '/^-?\d{1,4}(\.\d{1,3})?(px|em|rem)?$/',
+		'font-weight'    => '/^(|[1-9]00|regular|normal|bold)$/',
+		'font-style'     => '/^(|normal|italic)$/',
+		'text-transform' => '/^(|none|uppercase|lowercase|capitalize)$/',
+	);
+	$out      = array();
+	foreach ( $value as $sub => $one ) {
+		if ( ! is_string( $sub ) || ! is_string( $one ) ) {
+			return null;
+		}
+		if ( 'color' === $sub ) {
+			$colour = aafm_avada_global_colour( $one, $key );
+			if ( null === $colour ) {
+				return null;
+			}
+			$out[ $sub ] = $colour;
+			continue;
+		}
+		if ( ! isset( $patterns[ $sub ] ) ) {
+			return null;
+		}
+		if ( 1 !== preg_match( $patterns[ $sub ], $one ) && 1 !== preg_match( '/^var\(--awb-typography\d{1,2}-[a-z-]{1,32}\)$/', $one ) ) {
+			return null;
+		}
+		$out[ $sub ] = $one;
+	}
+	return $out;
+}
+
+/**
+ * Avada's cache reset with the narrow argument array only (Ruling B2, plan 326 S13-2): the compiled assets and Avada's
+ * own transients, never fonts, demo data or other caches, and never the bare call. False when the entry is missing or
+ * throws. This is not an object cache flush.
+ *
+ * @return bool
+ */
+function aafm_avada_reset_caches(): bool {
+	$reset = aafm_builder_vendor( 'avada_cache_reset' );
+	if ( null === $reset ) {
+		return false;
+	}
+	try {
+		$reset(
+			array(
+				'compiled_assets'  => true,
+				'transients'       => true,
+				'gfonts'           => false,
+				'fa_font'          => false,
+				'demo_data'        => false,
+				'po_export'        => false,
+				'patcher_messages' => false,
+				'other_caches'     => false,
+			)
+		);
+	} catch ( Throwable $e ) {
+		unset( $e );
+		return false;
+	}
+	return true;
+}
+
+/**
+ * Args for aafm/avada-update-global-options.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_avada_update_global_options(): array {
+	return array(
+		'label'               => aafm_ability_label( 'aafm/avada-update-global-options' ),
+		'description'         => aafm_ability_description( 'aafm/avada-update-global-options' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'set' => array(
+					'type'        => 'object',
+					'description' => __( 'Option key to its new value, keys from avada-get-global-options.', 'agent-abilities-for-mcp' ),
+				),
+			),
+			'required'             => array( 'set' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'option_name' => array( 'type' => 'string' ),
+				'changed'     => array(
+					'type'  => 'array',
+					'items' => array( 'type' => 'string' ),
+				),
+				'previous'    => array(
+					'type'        => 'object',
+					'description' => __( 'The old value of each changed option, null where none was stored.', 'agent-abilities-for-mcp' ),
+				),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_avada_update_global_options',
+		'permission_callback' => 'aafm_perm_manage_options',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => true,
+				'idempotent'  => true,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/avada-update-global-options (design AV-12). Every key and value is checked before the option is read;
+ * the stored array is changed only at the named keys (a typography or palette value only at its named sub-values) and
+ * written whole with aafm_update_option_verified() on the per-language name the read uses. Only a certified write is
+ * followed by the narrow cache reset.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_avada_update_global_options( array $input ) {
+	$name_of = aafm_builder_vendor( 'avada_option_name' );
+	$name    = null !== $name_of ? (string) $name_of() : '';
+	if ( '' === $name ) {
+		return new WP_Error(
+			'aafm_avada_theme_inactive',
+			__( 'The Avada theme is not active, so there are no Avada Global Options to change. Nothing was changed.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 409 )
+		);
+	}
+	$set = $input['set'] ?? null;
+	if ( $set instanceof stdClass ) {
+		$set = (array) $set;
+	}
+	if ( ! is_array( $set ) || array() === $set ) {
+		return aafm_builder_error( 'aafm_builder_invalid_value' );
+	}
+	$apply = array();
+	foreach ( $set as $key => $value ) {
+		$key = (string) $key;
+		if ( ! in_array( $key, aafm_avada_global_option_writable(), true ) ) {
+			return aafm_wpbakery_setting_error( 'aafm_builder_attribute_not_writable', $key );
+		}
+		$clean = aafm_avada_validate_global_option( $key, $value );
+		if ( is_wp_error( $clean ) ) {
+			return $clean;
+		}
+		$apply[ $key ] = $clean;
+	}
+
+	$stored = get_option( $name );
+	if ( ! is_array( $stored ) ) {
+		return new WP_Error(
+			'aafm_avada_options_unreadable',
+			__( 'The Avada Global Options could not be read. Nothing was changed.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 500 )
+		);
+	}
+	$rules    = aafm_avada_global_option_rules();
+	$new      = $stored;
+	$changed  = array();
+	$previous = array();
+	foreach ( $apply as $key => $value ) {
+		$before = $stored[ $key ] ?? null;
+		if ( 'typography' === $rules[ $key ] || 'palette' === $rules[ $key ] ) {
+			$merged = is_array( $before ) ? $before : array();
+			foreach ( $value as $sub => $one ) {
+				$merged[ $sub ] = 'palette' === $rules[ $key ] ? array_merge( is_array( $merged[ $sub ] ?? null ) ? $merged[ $sub ] : array(), $one ) : $one;
+			}
+			$value = $merged;
+		}
+		if ( $before === $value ) {
+			continue;
+		}
+		$new[ $key ]      = $value;
+		$changed[]        = $key;
+		$previous[ $key ] = $before;
+	}
+	$out = array(
+		'option_name' => $name,
+		'changed'     => $changed,
+		// An empty previous goes out as {} so the wire shape matches the object the schema declares.
+		'previous'    => array() === $previous ? new stdClass() : $previous,
+	);
+	if ( array() === $changed ) {
+		return $out;
+	}
+	if ( ! aafm_update_option_verified( $name, $new ) ) {
+		return new WP_Error(
+			'aafm_avada_options_not_saved',
+			__( 'The Avada Global Options could not be saved. Nothing was changed.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 500 )
+		);
+	}
+	aafm_avada_reset_caches();
 	return $out;
 }

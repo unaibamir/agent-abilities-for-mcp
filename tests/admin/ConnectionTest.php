@@ -1166,4 +1166,11 @@ final class ConnectionTest extends TestCase {
 	private function install_link_url( string $link ): string {
 		return (string) ( $this->install_link_config( $link )['url'] ?? '' );
 	}
+
+	public function test_allowlist_card_has_the_anchor_id(): void {
+		ob_start();
+		aafm_render_allowlist_section();
+		$html = (string) ob_get_clean();
+		$this->assertStringContainsString( '<details class="aafm-card aafm-section aafm-section--collapsible aafm-allowlist-card" id="aafm-card-allowlist"', $html );
+	}
 }

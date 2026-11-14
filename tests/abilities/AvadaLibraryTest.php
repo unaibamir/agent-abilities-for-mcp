@@ -240,4 +240,10 @@ final class AvadaLibraryTest extends TestCase {
 		$this->assertSame( '[fusion_text]Shared promo[/fusion_text]', $items[ $global ]['content'] );
 		$this->assertSame( '[fusion_text]Own button[/fusion_text]', $items[ $plain ]['content'] );
 	}
+
+	public function test_the_descriptions_say_a_global_item_comes_back_without_content_for_a_locked_user(): void {
+		$clause = 'without its content unless the user can edit private posts';
+		$this->assertStringContainsString( $clause, aafm_avada_registry_definitions()['aafm/avada-list-library']['description'] );
+		$this->assertStringContainsString( $clause, aafm_args_avada_list_library()['input_schema']['properties']['include_content']['description'] );
+	}
 }

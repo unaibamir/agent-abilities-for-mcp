@@ -90,7 +90,7 @@ function aafm_avada_registry_definitions(): array {
 		),
 		'aafm/avada-list-library'       => array(
 			'label'        => __( 'List the Avada library', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists Avada Library items: saved elements, columns, sections and post cards, and full-page templates. Returns id, title, status, kind (the library category, template for a template, or uncategorized), is_global and modified date, plus content, the raw Fusion Builder markup, only with include_content. A global item is shared, so editing it changes every page that shows it, and its text is edited in Avada\'s Library, not on the page (avada-get-page-content with include_structure gives the global_id of such an element). Response includes total (the query-wide count of matching items; each page omits items you lack edit access to, so total can exceed the rows returned). Requires the edit_posts capability. Only while Avada is active.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Lists Avada Library items: saved elements, columns, sections and post cards, and full-page templates. Returns id, title, status, kind (the library category, template for a template, or uncategorized), is_global and modified date, plus content, the raw Fusion Builder markup, only with include_content; a global item is listed without its content unless the user can edit private posts. A global item is shared, so editing it changes every page that shows it, and its text is edited in Avada\'s Library, not on the page (avada-get-page-content with include_structure gives the global_id of such an element). Response includes total (the query-wide count of matching items; each page omits items you lack edit access to, so total can exceed the rows returned). Requires the edit_posts capability. Only while Avada is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'avada',
@@ -1621,7 +1621,7 @@ function aafm_args_avada_list_library(): array {
 					'include_content' => array(
 						'type'        => 'boolean',
 						'default'     => false,
-						'description' => __( 'When true, each item also carries content, its raw Fusion Builder markup, unrendered.', 'agent-abilities-for-mcp' ),
+						'description' => __( 'When true, each item also carries content, its raw Fusion Builder markup, unrendered. A global item is listed without its content unless the user can edit private posts.', 'agent-abilities-for-mcp' ),
 					),
 				)
 			),

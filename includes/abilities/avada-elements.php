@@ -51,13 +51,21 @@ function aafm_register_avada_elements_full_definitions( array $registry ): array
  */
 function aafm_avada_elements_registry_definitions(): array {
 	return array(
-		'aafm/avada-list-elements' => array(
+		'aafm/avada-list-elements'  => array(
 			'label'        => __( 'List Avada elements', 'agent-abilities-for-mcp' ),
 			'description'  => __( 'Lists the elements Avada Builder has on this site, from Avada\'s own element map: tag, name, whether it holds other elements, and the one child element a parent element such as tabs takes. With tag it returns one element with its settings, each under the name Avada stores it (a padding setting is one per side): kind, label, default, the allowed values of a choice (at most 100), whether avada-update-element can write it, and needs, which is unfiltered_html for settings that can carry script or raw HTML. Typography and dynamic data settings are listed but cannot be written. Settings Avada adds only inside its own editor, such as the tablet and phone variants, are not listed. Requires the edit_posts capability; Avada\'s Role Manager settings are not applied. Only while Avada is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'avada',
 			'args_builder' => 'aafm_args_avada_list_elements',
+		),
+		'aafm/avada-update-element' => array(
+			'label'        => __( 'Update an Avada element', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Changes the settings or the inner text of one element on an Avada page, layout section, library item, form or off canvas panel, named by its index and by the tag and fingerprint avada-get-page-content returned with include_structure. set_atts sets settings by the names avada-list-elements gives, each value in the input form of its kind (an image as an attachment id under image_id, which writes the id and the URL together; a padding side such as padding_top as a CSS length); remove_atts takes settings off the element so Avada uses their default; text replaces the inner content of an element with no child elements. A double quote or a square bracket in a text setting is refused, because Avada\'s builder drops such a setting on its next save. Only a user who may post unfiltered HTML can put square brackets, percent-encoded brackets or data-* attributes in body text. Refused: a stale index or fingerprint, an element that shows a global library item (edit the item itself), a setting driven by dynamic data, a setting the element does not have or that cannot be written (typography and dynamic data cannot), a value its kind does not accept, and any change that would add or remove an element. Code blocks and settings that can carry script, such as link_attributes and custom attributes, need a user who may post unfiltered HTML. A save that would change other content for this user is refused, and nothing is saved. When a revision is kept, restore_revision_id brings the page back through restore-revision; the response also returns the element\'s new fingerprint and the page fingerprint. The outline stops at 2,000 elements. Not undoable from this plugin\'s change history. Requires edit access to the post, and for a layout section a user who can manage site options; Avada\'s Role Manager settings are not applied. Only while Avada is active.', 'agent-abilities-for-mcp' ),
+			'group'        => 'writes',
+			'risk'         => 'write',
+			'subject'      => 'avada',
+			'args_builder' => 'aafm_args_avada_update_element',
 		),
 	);
 }
@@ -377,7 +385,8 @@ function aafm_avada_attribute_text( string $text, bool $one_line = true, bool $s
 	}
 	if ( $sanitize ) {
 		// The sanitizer writes a lone < as &lt;; read it back as the character, escaped once below.
-		$text = html_entity_decode( $one_line ? sanitize_text_field( $text ) : sanitize_textarea_field( $text ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+		$clean = $one_line ? sanitize_text_field( $text ) : sanitize_textarea_field( $text );
+		$text  = html_entity_decode( $clean, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 	}
 	$controls = $one_line ? '/[\x00-\x1f\x7f]/' : '/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/';
 	if ( false !== strpbrk( $text, '"[]' ) || 1 === preg_match( $controls, $text ) ) {
@@ -775,4 +784,380 @@ function aafm_exec_avada_list_elements( array $input ) {
 		'skipped'    => $skipped,
 		'map_source' => 'avada',
 	);
+}
+
+/**
+ * The reversibility note of an engine result: reversible_reason only when the engine set it (the restore point was gone
+ * after the save).
+ *
+ * @param array<string,mixed> $result aafm_builder_commit() result.
+ * @return array<string,string>
+ */
+function aafm_avada_reversible_reason( array $result ): array {
+	return isset( $result['reversible_reason'] ) && is_string( $result['reversible_reason'] ) ? array( 'reversible_reason' => $result['reversible_reason'] ) : array();
+}
+
+/**
+ * The write output schema every Avada element write shares, with its own fields added.
+ *
+ * @param array<string,mixed> $extra Extra properties.
+ * @return array<string,mixed>
+ */
+function aafm_avada_write_output_schema( array $extra ): array {
+	return array(
+		'type'       => 'object',
+		'properties' => array_merge(
+			array( 'post' => array( 'type' => 'object' ) ),
+			$extra,
+			array(
+				'page_fingerprint'    => array( 'type' => 'string' ),
+				'restore_revision_id' => array(
+					'type'        => array( 'integer', 'null' ),
+					'description' => __( 'Pass to restore-revision to put the page back as it was. Null when nothing was saved or no revision is kept.', 'agent-abilities-for-mcp' ),
+				),
+				'reversible'          => array( 'type' => 'boolean' ),
+				'reversible_reason'   => array(
+					'type'        => 'string',
+					'description' => __( 'Present only when the restore point was gone after the save; says why there is no way back.', 'agent-abilities-for-mcp' ),
+				),
+			)
+		),
+	);
+}
+
+/**
+ * The element-address input fields: index and expect.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_avada_address_schema(): array {
+	return array(
+		'index'  => array(
+			'type'        => 'integer',
+			'minimum'     => 0,
+			'description' => __( 'The element\'s index in the outline from avada-get-page-content with include_structure.', 'agent-abilities-for-mcp' ),
+		),
+		'expect' => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'tag'         => array( 'type' => 'string' ),
+				'fingerprint' => array(
+					'type'    => 'string',
+					'pattern' => '^[0-9a-f]{16}$',
+				),
+			),
+			'required'             => array( 'tag', 'fingerprint' ),
+			'additionalProperties' => false,
+			'description'          => __( 'The tag and fingerprint the outline returned for that index. A page that changed since is refused.', 'agent-abilities-for-mcp' ),
+		),
+	);
+}
+
+/**
+ * Args for aafm/avada-update-element.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_avada_update_element(): array {
+	return array(
+		'label'               => aafm_ability_label( 'aafm/avada-update-element' ),
+		'description'         => aafm_ability_description( 'aafm/avada-update-element' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array_merge(
+				array(
+					'post_id' => array(
+						'type'        => 'integer',
+						'minimum'     => 1,
+						'description' => __( 'ID of the page, post, layout section, library item, form or off canvas panel.', 'agent-abilities-for-mcp' ),
+					),
+				),
+				aafm_avada_address_schema(),
+				array(
+					'set_atts'    => array(
+						'type'        => 'object',
+						'description' => __( 'Setting name to value, each name and value in the form avada-list-elements gives.', 'agent-abilities-for-mcp' ),
+					),
+					'remove_atts' => array(
+						'type'        => 'array',
+						'items'       => array( 'type' => 'string' ),
+						'description' => __( 'Setting names to take off the element, so Avada uses their default.', 'agent-abilities-for-mcp' ),
+					),
+					'text'        => array(
+						'type'        => 'string',
+						'description' => __( 'New inner content for an element with no child elements, such as a text block, a title or a button\'s text. HTML is filtered as in a post; a code block\'s code needs unfiltered HTML.', 'agent-abilities-for-mcp' ),
+					),
+				)
+			),
+			'required'             => array( 'post_id', 'index', 'expect' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => aafm_avada_write_output_schema(
+			array(
+				'index'       => array( 'type' => 'integer' ),
+				'fingerprint' => array( 'type' => 'string' ),
+				'changed'     => array(
+					'type'        => 'array',
+					'items'       => array( 'type' => 'string' ),
+					'description' => __( 'Settings whose stored value changed, and text when the inner content did. Empty when nothing was saved.', 'agent-abilities-for-mcp' ),
+				),
+			)
+		),
+		'execute_callback'    => 'aafm_exec_avada_update_element',
+		'permission_callback' => 'aafm_perm_avada_post_object',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * The refusal for a post that is not an Avada page.
+ *
+ * @return WP_Error
+ */
+function aafm_avada_not_owned_error(): WP_Error {
+	return new WP_Error(
+		'aafm_not_avada_owned',
+		__( 'This post is not an Avada page. Edit a page built with another builder in that builder. Nothing was changed.', 'agent-abilities-for-mcp' ),
+		array( 'status' => 409 )
+	);
+}
+
+/**
+ * The settings an element's dynamic data drives (A3: base64 JSON keyed by setting name), or null when the element
+ * carries dynamic data that cannot be read, which then blocks every change.
+ *
+ * @param array<string,mixed> $atts Stored attributes.
+ * @return array<string>|null
+ */
+function aafm_avada_dynamic_settings( array $atts ): ?array {
+	$raw = isset( $atts['dynamic_params'] ) && is_string( $atts['dynamic_params'] ) ? trim( $atts['dynamic_params'] ) : '';
+	if ( '' === $raw ) {
+		return array();
+	}
+	$data = json_decode( aafm_avada_decode_if_needed( $raw ), true );
+	return is_array( $data ) ? array_map( 'strval', array_keys( $data ) ) : null;
+}
+
+/**
+ * The refusal for a setting dynamic data drives.
+ *
+ * @param string $name Setting.
+ * @return WP_Error
+ */
+function aafm_avada_dynamic_error( string $name ): WP_Error {
+	return new WP_Error(
+		'aafm_avada_dynamic_setting',
+		/* translators: %s: the setting name. */
+		sprintf( __( 'Dynamic data drives the setting %s on this element, so a stored value would be ignored when the page is shown. Change it in Avada\'s builder. Nothing was changed.', 'agent-abilities-for-mcp' ), $name ),
+		array(
+			'status'  => 400,
+			'setting' => $name,
+		)
+	);
+}
+
+/**
+ * Execute aafm/avada-update-element (design AV-3 with AV-11 and the raw kinds of AV-14).
+ *
+ * Resolves the element by index and fingerprint with the tags the read used, refuses an element that shows a global
+ * library item, looks its settings up in Avada's map, applies the script gate to every touched setting before any value
+ * is encoded, rebuilds only the opening tag and, for text or an image, the inner content, and hands the result to the
+ * one guarded save (aafm_builder_commit()) with no CSS step: Avada resets a page's compiled CSS on every save (A11).
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_avada_update_element( array $input ) {
+	$id   = absint( $input['post_id'] ?? 0 );
+	$post = aafm_exact_object_chain( 'post', $id );
+	if ( ! $post instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	if ( ! aafm_builder_ownership_allows( 'avada', aafm_post_has_foreign_builder_ownership( $id ), $post ) ) {
+		return aafm_avada_not_owned_error();
+	}
+
+	$set      = is_array( $input['set_atts'] ?? null ) ? $input['set_atts'] : array();
+	$remove   = is_array( $input['remove_atts'] ?? null ) ? array_values( $input['remove_atts'] ) : array();
+	$has_text = array_key_exists( 'text', $input );
+	if ( array() === $set && array() === $remove && ! $has_text ) {
+		return new WP_Error(
+			'aafm_builder_nothing_to_change',
+			__( 'Give at least one of set_atts, remove_atts or text. Nothing was changed.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
+	}
+
+	$content = (string) $post->post_content;
+	$tags    = aafm_fusion_shortcode_tags();
+	$element = aafm_builder_resolve( $content, $tags, (int) ( $input['index'] ?? -1 ), is_array( $input['expect'] ?? null ) ? $input['expect'] : array() );
+	if ( is_wp_error( $element ) ) {
+		return $element;
+	}
+	$tag    = (string) $element['tag'];
+	$global = aafm_avada_global_id( $tag, (array) $element['atts'] );
+	if ( null !== $global ) {
+		return new WP_Error(
+			'aafm_avada_global_element',
+			/* translators: %1$d: the library item's post id. */
+			sprintf( __( 'This element shows the global library item %1$d, which every page that shows it shares. Edit item %1$d itself instead. Nothing was changed.', 'agent-abilities-for-mcp' ), $global ),
+			array(
+				'status'  => 409,
+				'item_id' => $global,
+			)
+		);
+	}
+	$entry = aafm_avada_map( $tag );
+	if ( is_wp_error( $entry ) ) {
+		return $entry;
+	}
+	$settings  = aafm_avada_settings( $entry );
+	$inner_par = aafm_avada_content_param( $entry );
+	$dynamic   = aafm_avada_dynamic_settings( (array) $element['atts'] );
+
+	// Every touched setting is checked, and gated, before any value is encoded.
+	$touched = array();
+	foreach ( array_merge( array_map( 'strval', array_keys( $set ) ), array_map( 'strval', $remove ) ) as $name ) {
+		if ( 1 !== preg_match( '/^[a-z0-9_]+$/', $name ) || ! isset( $settings[ $name ] ) ) {
+			return aafm_wpbakery_setting_error( 'aafm_builder_attribute_not_writable', $name );
+		}
+		$kind = aafm_avada_param_kind( $tag, $settings[ $name ] );
+		if ( ! $kind['writable'] ) {
+			return aafm_wpbakery_setting_error( 'aafm_builder_attribute_not_writable', $name );
+		}
+		if ( null === $dynamic || in_array( $name, $dynamic, true ) ) {
+			return aafm_avada_dynamic_error( $name );
+		}
+		$gate = aafm_avada_script_gate( $kind['kind'] );
+		if ( is_wp_error( $gate ) ) {
+			return $gate;
+		}
+		$touched[ $name ] = $kind['kind'];
+	}
+	$has_children = in_array( (int) $element['index'], array_column( (array) aafm_builder_elements( $content, $tags ), 'parent' ), true );
+	$text_kind    = null;
+	if ( $has_text ) {
+		$kind = null !== $inner_par && ! $has_children && 'upload' !== ( $inner_par['type'] ?? null ) ? aafm_avada_param_kind( $tag, $inner_par ) : null;
+		if ( null === $kind || ! $kind['writable'] ) {
+			return aafm_wpbakery_setting_error( 'aafm_builder_attribute_not_writable', 'text' );
+		}
+		if ( null === $dynamic || in_array( 'element_content', $dynamic, true ) ) {
+			return aafm_avada_dynamic_error( 'element_content' );
+		}
+		$gate = aafm_avada_script_gate( $kind['kind'] );
+		if ( is_wp_error( $gate ) ) {
+			return $gate;
+		}
+		$text_kind = $kind['kind'];
+	}
+
+	// The opening tag, and its attribute text between the tag name and the closing bracket.
+	$open      = substr( $content, (int) $element['start'], (int) $element['open_end'] - (int) $element['start'] );
+	$tail      = $element['self_closing'] ? (string) preg_replace( '/^.*?(\s*\/\]|\])$/s', '$1', $open ) : ']';
+	$attr_text = substr( $open, strlen( $tag ) + 1, strlen( $open ) - strlen( $tag ) - 1 - strlen( $tail ) );
+	$spans     = aafm_wpbakery_attribute_spans( $attr_text );
+	$inner     = substr( $content, (int) $element['open_end'], (int) $element['inner_end'] - (int) $element['open_end'] );
+	$new_inner = $inner;
+
+	$values = array();
+	foreach ( $set as $name => $value ) {
+		$name    = (string) $name;
+		$encoded = aafm_avada_encode_value( $touched[ $name ], $value, $settings[ $name ] );
+		if ( is_wp_error( $encoded ) ) {
+			return $encoded;
+		}
+		foreach ( is_array( $encoded ) ? $encoded : array( $name => $encoded ) as $attr => $stored ) {
+			if ( '' === $attr ) {
+				$new_inner = $stored;
+				continue;
+			}
+			$values[ $attr ] = $stored;
+		}
+	}
+	if ( $has_text && null !== $text_kind ) {
+		$encoded = aafm_avada_encode_value( $text_kind, $input['text'], (array) $inner_par );
+		if ( is_wp_error( $encoded ) ) {
+			return $encoded;
+		}
+		$new_inner = is_string( $encoded ) ? $encoded : $new_inner;
+	}
+
+	$changed  = array();
+	$edits    = array();
+	$appended = '';
+	foreach ( $values as $name => $encoded ) {
+		$name = (string) $name;
+		if ( isset( $spans[ $name ] ) && $spans[ $name ]['value'] === $encoded ) {
+			continue;
+		}
+		$changed[] = $name;
+		if ( isset( $spans[ $name ] ) ) {
+			$edits[ $spans[ $name ]['core_start'] ] = array( $spans[ $name ]['core_length'], $name . '="' . $encoded . '"' );
+		} else {
+			$appended .= ' ' . $name . '="' . $encoded . '"';
+		}
+	}
+	foreach ( $remove as $name ) {
+		$name = (string) $name;
+		if ( ! isset( $spans[ $name ] ) || isset( $edits[ $spans[ $name ]['core_start'] ] ) ) {
+			continue;
+		}
+		$changed[]                              = $name;
+		$edits[ $spans[ $name ]['core_start'] ] = array( $spans[ $name ]['whole_length'], '' );
+	}
+	krsort( $edits );
+	$new_attr_text = $attr_text;
+	foreach ( $edits as $start => list( $length, $replacement ) ) {
+		$new_attr_text = substr_replace( $new_attr_text, $replacement, $start, $length );
+	}
+	if ( '' !== $appended || array() !== $edits ) {
+		$trailing      = (string) preg_replace( '/^.*?(\s*)$/s', '$1', $attr_text );
+		$new_attr_text = rtrim( $new_attr_text ) . $appended . $trailing;
+	}
+	if ( $new_inner !== $inner ) {
+		if ( ! $element['has_closer'] || $element['self_closing'] || aafm_wpbakery_text_closes_a_tag( $new_inner, array_values( array_unique( array_merge( $tags, (array) aafm_wpbakery_shortcode_tags( $content, $new_inner ) ) ) ) ) ) {
+			return aafm_builder_error( 'aafm_builder_structure_changed' );
+		}
+		$changed[] = $has_text ? 'text' : 'image_id';
+		$changed   = array_values( array_unique( $changed ) );
+	}
+
+	$source = '[' . $tag . $new_attr_text . $tail . $new_inner . substr( $content, (int) $element['inner_end'], (int) $element['end'] - (int) $element['inner_end'] );
+	$new    = substr( $content, 0, (int) $element['start'] ) . $source . substr( $content, (int) $element['end'] );
+	$walk   = aafm_builder_walk( $content, $tags );
+	if ( null === $walk ) {
+		return aafm_builder_error( 'aafm_builder_unparseable' );
+	}
+	$atts     = shortcode_parse_atts( $new_attr_text );
+	$expected = aafm_builder_expected_walk(
+		$walk,
+		array(
+			'op'    => 'update',
+			'index' => (int) $element['index'],
+			'atts'  => is_array( $atts ) ? $atts : array(),
+		)
+	);
+
+	$result = aafm_builder_commit( $post, $content, $new, $tags, $expected, null, 'avada' );
+	if ( is_wp_error( $result ) ) {
+		return $result;
+	}
+	$stored   = (string) $result['post']->post_content;
+	$elements = aafm_builder_elements( $stored, $tags );
+	$after    = $elements[ (int) $element['index'] ] ?? null;
+	return array(
+		'post'                => aafm_redact_post( $result['post'] ),
+		'index'               => (int) $element['index'],
+		'fingerprint'         => null === $after ? '' : aafm_builder_fingerprint( $stored, $after ),
+		'page_fingerprint'    => $result['page_fingerprint'],
+		'changed'             => $result['unchanged'] ? array() : $changed,
+		'restore_revision_id' => $result['restore_revision_id'],
+		'reversible'          => $result['reversible'],
+	) + aafm_avada_reversible_reason( $result );
 }

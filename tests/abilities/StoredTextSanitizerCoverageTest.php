@@ -65,6 +65,18 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 			),
 			'reason' => 'The list-blocks search term. It becomes WP_Query\'s `s` argument and is never written back, so nothing about it reaches storage.',
 		),
+		'includes/abilities/avada-elements.php::aafm_avada_attribute_text::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( $text )',
+			),
+			'reason' => 'Design 325 section 4.7 Avada text kind: a one-line setting stored inside a shortcode attribute, not post text. Entities are decoded before and after, and the attribute rule then refuses quotes, brackets and control characters.',
+		),
+		'includes/abilities/avada-elements.php::aafm_avada_attribute_text::sanitize_textarea_field' => array(
+			'calls'  => array(
+				'sanitize_textarea_field( $text )',
+			),
+			'reason' => 'The multi-line form of the same Avada attribute rule (a textarea setting stored inside a shortcode attribute).',
+		),
 		'includes/abilities/avada.php::aafm_exec_avada_list_library::sanitize_text_field' => array(
 			'calls'  => array(
 				'sanitize_text_field( (string) $input[\'search\'] )',

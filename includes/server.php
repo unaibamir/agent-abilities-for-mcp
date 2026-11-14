@@ -498,6 +498,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// edit_pages without edit_posts still sees the tools it can call.
 		case 'aafm/avada-get-page-content':
 		case 'aafm/avada-replace-text':
+		case 'aafm/avada-update-element':
 		case 'aafm/wpbakery-get-page-content':
 		case 'aafm/wpbakery-replace-text':
 		case 'aafm/wpbakery-update-element':

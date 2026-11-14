@@ -1250,6 +1250,17 @@ function aafm_activity_detail_map(): array {
 			),
 			'link'     => 'post',
 		),
+		'aafm/avada-update-element'        => array(
+			/* translators: %s: the post's numeric ID. */
+			'template' => __( 'Ran an element update on Avada page #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'post_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
 		'aafm/wpbakery-replace-text'       => array(
 			/* translators: %s: the post's numeric ID. */
 			'template' => __( 'Ran a text replace on WPBakery page #%s', 'agent-abilities-for-mcp' ),

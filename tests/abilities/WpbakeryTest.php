@@ -697,7 +697,7 @@ WPB;
 		}
 		$this->assertStringContainsString( 'heading', $row['description'] );
 		$this->assertStringContainsString( 'Only while WPBakery Page Builder is active', $row['description'] );
-		$this->assertStringContainsString( 'Square brackets, percent-encoded brackets and data-* attributes in body text need a user who may post unfiltered HTML.', $row['description'] );
+		$this->assertStringContainsString( 'Only a user who may post unfiltered HTML can put square brackets, percent-encoded brackets or data-* attributes in body text, and even then text that would add an element is refused.', $row['description'] );
 	}
 
 	public function test_replace_contributor_is_refused_on_another_users_page_and_editor_allowed(): void {

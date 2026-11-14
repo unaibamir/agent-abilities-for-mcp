@@ -237,6 +237,9 @@ final class CatalogFixture {
 		'aafm/avada-remove-element',
 		'aafm/wpbakery-insert-template',
 		'aafm/wpbakery-update-page-code',
+		'aafm/avada-insert-library-item',
+		'aafm/avada-update-page-css',
+		'aafm/avada-update-page-options',
 		'aafm/geodirectory-create-listing',
 		'aafm/geodirectory-update-listing',
 	);

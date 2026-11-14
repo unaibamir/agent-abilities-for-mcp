@@ -434,7 +434,9 @@ final class AvadaTest extends TestCase {
 		$this->assertSame( 'array', $args['output_schema']['properties']['structure']['type'] );
 	}
 
-	/* ---------------------------------------------------------------- S7-3: the extended permission */
+	/* ---------------------------------------------------------------- S7-3: AV-1 and the extended permission */
+
+	private const AV1_PAGE = '[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1"][fusion_text]<p>Change me.</p>[/fusion_text][fusion_text]<iframe></iframe>[/fusion_text][fusion_title size="2"]Kept title[/fusion_title][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]';
 
 	private function av1_replace( int $id, string $search, string $replace ) {
 		return aafm_exec_avada_replace_text(
@@ -444,6 +446,15 @@ final class AvadaTest extends TestCase {
 				'replace' => $replace,
 			)
 		);
+	}
+
+	private function assert_av1_refused( $out, string $code, int $id, string $before ): void {
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( $code, $out->get_error_code() );
+		$this->assertSame( 409, $out->get_error_data()['status'] );
+		$this->assertStringNotContainsString( ' - ', $out->get_error_message() );
+		clean_post_cache( $id );
+		$this->assertSame( $before, get_post_field( 'post_content', $id, 'raw' ), 'Nothing was changed.' );
 	}
 
 	/**
@@ -459,6 +470,60 @@ final class AvadaTest extends TestCase {
 				'supports'        => array( 'title', 'editor', 'revisions' ),
 			)
 		);
+	}
+
+	public function test_replace_refuses_when_the_save_would_strip_untouched_content(): void {
+		$this->acting_as( 'editor' ); // Created as a user with unfiltered_html, so the iframe is stored.
+		$id = $this->make_avada_post( self::AV1_PAGE );
+		$this->assertSame( self::AV1_PAGE, get_post_field( 'post_content', $id, 'raw' ) );
+		$strip = static fn( $value ) => str_replace( '<iframe></iframe>', '', (string) $value );
+		add_filter( 'content_save_pre', $strip );
+		try {
+			$out = $this->av1_replace( $id, 'Change me.', 'Changed.' );
+		} finally {
+			remove_filter( 'content_save_pre', $strip );
+		}
+
+		$this->assert_av1_refused( $out, 'aafm_avada_save_would_change_page', $id, self::AV1_PAGE );
+	}
+
+	public function test_replace_refuses_when_a_save_filter_deletes_an_element_once_the_new_text_is_present(): void {
+		$this->acting_as( 'editor' );
+		$id    = $this->make_avada_post( self::AV1_PAGE );
+		$react = static function ( $value ) {
+			$value = (string) $value;
+			return false === strpos( $value, 'Trigger text' ) ? $value : str_replace( '[fusion_text]<iframe></iframe>[/fusion_text]', '', $value );
+		};
+		add_filter( 'content_save_pre', $react );
+		try {
+			$out = $this->av1_replace( $id, 'Change me.', 'Trigger text' );
+		} finally {
+			remove_filter( 'content_save_pre', $react );
+		}
+
+		$this->assert_av1_refused( $out, 'aafm_avada_save_would_change_layout', $id, self::AV1_PAGE );
+	}
+
+	public function test_replace_as_a_user_without_unfiltered_html_refuses_on_content_with_an_iframe(): void {
+		$content = (string) file_get_contents( dirname( __DIR__ ) . '/Fixtures/Avada/page-s7.txt' );
+		$author  = self::factory()->user->create( array( 'role' => 'author' ) );
+		$this->acting_as( 'administrator' ); // The iframe is stored by a user who may store it.
+		$id = self::factory()->post->create(
+			array(
+				'post_type'    => 'post',
+				'post_author'  => $author,
+				'post_content' => $content,
+			)
+		);
+		update_post_meta( $id, 'fusion_builder_status', 'active' );
+		$this->assertSame( $content, get_post_field( 'post_content', $id, 'raw' ) );
+		$this->assertStringContainsString( '<iframe', $content );
+		wp_set_current_user( $author );
+		$this->assertFalse( current_user_can( 'unfiltered_html' ) );
+		$this->assertTrue( aafm_perm_avada_post_object( array( 'post_id' => $id ) ) );
+
+		$this->assert_av1_refused( $this->av1_replace( $id, 'Paragraph bravo.', 'Paragraph changed.' ), 'aafm_avada_save_would_change_page', $id, $content );
+		$this->assertStringContainsString( '<iframe', get_post_field( 'post_content', $id, 'raw' ) );
 	}
 
 	public function test_replace_works_on_a_layout_section_for_an_administrator(): void {

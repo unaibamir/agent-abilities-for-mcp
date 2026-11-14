@@ -66,7 +66,7 @@ function aafm_avada_registry_definitions(): array {
 		),
 		'aafm/avada-replace-text'       => array(
 			'label'        => __( 'Replace text in an Avada page', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Replaces literal text within an Avada/Fusion Builder page while requiring the Fusion shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee). A replacement that would touch a shortcode tag, its self-closing form, or an attribute is refused rather than risk breaking the layout. Requires edit access to the post.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Replaces literal text within an Avada/Fusion Builder page while requiring the Fusion shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee). A replacement that would touch a shortcode tag, its self-closing form, or an attribute is refused rather than risk breaking the layout. If saving the page as this user would remove or change an element, or change other content on it (an embed the user may not keep, for example), the call is refused and nothing is saved. Also works on Avada\'s own library items, forms, off canvas content and layout sections; layout sections are open only to users who can manage site options. Requires edit access to the post.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'avada',
@@ -564,6 +564,15 @@ function aafm_exec_avada_replace_text( array $input ) {
 			__( 'That replacement would change the Fusion Builder shortcode structure rather than its text. Choose a search term that appears in plain text between or inside elements, not one that would alter a shortcode tag, its self-closing form, or an attribute. Nothing was changed.', 'agent-abilities-for-mcp' ),
 			array( 'status' => 400 )
 		);
+	}
+
+	// AV-1: steps 3 and 4 of the builder guard chain. A user whose own save would strip something on
+	// this page (an iframe in a text block, for a user without unfiltered_html) is refused here,
+	// rather than having kses remove it while the confirmation below compares against what core stores.
+	$tags   = aafm_fusion_shortcode_tags();
+	$replay = aafm_builder_replay_check( 'avada', $id, $content, $new, $tags, array_values( (array) aafm_fusion_shortcode_walk( $content, 0, $tags ) ) );
+	if ( is_wp_error( $replay ) ) {
+		return $replay;
 	}
 
 	$updated = wp_update_post(

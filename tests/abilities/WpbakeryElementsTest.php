@@ -1024,6 +1024,25 @@ final class WpbakeryElementsTest extends TestCase {
 		$this->assert_refused( $this->update( $id, 8, array( 'text' => '<p>&#x5b;vc_raw_js&#x5D;x&#X5B;/vc_raw_js&#093;</p>' ) ), 'aafm_builder_structure_changed', 400, $id, $this->fixture() );
 	}
 
+	public function test_update_with_the_stored_design_options_saves_nothing(): void {
+		$id        = $this->page( $this->fixture() );
+		$revisions = count( wp_get_post_revisions( $id ) );
+		$this->acting_as( 'administrator' );
+		WpbakeryMapStub::$calls = array();
+
+		$out = $this->update( $id, 0, array( 'set_atts' => array( 'css' => array( 'margin_top' => '10px' ) ) ) );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( array(), $out['changed'] );
+		$this->assertNull( $out['restore_revision_id'] );
+		$this->assertSame( $this->fixture(), get_post_field( 'post_content', $id, 'raw' ) );
+		$this->assertSame( $revisions, count( wp_get_post_revisions( $id ) ) );
+		$this->assertSame( array(), array_values( array_filter( WpbakeryMapStub::$calls, static fn( string $call ): bool => 0 === strpos( $call, 'rebuild:' ) ) ) );
+
+		$this->assertIsArray( $this->update( $id, 0, array( 'set_atts' => array( 'css' => array( 'margin_top' => '12px' ) ) ) ) );
+		$this->assertStringNotContainsString( 'vc_custom_1794659894762', get_post_field( 'post_content', $id, 'raw' ), 'A different rule still gets a new class.' );
+	}
+
 	public function test_update_refuses_inner_text_that_adds_an_element(): void {
 		$id = $this->page( $this->fixture() );
 		$this->acting_as( 'editor' );

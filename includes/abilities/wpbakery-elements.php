@@ -1099,6 +1099,18 @@ function aafm_exec_wpbakery_list_elements( array $input ) {
 }
 
 /**
+ * Whether two Design Options rules carry the same declarations, whatever their vc_custom class.
+ *
+ * @param string $stored  Stored attribute value.
+ * @param string $encoded New rule from the encoder.
+ * @return bool
+ */
+function aafm_wpbakery_same_design( string $stored, string $encoded ): bool {
+	$pattern = '/^\.vc_custom_\d+(\{[^{}]*\})$/';
+	return 1 === preg_match( $pattern, $stored, $a ) && 1 === preg_match( $pattern, $encoded, $b ) && $a[1] === $b[1];
+}
+
+/**
  * Args for aafm/wpbakery-update-element.
  *
  * @return array<string,mixed>
@@ -1317,6 +1329,10 @@ function aafm_exec_wpbakery_update_element( array $input ) {
 		$encoded       = aafm_wpbakery_encode_value( $touched[ $name ], $value, $param );
 		if ( is_wp_error( $encoded ) ) {
 			return $encoded;
+		}
+		// Design Options mint a new class each time; the same declarations under the stored class are no change.
+		if ( isset( $spans[ $name ] ) && 'css_editor' === $param['type'] && aafm_wpbakery_same_design( $spans[ $name ]['value'], $encoded ) ) {
+			continue;
 		}
 		if ( isset( $spans[ $name ] ) && $spans[ $name ]['value'] === $encoded ) {
 			continue;

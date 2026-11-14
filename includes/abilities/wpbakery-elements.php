@@ -2284,20 +2284,15 @@ function aafm_exec_wpbakery_remove_element( array $input ) {
 		return $element;
 	}
 	$index = (int) $element['index'];
-	if ( null === $element['parent'] ) {
-		$roots = 0;
-		foreach ( $elements as $e ) {
-			$roots += null === $e['parent'] && in_array( $e['tag'], array( 'vc_row', 'vc_section' ), true ) ? 1 : 0;
-		}
-		if ( $roots <= 1 && in_array( $element['tag'], array( 'vc_row', 'vc_section' ), true ) ) {
-			return aafm_builder_error( 'aafm_builder_remove_last_root' );
-		}
-	}
 	if ( aafm_wpbakery_empties_a_row( $elements, $index ) ) {
 		return aafm_wpbakery_row_needs_column_error();
 	}
 
-	$new  = substr( $content, 0, (int) $element['start'] ) . substr( $content, (int) $element['end'] );
+	$new = substr( $content, 0, (int) $element['start'] ) . substr( $content, (int) $element['end'] );
+	// Ruling B8, decided on the result the way the ownership guard reads it: every root kind it knows counts.
+	if ( 1 !== preg_match( aafm_page_builder_content_pattern(), $new ) ) {
+		return aafm_builder_error( 'aafm_builder_remove_last_root' );
+	}
 	$walk = aafm_builder_walk( $content, $tags );
 	if ( null === $walk ) {
 		return aafm_builder_error( 'aafm_builder_unparseable' );

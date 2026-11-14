@@ -2254,6 +2254,28 @@ final class WpbakeryElementsTest extends TestCase {
 		$this->assert_refused( $this->remove( $id, 0 ), 'aafm_builder_remove_last_root', 409, $id, self::SIMPLE );
 	}
 
+	/**
+	 * R1-1: every root kind the ownership guard reads counts, so the last one of any kind is refused.
+	 */
+	public function test_remove_refuses_the_last_root_of_each_kind(): void {
+		$item = '[vc_column_text]<p>F</p>[/vc_column_text]';
+		foreach ( array(
+			'[vc_section][vc_row][vc_column]' . $item . '[/vc_column][/vc_row][/vc_section]',
+			'[vc_flexbox_container][vc_flexbox_container_item]' . $item . '[/vc_flexbox_container_item][/vc_flexbox_container]',
+			'[vc_grid_container][vc_grid_container_item]' . $item . '[/vc_grid_container_item][/vc_grid_container]',
+		) as $content ) {
+			$id = $this->page( $content );
+			$this->assertSame( 'wpbakery', aafm_post_has_foreign_builder_ownership( $id ) );
+			$this->acting_as( 'editor' );
+			$this->assert_refused( $this->remove( $id, 0 ), 'aafm_builder_remove_last_root', 409, $id, $content );
+		}
+		$flex  = '[vc_flexbox_container][vc_flexbox_container_item]' . $item . '[/vc_flexbox_container_item][/vc_flexbox_container]';
+		$mixed = $this->page( self::SIMPLE . $flex );
+		$this->acting_as( 'editor' );
+		$this->assertIsArray( $this->remove( $mixed, 0 ), 'A flexbox root still holds the page.' );
+		$this->assertSame( $flex, get_post_field( 'post_content', $mixed, 'raw' ) );
+	}
+
 	public function test_remove_is_refused_when_revisions_are_off(): void {
 		$id = $this->page( self::TWO_ROWS );
 		$this->acting_as( 'editor' );

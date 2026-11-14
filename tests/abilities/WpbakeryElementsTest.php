@@ -2268,6 +2268,26 @@ final class WpbakeryElementsTest extends TestCase {
 		$this->assert_refused( $this->move( $id, 1, 3, 'inside_end' ), 'aafm_builder_row_needs_column', 400, $id, self::TWO_ROWS );
 	}
 
+	/**
+	 * CX-S9b-1: a moved tag the map cannot resolve is refused, and a mapped one keeps its own as_child rule, so neither
+	 * a flexbox item nor a flexbox container can be moved into a column.
+	 */
+	public function test_move_refuses_an_unmapped_tag_and_honours_the_moved_elements_as_child(): void {
+		$text = '[vc_column_text]<p>A</p>[/vc_column_text]';
+		$page = '[vc_row][vc_column]' . $text . '[/vc_column][/vc_row][vc_flexbox_container][vc_flexbox_container_item][vc_column_text]<p>F</p>[/vc_column_text][/vc_flexbox_container_item][/vc_flexbox_container]';
+		$id   = $this->page( $page );
+		$this->acting_as( 'editor' );
+		$this->assert_refused( $this->move( $id, 4, 2, 'after' ), 'aafm_builder_unknown_element', 400, $id, $page );
+		$this->assert_refused( $this->move( $id, 3, 2, 'after' ), 'aafm_builder_unknown_element', 400, $id, $page );
+
+		WpbakeryMapStub::install( self::container_map() );
+		$this->assert_refused( $this->move( $id, 3, 2, 'after' ), 'aafm_builder_invalid_nesting', 400, $id, $page );
+		$this->assert_refused( $this->move( $id, 4, 2, 'after' ), 'aafm_builder_invalid_nesting', 400, $id, $page );
+		$this->assert_refused( $this->insert( $id, 2, 'after', array( 'tag' => 'vc_flexbox_container' ) ), 'aafm_builder_invalid_nesting', 400, $id, $page );
+		WpbakeryMapStub::install();
+		$this->assert_refused( $this->insert( $id, 2, 'after', array( 'tag' => 'vc_flexbox_container_item' ) ), 'aafm_builder_unknown_element', 400, $id, $page );
+	}
+
 	public function test_move_to_the_same_place_saves_nothing(): void {
 		$id = $this->page( self::TWO_ROWS );
 		$this->acting_as( 'editor' );

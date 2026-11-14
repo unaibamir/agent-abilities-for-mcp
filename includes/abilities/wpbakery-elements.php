@@ -1482,10 +1482,13 @@ function aafm_wpbakery_nesting_allows( string $parent_tag, string $child_tag, ar
 		'vc_row'       => array( 'vc_column' ),
 		'vc_row_inner' => array( 'vc_column_inner' ),
 	);
+	// An element WPBakery maps with content_element false (a column, a tab section, a flexbox or grid item) is never
+	// free content: it goes only where a fixed rule or its parent's as_parent list names it.
+	$free = false !== ( $map[ $child_tag ]['content_element'] ?? true );
 	if ( isset( $fixed[ $parent_tag ] ) ) {
 		$ok = in_array( $child_tag, $fixed[ $parent_tag ], true );
 	} elseif ( 'vc_column' === $parent_tag || 'vc_column_inner' === $parent_tag ) {
-		$ok = ! in_array( $child_tag, $layout, true ) || ( 'vc_column' === $parent_tag && 'vc_row_inner' === $child_tag );
+		$ok = ( ! in_array( $child_tag, $layout, true ) && $free ) || ( 'vc_column' === $parent_tag && 'vc_row_inner' === $child_tag );
 	} else {
 		$entry = $map[ $parent_tag ] ?? array();
 		$raw   = $entry['as_parent'] ?? null;
@@ -1495,12 +1498,13 @@ function aafm_wpbakery_nesting_allows( string $parent_tag, string $child_tag, ar
 		if ( ! isset( $entry['as_parent'] ) ) {
 			// A container WPBakery maps with no as_parent (tab, accordion and toggle sections, flexbox and grid
 			// items) takes content elements, as its editor lets it.
-			$ok = ! empty( $entry['is_container'] ) && $layout_ok;
+			$ok = ! empty( $entry['is_container'] ) && $layout_ok && ( $free || 'vc_row_inner' === $child_tag );
 		} else {
 			$ok = is_array( $raw ) && ( array() !== $rule['only'] || array() !== $rule['except'] )
 				&& $layout_ok
 				&& ( array() === $rule['only'] || in_array( $child_tag, $rule['only'], true ) )
-				&& ! in_array( $child_tag, $rule['except'], true );
+				&& ! in_array( $child_tag, $rule['except'], true )
+				&& ( $free || in_array( $child_tag, $rule['only'], true ) || 'vc_row_inner' === $child_tag );
 		}
 	}
 	if ( $ok && '' !== $parent_tag ) {
@@ -2194,7 +2198,9 @@ function aafm_exec_wpbakery_move_element( array $input ) {
 		$entry = aafm_wpbakery_map( $context, $name );
 		if ( is_array( $entry ) ) {
 			$map[ $name ] = $entry;
-		} elseif ( 'aafm_builder_unknown_element' !== $entry->get_error_code() ) {
+		} elseif ( $name === $tag || 'aafm_builder_unknown_element' !== $entry->get_error_code() ) {
+			// The moved element must be in the map, so its own placement rule can be read; an unknown parent is left
+			// to the nesting check, which refuses it with the reason.
 			return $entry;
 		}
 	}

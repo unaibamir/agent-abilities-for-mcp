@@ -1392,4 +1392,52 @@ final class AvadaTest extends TestCase {
 
 		$this->assertInstanceOf( WP_Error::class, $out, 'Never an empty value standing in for a failed read.' );
 	}
+
+	public function test_affects_is_present_for_a_section_and_a_global_item_only(): void {
+		$this->register_avada_type( 'fusion_tb_section' );
+		$this->register_avada_type( 'fusion_element' );
+		$this->acting_as( 'administrator' );
+		$body    = '[fusion_builder_container][fusion_text]Shared words.[/fusion_text][/fusion_builder_container]';
+		$section = self::factory()->post->create(
+			array(
+				'post_type'    => 'fusion_tb_section',
+				'post_content' => $body,
+			)
+		);
+		$global  = self::factory()->post->create(
+			array(
+				'post_type'    => 'fusion_element',
+				'post_content' => $body,
+			)
+		);
+		update_post_meta( $global, '_fusion_is_global', 'yes' );
+		$local = self::factory()->post->create(
+			array(
+				'post_type'    => 'fusion_element',
+				'post_content' => $body,
+			)
+		);
+		$page  = $this->make_avada_post( $body );
+
+		$expect = array(
+			$section => 'every page that uses this section',
+			$global  => 'every page that shows this global element',
+			$local   => null,
+			$page    => null,
+		);
+		foreach ( $expect as $id => $affects ) {
+			$read    = aafm_exec_avada_get_page_content( array( 'post_id' => $id ) );
+			$replace = $this->av1_replace( $id, 'Shared words.', 'Shared words, edited.' );
+			$this->assertIsArray( $replace, (string) $id );
+			$this->assertSame( 1, $replace['replacements'] );
+			if ( null === $affects ) {
+				$this->assertArrayNotHasKey( 'affects', $read, (string) $id );
+				$this->assertArrayNotHasKey( 'affects', $replace, (string) $id );
+			} else {
+				$this->assertSame( $affects, $read['affects'], (string) $id );
+				$this->assertSame( $affects, $replace['affects'], (string) $id );
+				$this->assertSame( $affects, aafm_avada_affects( get_post( $id ) ) );
+			}
+		}
+	}
 }

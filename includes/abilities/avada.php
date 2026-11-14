@@ -171,6 +171,10 @@ function aafm_args_avada_get_page_content(): array {
 				'post_id'          => array( 'type' => 'integer' ),
 				'content'          => array( 'type' => 'string' ),
 				'is_avada_owned'   => array( 'type' => 'boolean' ),
+				'affects'          => array(
+					'type'        => 'string',
+					'description' => __( 'Present only when an edit here reaches more than this post: a layout section, or a global library element. Tell the owner before changing it.', 'agent-abilities-for-mcp' ),
+				),
 				'structure_status' => array(
 					'type'        => 'string',
 					'enum'        => array( 'ok', 'unparseable', 'truncated' ),
@@ -256,8 +260,12 @@ function aafm_exec_avada_get_page_content( array $input ) {
 	// Read first, before the ownership check loads this post's meta outside the checked scope. _fusion is
 	// read directly, never through Avada's getter, which can write while it reads (A12).
 	$metas = aafm_with_checked_reads(
-		static function () use ( $id, $with_options ): array {
-			$metas = array();
+		static function () use ( $post, $id, $with_options ): array {
+			$metas   = array();
+			$affects = aafm_avada_affects( $post );
+			if ( null !== $affects ) {
+				$metas['affects'] = $affects;
+			}
 			if ( $with_options ) {
 				$css                   = aafm_meta_get( 'post', $id, '_fusion_builder_custom_css', true );
 				$fusion                = aafm_meta_get( 'post', $id, '_fusion', true );
@@ -453,6 +461,24 @@ function aafm_avada_encoded_settings(): array {
 function aafm_avada_decode_if_needed( string $value ): string {
 	$raw = base64_decode( $value ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- reading Avada's own base64 form back (A3), never executed.
 	return base64_encode( $raw ) === $value ? $raw : $value; // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- the round-trip test Avada itself applies.
+}
+
+/**
+ * What else an edit to this post changes (design AV-2): every page that uses a layout section, or every
+ * page that shows a global library element (_fusion_is_global yes, read with aafm_meta_get(); the caller
+ * holds the checked scope). Null for anything else.
+ *
+ * @param WP_Post $post Post.
+ * @return string|null
+ */
+function aafm_avada_affects( WP_Post $post ): ?string {
+	if ( 'fusion_tb_section' === $post->post_type ) {
+		return __( 'every page that uses this section', 'agent-abilities-for-mcp' );
+	}
+	if ( in_array( $post->post_type, array( 'fusion_element', 'fusion_template' ), true ) && 'yes' === aafm_meta_get( 'post', $post->ID, '_fusion_is_global', true ) ) {
+		return __( 'every page that shows this global element', 'agent-abilities-for-mcp' );
+	}
+	return null;
 }
 
 /**
@@ -1180,9 +1206,20 @@ function aafm_exec_avada_replace_text( array $input ) {
 		);
 	}
 
-	return array(
-		'post'         => aafm_redact_post( $fresh ),
-		'replacements' => $replacements,
+	$affects = aafm_with_checked_reads(
+		static fn(): array => array( 'affects' => aafm_avada_affects( $fresh ) ),
+		aafm_generic_error()
+	);
+	if ( is_wp_error( $affects ) ) {
+		return $affects;
+	}
+	return array_filter(
+		array(
+			'post'         => aafm_redact_post( $fresh ),
+			'replacements' => $replacements,
+			'affects'      => $affects['affects'],
+		),
+		static fn( $value ): bool => null !== $value
 	);
 }
 

@@ -457,6 +457,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/builder-shortcodes.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/avada.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/wpbakery.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/wpbakery-elements.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/geodirectory.php';
 
 	add_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );

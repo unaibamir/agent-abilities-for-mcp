@@ -1,0 +1,816 @@
+<?php
+/**
+ * WPBakery Page Builder element tools: the element map through the vendor seam, the kind of every setting,
+ * the encoder that turns typed input into the form WPBakery 9.1 stores (the inverse of the decoder in
+ * wpbakery.php), and the abilities that read the element catalog and change one element.
+ *
+ * Design 325 sections 4.2, 4.7 and 9, plan 326 Session 9a. Vendor code is reached only through
+ * aafm_builder_vendor() (Ruling B14). A setting's param type comes only from the seam row
+ * wpbakery_param_type, the row the decoder reads; the map entry supplies labels, defaults, value lists and
+ * limits. Every setting that can carry script needs unfiltered_html, checked before anything is encoded.
+ *
+ * @package AgentAbilitiesForMCP
+ */
+
+declare( strict_types=1 );
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * The map refusal: WPBakery's map is missing or empty in this request.
+ *
+ * @return WP_Error
+ */
+function aafm_wpbakery_map_unavailable(): WP_Error {
+	return new WP_Error(
+		'aafm_wpbakery_map_unavailable',
+		__( 'WPBakery\'s element map is not available in this request, so its elements cannot be read or written here. Nothing was changed.', 'agent-abilities-for-mcp' ),
+		array( 'status' => 409 )
+	);
+}
+
+/**
+ * WPBakery's element map, through the vendor seam. With context grid the Grid Builder's mapper runs first,
+ * because WPBakery maps those elements only in a grid editor request (W18, Ruling B6). Each element is resolved
+ * on its own (WPBMap::getShortCode(), which getAllShortCodes() also calls per element), so one entry that
+ * throws or does not resolve is skipped and counted instead of failing the whole map.
+ *
+ * @param string      $context page or grid.
+ * @param string|null $tag     One element, or null for all.
+ * @param int         $skipped Entries skipped, added to.
+ * @return array<string,mixed>|WP_Error All elements keyed by tag, one element's settings, or a refusal:
+ *                                      aafm_wpbakery_map_unavailable (409), or aafm_builder_unknown_element
+ *                                      (400) for a tag the map does not have.
+ */
+function aafm_wpbakery_map( string $context = 'page', ?string $tag = null, int &$skipped = 0 ) {
+	if ( 'grid' === $context ) {
+		$mapper = aafm_builder_vendor( 'wpbakery_grid_mapper' );
+		if ( null === $mapper ) {
+			return aafm_wpbakery_map_unavailable();
+		}
+		try {
+			$mapper();
+		} catch ( Throwable $e ) {
+			return aafm_wpbakery_map_unavailable();
+		}
+	}
+	$one = aafm_builder_vendor( 'wpbakery_map_one' );
+	if ( null === $one ) {
+		return aafm_wpbakery_map_unavailable();
+	}
+	if ( null !== $tag ) {
+		try {
+			$settings = $one( $tag );
+		} catch ( Throwable $e ) {
+			return aafm_wpbakery_map_unavailable();
+		}
+		return is_array( $settings ) ? $settings : aafm_builder_error( 'aafm_builder_unknown_element' );
+	}
+	$all = aafm_builder_vendor( 'wpbakery_map_all' );
+	if ( null === $all ) {
+		return aafm_wpbakery_map_unavailable();
+	}
+	try {
+		$entries = $all();
+	} catch ( Throwable $e ) {
+		return aafm_wpbakery_map_unavailable();
+	}
+	if ( ! is_array( $entries ) || array() === $entries ) {
+		return aafm_wpbakery_map_unavailable();
+	}
+	$map = array();
+	foreach ( array_keys( $entries ) as $name ) {
+		try {
+			$settings = $one( (string) $name );
+		} catch ( Throwable $e ) {
+			++$skipped;
+			continue;
+		}
+		if ( ! is_array( $settings ) ) {
+			++$skipped;
+			continue;
+		}
+		$map[ (string) $name ] = $settings;
+	}
+	return array() === $map ? aafm_wpbakery_map_unavailable() : $map;
+}
+
+/**
+ * WPBakery's custom HTML elements (W12): the fixed baseline, always gated, plus whatever an add-on adds through
+ * WPBakery's own filter at call time. The filter can only add (Ruling R-S9a-3).
+ *
+ * @return array<string>
+ */
+function aafm_wpbakery_custom_html_elements(): array {
+	$baseline = array( 'vc_raw_html', 'vc_raw_js', 'vc_gmaps' );
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WPBakery's own filter (Vc_Post_Admin::get_elements_with_custom_html()), read so an add-on's script element is gated too.
+	$filtered = apply_filters( 'wpb_custom_html_elements', $baseline );
+	$added    = is_array( $filtered ) ? array_filter( $filtered, 'is_string' ) : array();
+	return array_values( array_unique( array_merge( $baseline, $added ) ) );
+}
+
+/**
+ * The kind a param type is written as (design 4.7, WPBakery table), before the script name rule. '' for a type
+ * the encoder does not know.
+ *
+ * @param string $type Param type from the map.
+ * @param string $name Setting name.
+ * @return string
+ */
+function aafm_wpbakery_type_kind( string $type, string $name ): string {
+	if ( 'content' === $name ) {
+		return in_array( $type, array( 'textarea_ace', 'textarea_raw_html' ), true ) ? 'raw' : 'content';
+	}
+	if ( 'el_class' === $name && 'textfield' === $type ) {
+		return 'token';
+	}
+	$kinds = array(
+		'textfield'              => 'text',
+		'textarea'               => 'text',
+		'el_id'                  => 'text',
+		'textarea_safe'          => 'safe_text',
+		'exploded_textarea_safe' => 'safe_text',
+		'exploded_textarea'      => 'list',
+		'vc_link'                => 'link',
+		'link'                   => 'link',
+		'href'                   => 'link',
+		'attach_image'           => 'image',
+		'attach_images'          => 'image',
+		'dropdown'               => 'choice',
+		'button_group'           => 'choice',
+		'checkbox'               => 'choice',
+		'toggle'                 => 'choice',
+		'animation_style'        => 'choice',
+		'colorpicker'            => 'colour',
+		'number'                 => 'number',
+		'range'                  => 'number',
+		'iconpicker'             => 'token',
+		'param_group'            => 'group',
+		'font_container'         => 'group',
+		'google_fonts'           => 'group',
+		'css_editor'             => 'design',
+		'textarea_ace'           => 'raw',
+		'textarea_raw_html'      => 'raw',
+	);
+	return $kinds[ $type ] ?? '';
+}
+
+/**
+ * A setting's param type, from the seam row the decoder also reads (one source, s8a-review-r3 note 2).
+ *
+ * @param string $tag  Tag.
+ * @param string $name Setting name.
+ * @return string|null Null when the map does not know it.
+ */
+function aafm_wpbakery_param_type( string $tag, string $name ): ?string {
+	$row = aafm_builder_vendor( 'wpbakery_param_type' );
+	if ( null === $row || '' === $name ) {
+		return null;
+	}
+	$type = $row( $tag, $name );
+	return is_string( $type ) ? $type : null;
+}
+
+/**
+ * The kind, whether the update tool can write it, and the capability it needs. The type comes from the seam row;
+ * then the name rule wins (design section 9, Ruling B1): every setting of an element on the custom HTML list and
+ * every setting named like WPBakery's custom onclick is raw.
+ *
+ * @param string              $tag   Tag.
+ * @param array<string,mixed> $param The map's param (labels, values, limits; its own type is not read).
+ * @return array{kind:string,writable:bool,needs:string}
+ */
+function aafm_wpbakery_param_kind( string $tag, array $param ): array {
+	$name     = isset( $param['param_name'] ) && is_string( $param['param_name'] ) ? $param['param_name'] : '';
+	$type     = aafm_wpbakery_param_type( $tag, $name );
+	$base     = null === $type ? '' : aafm_wpbakery_type_kind( $type, $name );
+	$writable = '' !== $base && 1 === preg_match( '/^[a-z0-9_]+$/', $name );
+	if ( $writable && 'choice' === $base ) {
+		$param['type'] = $type;
+		$writable      = array() !== aafm_wpbakery_choice_values( $param );
+	}
+	$scripted = in_array( $tag, aafm_wpbakery_custom_html_elements(), true ) || 1 === preg_match( '/(^|_)custom_onclick(_code)?$/', $name );
+	$kind     = $scripted ? 'raw' : ( '' === $base ? 'none' : $base );
+	return array(
+		'kind'     => $kind,
+		'writable' => $writable,
+		'needs'    => in_array( $kind, array( 'design', 'raw' ), true ) ? 'unfiltered_html' : '',
+	);
+}
+
+/**
+ * The values a choice setting allows, from the map: a dropdown's values, a button group's keys, a toggle's
+ * checked value or empty.
+ *
+ * @param array<string,mixed> $param Param with its type.
+ * @return array<string>
+ */
+function aafm_wpbakery_choice_values( array $param ): array {
+	$type  = (string) ( $param['type'] ?? '' );
+	$value = $param['value'] ?? null;
+	if ( 'toggle' === $type ) {
+		$checked = is_array( $value ) ? (string) current( $value ) : ( is_scalar( $value ) ? (string) $value : 'true' );
+		return array_values( array_unique( array( '' === $checked ? 'true' : $checked, '' ) ) );
+	}
+	if ( ! is_array( $value ) ) {
+		return array();
+	}
+	$out = array();
+	foreach ( $value as $key => $option ) {
+		if ( 'button_group' === $type ) {
+			$out[] = (string) $key;
+		} elseif ( is_scalar( $option ) ) {
+			$out[] = (string) $option;
+		}
+	}
+	return array_values( array_unique( $out ) );
+}
+
+/**
+ * The script gate (design section 9): design and raw kinds need unfiltered_html, checked before any value is
+ * encoded so a refused call never builds the script.
+ *
+ * @param string $kind Kind from aafm_wpbakery_param_kind().
+ * @return true|WP_Error
+ */
+function aafm_wpbakery_script_gate( string $kind ) {
+	if ( in_array( $kind, array( 'design', 'raw' ), true ) && ! current_user_can( 'unfiltered_html' ) ) {
+		return aafm_builder_error( 'aafm_builder_needs_unfiltered_html' );
+	}
+	return true;
+}
+
+/**
+ * A refusal that names the setting, so the agent sees which one in the error message.
+ *
+ * @param string $code aafm_builder_invalid_value or aafm_builder_attribute_not_writable.
+ * @param string $name Setting.
+ * @return WP_Error
+ */
+function aafm_wpbakery_setting_error( string $code, string $name ): WP_Error {
+	$error = aafm_builder_error( $code, array( 'setting' => $name ) );
+	return new WP_Error(
+		$code,
+		/* translators: 1: the refusal, 2: the setting name. */
+		sprintf( __( '%1$s Setting: %2$s.', 'agent-abilities-for-mcp' ), $error->get_error_message(), $name ),
+		$error->get_error_data()
+	);
+}
+
+/**
+ * URL-encodes like the editor's encodeURIComponent(): rawurlencode() with ! * ' ( ) left as they are.
+ *
+ * @param string $value Value.
+ * @return string
+ */
+function aafm_wpbakery_uri_encode( string $value ): string {
+	return strtr(
+		rawurlencode( $value ),
+		array(
+			'%21' => '!',
+			'%2A' => '*',
+			'%27' => "'",
+			'%28' => '(',
+			'%29' => ')',
+		)
+	);
+}
+
+/**
+ * W2: the escape WPBakery applies to every attribute value, reversed by the decoder.
+ *
+ * @param string $value Value.
+ * @return string
+ */
+function aafm_wpbakery_escape_attribute( string $value ): string {
+	return str_replace( array( '"', '[', ']' ), array( '``', '`{`', '`}`' ), $value );
+}
+
+/**
+ * A scalar text input as a string: a number is accepted as its string form, anything else is refused.
+ *
+ * @param mixed $value Input.
+ * @return string|null
+ */
+function aafm_wpbakery_scalar_text( $value ): ?string {
+	if ( is_string( $value ) ) {
+		return $value;
+	}
+	if ( is_int( $value ) || is_float( $value ) ) {
+		return (string) $value;
+	}
+	return null;
+}
+
+/**
+ * A link URL: http, https, mailto or tel, a site-relative path or an #anchor, accepted only as written.
+ *
+ * @param string $url URL.
+ * @return string|null Null when refused; '' for empty.
+ */
+function aafm_wpbakery_link_url( string $url ): ?string {
+	$url = trim( $url );
+	if ( '' === $url ) {
+		return '';
+	}
+	if ( '#' === $url[0] ) {
+		return 1 === preg_match( '/^#[A-Za-z0-9_\-:.]*$/', $url ) ? $url : null;
+	}
+	if ( '/' === $url[0] && ( ! isset( $url[1] ) || '/' !== $url[1] ) ) {
+		return esc_url_raw( $url ) === $url ? $url : null;
+	}
+	if ( 1 !== preg_match( '/^(https?|mailto|tel):/i', $url ) ) {
+		return null;
+	}
+	$clean = esc_url_raw( $url, array( 'http', 'https', 'mailto', 'tel' ) );
+	return '' !== $clean && $clean === $url ? $url : null;
+}
+
+/**
+ * A CSS length: a number and a unit, the units WPBakery's Design Options accept.
+ *
+ * @param mixed $value Value.
+ * @return bool
+ */
+function aafm_wpbakery_is_length( $value ): bool {
+	return is_string( $value ) && 1 === preg_match( '/^-?\d*\.?\d+(px|%|in|cm|mm|em|rem|ex|pt|pc|vw|vh|vmin|vmax)$/', $value );
+}
+
+/**
+ * A colour: hex, or rgb() or rgba() with numeric parts.
+ *
+ * @param mixed $value Value.
+ * @return bool
+ */
+function aafm_wpbakery_is_colour( $value ): bool {
+	return is_string( $value ) && (
+		1 === preg_match( '/^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/', $value )
+		|| 1 === preg_match( '/^rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(,\s*(0|1|0?\.\d+)\s*)?\)$/', $value )
+	);
+}
+
+/**
+ * The stored attribute text for a typed value (design 4.7), or a refusal naming the setting. The encoder is the
+ * inverse of aafm_wpbakery_decode_atts() and is checked against the bytes WPBakery's editor stored. Every text
+ * value goes through wp_kses_normalize_entities() before the vendor escape (Ruling B9). A value already in an
+ * encoded form is never accepted (design section 9). The caller runs aafm_wpbakery_script_gate() first.
+ *
+ * @param string              $kind  Kind from aafm_wpbakery_param_kind().
+ * @param mixed               $value The input form of the kind.
+ * @param array<string,mixed> $param The map's param, with type set from the param type row.
+ * @return string|WP_Error
+ */
+function aafm_wpbakery_encode_value( string $kind, $value, array $param ) {
+	$name  = isset( $param['param_name'] ) && is_string( $param['param_name'] ) ? $param['param_name'] : '';
+	$type  = isset( $param['type'] ) && is_string( $param['type'] ) ? $param['type'] : '';
+	$base  = aafm_wpbakery_type_kind( $type, $name );
+	$clean = 'raw' === $kind ? aafm_wpbakery_encode_raw( $base, $value, $param ) : aafm_wpbakery_encode_clean( $kind, $value, $param );
+	if ( null === $clean ) {
+		return aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $name );
+	}
+	return $clean;
+}
+
+/**
+ * A raw-kind value: W7 (base64 of the URL-encoded value) for a raw HTML type, the W17 form for a safe text
+ * setting with tags kept, the plain escaped text for a text setting (an onclick code), and the base kind's own
+ * form for anything else on a listed element. Only reached behind the gate.
+ *
+ * @param string              $base  Kind of the type before the name rule.
+ * @param mixed               $value Input.
+ * @param array<string,mixed> $param Param.
+ * @return string|null
+ */
+function aafm_wpbakery_encode_raw( string $base, $value, array $param ): ?string {
+	if ( 'raw' === $base ) {
+		return is_string( $value ) ? base64_encode( aafm_wpbakery_uri_encode( $value ) ) : null; // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- WPBakery's own raw element form (W7), behind unfiltered_html.
+	}
+	if ( 'safe_text' === $base || 'text' === $base ) {
+		$text = aafm_wpbakery_scalar_text( $value );
+		if ( null === $text || 0 === strpos( $text, '#E-8_' ) || ( 'text' === $base && 1 === preg_match( '/[\r\n]/', $text ) ) ) {
+			return null;
+		}
+		return 'safe_text' === $base ? aafm_wpbakery_safe_form( $text ) : aafm_wpbakery_escape_attribute( wp_kses_normalize_entities( $text ) );
+	}
+	return '' === $base ? null : aafm_wpbakery_encode_clean( $base, $value, $param );
+}
+
+/**
+ * W17: #E-8_ plus base64 of the URL-encoded value when it holds a double quote or http, else the value escaped
+ * as typed (with its entities normalised, since kses reads that form).
+ *
+ * @param string $text Value.
+ * @return string
+ */
+function aafm_wpbakery_safe_form( string $text ): string {
+	if ( false !== strpos( $text, '"' ) || false !== strpos( $text, 'http' ) ) {
+		return '#E-8_' . base64_encode( aafm_wpbakery_uri_encode( $text ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- WPBakery's own safe text form (W17), built by the plugin from checked input.
+	}
+	return aafm_wpbakery_escape_attribute( wp_kses_normalize_entities( $text ) );
+}
+
+/**
+ * A non-raw value in its stored form (escaped where the kind stores plain text), or null when refused.
+ *
+ * @param string              $kind  Kind.
+ * @param mixed               $value Input.
+ * @param array<string,mixed> $param Param with type.
+ * @return string|null
+ */
+function aafm_wpbakery_encode_clean( string $kind, $value, array $param ): ?string {
+	$type = (string) ( $param['type'] ?? '' );
+	switch ( $kind ) {
+		case 'text':
+			$text = aafm_wpbakery_plain_text( $value );
+			return null === $text ? null : aafm_wpbakery_escape_attribute( $text );
+		case 'safe_text':
+			return aafm_wpbakery_encode_safe_text( $value, 'exploded_textarea_safe' === $type );
+		case 'list':
+			if ( ! is_array( $value ) || array_values( $value ) !== $value ) {
+				return null;
+			}
+			$items = array();
+			foreach ( $value as $item ) {
+				$text = aafm_wpbakery_plain_text( $item );
+				if ( null === $text || false !== strpos( $text, ',' ) ) {
+					return null;
+				}
+				$items[] = $text;
+			}
+			return aafm_wpbakery_escape_attribute( implode( ',', $items ) );
+		case 'content':
+			return is_string( $value ) ? wp_kses_post( $value ) : null;
+		case 'link':
+			return aafm_wpbakery_encode_link( $value, 'href' === $type );
+		case 'image':
+			return aafm_wpbakery_encode_image( $value, 'attach_images' === $type );
+		case 'choice':
+			$choice = aafm_wpbakery_encode_choice( $value, $param );
+			return null === $choice ? null : aafm_wpbakery_escape_attribute( $choice );
+		case 'colour':
+			return aafm_wpbakery_is_colour( $value ) ? (string) $value : null;
+		case 'number':
+			return aafm_wpbakery_encode_number( $value, $param );
+		case 'token':
+			return is_string( $value ) && 1 === preg_match( '/^[A-Za-z0-9 _-]*$/', $value ) ? $value : null;
+		case 'group':
+			return aafm_wpbakery_encode_group( $value, $param );
+		case 'design':
+			return aafm_wpbakery_encode_design( $value );
+	}
+	return null;
+}
+
+/**
+ * Plain one-line text: the plugin's stored-text sanitizer, then entity normalisation (Ruling B9). A line break or
+ * an encoded #E-8_ value is refused.
+ *
+ * @param mixed $value Input.
+ * @return string|null
+ */
+function aafm_wpbakery_plain_text( $value ): ?string {
+	$text = aafm_wpbakery_scalar_text( $value );
+	if ( null === $text || 1 === preg_match( '/[\r\n]/', $text ) || 0 === strpos( $text, '#E-8_' ) ) {
+		return null;
+	}
+	return wp_kses_normalize_entities( aafm_sanitize_plain_text( $text ) );
+}
+
+/**
+ * Safe text (Ruling B5): tags stripped, a value that looks like a URL must pass the link check, then the W17
+ * form. The exploded type takes a list of strings or line breaks and joins them with commas, as the editor does.
+ *
+ * @param mixed $value    Input.
+ * @param bool  $exploded Whether the type is exploded_textarea_safe.
+ * @return string|null
+ */
+function aafm_wpbakery_encode_safe_text( $value, bool $exploded ): ?string {
+	if ( $exploded && is_array( $value ) ) {
+		if ( array_values( $value ) !== $value || array() !== array_filter( $value, static fn( $item ): bool => ! is_string( $item ) ) ) {
+			return null;
+		}
+		$value = implode( ',', $value );
+	}
+	if ( ! is_string( $value ) || 0 === strpos( $value, '#E-8_' ) ) {
+		return null;
+	}
+	$text = wp_strip_all_tags( $exploded ? (string) preg_replace( '/\r\n|\r|\n/', ',', $value ) : $value );
+	foreach ( $exploded ? explode( ',', $text ) : array( $text ) as $part ) {
+		$part = trim( $part );
+		if ( 1 === preg_match( '/^([a-z][a-z0-9+.\-]*:|\/\/)/i', $part ) && null === aafm_wpbakery_link_url( $part ) ) {
+			return null;
+		}
+	}
+	return aafm_wpbakery_safe_form( $text );
+}
+
+/**
+ * A link (W3): url, title, target and rel, only the non-empty parts, trimmed, each encoded like
+ * encodeURIComponent(). The href type takes a bare URL.
+ *
+ * @param mixed $value Input.
+ * @param bool  $href  Whether the type is href.
+ * @return string|null
+ */
+function aafm_wpbakery_encode_link( $value, bool $href ): ?string {
+	if ( $href ) {
+		$url = is_string( $value ) ? aafm_wpbakery_link_url( $value ) : null;
+		return null === $url ? null : aafm_wpbakery_escape_attribute( $url );
+	}
+	if ( ! is_array( $value ) || array() !== array_diff( array_keys( $value ), array( 'url', 'title', 'target', 'rel' ) ) ) {
+		return null;
+	}
+	$parts = array();
+	foreach ( array( 'url', 'title', 'target', 'rel' ) as $key ) {
+		$part = $value[ $key ] ?? '';
+		if ( ! is_string( $part ) ) {
+			return null;
+		}
+		$part = trim( $part );
+		if ( 'url' === $key ) {
+			$part = aafm_wpbakery_link_url( $part );
+		} elseif ( 'title' === $key ) {
+			$part = 1 === preg_match( '/[\r\n]/', $part ) ? null : wp_kses_normalize_entities( aafm_sanitize_plain_text( $part ) );
+		} elseif ( 'target' === $key ) {
+			$part = in_array( $part, array( '', '_self', '_blank' ), true ) ? $part : null;
+		} else {
+			$tokens = '' === $part ? array() : (array) preg_split( '/\s+/', $part );
+			$part   = array() === array_diff( $tokens, array( 'nofollow', 'noopener', 'noreferrer', 'sponsored', 'ugc', 'external' ) ) ? $part : null;
+		}
+		if ( null === $part ) {
+			return null;
+		}
+		if ( '' !== $part ) {
+			$parts[] = $key . ':' . aafm_wpbakery_uri_encode( $part );
+		}
+	}
+	return implode( '|', $parts );
+}
+
+/**
+ * An image id, or a list of ids for attach_images; each must be an existing image attachment.
+ *
+ * @param mixed $value Input.
+ * @param bool  $many  Whether the type takes several.
+ * @return string|null
+ */
+function aafm_wpbakery_encode_image( $value, bool $many ): ?string {
+	$ids = $many ? $value : array( $value );
+	if ( ! is_array( $ids ) || array() === $ids || array_values( $ids ) !== $ids ) {
+		return null;
+	}
+	foreach ( $ids as $id ) {
+		if ( ! is_int( $id ) || $id < 1 ) {
+			return null;
+		}
+		$attachment = aafm_exact_object( 'post', $id );
+		if ( ! $attachment instanceof WP_Post || 'attachment' !== $attachment->post_type || ! wp_attachment_is_image( $id ) ) {
+			return null;
+		}
+	}
+	return implode( ',', $ids );
+}
+
+/**
+ * A choice: one of the values the map lists (a checkbox also takes a list, joined with commas), unescaped.
+ *
+ * @param mixed               $value Input.
+ * @param array<string,mixed> $param Param with type.
+ * @return string|null
+ */
+function aafm_wpbakery_encode_choice( $value, array $param ): ?string {
+	$allowed = aafm_wpbakery_choice_values( $param );
+	$values  = 'checkbox' === ( $param['type'] ?? '' ) && is_array( $value ) ? $value : array( $value );
+	$out     = array();
+	foreach ( $values as $one ) {
+		$one = is_int( $one ) ? (string) $one : $one;
+		if ( ! is_string( $one ) || ! in_array( $one, $allowed, true ) ) {
+			return null;
+		}
+		$out[] = $one;
+	}
+	return array() === $out ? null : implode( ',', $out );
+}
+
+/**
+ * A number inside the map's minimum and maximum (settings min and max, or min and max on the param).
+ *
+ * @param mixed               $value Input; a numeric string is accepted, as a decoded param group row carries one.
+ * @param array<string,mixed> $param Param.
+ * @return string|null
+ */
+function aafm_wpbakery_encode_number( $value, array $param ): ?string {
+	if ( is_string( $value ) && 1 === preg_match( '/^-?\d+(\.\d+)?$/', $value ) ) {
+		$value = false === strpos( $value, '.' ) ? (int) $value : (float) $value;
+	}
+	if ( ! is_int( $value ) && ! is_float( $value ) ) {
+		return null;
+	}
+	$settings = is_array( $param['settings'] ?? null ) ? $param['settings'] : array();
+	$min      = $settings['min'] ?? $param['min'] ?? null;
+	$max      = $settings['max'] ?? $param['max'] ?? null;
+	if ( ( is_numeric( $min ) && $value < (float) $min ) || ( is_numeric( $max ) && $value > (float) $max ) ) {
+		return null;
+	}
+	return is_int( $value ) ? (string) $value : rtrim( rtrim( sprintf( '%.6F', $value ), '0' ), '.' );
+}
+
+/**
+ * A group: param_group rows (W6, each field through its own kind, the whole list as URL-encoded JSON), or the
+ * pair form of font_container and google_fonts (W3).
+ *
+ * @param mixed               $value Input.
+ * @param array<string,mixed> $param Param with type.
+ * @return string|null
+ */
+function aafm_wpbakery_encode_group( $value, array $param ): ?string {
+	$type = (string) ( $param['type'] ?? '' );
+	if ( 'font_container' === $type || 'google_fonts' === $type ) {
+		return aafm_wpbakery_encode_pairs( $value, $type, $param );
+	}
+	if ( ! is_array( $value ) || array_values( $value ) !== $value ) {
+		return null;
+	}
+	$fields = array();
+	foreach ( (array) ( $param['params'] ?? array() ) as $field ) {
+		if ( is_array( $field ) && isset( $field['param_name'], $field['type'] ) && is_string( $field['param_name'] ) && is_string( $field['type'] ) ) {
+			$fields[ $field['param_name'] ] = $field;
+		}
+	}
+	$rows = array();
+	foreach ( $value as $row ) {
+		if ( ! is_array( $row ) ) {
+			return null;
+		}
+		$encoded = array();
+		foreach ( $row as $name => $field_value ) {
+			$field = $fields[ (string) $name ] ?? null;
+			$kind  = null === $field ? '' : aafm_wpbakery_type_kind( (string) $field['type'], (string) $name );
+			if ( ! in_array( $kind, array( 'text', 'number', 'choice', 'colour', 'token', 'image' ), true ) ) {
+				return null;
+			}
+			// Inside URL-encoded JSON the W2 escape is not applied.
+			if ( 'text' === $kind ) {
+				$one = aafm_wpbakery_plain_text( $field_value );
+			} elseif ( 'choice' === $kind ) {
+				$one = aafm_wpbakery_encode_choice( $field_value, $field );
+			} else {
+				$one = aafm_wpbakery_encode_clean( $kind, $field_value, $field );
+			}
+			if ( null === $one ) {
+				return null;
+			}
+			$encoded[ (string) $name ] = $one;
+		}
+		$rows[] = array() === $encoded ? new stdClass() : $encoded;
+	}
+	$json = wp_json_encode( $rows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+	return false === $json ? null : aafm_wpbakery_uri_encode( $json );
+}
+
+/**
+ * The font_container (tag, text_align, font_size, line_height, color) or google_fonts (font_family, font_style) in
+ * the key:value pair form, keys in the map's field order.
+ *
+ * @param mixed               $value Input object.
+ * @param string              $type  font_container or google_fonts.
+ * @param array<string,mixed> $param Param.
+ * @return string|null
+ */
+function aafm_wpbakery_encode_pairs( $value, string $type, array $param ): ?string {
+	if ( ! is_array( $value ) ) {
+		return null;
+	}
+	$keys = 'google_fonts' === $type ? array( 'font_family', 'font_style' ) : array( 'tag', 'text_align', 'font_size', 'line_height', 'color' );
+	if ( 'font_container' === $type && is_array( $param['settings']['fields'] ?? null ) ) {
+		$order = array_values( array_intersect( array_map( 'strval', array_keys( $param['settings']['fields'] ) ), $keys ) );
+		$keys  = array_values( array_unique( array_merge( $order, $keys ) ) );
+	}
+	if ( array() !== array_diff( array_keys( $value ), $keys ) ) {
+		return null;
+	}
+	$size  = '/^\d+(\.\d+)?(px|em|rem|%|pt|vw|vh)?$/';
+	$rules = array(
+		'tag'         => static fn( string $v ): bool => in_array( $v, array( 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div' ), true ),
+		'text_align'  => static fn( string $v ): bool => in_array( $v, array( 'left', 'right', 'center', 'justify' ), true ),
+		'font_size'   => static fn( string $v ): bool => 1 === preg_match( $size, $v ),
+		'line_height' => static fn( string $v ): bool => 1 === preg_match( $size, $v ),
+		'color'       => 'aafm_wpbakery_is_colour',
+		'font_family' => static fn( string $v ): bool => 1 === preg_match( '/^[^;{}<(\\\\\r\n]+$/', $v ),
+		'font_style'  => static fn( string $v ): bool => 1 === preg_match( '/^[^;{}<(\\\\\r\n]+$/', $v ),
+	);
+	$parts = array();
+	foreach ( $keys as $key ) {
+		if ( ! array_key_exists( $key, $value ) ) {
+			continue;
+		}
+		$one = aafm_wpbakery_scalar_text( $value[ $key ] );
+		if ( null === $one || ( '' !== $one && ! $rules[ $key ]( $one ) ) ) {
+			return null;
+		}
+		if ( '' !== $one ) {
+			$parts[] = $key . ':' . aafm_wpbakery_uri_encode( $one );
+		}
+	}
+	return implode( '|', $parts );
+}
+
+/**
+ * Design Options (Ruling Q4, W10): typed fields turned into one rule .vc_custom_<13 digits>{...}, declarations in
+ * the order WPBakery's own CSS editor writes them. No selector, url() or brace ever comes from the caller; a
+ * background image is an attachment id the plugin resolves.
+ *
+ * @param mixed $value Input object of fields.
+ * @return string|null '' for no fields.
+ */
+function aafm_wpbakery_encode_design( $value ): ?string {
+	if ( ! is_array( $value ) ) {
+		return null;
+	}
+	$sides   = array( 'top', 'right', 'bottom', 'left' );
+	$lengths = array();
+	foreach ( array( 'margin', 'border', 'padding' ) as $layer ) {
+		foreach ( $sides as $side ) {
+			$lengths[] = 'border' === $layer ? 'border_' . $side . '_width' : $layer . '_' . $side;
+		}
+	}
+	$known = array_merge( $lengths, array( 'border_color', 'border_style', 'border_radius', 'background_color', 'background_image', 'background_style' ) );
+	if ( array() !== array_diff( array_keys( $value ), $known ) ) {
+		return null;
+	}
+	foreach ( array_merge( $lengths, array( 'border_radius' ) ) as $key ) {
+		if ( isset( $value[ $key ] ) && '' !== $value[ $key ] && ! aafm_wpbakery_is_length( $value[ $key ] ) ) {
+			return null;
+		}
+	}
+	foreach ( array( 'border_color', 'background_color' ) as $key ) {
+		if ( isset( $value[ $key ] ) && '' !== $value[ $key ] && ! aafm_wpbakery_is_colour( $value[ $key ] ) ) {
+			return null;
+		}
+	}
+	$style = (string) ( $value['border_style'] ?? '' );
+	$bg    = (string) ( $value['background_style'] ?? '' );
+	if ( ! in_array( $style, array( '', 'solid', 'dotted', 'dashed', 'none', 'hidden', 'double', 'groove', 'ridge', 'inset', 'outset', 'initial', 'inherit' ), true )
+		|| ! in_array( $bg, array( '', 'cover', 'contain', 'no-repeat', 'repeat' ), true ) ) {
+		return null;
+	}
+	$src = '';
+	if ( isset( $value['background_image'] ) && '' !== $value['background_image'] ) {
+		if ( null === aafm_wpbakery_encode_image( $value['background_image'], false ) ) {
+			return null;
+		}
+		$url = wp_get_attachment_image_url( (int) $value['background_image'], 'full' );
+		if ( ! is_string( $url ) || 1 === preg_match( '/[\s"\'()\\\\{};]/', $url ) ) {
+			return null;
+		}
+		$src = $url . '?id=' . (int) $value['background_image'];
+	}
+
+	$attrs = array();
+	foreach ( array( 'margin', 'border', 'padding' ) as $layer ) {
+		foreach ( $sides as $side ) {
+			$key = 'border' === $layer ? 'border_' . $side . '_width' : $layer . '_' . $side;
+			if ( '' !== (string) ( $value[ $key ] ?? '' ) ) {
+				$attrs[ 'border' === $layer ? 'border-' . $side . '-width' : $layer . '-' . $side ] = (string) $value[ $key ];
+			}
+		}
+	}
+	$colour = (string) ( $value['background_color'] ?? '' );
+	if ( '' !== $colour && '' !== $src ) {
+		$attrs['background'] = $colour . ' url(' . $src . ')';
+	} elseif ( '' !== $colour ) {
+		$attrs['background-color'] = $colour;
+	} elseif ( '' !== $src ) {
+		$attrs['background-image'] = 'url(' . $src . ')';
+	}
+	if ( '' !== $src && false !== strpos( $bg, 'repeat' ) ) {
+		$attrs['background-position'] = '0 0';
+		$attrs['background-repeat']   = $bg;
+	} elseif ( '' !== $src && in_array( $bg, array( 'cover', 'contain' ), true ) ) {
+		$attrs['background-position'] = 'center';
+		$attrs['background-repeat']   = 'no-repeat';
+		$attrs['background-size']     = $bg;
+	}
+	if ( 0 === strpos( $colour, 'rgba' ) ) {
+		$attrs['*background-color'] = (string) preg_replace( '/^rgba\((\d+),(\d+),(\d+),[^)]+\)$/', 'rgb($1,$2,$3)', (string) preg_replace( '/\s+/', '', $colour ) );
+	}
+	foreach ( array( 'left', 'right', 'top', 'bottom' ) as $side ) {
+		if ( isset( $attrs[ 'border-' . $side . '-width' ] ) && '' !== $style ) {
+			$attrs[ 'border-' . $side . '-style' ] = $style;
+		}
+	}
+	if ( '' !== (string) ( $value['border_color'] ?? '' ) ) {
+		$attrs['border-color'] = (string) $value['border_color'];
+	}
+	if ( '' !== (string) ( $value['border_radius'] ?? '' ) ) {
+		$attrs['border-radius'] = (string) $value['border_radius'];
+	}
+	if ( array() === $attrs ) {
+		return '';
+	}
+	$rule = '';
+	foreach ( $attrs as $property => $declaration ) {
+		$rule .= $property . ': ' . $declaration . ' !important;';
+	}
+	return '.vc_custom_' . (string) (int) floor( microtime( true ) * 1000 ) . '{' . $rule . '}';
+}

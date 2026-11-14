@@ -212,11 +212,13 @@ function aafm_exec_avada_get_page_content( array $input ) {
  * sees exactly what avada-replace-text guards. The walker's tuples are left as they are (the
  * structure check compares them for equality); index and global_id are added here.
  *
- * @param string $content Post content.
+ * @param string             $content Post content.
+ * @param array<string>|null $tags    Shortcode tags to walk; null keeps the Fusion list. With a
+ *                                    list passed, no global_id is added (it is a Fusion concept).
  * @return array{structure_status:string,structure?:list<array<string,mixed>>}
  */
-function aafm_avada_structure( string $content ): array {
-	$walk = aafm_fusion_shortcode_walk( $content, 0 );
+function aafm_avada_structure( string $content, ?array $tags = null ): array {
+	$walk = aafm_fusion_shortcode_walk( $content, 0, $tags );
 	if ( null === $walk ) {
 		return array( 'structure_status' => 'unparseable' );
 	}
@@ -231,7 +233,7 @@ function aafm_avada_structure( string $content ): array {
 			'has_closer'   => $element['has_closer'],
 			'atts'         => (object) $element['atts'],
 		);
-		$global_id = aafm_avada_global_id( $element['tag'], $element['atts'] );
+		$global_id = null === $tags ? aafm_avada_global_id( $element['tag'], $element['atts'] ) : null;
 		if ( null !== $global_id ) {
 			$item['global_id'] = $global_id;
 		}
@@ -407,12 +409,18 @@ function aafm_fusion_attribute_quotes_balanced( string $attribute_str ): bool {
  *   fail-closed rule, rather than silently exposing a "safe-looking" span that is not
  *   actually protecting the real boundary WordPress's own parser lost track of.
  *
- * @param string $content Content to scan at this nesting level.
- * @param int    $depth   Current nesting depth (0 = top level).
+ * @param string             $content Content to scan at this nesting level.
+ * @param int                $depth   Current nesting depth (0 = top level).
+ * @param array<string>|null $tags    Shortcode tags to walk; null keeps aafm_fusion_shortcode_tags().
+ *                                    An empty list walks nothing (get_shortcode_regex() would fall
+ *                                    back to every registered shortcode).
  * @return array<int,array{tag:string,self_closing:bool,has_closer:bool,atts:array<string,mixed>,depth:int}>|null Null means "could not be parsed" - the caller must refuse rather than assume safety.
  */
-function aafm_fusion_shortcode_walk( string $content, int $depth ): ?array {
-	$pattern = '/' . get_shortcode_regex( aafm_fusion_shortcode_tags() ) . '/';
+function aafm_fusion_shortcode_walk( string $content, int $depth, ?array $tags = null ): ?array {
+	if ( array() === $tags ) {
+		return array();
+	}
+	$pattern = '/' . get_shortcode_regex( null === $tags ? aafm_fusion_shortcode_tags() : $tags ) . '/';
 	$matched = preg_match_all( $pattern, $content, $matches, PREG_SET_ORDER );
 	if ( false === $matched ) {
 		return null; // Regex engine error (e.g. a backtrack-limit trip on pathological input).
@@ -454,7 +462,7 @@ function aafm_fusion_shortcode_walk( string $content, int $depth ): ?array {
 		);
 
 		if ( ! $self_closing && '' !== $inner ) {
-			$child = aafm_fusion_shortcode_walk( $inner, $depth + 1 );
+			$child = aafm_fusion_shortcode_walk( $inner, $depth + 1, $tags );
 			if ( null === $child ) {
 				return null;
 			}
@@ -481,13 +489,14 @@ function aafm_fusion_shortcode_walk( string $content, int $depth ): ?array {
  * compares structure and attribute VALUES, not the raw bytes inside a tag - not the
  * byte-identical guarantee the disclosure used to claim.
  *
- * @param string $before Content before the replacement.
- * @param string $after  Content after the replacement.
+ * @param string             $before Content before the replacement.
+ * @param string             $after  Content after the replacement.
+ * @param array<string>|null $tags   Shortcode tags to compare; null keeps the Fusion list.
  * @return bool
  */
-function aafm_fusion_shortcode_structure_preserved( string $before, string $after ): bool {
-	$original = aafm_fusion_shortcode_walk( $before, 0 );
-	$result   = aafm_fusion_shortcode_walk( $after, 0 );
+function aafm_fusion_shortcode_structure_preserved( string $before, string $after, ?array $tags = null ): bool {
+	$original = aafm_fusion_shortcode_walk( $before, 0, $tags );
+	$result   = aafm_fusion_shortcode_walk( $after, 0, $tags );
 
 	return null !== $original && null !== $result && $original === $result;
 }

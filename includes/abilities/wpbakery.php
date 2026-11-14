@@ -516,7 +516,9 @@ function aafm_exec_wpbakery_replace_text( array $input ) {
 		);
 	}
 
-	$inserted = wp_kses_post( $replace );
+	// Bracket entities are decoded first: WPBakery's editor reads the page through TinyMCE, which decodes them, so
+	// they would become a real element on its next save. As brackets, the structure check below refuses them.
+	$inserted = wp_kses_post( aafm_wpbakery_decode_bracket_entities( $replace ) );
 	$new      = str_replace( $search, $inserted, $content );
 
 	$tags = aafm_wpbakery_shortcode_tags( $content, $new );

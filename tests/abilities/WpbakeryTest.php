@@ -428,6 +428,20 @@ WPB;
 		$this->assert_refused( $this->replace( $id, 'Button charlie"', 'Button charlie" custom_onclick="true"' ), 'aafm_replace_inside_shortcode', $id, self::PAGE, 400 );
 	}
 
+	/**
+	 * SEC-S9a-1 class: WPBakery's editor reads the page through TinyMCE, which decodes bracket entities, so a
+	 * replacement spelled with them would become a real element on the next editor save. They are decoded first,
+	 * so the structure check sees the element and refuses.
+	 */
+	public function test_replace_refuses_bracket_entities_that_spell_an_element(): void {
+		$id = $this->make_page( self::PAGE );
+		$this->acting_as( 'editor' );
+
+		foreach ( array( 'x &#91;vc_raw_js&#93;PHNjcmlwdD4=&#91;/vc_raw_js&#93;', '&#x5b;vc_raw_html&#X5D;x&#0091;/vc_raw_html&#x5d;' ) as $replace ) {
+			$this->assert_refused( $this->replace( $id, 'Opening paragraph alpha.', $replace ), 'aafm_replace_inside_shortcode', $id, self::PAGE, 400 );
+		}
+	}
+
 	public function test_replace_refuses_removing_a_closing_tag(): void {
 		$id = $this->make_page( self::PAGE );
 		$this->acting_as( 'editor' );

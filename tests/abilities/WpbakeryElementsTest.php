@@ -2434,6 +2434,18 @@ final class WpbakeryElementsTest extends TestCase {
 		$this->assertSame( array( 'before', 'after', 'inside_start', 'inside_end' ), aafm_args_wpbakery_move_element()['input_schema']['properties']['placement']['enum'] );
 	}
 
+	/**
+	 * R1-3: a Grid Builder template and a site with revisions off keep no revision, so the disclosures promise one only
+	 * when revisions are on.
+	 */
+	public function test_insert_and_move_disclosures_promise_a_revision_only_when_revisions_are_on(): void {
+		foreach ( array( 'insert', 'move' ) as $tool ) {
+			$text = aafm_ability_disclosures()[ 'aafm/wpbakery-' . $tool . '-element' ];
+			$this->assertStringContainsString( 'when revisions are on', $text, $tool );
+			$this->assertStringNotContainsString( '; a revision is kept so', $text, $tool );
+		}
+	}
+
 	public function test_structural_tool_descriptions_say_what_the_design_requires(): void {
 		$registry = aafm_get_abilities_registry_full();
 		foreach ( array( 'insert', 'move', 'remove' ) as $tool ) {

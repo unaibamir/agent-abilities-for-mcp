@@ -242,6 +242,9 @@ function aafm_ability_disclosures(): array {
 		'aafm/avada-get-global-options'    => __( 'Reads a fixed list of Avada Global Options: colors, typography, header, logo, footer text and maintenance mode. API keys, passwords, custom CSS and the head and body code fields are never returned; footer text comes back as the stored HTML. Admins only.', 'agent-abilities-for-mcp' ),
 		'aafm/avada-list-library'          => __( 'Lists the Avada Library (saved elements, columns, sections, post cards and templates) and marks the global items shared across pages, with their raw markup on request. Shows only items the user can edit.', 'agent-abilities-for-mcp' ),
 
+		// WPBakery Page Builder.
+		'aafm/wpbakery-get-page-content'   => __( 'Reads the raw content of a WPBakery page, unchanged, and says whether WPBakery owns it. With include_structure it also lists the shortcode elements and their attributes as WPBakery stores them. Requires edit access to the post; WPBakery\'s Role Manager is not applied.', 'agent-abilities-for-mcp' ),
+
 		// GeoDirectory (default-off).
 		'aafm/geodirectory-get-listings'   => __( 'Lists GeoDirectory business/place listings (title, status, link).', 'agent-abilities-for-mcp' ),
 		'aafm/geodirectory-get-listing'    => __( 'Reads one GeoDirectory listing by id, including its address and coordinates.', 'agent-abilities-for-mcp' ),

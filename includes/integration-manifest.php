@@ -428,6 +428,12 @@ function aafm_integration_ability_order(): array {
 				'risk' => 'read',
 			),
 		),
+		'wpbakery'      => array(
+			array(
+				'name' => 'aafm/wpbakery-get-page-content',
+				'risk' => 'read',
+			),
+		),
 		'geodirectory'  => array(
 			array(
 				'name' => 'aafm/geodirectory-get-listings',

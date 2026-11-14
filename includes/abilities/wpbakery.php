@@ -21,6 +21,149 @@ declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
+add_filter( 'aafm_abilities_registry', 'aafm_register_wpbakery_definitions' );
+add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_wpbakery_full_definitions' );
+
+/**
+ * Contribute WPBakery ability definitions to the registry, only while WPBakery is active.
+ *
+ * @param array<string,array<string,mixed>> $registry Registry.
+ * @return array<string,array<string,mixed>>
+ */
+function aafm_register_wpbakery_definitions( array $registry ): array {
+	if ( ! aafm_integration_active( 'wpbakery' ) ) {
+		return $registry;
+	}
+	return array_merge( $registry, aafm_wpbakery_registry_definitions() );
+}
+
+/**
+ * Contribute WPBakery ability definitions to the host-independent full registry (used by the
+ * Integrations tab and the manifest, whether or not WPBakery is active here).
+ *
+ * @param array<string,array<string,mixed>> $registry Registry.
+ * @return array<string,array<string,mixed>>
+ */
+function aafm_register_wpbakery_full_definitions( array $registry ): array {
+	return array_merge( $registry, aafm_wpbakery_registry_definitions() );
+}
+
+/**
+ * The WPBakery ability rows, shared by the guarded and full registries.
+ *
+ * @return array<string,array<string,mixed>>
+ */
+function aafm_wpbakery_registry_definitions(): array {
+	return array(
+		'aafm/wpbakery-get-page-content' => array(
+			'label'        => __( 'Get WPBakery page content', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Reads the raw post content of a WPBakery page, unchanged. Shortcodes come back exactly as stored, never rendered or stripped, and attribute values keep the form WPBakery stores them in, including its escaped brackets and quotes and base64 encoded values such as raw HTML, so search for text as it is stored. Also returns is_wpbakery_owned, true when WPBakery owns the page. With include_structure it also returns an outline of the shortcode elements (tag, nesting depth, attributes) to find the text block that holds the text before calling wpbakery-replace-text. Requires edit access to the post; WPBakery\'s Role Manager settings are not applied. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
+			'group'        => 'reads',
+			'risk'         => 'read',
+			'subject'      => 'wpbakery',
+			'args_builder' => 'aafm_args_wpbakery_get_page_content',
+		),
+	);
+}
+
+/**
+ * Args for aafm/wpbakery-get-page-content.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_wpbakery_get_page_content(): array {
+	return array(
+		'label'               => aafm_ability_label( 'aafm/wpbakery-get-page-content' ),
+		'description'         => aafm_ability_description( 'aafm/wpbakery-get-page-content' ),
+		'category'            => 'aafm-reads',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'post_id'           => array(
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the post or page to read. The current user must have edit access to it.', 'agent-abilities-for-mcp' ),
+				),
+				'include_structure' => array(
+					'type'        => 'boolean',
+					'default'     => false,
+					'description' => __( 'When true, also returns structure: the shortcode elements in document order with their nesting depth and attributes, and structure_status. Use it to find the element that holds the text you want to change before calling wpbakery-replace-text.', 'agent-abilities-for-mcp' ),
+				),
+			),
+			'required'             => array( 'post_id' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'post_id'           => array( 'type' => 'integer' ),
+				'content'           => array( 'type' => 'string' ),
+				'is_wpbakery_owned' => array( 'type' => 'boolean' ),
+				'structure_status'  => array(
+					'type'        => 'string',
+					'enum'        => array( 'ok', 'unparseable', 'truncated' ),
+					'description' => __( 'Only with include_structure. ok: the outline is complete. unparseable: the shortcodes could not be read safely (wpbakery-replace-text refuses this page too) and no structure is returned. truncated: only the first 2,000 elements are listed.', 'agent-abilities-for-mcp' ),
+				),
+				'structure'         => array(
+					'type'        => 'array',
+					'description' => __( 'Only with include_structure, when structure_status is ok or truncated. Attribute values are shown as WPBakery stores them.', 'agent-abilities-for-mcp' ),
+					'items'       => array(
+						'type'       => 'object',
+						'properties' => array(
+							'index'        => array( 'type' => 'integer' ),
+							'depth'        => array( 'type' => 'integer' ),
+							'tag'          => array( 'type' => 'string' ),
+							'self_closing' => array( 'type' => 'boolean' ),
+							'has_closer'   => array( 'type' => 'boolean' ),
+							'atts'         => array( 'type' => 'object' ),
+						),
+					),
+				),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_wpbakery_get_page_content',
+		'permission_callback' => 'aafm_perm_avada_post_object',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => true,
+				'destructive' => false,
+				'idempotent'  => true,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/wpbakery-get-page-content: raw post_content, unrendered, an ownership flag
+ * decided from the content as the guard decides it, and on request the outline the write guards.
+ * No _wpb_* meta is read or returned.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_wpbakery_get_page_content( array $input ) {
+	$id   = absint( $input['post_id'] ?? 0 );
+	$post = aafm_exact_object( 'post', $id );
+	if ( ! $post instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+
+	$content = (string) $post->post_content;
+	$out     = array(
+		'post_id'           => $id,
+		'content'           => $content,
+		'is_wpbakery_owned' => 'wpbakery' === aafm_post_has_foreign_builder_ownership( $id, true ),
+	);
+	if ( ! empty( $input['include_structure'] ) ) {
+		$tags = aafm_wpbakery_shortcode_tags( $content );
+		$out  = array_merge(
+			$out,
+			null === $tags ? array( 'structure_status' => 'unparseable' ) : aafm_avada_structure( $content, $tags )
+		);
+	}
+	return $out;
+}
+
 /**
  * Every distinct shortcode name that appears in the given strings, merged.
  *

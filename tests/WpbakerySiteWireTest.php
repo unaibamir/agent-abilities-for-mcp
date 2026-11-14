@@ -21,7 +21,7 @@ final class WpbakerySiteWireTest extends TestCase {
 
 	private const TEMPLATE = '[vc_row][vc_column][vc_column_text]<p>From the template</p>[/vc_column_text][/vc_column][/vc_row]';
 
-	private const TOOLS = array( 'aafm/wpbakery-list-templates', 'aafm/wpbakery-insert-template' );
+	private const TOOLS = array( 'aafm/wpbakery-list-templates', 'aafm/wpbakery-insert-template', 'aafm/wpbakery-update-page-code' );
 
 	public function set_up(): void {
 		parent::set_up();
@@ -91,7 +91,7 @@ final class WpbakerySiteWireTest extends TestCase {
 	 * A handler and a page the caller can edit.
 	 *
 	 * @param string $role Role to act as.
-	 * @return array{0:\AAFM\Tests\Support\McpToolsHandlerShim,1:int}
+	 * @return array{0:\AAFM\Tests\Support\McpToolsHandlerShim,1:int,2:\WP\MCP\Core\McpServer}
 	 */
 	private function wired( string $role = 'administrator' ): array {
 		$id = self::factory()->post->create(
@@ -103,7 +103,8 @@ final class WpbakerySiteWireTest extends TestCase {
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		$this->register_enabled( self::TOOLS );
 		$this->acting_as( $role );
-		return array( new \AAFM\Tests\Support\McpToolsHandlerShim( $this->build_server( \WP\MCP\Core\McpAdapter::instance() ) ), $id );
+		$server = $this->build_server( \WP\MCP\Core\McpAdapter::instance() );
+		return array( new \AAFM\Tests\Support\McpToolsHandlerShim( $server ), $id, $server );
 	}
 
 	/**
@@ -252,5 +253,98 @@ final class WpbakerySiteWireTest extends TestCase {
 		$this->assertNull( $done['restore_revision_id'] );
 		$this->assertFalse( $done['reversible'] );
 		$this->assertStringContainsString( 'no longer there after the save', $done['reversible_reason'] );
+	}
+
+	public function test_update_page_code_round_trips_over_a_real_tools_call(): void {
+		$access = function ( $resolved, string $entry ) {
+			return 'wpbakery_user_access' === $entry ? fn() => new class() {
+				/**
+				 * Part.
+				 *
+				 * @return self
+				 */
+				public function part(): self {
+					return $this;
+				}
+
+				/**
+				 * State check.
+				 *
+				 * @return self
+				 */
+				public function checkStateAny(): self { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid -- WPBakery's own method name.
+					return $this;
+				}
+
+				/**
+				 * Result.
+				 *
+				 * @return bool
+				 */
+				public function get(): bool {
+					return true;
+				}
+			} : $resolved;
+		};
+		add_filter( 'aafm_builder_vendor', $access, 20, 2 );
+		list( $handler, $id ) = $this->wired();
+		update_post_meta( $id, '_wpb_post_custom_css', '.old{}' );
+		$args = array(
+			'post_id'          => $id,
+			'custom_css'       => '.title{display:none}',
+			'custom_js_footer' => 'console.info(1);',
+		);
+		$done = $this->wire(
+			$handler->call_tool(
+				array(
+					'name'      => aafm_mcp_tool_name( 'aafm/wpbakery-update-page-code' ),
+					'arguments' => $args,
+				),
+				'req-wpb-page-code-1'
+			)
+		);
+		$this->assertSame(
+			array(
+				'post_id'  => $id,
+				'changed'  => array( 'custom_css', 'custom_js_footer' ),
+				'previous' => array(
+					'custom_css'       => '.old{}',
+					'custom_js_footer' => '',
+				),
+				'undo'     => array(
+					'undoable'   => false,
+					'change_ids' => array(),
+					'reason'     => 'not_covered',
+				),
+			),
+			$done
+		);
+		$this->assertSame( '.title{display:none}', get_post_meta( $id, '_wpb_post_custom_css', true ) );
+		$this->assertSame( 'console.info(1);', get_post_meta( $id, '_wpb_post_custom_js_footer', true ) );
+
+		$again = $this->wire(
+			$handler->call_tool(
+				array(
+					'name'      => aafm_mcp_tool_name( 'aafm/wpbakery-update-page-code' ),
+					'arguments' => $args,
+				),
+				'req-wpb-page-code-2'
+			)
+		);
+		$this->assertSame( array(), $again['changed'] );
+		$this->assertSame( array(), $again['previous'] );
+		remove_filter( 'aafm_builder_vendor', $access, 20 );
+	}
+
+	public function test_update_page_code_is_absent_from_tools_list_without_unfiltered_html(): void {
+		list( $handler, , $server ) = $this->wired( 'editor' );
+		$editor                     = wp_get_current_user();
+		$names                      = static fn(): array => array_map( static fn( $tool ) => $tool->getName(), aafm_filter_mcp_tools_list( $handler->list_tools()->getTools(), $server ) );
+		$this->assertContains( aafm_mcp_tool_name( 'aafm/wpbakery-update-page-code' ), $names() );
+		$editor->add_cap( 'unfiltered_html', false );
+		$this->assertFalse( current_user_can( 'unfiltered_html' ) );
+		$visible = $names();
+		$this->assertNotContains( aafm_mcp_tool_name( 'aafm/wpbakery-update-page-code' ), $visible );
+		$this->assertContains( aafm_mcp_tool_name( 'aafm/wpbakery-insert-template' ), $visible );
 	}
 }

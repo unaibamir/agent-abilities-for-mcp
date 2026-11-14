@@ -1360,6 +1360,17 @@ function aafm_activity_detail_map(): array {
 			),
 			'link'     => 'post',
 		),
+		'aafm/wpbakery-update-page-code'   => array(
+			/* translators: %s: the post's numeric ID. */
+			'template' => __( 'Ran a page code update on WPBakery page #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'post_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
 		'aafm/geodirectory-create-listing' => array(
 			/* translators: %s: the new listing's numeric ID. */
 			'template'  => __( 'Created listing #%s', 'agent-abilities-for-mcp' ),

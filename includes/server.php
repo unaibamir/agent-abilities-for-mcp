@@ -516,6 +516,18 @@ function aafm_ability_list_permission( string $name ): ?callable {
 				$page_floor = aafm_ability_list_permission( 'aafm/update-page' );
 				return null !== $page_floor && (bool) $page_floor();
 			};
+		// The same floor, plus unfiltered_html, which aafm_perm_wpbakery_page_code() requires for every field.
+		case 'aafm/wpbakery-update-page-code':
+			return static function (): bool {
+				if ( ! current_user_can( 'unfiltered_html' ) ) {
+					return false;
+				}
+				if ( aafm_can_edit_post_family() ) {
+					return true;
+				}
+				$page_floor = aafm_ability_list_permission( 'aafm/update-page' );
+				return null !== $page_floor && (bool) $page_floor();
+			};
 
 		// GeoDirectory (added 1.7.4, default-off): gd_place registers with the literal
 		// 'capability_type' => 'post', so its mapped caps are the SAME primitive names as the

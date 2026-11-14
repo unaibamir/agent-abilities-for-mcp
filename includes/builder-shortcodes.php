@@ -375,6 +375,12 @@ function aafm_builder_vendor_rows(): array {
 			'target'   => 'vc_editor_post_types',
 			'requires' => 'vc_editor_post_types',
 		),
+		// WPBakery's access chain (vc_user_access()), for the one Role Manager check this plugin makes: the custom JS
+		// fields, which WPBakery's own save skips for a user whose unfiltered_html part is off (W11).
+		'wpbakery_user_access'       => array(
+			'target'   => 'vc_user_access',
+			'requires' => 'vc_user_access',
+		),
 		// The Global Options name of the active Avada theme; present only with the theme's own Avada() loaded.
 		'avada_option_name'          => array(
 			'target'   => array( 'Avada', 'get_option_name' ),

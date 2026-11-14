@@ -620,4 +620,303 @@ final class WpbakerySiteTest extends TestCase {
 		}
 		$this->assertStringContainsString( 'Only while WPBakery Page Builder is active', $row['description'] );
 	}
+
+	/**
+	 * Make the wpbakery_user_access seam answer WPBakery's own unfiltered_html part with $on.
+	 *
+	 * @param bool $on Access.
+	 * @return callable The filter, to remove.
+	 */
+	private function wpbakery_access( bool $on ): callable {
+		$filter = function ( $resolved, string $entry ) use ( $on ) {
+			if ( 'wpbakery_user_access' !== $entry ) {
+				return $resolved;
+			}
+			return function () use ( $on ) {
+				return new class( $on ) {
+					/**
+					 * Access.
+					 *
+					 * @var bool
+					 */
+					private $on;
+
+					/**
+					 * Seam stub of WPBakery's access chain.
+					 *
+					 * @param bool $on Access.
+					 */
+					public function __construct( bool $on ) {
+						$this->on = $on;
+					}
+
+					/**
+					 * Part.
+					 *
+					 * @param string $part Part.
+					 * @return self
+					 */
+					public function part( string $part ): self {
+						unset( $part );
+						return $this;
+					}
+
+					/**
+					 * State check.
+					 *
+					 * @param mixed ...$states States.
+					 * @return self
+					 */
+					public function checkStateAny( ...$states ): self { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid -- WPBakery's own method name.
+						unset( $states );
+						return $this;
+					}
+
+					/**
+					 * Result.
+					 *
+					 * @return bool
+					 */
+					public function get(): bool {
+						return $this->on;
+					}
+				};
+			};
+		};
+		add_filter( 'aafm_builder_vendor', $filter, 20, 2 );
+		return $filter;
+	}
+
+	/**
+	 * Run the page code update as the current user.
+	 *
+	 * @param int                 $id     Post.
+	 * @param array<string,mixed> $fields Fields.
+	 * @return array<string,mixed>|WP_Error
+	 */
+	private function page_code( int $id, array $fields ) {
+		return aafm_exec_wpbakery_update_page_code( array( 'post_id' => $id ) + $fields );
+	}
+
+	public function test_each_field_is_set_and_read_back_from_the_meta(): void {
+		$this->wpbakery_access( true );
+		$id = $this->page( self::SIMPLE );
+		$this->acting_as( 'administrator' );
+		$out = $this->page_code(
+			$id,
+			array(
+				'custom_css'       => '.a{color:red}',
+				'custom_js_header' => 'var a = 1;',
+				'custom_js_footer' => 'console.info("b");',
+			)
+		);
+		$this->assertSame(
+			array(
+				'post_id'  => $id,
+				'changed'  => array( 'custom_css', 'custom_js_header', 'custom_js_footer' ),
+				'previous' => array(
+					'custom_css'       => '',
+					'custom_js_header' => '',
+					'custom_js_footer' => '',
+				),
+			),
+			$out
+		);
+		$this->assertSame( '.a{color:red}', get_post_meta( $id, '_wpb_post_custom_css', true ) );
+		$this->assertSame( 'var a = 1;', get_post_meta( $id, '_wpb_post_custom_js_header', true ) );
+		$this->assertSame( 'console.info("b");', get_post_meta( $id, '_wpb_post_custom_js_footer', true ) );
+	}
+
+	public function test_an_empty_string_deletes_the_meta(): void {
+		$this->wpbakery_access( true );
+		$id = $this->page( self::SIMPLE );
+		update_post_meta( $id, '_wpb_post_custom_css', '.a{}' );
+		update_post_meta( $id, '_wpb_post_custom_js_footer', 'x();' );
+		$this->acting_as( 'administrator' );
+		$out = $this->page_code(
+			$id,
+			array(
+				'custom_css'       => '',
+				'custom_js_footer' => '',
+			)
+		);
+		$this->assertSame( array( 'custom_css', 'custom_js_footer' ), $out['changed'] );
+		$this->assertFalse( metadata_exists( 'post', $id, '_wpb_post_custom_css' ) );
+		$this->assertFalse( metadata_exists( 'post', $id, '_wpb_post_custom_js_footer' ) );
+		$this->assertSame(
+			array(
+				'custom_css'       => '.a{}',
+				'custom_js_footer' => 'x();',
+			),
+			$out['previous']
+		);
+	}
+
+	public function test_css_is_stored_without_tags(): void {
+		$id = $this->page( self::SIMPLE );
+		$this->acting_as( 'administrator' );
+		$this->assertIsArray( $this->page_code( $id, array( 'custom_css' => '.a{color:red}</style><script>alert(1)</script>' ) ) );
+		$this->assertSame( '.a{color:red}', get_post_meta( $id, '_wpb_post_custom_css', true ) );
+	}
+
+	public function test_js_containing_a_closing_script_tag_is_refused(): void {
+		$this->wpbakery_access( true );
+		$id = $this->page( self::SIMPLE );
+		$this->acting_as( 'administrator' );
+		foreach ( array( 'custom_js_header', 'custom_js_footer' ) as $field ) {
+			foreach ( array( 'a();</script><b>', 'a();</ScRiPt >' ) as $js ) {
+				$this->assert_error( $this->page_code( $id, array( $field => $js ) ), 'aafm_builder_invalid_value', 400 );
+			}
+			$this->assertFalse( metadata_exists( 'post', $id, '_wpb_post_' . $field ) );
+		}
+	}
+
+	public function test_the_permission_needs_edit_access_and_unfiltered_html(): void {
+		$author = self::factory()->user->create( array( 'role' => 'editor' ) );
+		$id     = $this->page( self::SIMPLE, $author );
+		$this->assertSame( 'aafm_perm_wpbakery_page_code', aafm_args_wpbakery_update_page_code()['permission_callback'] );
+		$this->act_as_restricted_editor();
+		$this->assertFalse( aafm_perm_wpbakery_page_code( array( 'post_id' => $id ) ) );
+		$this->acting_as( 'administrator' );
+		$this->assertTrue( aafm_perm_wpbakery_page_code( array( 'post_id' => $id ) ) );
+		$this->acting_as( 'contributor' );
+		$this->assertFalse( aafm_perm_wpbakery_page_code( array( 'post_id' => $id ) ) );
+	}
+
+	public function test_js_fields_are_refused_when_wpbakerys_own_access_is_off(): void {
+		$this->wpbakery_access( false );
+		$id = $this->page( self::SIMPLE );
+		$this->acting_as( 'administrator' );
+		foreach ( array( 'custom_js_header', 'custom_js_footer' ) as $field ) {
+			$this->assert_error( $this->page_code( $id, array( $field => 'a();' ) ), 'aafm_wpbakery_custom_js_off', 403 );
+			$this->assertFalse( metadata_exists( 'post', $id, '_wpb_post_' . $field ) );
+		}
+		$this->assert_error(
+			$this->page_code(
+				$id,
+				array(
+					'custom_css'       => '.a{}',
+					'custom_js_footer' => 'a();',
+				)
+			),
+			'aafm_wpbakery_custom_js_off',
+			403
+		);
+		$this->assertFalse( metadata_exists( 'post', $id, '_wpb_post_custom_css' ), 'Nothing is written when one field is refused.' );
+		$this->assertIsArray( $this->page_code( $id, array( 'custom_css' => '.a{}' ) ), 'CSS alone does not ask WPBakery.' );
+	}
+
+	public function test_previous_holds_the_old_values(): void {
+		$id = $this->page( self::SIMPLE );
+		update_post_meta( $id, '_wpb_post_custom_css', '.old{}' );
+		$this->acting_as( 'administrator' );
+		$out = $this->page_code( $id, array( 'custom_css' => '.new{}' ) );
+		$this->assertSame( array( 'custom_css' => '.old{}' ), $out['previous'] );
+		$this->assertSame( '.new{}', get_post_meta( $id, '_wpb_post_custom_css', true ) );
+	}
+
+	/**
+	 * Review Focus 3: writing what is stored changes nothing and writes no meta.
+	 */
+	public function test_writing_the_stored_values_changes_nothing(): void {
+		$this->wpbakery_access( true );
+		$id = $this->page( self::SIMPLE );
+		update_post_meta( $id, '_wpb_post_custom_css', '.a{}' );
+		update_post_meta( $id, '_wpb_post_custom_js_header', 'h();' );
+		$this->acting_as( 'administrator' );
+		$writes = 0;
+		$count  = static function ( $check ) use ( &$writes ) {
+			++$writes;
+			return $check;
+		};
+		add_filter( 'update_post_metadata', $count );
+		add_filter( 'delete_post_metadata', $count );
+		$out = $this->page_code(
+			$id,
+			array(
+				'custom_css'       => '.a{}',
+				'custom_js_header' => 'h();',
+				'custom_js_footer' => '',
+			)
+		);
+		remove_filter( 'update_post_metadata', $count );
+		remove_filter( 'delete_post_metadata', $count );
+		$this->assertSame(
+			array(
+				'post_id'  => $id,
+				'changed'  => array(),
+				'previous' => array(),
+			),
+			$out
+		);
+		$this->assertSame( 0, $writes );
+	}
+
+	public function test_page_code_is_refused_on_a_page_wpbakery_does_not_own(): void {
+		$content = '<!-- wp:paragraph --><p>Block page</p><!-- /wp:paragraph -->';
+		$id      = $this->page( $content );
+		update_post_meta( $id, '_elementor_edit_mode', 'builder' );
+		$this->acting_as( 'administrator' );
+		$this->assert_error( $this->page_code( $id, array( 'custom_css' => '.a{}' ) ), 'aafm_not_wpbakery_owned', 409 );
+		$this->assertFalse( metadata_exists( 'post', $id, '_wpb_post_custom_css' ) );
+	}
+
+	public function test_at_least_one_field_is_needed(): void {
+		$id = $this->page( self::SIMPLE );
+		$this->acting_as( 'administrator' );
+		$this->assert_error( $this->page_code( $id, array() ), 'aafm_wpbakery_page_code_empty', 400 );
+	}
+
+	public function test_a_failed_meta_write_is_an_error(): void {
+		$id = $this->page( self::SIMPLE );
+		$this->acting_as( 'administrator' );
+		$refuse = static fn( $check, $object_id, $key ) => '_wpb_post_custom_css' === $key ? false : $check;
+		add_filter( 'update_post_metadata', $refuse, 10, 3 );
+		add_filter( 'add_post_metadata', $refuse, 10, 3 );
+		$out = $this->page_code( $id, array( 'custom_css' => '.a{}' ) );
+		remove_filter( 'update_post_metadata', $refuse, 10 );
+		remove_filter( 'add_post_metadata', $refuse, 10 );
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertFalse( metadata_exists( 'post', $id, '_wpb_post_custom_css' ) );
+	}
+
+	public function test_discovery_hides_the_tool_from_a_user_without_unfiltered_html(): void {
+		$check = aafm_ability_list_permission( 'aafm/wpbakery-update-page-code' );
+		$this->assertIsCallable( $check );
+		$this->acting_as( 'administrator' );
+		$this->assertTrue( $check() );
+		$this->act_as_restricted_editor();
+		$this->assertFalse( $check() );
+		$this->acting_as( 'subscriber' );
+		$this->assertFalse( $check() );
+	}
+
+	public function test_page_code_schema_undo_audit_and_description(): void {
+		$name   = 'aafm/wpbakery-update-page-code';
+		$args   = aafm_args_wpbakery_update_page_code();
+		$schema = $args['input_schema'];
+		$this->assertFalse( $schema['additionalProperties'] );
+		$this->assertSame( array( 'post_id' ), $schema['required'] );
+		$this->assertSame( array( 'post_id', 'custom_css', 'custom_js_header', 'custom_js_footer' ), array_keys( $schema['properties'] ) );
+		$this->assertSame(
+			array(
+				'readonly'    => false,
+				'destructive' => false,
+				'idempotent'  => true,
+			),
+			$args['meta']['annotations']
+		);
+		$this->assertSame( 'not_covered', aafm_undo_refusals()[ $name ] );
+		$this->assertStringContainsString( 'Ran a page code update on WPBakery page #42', (string) aafm_build_activity_detail( $name, array( 'post_id' => 42 ) ) );
+		$row = aafm_get_abilities_registry_full()[ $name ];
+		$this->assertSame( 'writes', $row['group'] );
+		$this->assertSame( 'write', $row['risk'] );
+		foreach ( array( $row['description'], aafm_ability_disclosures()[ $name ] ) as $text ) {
+			$this->assertStringNotContainsString( ' - ', $text );
+			foreach ( array( 'replace', 'previous', 'unfiltered HTML', 'edit access' ) as $phrase ) {
+				$this->assertStringContainsString( $phrase, $text, $phrase );
+			}
+		}
+		$this->assertStringContainsString( 'Only while WPBakery Page Builder is active', $row['description'] );
+	}
 }

@@ -775,8 +775,6 @@ final class RevisionsTest extends TestCase {
 		$this->assertSame( $oldest->post_content, get_post( $pid )->post_content );
 	}
 
-	/* ---------------------------------------------------------------- S7-3: the extended permission */
-
 	public function test_revision_tools_reach_a_layout_section(): void {
 		register_post_type(
 			'fusion_tb_section',
@@ -795,19 +793,25 @@ final class RevisionsTest extends TestCase {
 		$this->assertFalse( aafm_perm_list_revisions( array( 'post_id' => $id ) ) );
 	}
 
-	/* ---------------------------------------------------------------- S7-4: X-1, restore on Avada and WPBakery pages */
-
-	private const AV_A = '[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1"][fusion_text]Alpha.[/fusion_text][fusion_text]Extra.[/fusion_text][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]';
-	private const AV_B = '[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1"][fusion_text]Bravo.[/fusion_text][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]';
+	private const AV_A  = '[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1"][fusion_text]Alpha.[/fusion_text][fusion_text]Extra.[/fusion_text][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]';
+	private const AV_B  = '[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1"][fusion_text]Bravo.[/fusion_text][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]';
 	private const WPB_A = '[vc_row][vc_column][vc_column_text]<p>Alpha.</p>[/vc_column_text][/vc_column][/vc_row]';
 	private const WPB_B = '[vc_row][vc_column][vc_column_text]<p>Bravo.</p>[/vc_column_text][/vc_column][/vc_row]';
 
-	/** @var list<array{0:int,1:string}> */
+	/**
+	 * Rebuilds the seam recorded, as (post id, kind) pairs.
+	 *
+	 * @var list<array{0:int,1:string}>
+	 */
 	private $rebuilds = array();
 
 	/**
-	 * A post whose oldest revision holds $old while the post holds $current, written as $writer.
+	 * A post whose oldest revision holds $old while the post holds $current, written as an administrator.
 	 *
+	 * @param string $old     Content the oldest revision holds.
+	 * @param string $current Content the post holds.
+	 * @param string $type    Post type.
+	 * @param int    $author  Post author, or 0 for the acting administrator.
 	 * @return array{0:int,1:int} Post id and the id of the revision holding $old.
 	 */
 	private function builder_post( string $old, string $current, string $type = 'page', int $author = 0 ): array {
@@ -854,13 +858,13 @@ final class RevisionsTest extends TestCase {
 	/**
 	 * Seam filter recording each CSS rebuild.
 	 *
-	 * @param callable|null $callable Resolved entry.
+	 * @param callable|null $resolved Resolved entry.
 	 * @param string        $entry    Entry.
 	 * @return callable|null
 	 */
-	public function rebuild_seam( $callable, string $entry ) {
+	public function rebuild_seam( $resolved, string $entry ) {
 		if ( 'wpbakery_css_rebuild' !== $entry ) {
-			return $callable;
+			return $resolved;
 		}
 		return function ( int $id, string $type ): void {
 			$this->rebuilds[] = array( $id, $type );
@@ -992,7 +996,14 @@ final class RevisionsTest extends TestCase {
 		update_post_meta( $pid, 'fusion_builder_status', 'active' );
 		wp_set_current_user( $author );
 		$this->assertFalse( current_user_can( 'unfiltered_html' ) );
-		$this->assertTrue( aafm_perm_restore_revision( array( 'post_id' => $pid, 'revision_id' => $rid ) ) );
+		$this->assertTrue(
+			aafm_perm_restore_revision(
+				array(
+					'post_id'     => $pid,
+					'revision_id' => $rid,
+				)
+			)
+		);
 
 		$this->assert_restore_refused( $this->restore( $pid, $rid ), 'aafm_avada_save_would_change_page', $pid, self::AV_B );
 	}
@@ -1008,7 +1019,7 @@ final class RevisionsTest extends TestCase {
 
 	public function test_restore_reports_stale_css_when_the_rebuild_fails(): void {
 		add_filter( 'aafm_integration_active_wpbakery', '__return_true' );
-		$absent = static fn( $callable, string $entry ) => 'wpbakery_css_rebuild' === $entry ? null : $callable;
+		$absent            = static fn( $resolved, string $entry ) => 'wpbakery_css_rebuild' === $entry ? null : $resolved;
 		add_filter( 'aafm_builder_vendor', $absent, 10, 2 );
 		list( $pid, $rid ) = $this->builder_post( self::WPB_A, self::WPB_B );
 		try {

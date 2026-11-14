@@ -723,8 +723,6 @@ WPB;
 		}
 	}
 
-	/* ---------------------------------------------------------------- S7-3: the shared ownership rule */
-
 	public function test_replace_works_on_a_grid_item_without_a_row(): void {
 		// WPBakery registers vc_grid_item as not public with capability type post (W16).
 		register_post_type(

@@ -52,7 +52,7 @@ final class BuilderShortcodesTest extends TestCase {
 				if ( 'Avada' === $folder && in_array( basename( (string) $file ), self::NOT_PAGES, true ) ) {
 					continue;
 				}
-				$content = (string) file_get_contents( (string) $file );
+				$content = (string) file_get_contents( (string) $file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a local fixture file, not a remote URL.
 				$tags    = 'Wpbakery' === $folder ? aafm_wpbakery_shortcode_tags( $content ) : null;
 				$walk    = aafm_fusion_shortcode_walk( $content, 0, $tags );
 				$els     = aafm_builder_elements( $content, $tags ?? aafm_fusion_shortcode_tags() );
@@ -110,7 +110,15 @@ final class BuilderShortcodesTest extends TestCase {
 
 		$this->assertSame( $fp, aafm_builder_fingerprint( $content, $els[2] ) );
 		$this->assertNotSame( $els[1]['start'], $els[2]['start'] );
-		$got = aafm_builder_resolve( $content, array( 'vc_column', 'vc_btn' ), 2, array( 'tag' => 'vc_btn', 'fingerprint' => $fp ) );
+		$got = aafm_builder_resolve(
+			$content,
+			array( 'vc_column', 'vc_btn' ),
+			2,
+			array(
+				'tag'         => 'vc_btn',
+				'fingerprint' => $fp,
+			)
+		);
 		$this->assertIsArray( $got );
 		$this->assertSame( $els[2]['start'], $got['start'] );
 		$this->assertSame( $els[2]['end'], $got['end'] );
@@ -144,17 +152,59 @@ final class BuilderShortcodesTest extends TestCase {
 
 		foreach (
 			array(
-				aafm_builder_resolve( self::TREE, self::TAGS, 3, array( 'tag' => 'vc_btn', 'fingerprint' => $fp ) ),
-				aafm_builder_resolve( self::TREE, self::TAGS, 3, array( 'tag' => 'vc_custom_heading', 'fingerprint' => '0000000000000000' ) ),
-				aafm_builder_resolve( self::TREE, self::TAGS, 6, array( 'tag' => 'vc_btn', 'fingerprint' => $fp ) ),
-				aafm_builder_resolve( $big, array( 'vc_btn' ), 2000, array( 'tag' => 'vc_btn', 'fingerprint' => $bfp ) ),
+				aafm_builder_resolve(
+					self::TREE,
+					self::TAGS,
+					3,
+					array(
+						'tag'         => 'vc_btn',
+						'fingerprint' => $fp,
+					)
+				),
+				aafm_builder_resolve(
+					self::TREE,
+					self::TAGS,
+					3,
+					array(
+						'tag'         => 'vc_custom_heading',
+						'fingerprint' => '0000000000000000',
+					)
+				),
+				aafm_builder_resolve(
+					self::TREE,
+					self::TAGS,
+					6,
+					array(
+						'tag'         => 'vc_btn',
+						'fingerprint' => $fp,
+					)
+				),
+				aafm_builder_resolve(
+					$big,
+					array( 'vc_btn' ),
+					2000,
+					array(
+						'tag'         => 'vc_btn',
+						'fingerprint' => $bfp,
+					)
+				),
 			) as $out
 		) {
 			$this->assertInstanceOf( WP_Error::class, $out );
 			$this->assertSame( 'aafm_builder_element_mismatch', $out->get_error_code() );
 			$this->assertSame( 409, $out->get_error_data()['status'] );
 		}
-		$this->assertIsArray( aafm_builder_resolve( self::TREE, self::TAGS, 3, array( 'tag' => 'vc_custom_heading', 'fingerprint' => $fp ) ) );
+		$this->assertIsArray(
+			aafm_builder_resolve(
+				self::TREE,
+				self::TAGS,
+				3,
+				array(
+					'tag'         => 'vc_custom_heading',
+					'fingerprint' => $fp,
+				)
+			)
+		);
 		$this->assertSame( 'aafm_builder_unparseable', aafm_builder_resolve( '[vc_btn title="a[1]"]', array( 'vc_btn' ), 0, array() )->get_error_code() );
 	}
 
@@ -244,7 +294,7 @@ final class BuilderShortcodesTest extends TestCase {
 		$this->assertNull( aafm_builder_vendor( 'wpbakery_css_rebuild' ) );
 		remove_filter( 'aafm_builder_vendor', $absent );
 
-		$present = static fn() => static function (): void {};
+		$present = static fn() => 'strlen';
 		add_filter( 'aafm_builder_vendor', $present );
 		$this->assertIsCallable( aafm_builder_vendor( 'wpbakery_css_rebuild' ) );
 		remove_filter( 'aafm_builder_vendor', $present );
@@ -365,8 +415,6 @@ final class BuilderShortcodesTest extends TestCase {
 		}
 	}
 
-	/* ---------------------------------------------------------------- commit chain */
-
 	private const PAGE = '[vc_row][vc_column][vc_column_text]<p>Old text.</p>[/vc_column_text][/vc_column][/vc_row]';
 
 	private function page( string $content = self::PAGE ): WP_Post {
@@ -385,13 +433,13 @@ final class BuilderShortcodesTest extends TestCase {
 	 * Commit a text change on PAGE.
 	 *
 	 * @param WP_Post       $post  Post.
-	 * @param string        $new   New content.
-	 * @param callable|null $after After step.
+	 * @param string        $content New content.
+	 * @param callable|null $after   After step.
 	 * @return array<string,mixed>|WP_Error
 	 */
-	private function commit_text( WP_Post $post, string $new, ?callable $after = null ) {
+	private function commit_text( WP_Post $post, string $content, ?callable $after = null ) {
 		$old = (string) $post->post_content;
-		return aafm_builder_commit( $post, $old, $new, (array) aafm_wpbakery_shortcode_tags( $old ), (array) aafm_fusion_shortcode_walk( $old, 0, aafm_wpbakery_shortcode_tags( $old ) ), $after, 'wpbakery' );
+		return aafm_builder_commit( $post, $old, $content, (array) aafm_wpbakery_shortcode_tags( $old ), (array) aafm_fusion_shortcode_walk( $old, 0, aafm_wpbakery_shortcode_tags( $old ) ), $after, 'wpbakery' );
 	}
 
 	private function assert_untouched( $out, string $code, WP_Post $post, ?int $status ): void {
@@ -585,7 +633,7 @@ final class BuilderShortcodesTest extends TestCase {
 	public function test_commit_refuses_before_saving_when_the_after_step_is_unavailable(): void {
 		$post      = $this->page();
 		$revisions = count( wp_get_post_revisions( $post->ID ) );
-		$after     = static fn( int $id, bool $probe ): bool => false;
+		$after     = static fn(): bool => false;
 
 		$this->assert_untouched( $this->commit_text( $post, str_replace( 'Old text.', 'New text.', self::PAGE ), $after ), 'aafm_wpbakery_css_rebuild_unavailable', $post, 409 );
 		$this->assertSame( $revisions, count( wp_get_post_revisions( $post->ID ) ) );
@@ -644,12 +692,10 @@ final class BuilderShortcodesTest extends TestCase {
 		$this->assertSame( 'aafm_avada_save_would_change_page', $exact->get_error_code() );
 	}
 
-	/* ---------------------------------------------------------------- S7-3: the WPBakery CSS rebuild */
-
 	public function test_rebuild_css_calls_default_then_custom_once_each(): void {
 		$calls = array();
-		$seam  = static function ( $callable, string $entry ) use ( &$calls ) {
-			return 'wpbakery_css_rebuild' !== $entry ? $callable : static function ( int $id, string $type ) use ( &$calls ): void {
+		$seam  = static function ( $resolved, string $entry ) use ( &$calls ) {
+			return 'wpbakery_css_rebuild' !== $entry ? $resolved : static function ( int $id, string $type ) use ( &$calls ): void {
 				$calls[] = array( $id, $type );
 			};
 		};
@@ -673,8 +719,10 @@ final class BuilderShortcodesTest extends TestCase {
 			remove_filter( 'aafm_builder_vendor', $absent );
 		}
 
-		$throws = static fn() => static function (): void {
-			throw new \RuntimeException( 'boom' );
+		$throws = static function () {
+			return static function (): void {
+				throw new \RuntimeException( 'boom' );
+			};
 		};
 		add_filter( 'aafm_builder_vendor', $throws );
 		try {
@@ -686,8 +734,10 @@ final class BuilderShortcodesTest extends TestCase {
 
 	public function test_rebuild_css_probe_changes_nothing(): void {
 		$calls = 0;
-		$seam  = static fn() => static function () use ( &$calls ): void {
-			++$calls;
+		$seam  = static function () use ( &$calls ) {
+			return static function () use ( &$calls ): void {
+				++$calls;
+			};
 		};
 		add_filter( 'aafm_builder_vendor', $seam );
 		try {

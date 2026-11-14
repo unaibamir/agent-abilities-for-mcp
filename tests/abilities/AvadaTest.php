@@ -434,8 +434,6 @@ final class AvadaTest extends TestCase {
 		$this->assertSame( 'array', $args['output_schema']['properties']['structure']['type'] );
 	}
 
-	/* ---------------------------------------------------------------- S7-3: AV-1 and the extended permission */
-
 	private const AV1_PAGE = '[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1"][fusion_text]<p>Change me.</p>[/fusion_text][fusion_text]<iframe></iframe>[/fusion_text][fusion_title size="2"]Kept title[/fusion_title][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]';
 
 	private function av1_replace( int $id, string $search, string $replace ) {
@@ -459,6 +457,9 @@ final class AvadaTest extends TestCase {
 
 	/**
 	 * Register one of Avada's own types the way fusion-builder does (A8): not public, capability type post.
+	 *
+	 * @param string $type         Post type.
+	 * @param bool   $map_meta_cap Whether core maps meta capabilities for it.
 	 */
 	private function register_avada_type( string $type, bool $map_meta_cap = true ): void {
 		register_post_type(
@@ -505,7 +506,7 @@ final class AvadaTest extends TestCase {
 	}
 
 	public function test_replace_as_a_user_without_unfiltered_html_refuses_on_content_with_an_iframe(): void {
-		$content = (string) file_get_contents( dirname( __DIR__ ) . '/Fixtures/Avada/page-s7.txt' );
+		$content = (string) file_get_contents( dirname( __DIR__ ) . '/Fixtures/Avada/page-s7.txt' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a local fixture file, not a remote URL.
 		$author  = self::factory()->user->create( array( 'role' => 'author' ) );
 		$this->acting_as( 'administrator' ); // The iframe is stored by a user who may store it.
 		$id = self::factory()->post->create(

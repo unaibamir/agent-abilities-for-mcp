@@ -349,7 +349,7 @@ function aafm_render_dashboard_tab(): void {
 		echo '<span class="aafm-setup-ic" aria-hidden="true">';
 		echo wp_kses( aafm_icon( 'success' ), aafm_svg_allowed_html() );
 		echo '</span>';
-		echo '<h2>' . esc_html__( 'Setup complete, steps below', 'agent-abilities-for-mcp' ) . '</h2>';
+		echo '<h2>' . esc_html__( 'Setup complete', 'agent-abilities-for-mcp' ) . '</h2>';
 	} else {
 		echo '<h2>' . esc_html__( 'Finish setting up', 'agent-abilities-for-mcp' ) . '</h2>';
 		printf(

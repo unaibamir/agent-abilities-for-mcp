@@ -785,4 +785,27 @@ final class DashboardTest extends TestCase {
 		$this->assertSame( 0, $this->flag_outcome_rows(), 'The Dashboard backfill write is not an admin settings change either.' );
 		$this->assertSame( PHP_INT_MIN, has_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome' ) );
 	}
+
+	public function test_recap_heading_is_true_while_collapsed(): void {
+		aafm_create_agent_user( 'mcp-agent' );
+		$this->give_agent_user_an_app_password();
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		update_option( 'aafm_enabled_abilities', array( 'aafm/get-post' ) );
+		aafm_log_activity(
+			array(
+				'ability' => 'aafm/get-post',
+				'status'  => 'success',
+			)
+		);
+
+		ob_start();
+		aafm_render_dashboard_tab();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringNotContainsString( 'class="aafm-setup" open', $html );
+		$this->assertStringContainsString( '<h2>Setup complete</h2>', $html );
+		$this->assertStringNotContainsString( 'steps below', $html );
+		// The summary itself is the affordance that opens the steps.
+		$this->assertMatchesRegularExpression( '/<details class="aafm-setup"><summary class="aafm-setup-top">/', $html );
+	}
 }

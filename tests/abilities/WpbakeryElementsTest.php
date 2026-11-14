@@ -652,7 +652,7 @@ final class WpbakeryElementsTest extends TestCase {
 				)
 			)
 		);
-		foreach ( array( ';', '{', '}', '<', '(', '\\' ) as $char ) {
+		foreach ( array( ';', '{', '}', '<', '(', '\\', '&#59;', '&#x7b;', '&lpar;', '&#59', '&#40' ) as $char ) {
 			$this->assert_error( $this->encode( 'vc_custom_heading', 'google_fonts', array( 'font_family' => 'Abril' . $char ) ), 'aafm_builder_invalid_value', 400 );
 		}
 	}

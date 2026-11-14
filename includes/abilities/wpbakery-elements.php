@@ -781,8 +781,9 @@ function aafm_wpbakery_encode_pairs( $value, string $type, array $param ): ?stri
 		'font_size'   => static fn( string $v ): bool => 1 === preg_match( $size, $v ),
 		'line_height' => static fn( string $v ): bool => 1 === preg_match( $size, $v ),
 		'color'       => 'aafm_wpbakery_is_colour',
-		'font_family' => static fn( string $v ): bool => 1 === preg_match( '/^[^;{}<(\\\\\r\n]+$/', $v ),
-		'font_style'  => static fn( string $v ): bool => 1 === preg_match( '/^[^;{}<(\\\\\r\n]+$/', $v ),
+		// No & either: an entity, even one without its semicolon, would decode to a refused character in an attribute.
+		'font_family' => static fn( string $v ): bool => 1 === preg_match( '/^[^;{}<(&\\\\\r\n]+$/', $v ),
+		'font_style'  => static fn( string $v ): bool => 1 === preg_match( '/^[^;{}<(&\\\\\r\n]+$/', $v ),
 	);
 	$parts = array();
 	foreach ( $keys as $key ) {

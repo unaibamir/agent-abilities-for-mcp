@@ -83,6 +83,12 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 			),
 			'reason' => 'Plan 326 S12-2: Avada page CSS (_fusion_builder_custom_css) is a stylesheet, not post text, and only a user with unfiltered_html can write it. Tags are stripped and line breaks kept, the form Avada prints inside its own style tag.',
 		),
+		'includes/abilities/avada-site.php::aafm_avada_studio_row::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( $tags[0] )',
+			),
+			'reason' => 'Plan 326 S13-3b: the category of an Avada Studio catalogue row, from Avada\'s servers, returned by the list and never written anywhere.',
+		),
 		'includes/abilities/avada-site.php::aafm_avada_validate_global_option::sanitize_text_field' => array(
 			'calls'  => array(
 				'sanitize_text_field( $entry[\'label\'] )',

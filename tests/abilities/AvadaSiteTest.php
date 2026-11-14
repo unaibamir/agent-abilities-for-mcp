@@ -1784,4 +1784,237 @@ final class AvadaSiteTest extends TestCase {
 		$this->assertSame( 'aafm_avada_layout_unparseable', $err->get_error_code() );
 		$this->assertSame( $raw, get_post_field( 'post_content', $ids['layout'], 'raw' ) );
 	}
+
+	/**
+	 * What the stub Studio importer was asked, in order: method => args.
+	 *
+	 * @var list<array{0:string,1:array<int,mixed>}>
+	 */
+	public static array $studio_calls = array();
+
+	/**
+	 * The Studio seam: the theme's option name, a catalogue, an importer that records its calls and creates the post
+	 * Avada would, and the registration answer. Each entry can be forced absent; $catalogue false is a failed fetch.
+	 *
+	 * @param array<string,mixed>|false $catalogue  What get_data() returns.
+	 * @param array<string,bool>        $absent     Entries to force absent.
+	 * @param bool                      $registered What should_show( 'studio' ) answers.
+	 * @param mixed                     $result     What import_post() returns, or null to create the post.
+	 * @return callable
+	 */
+	private function studio_seam( $catalogue = null, array $absent = array(), bool $registered = true, $result = null ): callable {
+		self::$studio_calls = array();
+		$catalogue          = null === $catalogue ? array(
+			'fusion_element'  => array(
+				array(
+					'ID'         => 501,
+					'post_title' => 'Hero <b>block</b>',
+					'url'        => 'https://avada.studio/item/501/',
+					'tags'       => array( 'heroes', 'dark' ),
+					'thumbnail'  => array( 'url' => 'https://avada.studio/501.jpg' ),
+				),
+				array(
+					'ID'         => 502,
+					'post_title' => str_repeat( 'x', 300 ),
+				),
+				array( 'post_title' => 'no id' ),
+			),
+			'fusion_template' => array(
+				array(
+					'ID'         => 601,
+					'post_title' => 'Landing',
+				),
+			),
+			'studio_tags'     => array(),
+		) : $catalogue;
+		$studio             = new class( $catalogue ) {
+			/**
+			 * Catalogue.
+			 *
+			 * @var mixed
+			 */
+			private $data;
+
+			/**
+			 * Constructor.
+			 *
+			 * @param mixed $data Catalogue.
+			 */
+			public function __construct( $data ) {
+				$this->data = $data;
+			}
+
+			/**
+			 * Avada's own method name (A21).
+			 *
+			 * @return mixed
+			 */
+			public function get_data() {
+				return $this->data;
+			}
+		};
+		$importer           = new class( $result ) {
+			/**
+			 * Avada's own switch; never set by this plugin.
+			 *
+			 * @var bool
+			 */
+			public $update_post = false;
+
+			/**
+			 * Forced result.
+			 *
+			 * @var mixed
+			 */
+			private $result;
+
+			/**
+			 * Constructor.
+			 *
+			 * @param mixed $result Result.
+			 */
+			public function __construct( $result ) {
+				$this->result = $result;
+			}
+
+			/**
+			 * Record.
+			 *
+			 * @param array<string,mixed> $options Options.
+			 * @return void
+			 */
+			public function set_import_options( $options ): void {
+				AvadaSiteTest::$studio_calls[] = array( 'set_import_options', array( $options ) );
+			}
+
+			/**
+			 * Record and create the post Avada's importer would.
+			 *
+			 * @param array<string,mixed> $studio_post  Studio post.
+			 * @param array<string,mixed> $local_post   Local post.
+			 * @param bool                $import_media Media.
+			 * @return mixed
+			 */
+			public function import_post( $studio_post = array(), $local_post = array(), $import_media = true ) {
+				AvadaSiteTest::$studio_calls[] = array( 'import_post', array( $studio_post, $local_post, $import_media, function_exists( 'media_handle_sideload' ), function_exists( 'wp_generate_attachment_metadata' ), function_exists( 'download_url' ) ) );
+				if ( null !== $this->result ) {
+					return $this->result;
+				}
+				$id = wp_insert_post(
+					array(
+						'post_type'   => $studio_post['post_type'],
+						'post_title'  => 'Imported',
+						'post_status' => 'publish',
+					)
+				);
+				update_post_meta( $id, '_avada_studio_post', $studio_post['post_id'] );
+				return array(
+					'post_id'      => $id,
+					'was_imported' => false,
+				);
+			}
+		};
+		$filter             = static function ( $resolved, string $entry ) use ( $studio, $importer, $absent, $registered ) {
+			if ( ! empty( $absent[ $entry ] ) ) {
+				return null;
+			}
+			switch ( $entry ) {
+				case 'avada_option_name':
+					return static fn(): string => 'fusion_options';
+				case 'avada_studio':
+					return static fn() => $studio;
+				case 'avada_studio_import':
+					return static fn() => $importer;
+				case 'avada_studio_registered':
+					return static fn(): bool => $registered;
+			}
+			return $resolved;
+		};
+		add_filter( 'aafm_builder_vendor', $filter, 20, 2 );
+		return $filter;
+	}
+
+	public function test_studio_types_are_avadas_six(): void {
+		$this->assertSame( array( 'fusion_template', 'fusion_tb_section', 'fusion_element', 'fusion_icons', 'fusion_form', 'awb_off_canvas' ), aafm_avada_studio_types() );
+	}
+
+	public function test_studio_is_unavailable_without_the_theme_with_studio_off_or_unregistered(): void {
+		$filter = $this->studio_seam();
+		$this->assertTrue( aafm_avada_studio_ready() );
+		remove_filter( 'aafm_builder_vendor', $filter, 20 );
+		foreach ( array(
+			array( array( 'avada_option_name' => true ), true ),
+			array( array( 'avada_studio' => true ), true ),
+			array( array( 'avada_studio_import' => true ), true ),
+			array( array( 'avada_studio_registered' => true ), true ),
+			array( array(), false ),
+		) as $case ) {
+			$filter = $this->studio_seam( null, $case[0], $case[1] );
+			$out    = aafm_avada_studio_ready();
+			remove_filter( 'aafm_builder_vendor', $filter, 20 );
+			$this->assertInstanceOf( WP_Error::class, $out );
+			$this->assertSame( 'aafm_avada_studio_unavailable', $out->get_error_code() );
+			$this->assertSame( 409, $out->get_error_data()['status'] );
+		}
+	}
+
+	public function test_a_failed_catalogue_fetch_is_an_error_not_an_empty_list(): void {
+		$filter = $this->studio_seam( false );
+		$out    = aafm_avada_studio_catalogue();
+		remove_filter( 'aafm_builder_vendor', $filter, 20 );
+		$this->assertSame( 'aafm_avada_studio_fetch_failed', $out->get_error_code() );
+	}
+
+	public function test_list_rows_are_trimmed_and_capped(): void {
+		$this->assertSame(
+			array(
+				'id'          => 501,
+				'type'        => 'fusion_element',
+				'title'       => 'Hero block',
+				'category'    => 'heroes',
+				'preview_url' => 'https://avada.studio/item/501/',
+			),
+			aafm_avada_studio_row(
+				array(
+					'ID'         => '501',
+					'post_title' => 'Hero <b>block</b>',
+					'url'        => 'https://avada.studio/item/501/',
+					'tags'       => array( 'heroes' ),
+					'secret'     => 'x',
+				),
+				'fusion_element'
+			)
+		);
+		$this->assertSame(
+			200,
+			mb_strlen(
+				aafm_avada_studio_row(
+					array(
+						'ID'         => 2,
+						'post_title' => str_repeat( 'é', 300 ),
+					),
+					'fusion_element'
+				)['title']
+			)
+		);
+		$this->assertNull( aafm_avada_studio_row( array( 'post_title' => 'x' ), 'fusion_element' ) );
+		$this->assertNull( aafm_avada_studio_row( 'x', 'fusion_element' ) );
+	}
+
+	public function test_the_studio_source_never_names_the_registration_data(): void {
+		$source = (string) file_get_contents( dirname( __DIR__, 2 ) . '/includes/abilities/avada-site.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- source scan.
+		$start  = strpos( $source, 'function aafm_avada_studio_types' );
+		$this->assertNotFalse( $start );
+		$studio = substr( $source, (int) $start );
+		foreach ( array( 'purchase_code', 'token', 'registration_data' ) as $needle ) {
+			$this->assertStringNotContainsString( $needle, $studio, $needle );
+		}
+		$seam  = (string) file_get_contents( dirname( __DIR__, 2 ) . '/includes/builder-shortcodes.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- source scan.
+		$start = (int) strpos( $seam, "'avada_studio'" );
+		$rows  = substr( $seam, $start, (int) strpos( $seam, "'avada_option_name'", $start ) - $start );
+		$this->assertStringContainsString( "should_show( 'studio' )", $rows );
+		foreach ( array( 'purchase_code', 'token', 'registration_data', 'get_option' ) as $needle ) {
+			$this->assertStringNotContainsString( $needle, $rows, $needle );
+		}
+	}
 }

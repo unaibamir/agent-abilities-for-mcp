@@ -131,6 +131,7 @@ final class OptionReadSweepTest extends TestCase {
 	 * @var list<string>
 	 */
 	private const GET_TRANSIENT = array(
+		'includes/abilities/avada-site.php|aafm_exec_avada_list_studio_items|1',
 		'includes/admin/doctor.php|aafm_doctor_handle_probe|1',
 		'includes/admin/doctor.php|aafm_doctor_last_header_result|1',
 		'includes/admin/page.php|aafm_detected_meta_keys|1',
@@ -406,7 +407,7 @@ final class OptionReadSweepTest extends TestCase {
 	public function test_every_get_transient_call_is_listed_exactly_once(): void {
 		$found = $this->plugin_calls();
 
-		$this->assertCount( 12, $found['get_transient'] );
+		$this->assertCount( 13, $found['get_transient'] );
 		$this->assertSame( $this->sorted( self::GET_TRANSIENT ), $this->keys_of( $found, 'get_transient' ) );
 	}
 

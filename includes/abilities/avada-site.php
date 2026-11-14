@@ -1254,3 +1254,363 @@ function aafm_exec_avada_update_layout( array $input ) {
 	$out['changed'] = true;
 	return $out;
 }
+
+/**
+ * The post types an Avada Studio item can have (A24).
+ *
+ * @return list<string>
+ */
+function aafm_avada_studio_types(): array {
+	return array( 'fusion_template', 'fusion_tb_section', 'fusion_element', 'fusion_icons', 'fusion_form', 'awb_off_canvas' );
+}
+
+/**
+ * Whether Avada Studio can be used here: true, or WP_Error aafm_avada_studio_unavailable (409) when the Avada theme is
+ * not active, Studio's catalogue or importer entry is missing (Studio switched off, A21), or Avada does not show Studio
+ * (the one registration question this plugin asks, A24). The registration itself is never read.
+ *
+ * @return true|WP_Error
+ */
+function aafm_avada_studio_ready() {
+	$registered = aafm_builder_vendor( 'avada_studio_registered' );
+	if ( null === aafm_builder_vendor( 'avada_option_name' ) || null === aafm_builder_vendor( 'avada_studio' ) || null === aafm_builder_vendor( 'avada_studio_import' )
+		|| null === $registered || true !== $registered() ) {
+		return new WP_Error(
+			'aafm_avada_studio_unavailable',
+			__( 'Avada Studio is not available on this site: it needs the Avada theme active, Studio switched on in Avada and the product registered. Nothing was changed.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 409 )
+		);
+	}
+	return true;
+}
+
+/**
+ * Whether the site owner has approved the Studio tools: the import tool is switched on and the high-risk category is
+ * unlocked (Rulings Q17, Q19). One approval covers the list too.
+ *
+ * @return bool
+ */
+function aafm_avada_studio_approved(): bool {
+	return aafm_is_ability_enabled( 'aafm/avada-import-studio-item' ) && ! aafm_ability_is_locked( 'aafm/avada-import-studio-item' );
+}
+
+/**
+ * The refusal while the Studio tools are not approved.
+ *
+ * @return WP_Error
+ */
+function aafm_avada_studio_not_approved_error(): WP_Error {
+	return new WP_Error(
+		'aafm_avada_studio_not_approved',
+		__( 'The Avada Studio tools need the site owner\'s approval first: unlock the high-risk category in this plugin\'s settings and switch on the Avada Studio import. Nothing was changed.', 'agent-abilities-for-mcp' ),
+		array( 'status' => 403 )
+	);
+}
+
+/**
+ * Avada's Studio catalogue from AWB_Studio()->get_data() (A21): an array keyed by item type, or WP_Error
+ * aafm_avada_studio_fetch_failed when Avada returns anything else, never an empty list. When Avada has no cached
+ * catalogue, Avada itself downloads it and caches it in its avada_studio transient.
+ *
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_avada_studio_catalogue() {
+	$studio = aafm_builder_vendor( 'avada_studio' );
+	try {
+		$object = null !== $studio ? $studio() : null;
+		$data   = is_object( $object ) && method_exists( $object, 'get_data' ) ? $object->get_data() : false;
+	} catch ( Throwable $e ) {
+		unset( $e );
+		$data = false;
+	}
+	if ( ! is_array( $data ) ) {
+		return new WP_Error(
+			'aafm_avada_studio_fetch_failed',
+			__( 'Avada could not load the Studio catalogue from Avada\'s servers. Try again later. Nothing was changed.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 502 )
+		);
+	}
+	return $data;
+}
+
+/**
+ * One catalogue item trimmed to what the list returns, every string capped, or null when it has no positive id.
+ *
+ * @param mixed  $item Catalogue row.
+ * @param string $type Item type.
+ * @return array<string,mixed>|null
+ */
+function aafm_avada_studio_row( $item, string $type ): ?array {
+	if ( ! is_array( $item ) || ! is_numeric( $item['ID'] ?? null ) || (int) $item['ID'] < 1 ) {
+		return null;
+	}
+	$row  = array(
+		'id'    => (int) $item['ID'],
+		'type'  => $type,
+		'title' => mb_substr( is_string( $item['post_title'] ?? null ) ? wp_strip_all_tags( $item['post_title'] ) : '', 0, 200 ),
+	);
+	$tags = is_array( $item['tags'] ?? null ) ? array_values( array_filter( $item['tags'], 'is_string' ) ) : array();
+	if ( array() !== $tags ) {
+		$row['category'] = mb_substr( sanitize_text_field( $tags[0] ), 0, 100 );
+	}
+	$url = is_string( $item['url'] ?? null ) ? esc_url_raw( $item['url'] ) : '';
+	if ( '' !== $url && strlen( $url ) <= 500 ) {
+		$row['preview_url'] = $url;
+	}
+	return $row;
+}
+
+/**
+ * Args for aafm/avada-list-studio-items.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_avada_list_studio_items(): array {
+	return array(
+		'label'               => aafm_ability_label( 'aafm/avada-list-studio-items' ),
+		'description'         => aafm_ability_description( 'aafm/avada-list-studio-items' ),
+		'category'            => 'aafm-reads',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'type'     => array(
+					'type' => 'string',
+					'enum' => aafm_avada_studio_types(),
+				),
+				'search'   => array(
+					'type'      => 'string',
+					'maxLength' => 100,
+				),
+				'page'     => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+					'default' => 1,
+				),
+				'per_page' => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+					'maximum' => 50,
+					'default' => 20,
+				),
+			),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'items'      => array(
+					'type'  => 'array',
+					'items' => array(
+						'type'       => 'object',
+						'properties' => array(
+							'id'          => array( 'type' => 'integer' ),
+							'type'        => array( 'type' => 'string' ),
+							'title'       => array( 'type' => 'string' ),
+							'category'    => array( 'type' => 'string' ),
+							'preview_url' => array( 'type' => 'string' ),
+						),
+					),
+				),
+				'total'      => array( 'type' => 'integer' ),
+				'from_cache' => array( 'type' => 'boolean' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_avada_list_studio_items',
+		'permission_callback' => 'aafm_perm_manage_options',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => true,
+				'destructive' => false,
+				'idempotent'  => true,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/avada-list-studio-items (design AV-15 Studio). Approval first, then availability, then Avada's own
+ * catalogue call; this plugin makes no request of its own.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_avada_list_studio_items( array $input ) {
+	if ( ! aafm_avada_studio_approved() ) {
+		return aafm_avada_studio_not_approved_error();
+	}
+	$ready = aafm_avada_studio_ready();
+	if ( is_wp_error( $ready ) ) {
+		return $ready;
+	}
+	$cached = false !== get_transient( 'avada_studio' );
+	$data   = aafm_avada_studio_catalogue();
+	if ( is_wp_error( $data ) ) {
+		return $data;
+	}
+	$type   = isset( $input['type'] ) && in_array( $input['type'], aafm_avada_studio_types(), true ) ? array( (string) $input['type'] ) : aafm_avada_studio_types();
+	$search = isset( $input['search'] ) && is_string( $input['search'] ) ? trim( $input['search'] ) : '';
+	$rows   = array();
+	foreach ( $type as $one ) {
+		foreach ( is_array( $data[ $one ] ?? null ) ? $data[ $one ] : array() as $item ) {
+			$row = aafm_avada_studio_row( $item, $one );
+			if ( null !== $row && ( '' === $search || false !== mb_stripos( $row['title'], $search ) ) ) {
+				$rows[] = $row;
+			}
+		}
+	}
+	$per_page = min( 50, max( 1, (int) ( $input['per_page'] ?? 20 ) ) );
+	$page     = max( 1, (int) ( $input['page'] ?? 1 ) );
+	return array(
+		'items'      => array_slice( $rows, ( $page - 1 ) * $per_page, $per_page ),
+		'total'      => count( $rows ),
+		'from_cache' => $cached,
+	);
+}
+
+/**
+ * Args for aafm/avada-import-studio-item.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_avada_import_studio_item(): array {
+	return array(
+		'label'               => aafm_ability_label( 'aafm/avada-import-studio-item' ),
+		'description'         => aafm_ability_description( 'aafm/avada-import-studio-item' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'item_id' => array(
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'The item\'s id from avada-list-studio-items.', 'agent-abilities-for-mcp' ),
+				),
+				'type'    => array(
+					'type' => 'string',
+					'enum' => aafm_avada_studio_types(),
+				),
+				'media'   => array(
+					'type'    => 'string',
+					'enum'    => array( 'import', 'placeholders' ),
+					'default' => 'import',
+				),
+			),
+			'required'             => array( 'item_id', 'type' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'post_id'      => array( 'type' => 'integer' ),
+				'post_type'    => array( 'type' => 'string' ),
+				'title'        => array( 'type' => 'string' ),
+				'was_imported' => array(
+					'type'        => 'boolean',
+					'description' => __( 'True when Avada found an earlier import of this item and created nothing.', 'agent-abilities-for-mcp' ),
+				),
+				'media'        => array( 'type' => 'string' ),
+				'note'         => array( 'type' => 'string' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_avada_import_studio_item',
+		'permission_callback' => 'aafm_perm_manage_options',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+				'idempotent'  => true,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/avada-import-studio-item (design AV-15 Studio, Rulings Q17, Q19, X2). The approval and availability
+ * checks run first; the item must be in Avada's own catalogue with that type, so Avada is never asked for a path the
+ * caller chose. Avada's importer then fetches and writes everything under the site's own registration, the call its
+ * setup wizard makes, with update_post never set so an existing post is never overwritten. The new post is read back
+ * and its type and _avada_studio_post meta checked.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_avada_import_studio_item( array $input ) {
+	if ( ! aafm_avada_studio_approved() ) {
+		return aafm_avada_studio_not_approved_error();
+	}
+	$ready = aafm_avada_studio_ready();
+	if ( is_wp_error( $ready ) ) {
+		return $ready;
+	}
+	$item_id = absint( $input['item_id'] ?? 0 );
+	$type    = is_string( $input['type'] ?? null ) ? $input['type'] : '';
+	$media   = 'placeholders' === ( $input['media'] ?? 'import' ) ? 'placeholders' : 'import';
+	if ( ! $item_id || ! in_array( $type, aafm_avada_studio_types(), true ) ) {
+		return aafm_builder_error( 'aafm_builder_invalid_value' );
+	}
+	$data = aafm_avada_studio_catalogue();
+	if ( is_wp_error( $data ) ) {
+		return $data;
+	}
+	$listed = false;
+	foreach ( is_array( $data[ $type ] ?? null ) ? $data[ $type ] : array() as $item ) {
+		$row = aafm_avada_studio_row( $item, $type );
+		if ( null !== $row && $item_id === $row['id'] ) {
+			$listed = true;
+			break;
+		}
+	}
+	if ( ! $listed ) {
+		return aafm_builder_error( 'aafm_builder_unknown_template' );
+	}
+
+	// Core files Avada's media step needs and does not load itself (A23).
+	require_once ABSPATH . 'wp-admin/includes/file.php';
+	require_once ABSPATH . 'wp-admin/includes/media.php';
+	require_once ABSPATH . 'wp-admin/includes/image.php';
+	$failed = new WP_Error(
+		'aafm_avada_studio_import_failed',
+		__( 'Avada could not import this Studio item. Nothing was confirmed as imported.', 'agent-abilities-for-mcp' ),
+		array( 'status' => 502 )
+	);
+	$import = aafm_builder_vendor( 'avada_studio_import' );
+	try {
+		$importer = null !== $import ? $import() : null;
+		if ( ! is_object( $importer ) || ! method_exists( $importer, 'set_import_options' ) || ! method_exists( $importer, 'import_post' ) ) {
+			return $failed;
+		}
+		// The accepted values of AWB_Studio::studio_import_options_template() (inc/class-awb-studio.php:124).
+		$importer->set_import_options( array( 'images' => 'import' === $media ? 'do-import-images' : 'dont-import-images' ) );
+		$result = $importer->import_post(
+			array(
+				'post_id'   => $item_id,
+				'post_type' => $type,
+			),
+			array(),
+			true
+		);
+	} catch ( Throwable $e ) {
+		unset( $e );
+		return $failed;
+	}
+	$post_id = is_array( $result ) && is_numeric( $result['post_id'] ?? null ) ? (int) $result['post_id'] : 0;
+	$post    = $post_id > 0 ? aafm_exact_object( 'post', $post_id ) : null;
+	if ( ! $post instanceof WP_Post || $type !== $post->post_type ) {
+		return $failed;
+	}
+	$meta = aafm_with_checked_reads(
+		static fn(): array => array( 'source' => aafm_meta_get( 'post', $post_id, '_avada_studio_post', true ) ),
+		aafm_generic_error()
+	);
+	if ( is_wp_error( $meta ) || ! is_scalar( $meta['source'] ) || (string) $item_id !== (string) $meta['source'] ) {
+		return $failed;
+	}
+	return array(
+		'post_id'      => $post_id,
+		'post_type'    => $type,
+		'title'        => $post->post_title,
+		'was_imported' => true === ( $result['was_imported'] ?? false ),
+		'media'        => $media,
+		'note'         => __( 'Only the item\'s own post was confirmed; the attachments, forms, menus and icons Avada imports with it are not checked one by one. Place the item on a page with avada-insert-library-item.', 'agent-abilities-for-mcp' ),
+	);
+}

@@ -235,7 +235,7 @@ function aafm_args_wpbakery_list_templates(): array {
 							'id'               => array( 'type' => 'string' ),
 							'source'           => array(
 								'type' => 'string',
-								'enum' => array( 'saved' ),
+								'enum' => array( 'saved', 'templatera' ),
 							),
 							'name'             => array( 'type' => 'string' ),
 							'content'          => array(

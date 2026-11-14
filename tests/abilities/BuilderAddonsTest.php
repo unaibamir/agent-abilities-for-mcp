@@ -524,4 +524,14 @@ final class BuilderAddonsTest extends TestCase {
 			$this->assertStringNotContainsString( ' - ', $text );
 		}
 	}
+
+	public function test_a_templatera_row_validates_against_the_list_output_schema(): void {
+		add_filter( 'aafm_templatera_active', '__return_true' );
+		$this->template( self::TEMPLATE );
+		$this->acting_as( 'editor' );
+		$out    = aafm_exec_wpbakery_list_templates( array( 'include_content' => true ) );
+		$schema = aafm_args_wpbakery_list_templates()['output_schema'];
+		$this->assertSame( array( 'saved', 'templatera' ), $schema['properties']['templates']['items']['properties']['source']['enum'] );
+		$this->assertTrue( rest_validate_value_from_schema( $out, $schema, 'output' ) );
+	}
 }

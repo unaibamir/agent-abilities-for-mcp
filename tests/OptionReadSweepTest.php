@@ -35,6 +35,7 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/abilities/settings.php|aafm_exec_update_site_settings|1' => 'N',
 		'includes/abilities/settings.php|aafm_exec_update_site_settings|2' => 'N',
 		'includes/abilities/users.php|aafm_exec_create_user|1' => 'G',
+		'includes/abilities/wpbakery-site.php|aafm_wpbakery_saved_templates|1' => 'N',
 		'includes/adapter-loader.php|aafm_maybe_disable_standalone_adapter_autoload|1' => 'N',
 		'includes/admin/changes.php|aafm_render_undo_notice|1' => 'N',
 		'includes/admin/connection.php|aafm_endpoint_url|1' => 'N',
@@ -364,7 +365,7 @@ final class OptionReadSweepTest extends TestCase {
 			array(
 				'G' => 21,
 				'L' => 3,
-				'N' => 40,
+				'N' => 41,
 			),
 			array(
 				'G' => count( array_keys( self::GET_OPTION, 'G', true ) ),

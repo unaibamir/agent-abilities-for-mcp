@@ -591,7 +591,7 @@ function aafm_exec_wpbakery_replace_text( array $input ) {
 	if ( is_wp_error( $inserted ) ) {
 		return $inserted;
 	}
-	$new      = str_replace( $search, $inserted, $content );
+	$new = str_replace( $search, $inserted, $content );
 
 	$tags = aafm_wpbakery_shortcode_tags( $content, $new );
 	if ( null === $tags ) {

@@ -415,9 +415,9 @@ function aafm_wpbakery_is_colour( $value ): bool {
  * @return string|WP_Error
  */
 function aafm_wpbakery_encode_value( string $kind, $value, array $param ) {
-	$name  = isset( $param['param_name'] ) && is_string( $param['param_name'] ) ? $param['param_name'] : '';
-	$type  = isset( $param['type'] ) && is_string( $param['type'] ) ? $param['type'] : '';
-	$base  = aafm_wpbakery_type_kind( $type, $name );
+	$name = isset( $param['param_name'] ) && is_string( $param['param_name'] ) ? $param['param_name'] : '';
+	$type = isset( $param['type'] ) && is_string( $param['type'] ) ? $param['type'] : '';
+	$base = aafm_wpbakery_type_kind( $type, $name );
 	if ( 'content' === $kind ) {
 		// Body text goes through the shared choke point, whose refusal is returned as it is.
 		return is_string( $value ) ? aafm_wpbakery_body_text( $value ) : aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $name );

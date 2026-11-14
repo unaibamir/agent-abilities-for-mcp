@@ -106,7 +106,8 @@ function aafm_avada_registry_definitions(): array {
  * capability family. A post of a builder's own type (aafm_builder_own_post_types(), not public, so
  * never on the owner's exposed list) needs a registered type with map_meta_cap and edit_post on that
  * post, the check aafm_exec_avada_list_library() makes; an Avada layout section also needs
- * manage_options, because a header or footer section changes every page (Ruling Q3).
+ * manage_options, because a header or footer section changes every page (Ruling Q3), and a global
+ * library item needs edit_private_posts, Avada's own default for global elements (Ruling R-S8b-4).
  *
  * @param array<string,mixed> $input Input.
  * @return bool
@@ -128,9 +129,23 @@ function aafm_perm_avada_post_object( array $input ): bool {
 			$register();
 		}
 	}
-	return aafm_type_caps( $post->post_type )['mapped']
-		&& aafm_user_can_checked( 'edit_post', $id )
-		&& ( 'fusion_tb_section' !== $post->post_type || current_user_can( 'manage_options' ) );
+	if ( ! aafm_type_caps( $post->post_type )['mapped']
+		|| ! aafm_user_can_checked( 'edit_post', $id )
+		|| ( 'fusion_tb_section' === $post->post_type && ! current_user_can( 'manage_options' ) ) ) {
+		return false;
+	}
+	// A global library item changes every page that shows it, and Avada refuses its edit screen to a user without
+	// edit_private_posts (AWB_Role_Manager::check_global_element_and_backend_builder_access()). Only that fixed
+	// default is mirrored; the Role Manager's per-role settings are still not consulted (Ruling R-S8b-4). An
+	// unreadable marker counts as global.
+	if ( in_array( $post->post_type, array( 'fusion_element', 'fusion_template' ), true ) && ! current_user_can( 'edit_private_posts' ) ) {
+		$global = aafm_with_checked_reads(
+			static fn(): array => array( 'is_global' => 'yes' === aafm_meta_get( 'post', $id, '_fusion_is_global', true ) ),
+			aafm_generic_error()
+		);
+		return ! is_wp_error( $global ) && false === $global['is_global'];
+	}
+	return true;
 }
 
 /**

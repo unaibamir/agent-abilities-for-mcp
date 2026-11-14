@@ -1461,4 +1461,98 @@ final class AvadaTest extends TestCase {
 	public function test_replace_output_schema_declares_affects(): void {
 		$this->assertSame( 'string', aafm_args_avada_replace_text()['output_schema']['properties']['affects']['type'] );
 	}
+
+	/**
+	 * Author-owned library items, one marked global the way Avada's library marks it, each with a revision.
+	 *
+	 * @return array{author:int,global:int,local:int,template:int,revision:int}
+	 */
+	private function global_library_items(): array {
+		$this->register_avada_type( 'fusion_element' );
+		$this->register_avada_type( 'fusion_template' );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$make  = static function ( string $type, bool $is_global ) use ( $author ): int {
+			$id = self::factory()->post->create(
+				array(
+					'post_type'    => $type,
+					'post_author'  => $author,
+					'post_content' => '[fusion_text]Shared words.[/fusion_text]',
+				)
+			);
+			if ( $is_global ) {
+				update_post_meta( $id, '_fusion_is_global', 'yes' );
+			}
+			return $id;
+		};
+		$items = array(
+			'author'   => $author,
+			'global'   => $make( 'fusion_element', true ),
+			'local'    => $make( 'fusion_element', false ),
+			'template' => $make( 'fusion_template', true ),
+		);
+		wp_update_post(
+			array(
+				'ID'           => $items['global'],
+				'post_content' => '[fusion_text]Shared words, again.[/fusion_text]',
+			)
+		);
+		$items['revision'] = (int) array_key_first( wp_get_post_revisions( $items['global'] ) );
+		return $items;
+	}
+
+	public function test_a_global_library_item_needs_edit_private_posts_as_avada_requires(): void {
+		$items = $this->global_library_items();
+		$this->assertSame( 'aafm_perm_avada_post_object', aafm_args_avada_get_page_content()['permission_callback'] );
+		$this->assertSame( 'aafm_perm_avada_post_object', aafm_args_avada_replace_text()['permission_callback'] );
+		$this->assertGreaterThan( 0, $items['revision'] );
+
+		wp_set_current_user( $items['author'] );
+		$this->assertTrue( current_user_can( 'edit_post', $items['global'] ), 'The author owns it.' );
+		$this->assertFalse( current_user_can( 'edit_private_posts' ) );
+		$this->assertFalse( aafm_perm_avada_post_object( array( 'post_id' => $items['global'] ) ), 'Read and replace.' );
+		$this->assertFalse( aafm_perm_avada_post_object( array( 'post_id' => $items['template'] ) ) );
+		$this->assertFalse(
+			aafm_perm_restore_revision(
+				array(
+					'post_id'     => $items['global'],
+					'revision_id' => $items['revision'],
+				)
+			)
+		);
+		$this->assertTrue( aafm_perm_avada_post_object( array( 'post_id' => $items['local'] ) ), 'Their own item that is not global.' );
+
+		foreach ( array( 'editor', 'administrator' ) as $role ) {
+			$this->acting_as( $role );
+			$this->assertTrue( aafm_perm_avada_post_object( array( 'post_id' => $items['global'] ) ), $role );
+			$this->assertTrue(
+				aafm_perm_restore_revision(
+					array(
+						'post_id'     => $items['global'],
+						'revision_id' => $items['revision'],
+					)
+				),
+				$role
+			);
+		}
+	}
+
+	public function test_a_global_library_item_is_refused_when_the_global_marker_read_fails(): void {
+		$items = $this->global_library_items();
+		wp_set_current_user( $items['author'] );
+		$id = $items['local'];
+		aafm_exact_object( 'post', $id );
+		wp_cache_delete( $id, 'post_meta' );
+		QueryFaultInjector::reset_fired_count();
+
+		$allowed = QueryFaultInjector::break_query_with_real_error(
+			array( 'SELECT post_id, meta_key, meta_value FROM', 'postmeta' ),
+			static fn(): bool => aafm_perm_avada_post_object( array( 'post_id' => $id ) ),
+			1
+		);
+		wp_cache_delete( $id, 'post_meta' );
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+		$this->assertFalse( $allowed, 'Fail closed: an unread marker is not taken as "not global".' );
+	}
 }

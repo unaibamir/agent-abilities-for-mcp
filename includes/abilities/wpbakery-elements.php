@@ -9,12 +9,58 @@
  * wpbakery_param_type, the row the decoder reads; the map entry supplies labels, defaults, value lists and
  * limits. Every setting that can carry script needs unfiltered_html, checked before anything is encoded.
  *
+ * Registers ONLY while WPBakery Page Builder is active (aafm_integration_active('wpbakery')).
+ *
  * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
+
+add_filter( 'aafm_abilities_registry', 'aafm_register_wpbakery_elements_definitions' );
+add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_wpbakery_elements_full_definitions' );
+
+/**
+ * Contribute the WPBakery element ability definitions, only while WPBakery is active.
+ *
+ * @param array<string,array<string,mixed>> $registry Registry.
+ * @return array<string,array<string,mixed>>
+ */
+function aafm_register_wpbakery_elements_definitions( array $registry ): array {
+	if ( ! aafm_integration_active( 'wpbakery' ) ) {
+		return $registry;
+	}
+	return array_merge( $registry, aafm_wpbakery_elements_registry_definitions() );
+}
+
+/**
+ * Contribute the WPBakery element ability definitions to the host-independent full registry.
+ *
+ * @param array<string,array<string,mixed>> $registry Registry.
+ * @return array<string,array<string,mixed>>
+ */
+function aafm_register_wpbakery_elements_full_definitions( array $registry ): array {
+	return array_merge( $registry, aafm_wpbakery_elements_registry_definitions() );
+}
+
+/**
+ * The WPBakery element ability rows.
+ *
+ * @return array<string,array<string,mixed>>
+ */
+function aafm_wpbakery_elements_registry_definitions(): array {
+	return array(
+		'aafm/wpbakery-list-elements' => array(
+			'label'        => __( 'List WPBakery elements', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Lists the elements WPBakery Page Builder has on this site, add-ons included, from WPBakery\'s own element map: tag, name, category, whether it holds other elements, the elements it allows inside it and the ones it may sit in, and whether it is deprecated. With tag it returns one element with its settings: name, kind, label, default, the allowed values of a choice (at most 100), whether wpbakery-update-element can write it, and needs, which is unfiltered_html for Design Options and for settings that can carry script or raw HTML. With context grid it lists the Grid Builder\'s elements too. An element an add-on maps only inside wp-admin is not listed. Requires the edit_posts capability; WPBakery\'s Role Manager settings are not applied. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
+			'group'        => 'reads',
+			'risk'         => 'read',
+			'subject'      => 'wpbakery',
+			'args_builder' => 'aafm_args_wpbakery_list_elements',
+		),
+	);
+}
 
 /**
  * The map refusal: WPBakery's map is missing or empty in this request.
@@ -813,4 +859,217 @@ function aafm_wpbakery_encode_design( $value ): ?string {
 		$rule .= $property . ': ' . $declaration . ' !important;';
 	}
 	return '.vc_custom_' . (string) (int) floor( microtime( true ) * 1000 ) . '{' . $rule . '}';
+}
+
+/**
+ * Args for aafm/wpbakery-list-elements.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_wpbakery_list_elements(): array {
+	return array(
+		'label'               => aafm_ability_label( 'aafm/wpbakery-list-elements' ),
+		'description'         => aafm_ability_description( 'aafm/wpbakery-list-elements' ),
+		'category'            => 'aafm-reads',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array_merge(
+				array(
+					'context' => array(
+						'type'        => 'string',
+						'enum'        => array( 'page', 'grid' ),
+						'default'     => 'page',
+						'description' => __( 'page for the elements of a page (the default), grid to include the Grid Builder\'s elements for a grid template.', 'agent-abilities-for-mcp' ),
+					),
+					'tag'     => array(
+						'type'        => 'string',
+						'description' => __( 'One element\'s shortcode tag, such as vc_custom_heading. Returns that element with its settings.', 'agent-abilities-for-mcp' ),
+					),
+					'search'  => array(
+						'type'        => 'string',
+						'description' => __( 'Only elements whose name or tag contains this text.', 'agent-abilities-for-mcp' ),
+					),
+				),
+				aafm_pagination_schema_props(
+					50,
+					__( 'Number of elements per page, clamped to the 1-50 range. Defaults to 20 when omitted.', 'agent-abilities-for-mcp' ),
+					__( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' )
+				)
+			),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'elements'   => array(
+					'type'  => 'array',
+					'items' => array(
+						'type'       => 'object',
+						'properties' => array(
+							'tag'              => array( 'type' => 'string' ),
+							'name'             => array( 'type' => 'string' ),
+							'category'         => array( 'type' => 'string' ),
+							'is_container'     => array( 'type' => 'boolean' ),
+							'allowed_children' => array(
+								'type'        => 'object',
+								'description' => __( 'From the map: only, the elements allowed inside, and except, the ones refused. Both empty when the map sets no rule.', 'agent-abilities-for-mcp' ),
+							),
+							'allowed_parents'  => array(
+								'type'        => 'object',
+								'description' => __( 'From the map: only, the elements it may sit in, and except, the ones it may not. Both empty when the map sets no rule.', 'agent-abilities-for-mcp' ),
+							),
+							'deprecated'       => array( 'type' => 'boolean' ),
+							'settings'         => array(
+								'type'        => 'array',
+								'description' => __( 'Only with tag. kind is how wpbakery-update-element takes the value; writable says whether it can; needs is unfiltered_html for Design Options and for settings that can carry script or raw HTML.', 'agent-abilities-for-mcp' ),
+							),
+						),
+					),
+				),
+				'total'      => array( 'type' => 'integer' ),
+				'skipped'    => array(
+					'type'        => 'integer',
+					'description' => __( 'Map entries and settings left out because the map could not resolve them or they had no setting name.', 'agent-abilities-for-mcp' ),
+				),
+				'map_source' => array( 'type' => 'string' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_wpbakery_list_elements',
+		'permission_callback' => 'aafm_perm_blocks_floor',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => true,
+				'destructive' => false,
+				'idempotent'  => true,
+			),
+		),
+	);
+}
+
+/**
+ * A string from the element map, through the plugin's stored-text sanitizer so a label cannot carry markup.
+ *
+ * @param mixed $value Map value.
+ * @return string
+ */
+function aafm_wpbakery_map_text( $value ): string {
+	return is_scalar( $value ) ? aafm_sanitize_plain_text( (string) $value ) : '';
+}
+
+/**
+ * A map nesting rule (as_parent or as_child): only and except lists of tags.
+ *
+ * @param mixed $rule Map value.
+ * @return array{only:list<string>,except:list<string>}
+ */
+function aafm_wpbakery_nesting_rule( $rule ): array {
+	$out = array(
+		'only'   => array(),
+		'except' => array(),
+	);
+	foreach ( array( 'only', 'except' ) as $key ) {
+		if ( is_array( $rule ) && isset( $rule[ $key ] ) && is_string( $rule[ $key ] ) ) {
+			$out[ $key ] = array_values( array_filter( array_map( 'aafm_wpbakery_map_text', explode( ',', $rule[ $key ] ) ), static fn( string $tag ): bool => '' !== $tag ) );
+		}
+	}
+	return $out;
+}
+
+/**
+ * One catalog row, with settings on request. A param that is not an array or has no setting name is skipped and
+ * counted.
+ *
+ * @param string              $tag           Tag.
+ * @param array<string,mixed> $entry         Map entry.
+ * @param bool                $with_settings Whether to add settings.
+ * @param int                 $skipped       Skip counter, added to.
+ * @return array<string,mixed>
+ */
+function aafm_wpbakery_catalog_row( string $tag, array $entry, bool $with_settings, int &$skipped ): array {
+	$category = $entry['category'] ?? '';
+	$row      = array(
+		'tag'              => $tag,
+		'name'             => aafm_wpbakery_map_text( $entry['name'] ?? $tag ),
+		'category'         => is_array( $category ) ? implode( ', ', array_filter( array_map( 'aafm_wpbakery_map_text', $category ), static fn( string $part ): bool => '' !== $part ) ) : aafm_wpbakery_map_text( $category ),
+		'is_container'     => ! empty( $entry['is_container'] ) || ! empty( $entry['as_parent'] ),
+		'allowed_children' => aafm_wpbakery_nesting_rule( $entry['as_parent'] ?? null ),
+		'allowed_parents'  => aafm_wpbakery_nesting_rule( $entry['as_child'] ?? null ),
+		'deprecated'       => ! empty( $entry['deprecated'] ),
+	);
+	if ( ! $with_settings ) {
+		return $row;
+	}
+	$row['settings'] = array();
+	foreach ( (array) ( $entry['params'] ?? array() ) as $param ) {
+		if ( ! is_array( $param ) || ! isset( $param['param_name'] ) || ! is_string( $param['param_name'] ) || '' === $param['param_name'] ) {
+			++$skipped;
+			continue;
+		}
+		$kind    = aafm_wpbakery_param_kind( $tag, $param );
+		$type    = aafm_wpbakery_param_type( $tag, $param['param_name'] );
+		$allowed = array();
+		if ( null !== $type && 'choice' === aafm_wpbakery_type_kind( $type, $param['param_name'] ) ) {
+			$allowed = array_slice( array_map( 'aafm_wpbakery_map_text', aafm_wpbakery_choice_values( array_merge( $param, array( 'type' => $type ) ) ) ), 0, 100 );
+		}
+		$default = $param['std'] ?? null;
+		if ( ! is_scalar( $default ) ) {
+			$default = array() !== $allowed ? $allowed[0] : ( is_scalar( $param['value'] ?? null ) ? $param['value'] : '' );
+		}
+		$row['settings'][] = array(
+			'name'           => $param['param_name'],
+			'kind'           => $kind['kind'],
+			'label'          => aafm_wpbakery_map_text( $param['heading'] ?? '' ),
+			'default'        => aafm_wpbakery_map_text( $default ),
+			'allowed_values' => $allowed,
+			'writable'       => $kind['writable'],
+			'needs'          => $kind['needs'],
+		);
+	}
+	return $row;
+}
+
+/**
+ * Execute aafm/wpbakery-list-elements (design WB-3).
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_wpbakery_list_elements( array $input ) {
+	$context = 'grid' === ( $input['context'] ?? 'page' ) ? 'grid' : 'page';
+	$skipped = 0;
+	if ( isset( $input['tag'] ) && '' !== (string) $input['tag'] ) {
+		$tag   = (string) $input['tag'];
+		$entry = aafm_wpbakery_map( $context, $tag );
+		if ( is_wp_error( $entry ) ) {
+			return $entry;
+		}
+		$row = aafm_wpbakery_catalog_row( $tag, $entry, true, $skipped );
+		return array(
+			'elements'   => array( $row ),
+			'total'      => 1,
+			'skipped'    => $skipped,
+			'map_source' => 'wpbakery',
+		);
+	}
+
+	$map = aafm_wpbakery_map( $context, null, $skipped );
+	if ( is_wp_error( $map ) ) {
+		return $map;
+	}
+	$search = isset( $input['search'] ) ? strtolower( aafm_sanitize_plain_text( (string) $input['search'] ) ) : '';
+	$rows   = array();
+	foreach ( $map as $tag => $entry ) {
+		$row = aafm_wpbakery_catalog_row( (string) $tag, $entry, false, $skipped );
+		if ( '' !== $search && false === strpos( strtolower( $row['tag'] ), $search ) && false === strpos( strtolower( $row['name'] ), $search ) ) {
+			continue;
+		}
+		$rows[] = $row;
+	}
+	$paging = aafm_paginate_args( $input + array( 'per_page' => 20 ), 50 );
+	return array(
+		'elements'   => array_slice( $rows, ( $paging['page'] - 1 ) * $paging['per_page'], $paging['per_page'] ),
+		'total'      => count( $rows ),
+		'skipped'    => $skipped,
+		'map_source' => 'wpbakery',
+	);
 }

@@ -129,6 +129,197 @@ final class WpbakeryElementsTest extends TestCase {
 		return $editor;
 	}
 
+	public function test_list_rows_have_the_seven_keys(): void {
+		$this->acting_as( 'editor' );
+		$out = aafm_exec_wpbakery_list_elements( array( 'per_page' => 50 ) );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( array( 'elements', 'total', 'skipped', 'map_source' ), array_keys( $out ) );
+		$this->assertSame( 'wpbakery', $out['map_source'] );
+		$this->assertSame( count( WpbakeryMapStub::map() ), $out['total'] );
+		foreach ( $out['elements'] as $row ) {
+			$this->assertSame( array( 'tag', 'name', 'category', 'is_container', 'allowed_children', 'allowed_parents', 'deprecated' ), array_keys( $row ) );
+		}
+		$by_tag = array_column( $out['elements'], null, 'tag' );
+		$this->assertTrue( $by_tag['vc_row']['is_container'] );
+		$this->assertFalse( $by_tag['wpb_btn']['is_container'] );
+		$this->assertSame( array( 'vc_row' ), $by_tag['vc_column']['allowed_parents']['only'] );
+		$this->assertTrue( $by_tag['vc_btn']['deprecated'] );
+		$this->assertSame( 'Content', $by_tag['vc_row']['category'] );
+	}
+
+	public function test_tag_detail_lists_settings_with_kind_writable_and_needs(): void {
+		$this->acting_as( 'editor' );
+		$out = aafm_exec_wpbakery_list_elements( array( 'tag' => 'wpb_btn' ) );
+
+		$this->assertIsArray( $out );
+		$this->assertCount( 1, $out['elements'] );
+		$settings = array_column( $out['elements'][0]['settings'], null, 'name' );
+		foreach ( $settings as $setting ) {
+			$this->assertSame( array( 'name', 'kind', 'label', 'default', 'allowed_values', 'writable', 'needs' ), array_keys( $setting ) );
+		}
+		$this->assertSame( 'text', $settings['title']['kind'] );
+		$this->assertSame( 'Text on the button', $settings['title']['default'] );
+		$this->assertSame( 'link', $settings['link']['kind'] );
+		$this->assertSame( array( 'rounded', 'square', 'round' ), $settings['shape']['allowed_values'] );
+		$this->assertSame( array( 'left', 'center' ), $settings['align']['allowed_values'] );
+		$this->assertSame( 'raw', $settings['custom_onclick_code']['kind'] );
+		$this->assertSame( 'unfiltered_html', $settings['custom_onclick_code']['needs'] );
+		$this->assertSame( 'design', $settings['css']['kind'] );
+		$this->assertSame( 'token', $settings['el_class']['kind'] );
+		$this->assertSame( '', $settings['title']['needs'] );
+		$this->assertTrue( $settings['title']['writable'] );
+	}
+
+	public function test_a_malformed_param_is_skipped_and_counted(): void {
+		$this->acting_as( 'editor' );
+		$out = aafm_exec_wpbakery_list_elements( array( 'tag' => 'acme_odd' ) );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( 2, $out['skipped'] );
+		$names = array_column( $out['elements'][0]['settings'], 'name' );
+		$this->assertSame( array( 'ids', 'secret', 'query', 'order', 'empty_choice', 'label' ), $names );
+		$settings = array_column( $out['elements'][0]['settings'], null, 'name' );
+		$this->assertSame( 'Label text', $settings['label']['label'], 'Map strings go through the stored-text sanitizer.' );
+	}
+
+	public function test_a_map_entry_that_throws_is_skipped_and_counted(): void {
+		WpbakeryMapStub::install( null, array( 'vc_gmaps' ) );
+		$this->acting_as( 'editor' );
+		$out = aafm_exec_wpbakery_list_elements( array( 'per_page' => 50 ) );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( 1, $out['skipped'] );
+		$this->assertNotContains( 'vc_gmaps', array_column( $out['elements'], 'tag' ) );
+	}
+
+	public function test_an_empty_map_is_refused_never_an_empty_list(): void {
+		WpbakeryMapStub::install( array() );
+		$this->acting_as( 'editor' );
+
+		$this->assert_error( aafm_exec_wpbakery_list_elements( array() ), 'aafm_wpbakery_map_unavailable', 409 );
+	}
+
+	public function test_a_missing_vendor_is_refused(): void {
+		WpbakeryMapStub::install( null, array(), array( 'wpbakery_map_all', 'wpbakery_map_one' ) );
+		$this->acting_as( 'editor' );
+
+		$this->assert_error( aafm_exec_wpbakery_list_elements( array() ), 'aafm_wpbakery_map_unavailable', 409 );
+		$this->assert_error( aafm_wpbakery_map( 'page', 'vc_row' ), 'aafm_wpbakery_map_unavailable', 409 );
+	}
+
+	public function test_pagination_caps_at_50(): void {
+		$map = array();
+		for ( $i = 1; $i <= 60; $i++ ) {
+			$map[ 'acme_el_' . $i ] = array( 'name' => 'Element ' . $i );
+		}
+		WpbakeryMapStub::install( $map );
+		$this->acting_as( 'editor' );
+
+		$out = aafm_exec_wpbakery_list_elements( array( 'per_page' => 500 ) );
+		$this->assertIsArray( $out );
+		$this->assertCount( 50, $out['elements'] );
+		$this->assertSame( 60, $out['total'] );
+		$second = aafm_exec_wpbakery_list_elements(
+			array(
+				'per_page' => 50,
+				'page'     => 2,
+			)
+		);
+		$this->assertSame( array( 'acme_el_51', 'acme_el_52' ), array_slice( array_column( $second['elements'], 'tag' ), 0, 2 ) );
+		$this->assertSame( 50, aafm_args_wpbakery_list_elements()['input_schema']['properties']['per_page']['maximum'] );
+	}
+
+	public function test_search_matches_name_and_tag(): void {
+		$this->acting_as( 'editor' );
+		$out = aafm_exec_wpbakery_list_elements( array( 'search' => 'heading' ) );
+		$this->assertSame( array( 'vc_custom_heading' ), array_column( $out['elements'], 'tag' ) );
+		$out = aafm_exec_wpbakery_list_elements( array( 'search' => 'raw_' ) );
+		$this->assertSame( array( 'vc_raw_html', 'vc_raw_js' ), array_column( $out['elements'], 'tag' ) );
+	}
+
+	public function test_grid_context_runs_the_grid_mapper_first(): void {
+		$this->acting_as( 'editor' );
+		aafm_exec_wpbakery_list_elements( array( 'context' => 'grid' ) );
+
+		$this->assertSame( 'grid_mapper', WpbakeryMapStub::$calls[0] );
+		$this->assertSame( 'map_all', WpbakeryMapStub::$calls[1] );
+
+		WpbakeryMapStub::$calls = array();
+		aafm_exec_wpbakery_list_elements( array() );
+		$this->assertNotContains( 'grid_mapper', WpbakeryMapStub::$calls );
+	}
+
+	public function test_grid_context_is_refused_without_the_grid_mapper(): void {
+		WpbakeryMapStub::install( null, array(), array( 'wpbakery_grid_mapper' ) );
+		$this->acting_as( 'editor' );
+
+		$this->assert_error( aafm_exec_wpbakery_list_elements( array( 'context' => 'grid' ) ), 'aafm_wpbakery_map_unavailable', 409 );
+	}
+
+	public function test_an_unknown_tag_is_refused(): void {
+		$this->acting_as( 'editor' );
+		$this->assert_error( aafm_exec_wpbakery_list_elements( array( 'tag' => 'acme_nothing' ) ), 'aafm_builder_unknown_element', 400 );
+	}
+
+	public function test_a_subscriber_is_refused(): void {
+		$args = aafm_args_wpbakery_list_elements();
+		$this->assertSame( 'aafm_perm_blocks_floor', $args['permission_callback'] );
+		$this->acting_as( 'subscriber' );
+		$this->assertFalse( aafm_perm_blocks_floor() );
+		$this->acting_as( 'contributor' );
+		$this->assertTrue( aafm_perm_blocks_floor() );
+	}
+
+	public function test_allowed_values_are_capped_at_100(): void {
+		$values = array();
+		for ( $i = 1; $i <= 150; $i++ ) {
+			$values[ 'Option ' . $i ] = 'opt' . $i;
+		}
+		WpbakeryMapStub::install(
+			array(
+				'acme_many' => array(
+					'name'   => 'Many',
+					'params' => array(
+						array(
+							'type'       => 'dropdown',
+							'param_name' => 'pick',
+							'value'      => $values,
+						),
+					),
+				),
+			)
+		);
+		$this->acting_as( 'editor' );
+		$out = aafm_exec_wpbakery_list_elements( array( 'tag' => 'acme_many' ) );
+
+		$this->assertCount( 100, $out['elements'][0]['settings'][0]['allowed_values'] );
+	}
+
+	public function test_list_schema_is_closed_and_read_only(): void {
+		$args = aafm_args_wpbakery_list_elements();
+		$this->assertFalse( $args['input_schema']['additionalProperties'] );
+		$this->assertSame( array( 'page', 'grid' ), $args['input_schema']['properties']['context']['enum'] );
+		$this->assertSame( 'aafm-reads', $args['category'] );
+		$this->assertTrue( $args['meta']['annotations']['readonly'] );
+		$row = aafm_get_abilities_registry_full()['aafm/wpbakery-list-elements'];
+		$this->assertSame( 'reads', $row['group'] );
+		$this->assertSame( 'read', $row['risk'] );
+		$this->assertSame( 'wpbakery', $row['subject'] );
+	}
+
+	public function test_list_description_names_only_wpbakery_and_has_no_spaced_hyphen(): void {
+		$row = aafm_get_abilities_registry_full()['aafm/wpbakery-list-elements'];
+		foreach ( array( $row['description'], aafm_ability_disclosures()['aafm/wpbakery-list-elements'] ) as $text ) {
+			$this->assertStringNotContainsString( ' - ', $text );
+			foreach ( array( 'Visual Composer', 'Avada', 'Elementor' ) as $other ) {
+				$this->assertStringNotContainsString( $other, $text );
+			}
+			$this->assertStringContainsString( 'Role Manager', $text );
+		}
+		$this->assertStringContainsString( 'Only while WPBakery Page Builder is active', $row['description'] );
+	}
+
 	public function test_raw_html_content_and_custom_onclick_settings_are_the_raw_kind(): void {
 		$this->assertSame( 'raw', aafm_wpbakery_param_kind( 'vc_gmaps', $this->param( 'vc_gmaps', 'link' ) )['kind'], 'A textarea_safe setting on a custom HTML element is raw.' );
 		$this->assertSame( 'raw', aafm_wpbakery_param_kind( 'vc_gmaps', $this->param( 'vc_gmaps', 'title' ) )['kind'] );

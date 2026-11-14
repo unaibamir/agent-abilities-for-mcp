@@ -332,6 +332,14 @@ function aafm_builder_vendor_rows(): array {
 			},
 			'requires' => 'vc_path_dir',
 		),
+		// A setting's param type from WPBakery's element map, or null when the map does not know it.
+		'wpbakery_param_type'     => array(
+			'target'   => static function ( string $tag, string $name ): ?string {
+				$param = call_user_func( array( 'WPBMap', 'getParam' ), $tag, $name ); // @phpstan-ignore-line argument.type (WPBakery's own map; this row is present only when vc_map() exists, see requires)
+				return is_array( $param ) && isset( $param['type'] ) && is_string( $param['type'] ) ? $param['type'] : null;
+			},
+			'requires' => 'vc_map',
+		),
 	);
 }
 

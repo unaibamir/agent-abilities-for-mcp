@@ -1163,4 +1163,62 @@ WPB;
 			add_filter( 'aafm_integration_active_wpbakery', '__return_true' );
 		}
 	}
+	/**
+	 * Stand in for WPBakery's element map through the seam (Ruling B14): tag => param name => type.
+	 *
+	 * @param array<string,array<string,string>> $map Types.
+	 * @return callable The filter, for removal.
+	 */
+	private function map_types( array $map ): callable {
+		$filter = static function ( $resolved, string $entry ) use ( $map ) {
+			if ( 'wpbakery_param_type' !== $entry ) {
+				return $resolved;
+			}
+			return static function ( string $tag, string $name ) use ( $map ): ?string {
+				return $map[ $tag ][ $name ] ?? null;
+			};
+		};
+		add_filter( 'aafm_builder_vendor', $filter, 10, 2 );
+		return $filter;
+	}
+
+	public function test_a_plain_text_that_starts_like_a_link_stays_a_string(): void {
+		$atts = array(
+			'text'  => 'url:https://example.com/docs',
+			'title' => 'title: our services',
+		);
+		$this->assertSame( $atts, aafm_wpbakery_decode_atts( 'vc_custom_heading', $atts ), 'Without a map the strict shape rule keeps text.' );
+
+		$filter = $this->map_types(
+			array(
+				'vc_custom_heading' => array(
+					'text'  => 'textarea',
+					'title' => 'textfield',
+				),
+			)
+		);
+		$this->assertSame( $atts, aafm_wpbakery_decode_atts( 'vc_custom_heading', $atts ), 'A mapped text setting is never a link.' );
+		remove_filter( 'aafm_builder_vendor', $filter, 10 );
+	}
+
+	public function test_a_link_with_colons_and_a_port_keeps_its_full_url_with_and_without_the_map(): void {
+		$atts   = array( 'link' => 'url:https%3A%2F%2Fexample.com%3A8080%2Fa%3Ab|title:Docs%3A%20start|target:_blank|rel:nofollow' );
+		$expect = array(
+			'link' => array(
+				'url'    => 'https://example.com:8080/a:b',
+				'title'  => 'Docs: start',
+				'target' => '_blank',
+				'rel'    => 'nofollow',
+			),
+		);
+		$this->assertSame( $expect, aafm_wpbakery_decode_atts( 'wpb_btn', $atts ) );
+
+		$filter = $this->map_types( array( 'wpb_btn' => array( 'link' => 'link' ) ) );
+		$this->assertSame( $expect, aafm_wpbakery_decode_atts( 'wpb_btn', $atts ) );
+		remove_filter( 'aafm_builder_vendor', $filter, 10 );
+
+		$filter = $this->map_types( array( 'vc_custom_heading' => array( 'link' => 'vc_link' ) ) );
+		$this->assertSame( $expect, aafm_wpbakery_decode_atts( 'vc_custom_heading', $atts ) );
+		remove_filter( 'aafm_builder_vendor', $filter, 10 );
+	}
 }

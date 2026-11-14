@@ -276,32 +276,39 @@ function aafm_wpbakery_structure( string $content, array $tags ): array {
 }
 
 /**
- * Attribute values as WPBakery 9.1 reads them, decided by each stored value's shape (the element map
- * is not consulted): W2's escaped quote and brackets restored on every value, as prepareAtts() does;
- * then a url:..|title:.. value split into url, title, target and rel as vc_build_link() does (W3); a
- * URL-encoded JSON list decoded to rows as vc_param_group_parse_atts() does (W6); a #E-8_ value
- * decoded as vc_value_from_safe() does (W17). The S9a encoder is the inverse.
+ * Attribute values as WPBakery 9.1 reads them: W2's escaped quote and brackets restored on every value,
+ * as prepareAtts() does; a link setting split into url, title, target and rel as vc_build_link() does
+ * (W3); a URL-encoded JSON list decoded to rows as vc_param_group_parse_atts() does (W6); a #E-8_ value
+ * decoded as vc_value_from_safe() does (W17). Whether a value is a link comes from WPBakery's element
+ * map (param type vc_link or link) when the map knows the setting, and from a strict shape rule only
+ * when it does not. The S9a encoder is the inverse.
  *
- * @param string              $tag  Shortcode tag (kept for the encoder's signature; unused by the shape rules).
+ * @param string              $tag  Shortcode tag.
  * @param array<string,mixed> $atts Stored attributes.
  * @return array<string,mixed>
  */
 function aafm_wpbakery_decode_atts( string $tag, array $atts ): array {
-	unset( $tag );
-	$decoded = array();
+	$param_type = aafm_builder_vendor( 'wpbakery_param_type' );
+	$decoded    = array();
 	foreach ( $atts as $name => $value ) {
-		$decoded[ $name ] = is_string( $value ) ? aafm_wpbakery_decode_value( $value ) : $value;
+		if ( ! is_string( $value ) ) {
+			$decoded[ $name ] = $value;
+			continue;
+		}
+		$type             = null === $param_type ? null : $param_type( $tag, (string) $name );
+		$decoded[ $name ] = aafm_wpbakery_decode_value( $value, is_string( $type ) ? $type : null );
 	}
 	return $decoded;
 }
 
 /**
- * One attribute value, decoded by shape (see aafm_wpbakery_decode_atts()).
+ * One attribute value, decoded (see aafm_wpbakery_decode_atts()).
  *
- * @param string $value Stored value.
+ * @param string      $value Stored value.
+ * @param string|null $type  The setting's param type from the element map, or null when the map does not know it.
  * @return string|array<mixed>
  */
-function aafm_wpbakery_decode_value( string $value ) {
+function aafm_wpbakery_decode_value( string $value, ?string $type = null ) {
 	$escapes = array( '`{`', '`}`', '``' );
 	$plain   = array( '[', ']', '"' );
 	$value   = str_replace( $escapes, $plain, $value );
@@ -309,18 +316,8 @@ function aafm_wpbakery_decode_value( string $value ) {
 		$raw = base64_decode( substr( $value, 5 ), true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- reading WPBakery's own #E-8_ form back (W17), never executed.
 		return false === $raw ? $value : str_replace( $escapes, $plain, rawurldecode( $raw ) );
 	}
-	if ( 1 === preg_match( '/^(url|title|target|rel):[^|]*(\|(url|title|target|rel):[^|]*)*$/', $value ) ) {
-		$link = array(
-			'url'    => '',
-			'title'  => '',
-			'target' => '',
-			'rel'    => '',
-		);
-		foreach ( explode( '|', $value ) as $pair ) {
-			$parts             = explode( ':', $pair );
-			$link[ $parts[0] ] = trim( rawurldecode( $parts[1] ) );
-		}
-		return $link;
+	if ( null === $type ? aafm_wpbakery_looks_like_link( $value ) : in_array( $type, array( 'vc_link', 'link' ), true ) ) {
+		return aafm_wpbakery_parse_link( $value );
 	}
 	if ( 0 === stripos( $value, '%5B' ) ) {
 		$rows = json_decode( urldecode( $value ), true );
@@ -329,6 +326,41 @@ function aafm_wpbakery_decode_value( string $value ) {
 		}
 	}
 	return $value;
+}
+
+/**
+ * A link value read as vc_build_link() reads it (W3, vc_parse_multi_attribute()): the four parts default
+ * to empty, pairs split on the pipe, each pair split on its first colon, the value URL-decoded and trimmed.
+ *
+ * @param string $value Stored value, W2 already reversed.
+ * @return array<string,string>
+ */
+function aafm_wpbakery_parse_link( string $value ): array {
+	$link = array(
+		'url'    => '',
+		'title'  => '',
+		'target' => '',
+		'rel'    => '',
+	);
+	foreach ( explode( '|', $value ) as $pair ) {
+		$parts = explode( ':', $pair, 2 );
+		if ( '' !== $parts[0] && isset( $parts[1] ) ) {
+			$link[ $parts[0] ] = trim( rawurldecode( $parts[1] ) );
+		}
+	}
+	return $link;
+}
+
+/**
+ * The fallback when the element map does not know a setting: a link only when every pair names one of
+ * WPBakery's four link keys and every part is in the URL-encoded form WPBakery stores (W3), so plain
+ * text such as "url:https://example.com" or "title: our services" stays text.
+ *
+ * @param string $value Stored value, W2 already reversed.
+ * @return bool
+ */
+function aafm_wpbakery_looks_like_link( string $value ): bool {
+	return 1 === preg_match( '/^(url|title|target|rel):[A-Za-z0-9._~%-]*(\|(url|title|target|rel):[A-Za-z0-9._~%-]*)*$/', $value );
 }
 
 /**

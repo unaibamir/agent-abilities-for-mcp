@@ -1182,6 +1182,15 @@ final class AvadaElementsTest extends TestCase {
 		}
 	}
 
+	public function test_a_mapped_tag_no_shortcode_renders_is_refused(): void {
+		$this->act_as_admin();
+		$id     = $this->avada_post();
+		$before = (string) get_post( $id )->post_content;
+		// fusion_google_map is in the stub map, but no shortcode is registered for it in this request.
+		$node = array( 'tag' => 'fusion_google_map' );
+		$this->assert_refused( aafm_exec_avada_insert_element( $this->insert_input( $id, $node, 'fusion_title', 'after' ) ), 'aafm_builder_unknown_element', 400, $id, $before );
+	}
+
 	public function test_an_insert_inside_a_global_element_is_refused(): void {
 		$this->act_as_admin();
 		$content = '[fusion_builder_container fusion_global="14"][fusion_builder_row][fusion_builder_column type="1_1" layout="1_1"][fusion_title size="2"]G[/fusion_title][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]';

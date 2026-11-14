@@ -1623,7 +1623,8 @@ function aafm_avada_trusted_text_allowed( string $text, array $tags ) {
 
 /**
  * The shared Avada insert path (design AV-5, handover 2 for S12 and S13). Checks the limits, every tag against the map
- * (a tag the map cannot resolve, fusion_global included, is refused before any nesting check), the nesting, the place
+ * (a tag the map cannot resolve or no registered shortcode renders, fusion_global included, is refused before any
+ * nesting check), the nesting, the place
  * (never inside an element that shows a global library item), gates script content, serializes (untrusted) or splices
  * the stored sources (trusted), and saves through aafm_builder_commit() with no CSS step: Avada resets a page's
  * compiled CSS on every save (A11). The caller has already loaded the post, called the ownership check in its own body,
@@ -1665,7 +1666,8 @@ function aafm_avada_insert_tree( WP_Post $post, array $tree, array $anchor, bool
 		}
 	}
 
-	$tags     = array_values( array_unique( array_merge( aafm_fusion_shortcode_tags(), $seen ) ) );
+	// The tags the page reads use, so the returned index and fingerprint match the next outline.
+	$tags     = aafm_fusion_shortcode_tags();
 	$elements = aafm_builder_elements( $content, $tags );
 	if ( null === $elements ) {
 		return aafm_builder_error( 'aafm_builder_unparseable' );
@@ -1705,8 +1707,9 @@ function aafm_avada_insert_tree( WP_Post $post, array $tree, array $anchor, bool
 	if ( is_wp_error( $map ) ) {
 		return $map;
 	}
+	// A tag the map lists but no registered shortcode renders would be invisible to the outline: refused as well.
 	foreach ( array_unique( $seen ) as $tag ) {
-		if ( ! isset( $map[ $tag ] ) ) {
+		if ( ! isset( $map[ $tag ] ) || ! in_array( $tag, $tags, true ) ) {
 			return aafm_builder_error( 'aafm_builder_unknown_element' );
 		}
 	}

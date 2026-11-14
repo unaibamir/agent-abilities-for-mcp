@@ -75,6 +75,14 @@ function aafm_avada_elements_registry_definitions(): array {
 			'subject'      => 'avada',
 			'args_builder' => 'aafm_args_avada_insert_element',
 		),
+		'aafm/avada-move-element'   => array(
+			'label'        => __( 'Move an Avada element', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Moves one element, with its children, to a new place on the same Avada page, layout section, library item, form or off canvas panel: before or after another element, or as its first or last child. The element and the anchor are each named by index and fingerprint from avada-get-page-content with include_structure. The element\'s stored text moves byte for byte; nothing is rewritten. A move to a new parent follows Avada\'s nesting (a container takes rows, a row takes columns, a column takes elements or nested columns, a parent element such as tabs takes only its own child element), and a reorder under the same parent is always allowed. Refused: a move into the element itself or one of its children, an element type Avada\'s element map does not list, a place inside an element that shows a global library item, and a move that would leave a container with no row or a row with no column. A move to the place the element already has saves nothing and returns moved false. page_fingerprint must be the one from the last read or write; the response returns the new one with the element\'s new index and fingerprint. A save that would change other content for this user is refused, and nothing is saved. When a revision is kept, restore_revision_id brings the page back through restore-revision. Not undoable from this plugin\'s change history. Requires edit access to the post, and for a layout section a user who can manage site options; Avada\'s Role Manager settings are not applied. Only while Avada is active.', 'agent-abilities-for-mcp' ),
+			'group'        => 'writes',
+			'risk'         => 'write',
+			'subject'      => 'avada',
+			'args_builder' => 'aafm_args_avada_move_element',
+		),
 	);
 }
 
@@ -1946,4 +1954,180 @@ function aafm_exec_avada_insert_element( array $input ) {
 	}
 	$out['post'] = aafm_redact_post( $out['post'] );
 	return $out;
+}
+
+/**
+ * Whether taking the element at $index out of its parent would leave a container with no row, or a row or nested row
+ * with no column.
+ *
+ * @param list<array<string,mixed>> $elements Outline.
+ * @param int                       $index    Element.
+ * @return bool
+ */
+function aafm_avada_empties_a_layout_parent( array $elements, int $index ): bool {
+	$parent = $elements[ $index ]['parent'];
+	if ( null === $parent || ! in_array( $elements[ $parent ]['tag'], array( 'fusion_builder_container', 'fusion_builder_row', 'fusion_builder_row_inner' ), true ) ) {
+		return false;
+	}
+	return 1 === count( array_keys( array_column( $elements, 'parent' ), $parent, true ) );
+}
+
+/**
+ * The refusal for a change that would leave a container, row or nested row empty.
+ *
+ * @return WP_Error
+ */
+function aafm_avada_layout_needs_child_error(): WP_Error {
+	return new WP_Error(
+		'aafm_avada_layout_needs_child',
+		__( 'A container must keep at least one row, and a row at least one column, so this change would break the layout. Move or remove the whole container or row instead. Nothing was changed.', 'agent-abilities-for-mcp' ),
+		array( 'status' => 400 )
+	);
+}
+
+/**
+ * Args for aafm/avada-move-element.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_avada_move_element(): array {
+	return array(
+		'label'               => aafm_ability_label( 'aafm/avada-move-element' ),
+		'description'         => aafm_ability_description( 'aafm/avada-move-element' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => aafm_avada_structural_schema( true, true ),
+			'required'             => array( 'post_id', 'page_fingerprint', 'index', 'expect', 'anchor_index', 'anchor_expect', 'placement' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => aafm_avada_write_output_schema(
+			array(
+				'index'       => array( 'type' => 'integer' ),
+				'fingerprint' => array( 'type' => 'string' ),
+				'moved'       => array(
+					'type'        => 'boolean',
+					'description' => __( 'False when the element was already in that place and nothing was saved.', 'agent-abilities-for-mcp' ),
+				),
+			)
+		),
+		'execute_callback'    => 'aafm_exec_avada_move_element',
+		'permission_callback' => 'aafm_perm_avada_post_object',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/avada-move-element (design AV-6). Cuts the element's stored bytes, children included, and splices the
+ * same bytes in at the anchor; nothing is re-serialized or encoded. The moved tag must be in Avada's map; a move to a
+ * new parent follows the nesting rules, a reorder under the same parent needs none. A move to the place it already has
+ * saves nothing and reports moved false (Ruling R3-PR2-8).
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_avada_move_element( array $input ) {
+	$id   = absint( $input['post_id'] ?? 0 );
+	$post = aafm_exact_object_chain( 'post', $id );
+	if ( ! $post instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	if ( ! aafm_builder_ownership_allows( 'avada', aafm_post_has_foreign_builder_ownership( $id ), $post ) ) {
+		return aafm_avada_not_owned_error();
+	}
+	$content = (string) $post->post_content;
+	$check   = aafm_builder_page_check( $content, (string) ( $input['page_fingerprint'] ?? '' ) );
+	if ( is_wp_error( $check ) ) {
+		return $check;
+	}
+	$tags     = aafm_fusion_shortcode_tags();
+	$elements = aafm_builder_elements( $content, $tags );
+	if ( null === $elements ) {
+		return aafm_builder_error( 'aafm_builder_unparseable' );
+	}
+	$element = aafm_builder_resolve( $content, $tags, (int) ( $input['index'] ?? -1 ), is_array( $input['expect'] ?? null ) ? $input['expect'] : array() );
+	if ( is_wp_error( $element ) ) {
+		return $element;
+	}
+	$anchor = aafm_builder_resolve( $content, $tags, (int) ( $input['anchor_index'] ?? -1 ), is_array( $input['anchor_expect'] ?? null ) ? $input['anchor_expect'] : array() );
+	if ( is_wp_error( $anchor ) ) {
+		return $anchor;
+	}
+	$index     = (int) $element['index'];
+	$size      = aafm_builder_subtree_size( $elements, $index );
+	$placement = (string) ( $input['placement'] ?? '' );
+	$inside    = (int) $anchor['index'] > $index && (int) $anchor['index'] < $index + $size;
+	if ( $inside || ( (int) $anchor['index'] === $index && 0 === strpos( $placement, 'inside_' ) ) ) {
+		return aafm_builder_error( 'aafm_builder_invalid_move' );
+	}
+	$point = aafm_builder_anchor_point( $elements, $anchor, $placement );
+	if ( is_wp_error( $point ) ) {
+		return $point;
+	}
+	foreach ( array( $element['parent'], $point['parent'] ) as $parent ) {
+		$global = aafm_avada_global_ancestor( $elements, null === $parent ? null : (int) $parent );
+		if ( null !== $global ) {
+			return aafm_avada_inside_global_error( $global );
+		}
+	}
+	$map = aafm_avada_map();
+	if ( is_wp_error( $map ) ) {
+		return $map;
+	}
+	$tag = (string) $element['tag'];
+	if ( ! isset( $map[ $tag ] ) ) {
+		return aafm_builder_error( 'aafm_builder_unknown_element' );
+	}
+	if ( $point['parent'] !== $element['parent'] ) {
+		$parent_tag = null === $point['parent'] ? '' : (string) $elements[ $point['parent'] ]['tag'];
+		$nesting    = aafm_avada_nesting_allows( $parent_tag, $tag, $map );
+		if ( is_wp_error( $nesting ) ) {
+			return $nesting;
+		}
+		if ( aafm_avada_empties_a_layout_parent( $elements, $index ) ) {
+			return aafm_avada_layout_needs_child_error();
+		}
+	}
+
+	$start  = (int) $element['start'];
+	$length = (int) $element['end'] - $start;
+	$source = substr( $content, $start, $length );
+	$cut    = substr( $content, 0, $start ) . substr( $content, $start + $length );
+	$offset = $point['offset'] > $start ? $point['offset'] - $length : $point['offset'];
+	$new    = substr( $cut, 0, $offset ) . $source . substr( $cut, $offset );
+	$walk   = aafm_builder_walk( $content, $tags );
+	if ( null === $walk ) {
+		return aafm_builder_error( 'aafm_builder_unparseable' );
+	}
+	$expected = aafm_builder_expected_walk(
+		$walk,
+		array(
+			'op'    => 'move',
+			'index' => $index,
+			'at'    => $point['at'],
+			'depth' => $point['depth'],
+		)
+	);
+	$result   = aafm_builder_commit( $post, $content, $new, $tags, $expected, null, 'avada' );
+	if ( is_wp_error( $result ) ) {
+		return $result;
+	}
+	$stored    = (string) $result['post']->post_content;
+	$new_index = $point['at'] > $index ? $point['at'] - $size : $point['at'];
+	$after     = aafm_builder_elements( $stored, $tags );
+	$moved     = $after[ $new_index ] ?? null;
+	return array(
+		'post'                => aafm_redact_post( $result['post'] ),
+		'index'               => $new_index,
+		'fingerprint'         => null === $moved ? '' : aafm_builder_fingerprint( $stored, $moved ),
+		'page_fingerprint'    => $result['page_fingerprint'],
+		'moved'               => ! $result['unchanged'],
+		'restore_revision_id' => $result['restore_revision_id'],
+		'reversible'          => $result['reversible'],
+	) + aafm_avada_reversible_reason( $result );
 }

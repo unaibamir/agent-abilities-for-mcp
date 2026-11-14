@@ -1455,4 +1455,178 @@ final class AvadaElementsTest extends TestCase {
 		$id = self::factory()->post->create( array( 'post_content' => '<!-- wp:paragraph --><p>x</p><!-- /wp:paragraph -->' ) );
 		$this->assert_refused( aafm_exec_avada_insert_element( $this->insert_input( $id, $this->container_node(), null ) ), 'aafm_not_avada_owned', 409, $id, '<!-- wp:paragraph --><p>x</p><!-- /wp:paragraph -->' );
 	}
+
+	// S10b: avada-move-element.
+
+	/**
+	 * Move input for the nth element with a tag against the nth anchor with a tag.
+	 *
+	 * @param int    $id         Post.
+	 * @param string $tag        Moved tag.
+	 * @param int    $nth        Which one.
+	 * @param string $anchor_tag Anchor tag.
+	 * @param int    $anchor_nth Which anchor.
+	 * @param string $placement  Placement.
+	 * @return array<string,mixed>
+	 */
+	private function move_input( int $id, string $tag, int $nth, string $anchor_tag, int $anchor_nth, string $placement ): array {
+		$addr   = $this->addr( $id, $tag, array(), $nth );
+		$anchor = $this->addr( $id, $anchor_tag, array(), $anchor_nth );
+		return $addr + array(
+			'page_fingerprint' => aafm_builder_page_fingerprint( (string) get_post( $id )->post_content ),
+			'anchor_index'     => $anchor['index'],
+			'anchor_expect'    => $anchor['expect'],
+			'placement'        => $placement,
+		);
+	}
+
+	/**
+	 * Two containers, each with one 1_1 column holding a title.
+	 *
+	 * @return string
+	 */
+	private function two_containers(): string {
+		$one = static fn( string $t ) => '[fusion_builder_container type="flex"][fusion_builder_row][fusion_builder_column type="1_1" layout="1_1"][fusion_title size="2"]' . $t . '[/fusion_title][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]';
+		return $one( 'A' ) . $one( 'B' );
+	}
+
+	public function test_move_reorders_containers_byte_for_byte(): void {
+		$this->act_as_admin();
+		$content = $this->two_containers();
+		$id      = $this->avada_post( $content );
+		$out     = aafm_exec_avada_move_element( $this->move_input( $id, 'fusion_builder_container', 1, 'fusion_builder_container', 0, 'before' ) );
+		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+		$this->assertTrue( $out['moved'] );
+		$this->assertSame( 0, $out['index'] );
+		$stored = (string) get_post( $id )->post_content;
+		$half   = strlen( $content ) / 2;
+		$this->assertSame( substr( $content, $half ) . substr( $content, 0, $half ), $stored );
+		$this->assertSame( aafm_builder_page_fingerprint( $stored ), $out['page_fingerprint'] );
+		$this->assertSame( aafm_builder_fingerprint( $stored, $this->elements( $stored )[0] ), $out['fingerprint'] );
+		$this->assertArrayNotHasKey( 'post_content', $out['post'] );
+	}
+
+	public function test_move_onto_its_own_place_saves_nothing(): void {
+		$this->act_as_admin();
+		$content = $this->two_containers();
+		$id      = $this->avada_post( $content );
+		$out     = aafm_exec_avada_move_element( $this->move_input( $id, 'fusion_builder_container', 0, 'fusion_builder_container', 1, 'before' ) );
+		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+		$this->assertFalse( $out['moved'] );
+		$this->assertNull( $out['restore_revision_id'] );
+		$this->assertSame( $content, get_post( $id )->post_content );
+	}
+
+	public function test_move_into_itself_and_onto_itself_is_refused(): void {
+		$this->act_as_admin();
+		$content = $this->two_containers();
+		$id      = $this->avada_post( $content );
+		$this->assert_refused( aafm_exec_avada_move_element( $this->move_input( $id, 'fusion_builder_container', 0, 'fusion_builder_column', 0, 'inside_end' ) ), 'aafm_builder_invalid_move', 400, $id, $content );
+		$this->assert_refused( aafm_exec_avada_move_element( $this->move_input( $id, 'fusion_builder_container', 0, 'fusion_builder_container', 0, 'inside_end' ) ), 'aafm_builder_invalid_move', 400, $id, $content );
+	}
+
+	public function test_move_between_columns_keeps_siblings_and_follows_nesting(): void {
+		$this->act_as_admin();
+		$content = $this->two_containers();
+		$id      = $this->avada_post( $content );
+		// The title of the first column into the second column, at its start: first and last child cases.
+		$out = aafm_exec_avada_move_element( $this->move_input( $id, 'fusion_title', 0, 'fusion_builder_column', 1, 'inside_start' ) );
+		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+		$stored = (string) get_post( $id )->post_content;
+		$this->assertSame( 1, substr_count( $stored, ']A[' ) );
+		$this->assertSame( 1, substr_count( $stored, ']B[' ) );
+		$this->assertStringContainsString( '[fusion_title size="2"]A[/fusion_title][fusion_title size="2"]B[/fusion_title]', $stored );
+		$this->assertStringContainsString( '[fusion_builder_column type="1_1" layout="1_1"][/fusion_builder_column]', $stored, 'The emptied column stays.' );
+		// A title cannot go into a row, and a row cannot go to the top level.
+		$this->assert_refused( aafm_exec_avada_move_element( $this->move_input( $id, 'fusion_title', 0, 'fusion_builder_row', 0, 'inside_end' ) ), 'aafm_builder_invalid_nesting', 400, $id, $stored );
+		$this->assert_refused( aafm_exec_avada_move_element( $this->move_input( $id, 'fusion_builder_row', 0, 'fusion_builder_container', 1, 'after' ) ), 'aafm_builder_invalid_nesting', 400, $id, $stored );
+	}
+
+	public function test_move_that_empties_a_row_or_a_container_is_refused(): void {
+		$this->act_as_admin();
+		$content = $this->two_containers();
+		$id      = $this->avada_post( $content );
+		$this->assert_refused( aafm_exec_avada_move_element( $this->move_input( $id, 'fusion_builder_column', 0, 'fusion_builder_column', 1, 'after' ) ), 'aafm_avada_layout_needs_child', 400, $id, $content );
+		$this->assert_refused( aafm_exec_avada_move_element( $this->move_input( $id, 'fusion_builder_row', 0, 'fusion_builder_row', 1, 'after' ) ), 'aafm_avada_layout_needs_child', 400, $id, $content );
+	}
+
+	public function test_same_parent_reorder_needs_no_nesting_but_an_unmapped_tag_is_refused(): void {
+		$this->act_as_admin();
+		$content = '[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1"][fusion_title size="2"]A[/fusion_title][fusion_unknown_box]x[/fusion_unknown_box][fusion_title size="2"]C[/fusion_title][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]';
+		// A registered fusion_ shortcode the map does not list: the outline reads it, the move refuses it.
+		add_shortcode( 'fusion_unknown_box', '__return_empty_string' );
+		$id = $this->avada_post( $content );
+		$this->assert_refused( aafm_exec_avada_move_element( $this->move_input( $id, 'fusion_unknown_box', 0, 'fusion_title', 1, 'after' ) ), 'aafm_builder_unknown_element', 400, $id, $content );
+		remove_shortcode( 'fusion_unknown_box' );
+		// The last title to the front of its own column: same parent, so no nesting check runs.
+		$out = aafm_exec_avada_move_element( $this->move_input( $id, 'fusion_title', 1, 'fusion_title', 0, 'before' ) );
+		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+		$this->assertStringStartsWith( '[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1"][fusion_title size="2"]C[/fusion_title][fusion_title size="2"]A', get_post( $id )->post_content );
+	}
+
+	public function test_move_out_of_or_into_a_global_element_is_refused(): void {
+		$this->act_as_admin();
+		$content = str_replace( '[fusion_builder_container type="flex"]', '[fusion_builder_container type="flex" fusion_global="14"]', substr( $this->two_containers(), 0, strlen( $this->two_containers() ) / 2 ) ) . substr( $this->two_containers(), strlen( $this->two_containers() ) / 2 );
+		$id      = $this->avada_post( $content );
+		$this->assert_refused( aafm_exec_avada_move_element( $this->move_input( $id, 'fusion_title', 0, 'fusion_title', 1, 'after' ) ), 'aafm_avada_global_element', 409, $id, $content );
+		$this->assert_refused( aafm_exec_avada_move_element( $this->move_input( $id, 'fusion_title', 1, 'fusion_title', 0, 'after' ) ), 'aafm_avada_global_element', 409, $id, $content );
+		// The global container itself moves.
+		$this->assertIsArray( aafm_exec_avada_move_element( $this->move_input( $id, 'fusion_builder_container', 0, 'fusion_builder_container', 1, 'after' ) ) );
+	}
+
+	public function test_move_and_remove_refuse_a_stale_page_fingerprint(): void {
+		$this->act_as_admin();
+		$content                   = $this->two_containers();
+		$id                        = $this->avada_post( $content );
+		$input                     = $this->move_input( $id, 'fusion_builder_container', 1, 'fusion_builder_container', 0, 'before' );
+		$input['page_fingerprint'] = str_repeat( '0', 16 );
+		$this->assert_refused( aafm_exec_avada_move_element( $input ), 'aafm_builder_page_changed', 409, $id, $content );
+		if ( function_exists( 'aafm_exec_avada_remove_element' ) ) {
+			$remove = $this->addr( $id, 'fusion_builder_container', array( 'page_fingerprint' => str_repeat( '0', 16 ) ), 1 );
+			$this->assert_refused( aafm_exec_avada_remove_element( $remove ), 'aafm_builder_page_changed', 409, $id, $content );
+		}
+	}
+
+	public function test_chained_moves_keep_addressing_valid(): void {
+		$this->act_as_admin();
+		$id    = $this->avada_post( $this->two_containers() );
+		$first = aafm_exec_avada_move_element( $this->move_input( $id, 'fusion_builder_container', 1, 'fusion_builder_container', 0, 'before' ) );
+		$this->assertIsArray( $first );
+		$anchor = $this->addr( $id, 'fusion_builder_container', array(), 1 );
+		$back   = aafm_exec_avada_move_element(
+			array(
+				'post_id'          => $id,
+				'page_fingerprint' => $first['page_fingerprint'],
+				'index'            => $first['index'],
+				'expect'           => array(
+					'tag'         => 'fusion_builder_container',
+					'fingerprint' => $first['fingerprint'],
+				),
+				'anchor_index'     => $anchor['index'],
+				'anchor_expect'    => $anchor['expect'],
+				'placement'        => 'after',
+			)
+		);
+		$this->assertIsArray( $back, is_wp_error( $back ) ? $back->get_error_message() : '' );
+		$this->assertSame( $this->two_containers(), get_post( $id )->post_content );
+	}
+
+	public function test_move_permissions_discovery_audit_and_schema(): void {
+		$args = aafm_args_avada_move_element();
+		$this->assertSame( 'aafm_perm_avada_post_object', $args['permission_callback'] );
+		$this->assertSame( array( 'post_id', 'page_fingerprint', 'index', 'expect', 'anchor_index', 'anchor_expect', 'placement' ), $args['input_schema']['required'] );
+		$this->assertSame( 'string', $args['output_schema']['properties']['reversible_reason']['type'] );
+		$this->assertArrayHasKey( 'moved', $args['output_schema']['properties'] );
+		$this->assertSame( 'Ran an element move on Avada page #%s', aafm_activity_detail_map()['aafm/avada-move-element']['template'] );
+		$this->assertArrayHasKey( 'aafm/avada-move-element', aafm_register_avada_elements_definitions( array() ) );
+		$keep = static fn(): int => 1;
+		$this->act_as_admin();
+		$id   = $this->avada_post( $this->two_containers() );
+		add_filter( 'wp_revisions_to_keep', $keep );
+		$out = aafm_exec_avada_move_element( $this->move_input( $id, 'fusion_builder_container', 1, 'fusion_builder_container', 0, 'before' ) );
+		remove_filter( 'wp_revisions_to_keep', $keep );
+		$this->assertIsArray( $out );
+		$this->assertFalse( $out['reversible'] );
+		$this->assertStringContainsString( 'keeps 1 revision per post', $out['reversible_reason'] );
+	}
 }

@@ -439,6 +439,10 @@ function aafm_integration_ability_order(): array {
 				'name' => 'aafm/avada-insert-element',
 				'risk' => 'write',
 			),
+			array(
+				'name' => 'aafm/avada-move-element',
+				'risk' => 'write',
+			),
 		),
 		'wpbakery'      => array(
 			array(

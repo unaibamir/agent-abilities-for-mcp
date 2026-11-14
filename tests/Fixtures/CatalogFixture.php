@@ -122,6 +122,7 @@ final class CatalogFixture {
 		'aafm/avada-get-global-options',
 		'aafm/avada-list-library',
 		'aafm/wpbakery-get-page-content',
+		'aafm/wpbakery-list-elements',
 		'aafm/geodirectory-get-listings',
 		'aafm/geodirectory-get-listing',
 	);
@@ -224,6 +225,7 @@ final class CatalogFixture {
 		'aafm/upload-media-from-url',
 		'aafm/avada-replace-text',
 		'aafm/wpbakery-replace-text',
+		'aafm/wpbakery-update-element',
 		'aafm/geodirectory-create-listing',
 		'aafm/geodirectory-update-listing',
 	);

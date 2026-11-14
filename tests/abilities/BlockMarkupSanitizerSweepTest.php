@@ -46,6 +46,7 @@ final class BlockMarkupSanitizerSweepTest extends TestCase {
 		'posts.php'                  => array( '$replace' => 'replace-in-post and replace-sitewide inserted text, text-only by design.' ),
 		'terms.php'                  => array( "(string) \$input['description']" => 'Term description (create and update).' ),
 		'wpbakery.php'               => array( '$replace' => 'Inserted text, text-only by design.' ),
+		'wpbakery-elements.php'      => array( '$value' => 'Inner content of one WPBakery element, filtered for every user; a shortcode it adds is refused by the outline check.' ),
 		'woocommerce/products.php'   => array( "(string) \$input['short_description']" => 'Stored as post_excerpt, not block markup.' ),
 		'woocommerce/variations.php' => array( "(string) \$input['description']" => 'Stored in variation meta, not block markup.' ),
 	);
@@ -165,7 +166,7 @@ final class BlockMarkupSanitizerSweepTest extends TestCase {
 		}
 		sort( $expected );
 
-		$this->assertCount( 13, $expected, 'Fixture: thirteen excluded calls.' );
+		$this->assertCount( 14, $expected, 'Fixture: fourteen excluded calls.' );
 		$this->assertSame( $expected, self::calls_to( 'wp_kses_post' ), 'A wp_kses_post( call in includes/abilities/ is neither routed through aafm_kses_block_markup() nor on the exclusion list.' );
 	}
 

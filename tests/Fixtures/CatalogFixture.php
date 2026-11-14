@@ -226,6 +226,9 @@ final class CatalogFixture {
 		'aafm/avada-replace-text',
 		'aafm/wpbakery-replace-text',
 		'aafm/wpbakery-update-element',
+		'aafm/wpbakery-insert-element',
+		'aafm/wpbakery-move-element',
+		'aafm/wpbakery-remove-element',
 		'aafm/geodirectory-create-listing',
 		'aafm/geodirectory-update-listing',
 	);
@@ -282,5 +285,6 @@ final class CatalogFixture {
 		'aafm/wc-delete-product-variation',
 		'aafm/tec-delete-event',
 		'aafm/undo-change',
+		'aafm/wpbakery-remove-element',
 	);
 }

@@ -1117,6 +1117,13 @@ final class WpbakeryElementsTest extends TestCase {
 		$this->assert_refused( $this->update( $id, 8, array( 'text' => '<p>Footnote [1]</p>' ) ), 'aafm_builder_structure_changed', 400, $id, (string) get_post_field( 'post_content', $id, 'raw' ) );
 	}
 
+	/**
+	 * R3-1: quote entities inside the HTML stay encoded, so an attribute holding one keeps all of its text.
+	 */
+	public function test_body_text_keeps_quote_entities_inside_attributes(): void {
+		$this->assertSame( '<p><img src="x.jpg" alt="the &quot;best&quot; view &quot;x&quot; &apos;y&apos;" /></p>', $this->encode( 'vc_column_text', 'content', '<p><img src="x.jpg" alt="the &quot;best&quot; view &#34;x&#x22; &#39;y&#x27;" /></p>' ) );
+	}
+
 	public function test_update_with_the_stored_design_options_saves_nothing(): void {
 		$id        = $this->page( $this->fixture() );
 		$revisions = count( wp_get_post_revisions( $id ) );

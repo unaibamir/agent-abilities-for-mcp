@@ -466,6 +466,15 @@ WPB;
 		$this->assertSame( 1, $this->replace( $id, 'Opening paragraph alpha.', 'Opening paragraph beta.' )['replacements'] );
 	}
 
+	public function test_replace_keeps_quote_entities_inside_attributes(): void {
+		$content = '[vc_row][vc_column][vc_column_text]<p>Swap me.</p>[/vc_column_text][/vc_column][/vc_row]';
+		$id      = $this->make_page( $content );
+		$this->acting_as( 'editor' );
+
+		$this->assertSame( 1, $this->replace( $id, 'Swap me.', '<img src="x.jpg" alt="the &quot;best&quot; view" />' )['replacements'] );
+		$this->assertStringContainsString( 'alt="the &quot;best&quot; view"', get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
 	public function test_replace_refuses_removing_a_closing_tag(): void {
 		$id = $this->make_page( self::PAGE );
 		$this->acting_as( 'editor' );

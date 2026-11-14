@@ -383,15 +383,17 @@ function aafm_wpbakery_decode_raw( string $inner ): ?string {
  * reads the page through TinyMCE, which decodes every entity in text and encodes only & < and > again (smoke probes,
  * S9a fix rounds 1 and 2), so an entity that spells a bracket, a slash or a letter of a shortcode name becomes the
  * real character on its next save. Decoding it first lets every check see what the editor will produce. An entity
- * that decodes to & < or > is written as &amp;, &lt; or &gt;, and an unknown entity is left as it is.
+ * that decodes to & < or > is written as &amp;, &lt; or &gt;, and an unknown entity is left as it is. With
+ * $keep_quotes, a quote entity stays one entity (&quot; or &apos;), for HTML whose attribute values may hold one.
  *
- * @param string $text Text.
+ * @param string $text        Text.
+ * @param bool   $keep_quotes Whether quote entities stay encoded.
  * @return string
  */
-function aafm_wpbakery_decode_entities( string $text ): string {
+function aafm_wpbakery_decode_entities( string $text, bool $keep_quotes = false ): string {
 	return (string) preg_replace_callback(
 		'/&(#[0-9]+|#x[0-9a-f]+|[a-z][a-z0-9]*);/i',
-		static function ( array $m ): string {
+		static function ( array $m ) use ( $keep_quotes ): string {
 			if ( in_array( strtolower( $m[1] ), array( 'amp', 'lt', 'gt' ), true ) ) {
 				return $m[0];
 			}
@@ -407,6 +409,10 @@ function aafm_wpbakery_decode_entities( string $text ): string {
 				'<' => '&lt;',
 				'>' => '&gt;',
 			);
+			if ( $keep_quotes ) {
+				$keep['"'] = '&quot;';
+				$keep["'"] = '&apos;';
+			}
 			return $char === $m[0] ? $m[0] : strtr( $char, $keep );
 		},
 		$text
@@ -416,15 +422,16 @@ function aafm_wpbakery_decode_entities( string $text ): string {
 /**
  * Body text for a WPBakery page: text stored between shortcode tags rather than in an escaped attribute (an
  * element's inner content, a replace-text replacement). The one choke point every such write goes through.
- * Entities are decoded to the form WPBakery's editor saves, then, for a user who may not post unfiltered HTML, the
- * text may hold no square bracket at all: the editor rewrites body text on its next save in ways a check cannot all
- * predict, and with no bracket no shortcode can come of it. For a user who may, the structure and closer checks that follow still apply. Then wp_kses_post().
+ * Entities are decoded to the form WPBakery's editor saves (quote entities kept, so an attribute holding one keeps
+ * its text), then, for a user who may not post unfiltered HTML, the text may hold no square bracket at all: the
+ * editor rewrites body text on its next save in ways a check cannot all predict, and with no bracket no shortcode
+ * can come of it. For a user who may, the structure and closer checks that follow still apply. Then wp_kses_post().
  *
  * @param string $text Text from the caller.
  * @return string|WP_Error
  */
 function aafm_wpbakery_body_text( string $text ) {
-	$decoded = aafm_wpbakery_decode_entities( $text );
+	$decoded = aafm_wpbakery_decode_entities( $text, true );
 	if ( ! current_user_can( 'unfiltered_html' ) && false !== strpbrk( $decoded, '[]' ) ) {
 		return new WP_Error(
 			'aafm_wpbakery_brackets_need_unfiltered_html',

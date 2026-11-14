@@ -845,7 +845,92 @@ final class AvadaElementsTest extends TestCase {
 		add_filter( 'aafm_integration_active_avada', '__return_true' );
 	}
 
-	// S10b: nesting and the insert path.
+	// S10b: nesting, the insert path and avada-insert-element.
+
+	/**
+	 * The stub map with the extra entries the insert tests need: a dynamic data element, which the editor always writes
+	 * in the void form.
+	 *
+	 * @return array<string,array<string,mixed>>
+	 */
+	private function insert_map(): array {
+		$map           = AvadaMapStub::map();
+		$map['awb_dd'] = array(
+			'name'      => 'Dynamic Data',
+			'shortcode' => 'awb_dd',
+			'params'    => array(
+				array(
+					'type'       => 'textfield',
+					'param_name' => 'class',
+					'value'      => '',
+				),
+			),
+		);
+		return $map;
+	}
+
+	/**
+	 * Insert input against the nth element with a tag, with the page fingerprint of the stored page.
+	 *
+	 * @param int                 $id        Post.
+	 * @param array<string,mixed> $element   Element node.
+	 * @param string|null         $tag       Anchor tag, or null for no anchor.
+	 * @param string              $placement Placement.
+	 * @param int                 $nth       Which anchor.
+	 * @return array<string,mixed>
+	 */
+	private function insert_input( int $id, array $element, ?string $tag = 'fusion_builder_container', string $placement = 'after', int $nth = 0 ): array {
+		$content = (string) get_post( $id )->post_content;
+		$input   = array(
+			'post_id'          => $id,
+			'page_fingerprint' => aafm_builder_page_fingerprint( $content ),
+			'element'          => $element,
+		);
+		if ( null === $tag ) {
+			return $input;
+		}
+		$addr = $this->addr( $id, $tag, array(), $nth );
+		return $input + array(
+			'anchor_index'  => $addr['index'],
+			'anchor_expect' => $addr['expect'],
+			'placement'     => $placement,
+		);
+	}
+
+	/**
+	 * A container with one 1_1 column holding a title and a button.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private function container_node(): array {
+		return array(
+			'tag'      => 'fusion_builder_container',
+			'children' => array(
+				array(
+					'tag'      => 'fusion_builder_row',
+					'children' => array(
+						array(
+							'tag'      => 'fusion_builder_column',
+							'atts'     => array( 'type' => '1_1' ),
+							'children' => array(
+								array(
+									'tag'  => 'fusion_title',
+									'atts' => array( 'size' => '2' ),
+									'text' => 'New title',
+								),
+								array(
+									'tag'  => 'fusion_button',
+									'atts' => array( 'link' => 'https://example.com/new' ),
+									'text' => 'Go',
+								),
+							),
+						),
+					),
+				),
+			),
+		);
+	}
+
 	/**
 	 * Parent, child and whether Avada allows it.
 	 *
@@ -903,6 +988,85 @@ final class AvadaElementsTest extends TestCase {
 		$this->assert_error( aafm_avada_nesting_allows( 'fusion_builder_column', 'fusion_tab', $map ), 'aafm_builder_invalid_nesting', 400 );
 	}
 
+	public function test_a_parent_element_takes_only_its_child_tag(): void {
+		$this->act_as_admin();
+		$id     = $this->avada_post();
+		$before = (string) get_post( $id )->post_content;
+		$out    = aafm_exec_avada_insert_element(
+			$this->insert_input(
+				$id,
+				array(
+					'tag'  => 'fusion_title',
+					'text' => 'Not a tab',
+				),
+				'fusion_tabs',
+				'inside_end'
+			)
+		);
+		$this->assert_refused( $out, 'aafm_builder_invalid_nesting', 400, $id, $before );
+		$ok = aafm_exec_avada_insert_element(
+			$this->insert_input(
+				$id,
+				array(
+					'tag'  => 'fusion_tab',
+					'atts' => array( 'title' => 'Third' ),
+					'text' => 'Third tab',
+				),
+				'fusion_tabs',
+				'inside_end'
+			)
+		);
+		$this->assertIsArray( $ok, is_wp_error( $ok ) ? $ok->get_error_message() : '' );
+		$this->assertStringContainsString( '[fusion_tab title="Third"]Third tab[/fusion_tab][/fusion_tabs]', get_post( $id )->post_content );
+	}
+
+	public function test_a_column_needs_a_type_from_the_maps_list(): void {
+		$this->act_as_admin();
+		foreach ( array( null, '0', '3_2', 'auto', '150%', 'wide' ) as $width ) {
+			$id     = $this->avada_post();
+			$before = (string) get_post( $id )->post_content;
+			$node   = array(
+				'tag'  => 'fusion_builder_column',
+				'atts' => null === $width ? array() : array( 'type' => $width ),
+			);
+			$this->assert_refused( aafm_exec_avada_insert_element( $this->insert_input( $id, $node, 'fusion_builder_column', 'after' ) ), 'aafm_avada_column_needs_width', 400, $id, $before );
+		}
+		foreach ( array( '1_2', '25%', '33.33%' ) as $width ) {
+			$this->assertSame( $width, aafm_avada_column_width( $width ) );
+		}
+	}
+
+	public function test_inserted_elements_carry_every_map_setting_by_default(): void {
+		$this->act_as_admin();
+		$id  = $this->avada_post();
+		$out = aafm_exec_avada_insert_element( $this->insert_input( $id, $this->container_node() ) );
+		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+		$this->assertSame( 5, $out['inserted'] );
+		$stored = (string) get_post( $id )->post_content;
+		$this->assertStringContainsString(
+			'[fusion_builder_container type="flex" padding_top="" padding_right="" padding_bottom="" padding_left="" background_color="" publish_date=""][fusion_builder_row]'
+			. '[fusion_builder_column type="1_1" layout="1_1" link="" first="true" last="true" border_position="all"]'
+			. '[fusion_title size="2" fusion_font_family_title_font="" text_color=""]New title[/fusion_title]',
+			$stored
+		);
+		$this->assertMatchesRegularExpression( '/\[fusion_button link="https:\/\/example\.com\/new" title="" target="_self" [^\]]*hide_on_mobile="small-visibility,medium-visibility,large-visibility"[^\]]*\]Go\[\/fusion_button\]/', $stored );
+		$elements = $this->elements( $stored );
+		$this->assertSame( 'fusion_builder_container', $elements[ $out['index'] ]['tag'] );
+		$this->assertSame( aafm_builder_fingerprint( $stored, $elements[ $out['index'] ] ), $out['fingerprint'] );
+		$this->assertSame( aafm_builder_page_fingerprint( $stored ), $out['page_fingerprint'] );
+		$this->assertArrayNotHasKey( 'post_content', $out['post'] );
+	}
+
+	public function test_inserted_elements_drop_empty_settings_when_the_site_removes_them(): void {
+		$this->act_as_admin();
+		update_option( 'fusion_builder_settings', array( 'remove_empty_attributes' => 'on' ) );
+		$id  = $this->avada_post();
+		$out = aafm_exec_avada_insert_element( $this->insert_input( $id, $this->container_node() ) );
+		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+		$stored = (string) get_post( $id )->post_content;
+		$this->assertStringContainsString( '[fusion_builder_container type="flex"][fusion_builder_row][fusion_builder_column type="1_1" layout="1_1" first="true" last="true" border_position="all"][fusion_title size="2"]New title[/fusion_title]', $stored );
+	}
+
 	public function test_column_flags_follow_the_editors_running_width(): void {
 		$this->assertSame(
 			array(
@@ -946,6 +1110,294 @@ final class AvadaElementsTest extends TestCase {
 		);
 	}
 
+	public function test_the_void_form_is_used_only_where_the_editor_uses_it(): void {
+		$this->act_as_admin();
+		AvadaMapStub::install( $this->insert_map() );
+		add_shortcode( 'awb_dd', '__return_empty_string' );
+		$id    = $this->avada_post();
+		$nodes = array(
+			array( 'tag' => 'fusion_button' ),
+			array( 'tag' => 'fusion_text' ),
+			array( 'tag' => 'fusion_code' ),
+			array( 'tag' => 'awb_dd' ),
+			array(
+				'tag'  => 'fusion_title',
+				'text' => 'T',
+			),
+		);
+		foreach ( $nodes as $node ) {
+			$out = aafm_exec_avada_insert_element( $this->insert_input( $id, $node, 'fusion_title', 'after' ) );
+			$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : $node['tag'] );
+		}
+		remove_shortcode( 'awb_dd' );
+		$stored = (string) get_post( $id )->post_content;
+		$this->assertMatchesRegularExpression( '/\[fusion_button [^\]]*\/\]/', $stored );
+		$this->assertStringContainsString( '[fusion_text columns="1"][/fusion_text]', $stored );
+		$this->assertStringContainsString( '[fusion_code][/fusion_code]', $stored );
+		$this->assertStringContainsString( '[awb_dd class="" /]', $stored );
+		$this->assertStringContainsString( 'fusion_title size="1" fusion_font_family_title_font="" text_color=""]T[/fusion_title]', $stored );
+	}
+
+	public function test_a_row_and_an_inner_row_carry_only_what_the_editor_writes(): void {
+		$this->act_as_admin();
+		$id     = $this->avada_post();
+		$before = (string) get_post( $id )->post_content;
+		$node   = array(
+			'tag'      => 'fusion_builder_row_inner',
+			'children' => array(
+				array(
+					'tag'      => 'fusion_builder_column_inner',
+					'atts'     => array( 'type' => '1_2' ),
+					'children' => array(
+						array(
+							'tag'  => 'fusion_title',
+							'text' => 'Nested',
+						),
+					),
+				),
+			),
+		);
+		$out    = aafm_exec_avada_insert_element( $this->insert_input( $id, $node, 'fusion_title', 'after' ) );
+		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+		$this->assertStringContainsString( '[fusion_builder_row_inner][fusion_builder_column_inner type="1_2" layout="1_2" first="true" last="true" border_position="all"][fusion_title', get_post( $id )->post_content );
+		$id2 = $this->avada_post();
+		$row = array(
+			'tag'  => 'fusion_builder_row',
+			'atts' => array( 'class' => 'x' ),
+		);
+		$this->assert_refused( aafm_exec_avada_insert_element( $this->insert_input( $id2, $row, 'fusion_builder_row', 'after' ) ), 'aafm_builder_attribute_not_writable', 400, $id2, $before );
+	}
+
+	public function test_an_unmapped_tag_is_refused_before_nesting(): void {
+		$this->act_as_admin();
+		foreach ( array( 'fusion_global', 'fusion_unknown_box' ) as $tag ) {
+			$id     = $this->avada_post();
+			$before = (string) get_post( $id )->post_content;
+			$node   = array(
+				'tag'  => $tag,
+				'atts' => array( 'id' => '14' ),
+			);
+			// At the top level, where nesting would refuse anything but a container, the map refusal comes first.
+			$this->assert_refused( aafm_exec_avada_insert_element( $this->insert_input( $id, $node ) ), 'aafm_builder_unknown_element', 400, $id, $before );
+		}
+	}
+
+	public function test_an_insert_inside_a_global_element_is_refused(): void {
+		$this->act_as_admin();
+		$content = '[fusion_builder_container fusion_global="14"][fusion_builder_row][fusion_builder_column type="1_1" layout="1_1"][fusion_title size="2"]G[/fusion_title][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]';
+		$id      = $this->avada_post( $content );
+		$node    = array(
+			'tag'  => 'fusion_title',
+			'text' => 'X',
+		);
+		$out     = aafm_exec_avada_insert_element( $this->insert_input( $id, $node, 'fusion_title', 'after' ) );
+		$this->assert_refused( $out, 'aafm_avada_global_element', 409, $id, $content );
+		$this->assertSame( 14, $out->get_error_data()['item_id'] );
+		// Beside the global container is fine.
+		$this->assertIsArray( aafm_exec_avada_insert_element( $this->insert_input( $id, $this->container_node() ) ) );
+	}
+
+	public function test_insert_limits(): void {
+		$this->act_as_admin();
+		$id     = $this->avada_post();
+		$before = (string) get_post( $id )->post_content;
+		$leaf   = array(
+			'tag'  => 'fusion_title',
+			'text' => 'x',
+		);
+		$many   = array(
+			'tag'      => 'fusion_builder_column',
+			'atts'     => array( 'type' => '1_1' ),
+			'children' => array_fill( 0, 50, $leaf ),
+		);
+		$this->assert_refused( aafm_exec_avada_insert_element( $this->insert_input( $id, $many, 'fusion_builder_column', 'after' ) ), 'aafm_builder_insert_limit', 400, $id, $before );
+		$deep = $leaf;
+		for ( $i = 0; $i < 6; $i++ ) {
+			$deep = array(
+				'tag'      => 'fusion_tabs',
+				'children' => array( $deep ),
+			);
+		}
+		$this->assert_refused( aafm_exec_avada_insert_element( $this->insert_input( $id, $deep, 'fusion_title', 'after' ) ), 'aafm_builder_insert_limit', 400, $id, $before );
+	}
+
+	public function test_an_editor_cannot_insert_a_code_block_or_an_onclick(): void {
+		$this->act_as_restricted_editor();
+		$id     = $this->avada_post();
+		$before = (string) get_post( $id )->post_content;
+		$code   = array(
+			'tag'  => 'fusion_code',
+			'text' => '<script>alert(1)</script>',
+		);
+		$this->assert_refused( aafm_exec_avada_insert_element( $this->insert_input( $id, $code, 'fusion_title', 'after' ) ), 'aafm_builder_needs_unfiltered_html', 403, $id, $before );
+		$button = array(
+			'tag'  => 'fusion_button',
+			'atts' => array( 'link_attributes' => "onclick='x()'" ),
+		);
+		$this->assert_refused( aafm_exec_avada_insert_element( $this->insert_input( $id, $button, 'fusion_title', 'after' ) ), 'aafm_builder_needs_unfiltered_html', 403, $id, $before );
+	}
+
+	/**
+	 * Body text and the refusal it gets.
+	 *
+	 * @return array<string,array{0:string,1:string}>
+	 */
+	public function body_text_classes(): array {
+		return array(
+			'bracket'         => array( 'a [b] c', 'aafm_avada_brackets_need_unfiltered_html' ),
+			'bracket entity'  => array( 'a &#91;b&#93; c', 'aafm_avada_brackets_need_unfiltered_html' ),
+			'encoded bracket' => array( 'a %5Bb%5D c', 'aafm_avada_encoded_brackets_need_unfiltered_html' ),
+			'data attribute'  => array( '<span data-x="1">a</span>', 'aafm_avada_data_attributes_need_unfiltered_html' ),
+			'unfinished tag'  => array( 'a <span class="x', 'aafm_avada_incomplete_html_needs_unfiltered_html' ),
+		);
+	}
+
+	/**
+	 * Each body-text class through insert.
+	 *
+	 * @dataProvider body_text_classes
+	 *
+	 * @param string $text Text.
+	 * @param string $code Refusal.
+	 */
+	public function test_body_text_classes_are_refused_through_insert_for_a_restricted_editor( string $text, string $code ): void {
+		$this->act_as_restricted_editor();
+		$id     = $this->avada_post();
+		$before = (string) get_post( $id )->post_content;
+		$node   = array(
+			'tag'  => 'fusion_text',
+			'text' => $text,
+		);
+		$this->assert_refused( aafm_exec_avada_insert_element( $this->insert_input( $id, $node, 'fusion_title', 'after' ) ), $code, 400, $id, $before );
+	}
+
+	public function test_an_administrator_inserts_brackets_in_body_text_and_a_raw_setting(): void {
+		$this->act_as_admin();
+		$id   = $this->avada_post();
+		$node = array(
+			'tag'  => 'fusion_button',
+			'atts' => array( 'link_attributes' => "data-x='1'" ),
+			'text' => 'a %5Bb%5D c',
+		);
+		$out  = aafm_exec_avada_insert_element( $this->insert_input( $id, $node, 'fusion_title', 'after' ) );
+		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+		$this->assertStringContainsString( "link_attributes=\"data-x='1'\"", get_post( $id )->post_content );
+	}
+
+	public function test_a_double_quote_in_an_inserted_attribute_is_refused(): void {
+		$this->act_as_admin();
+		$id     = $this->avada_post();
+		$before = (string) get_post( $id )->post_content;
+		foreach ( array( 'Say "hi"', 'Say &quot;hi&quot;', 'a [b]' ) as $title ) {
+			$node = array(
+				'tag'  => 'fusion_button',
+				'atts' => array( 'title' => $title ),
+			);
+			$out  = aafm_exec_avada_insert_element( $this->insert_input( $id, $node, 'fusion_title', 'after' ) );
+			$this->assert_refused( $out, 'aafm_builder_invalid_value', 400, $id, $before );
+			$this->assertSame( 'title', $out->get_error_data()['setting'] );
+		}
+	}
+
+	public function test_dynamic_params_and_unknown_settings_are_refused_on_insert(): void {
+		$this->act_as_admin();
+		$id     = $this->avada_post();
+		$before = (string) get_post( $id )->post_content;
+		foreach ( array( 'dynamic_params', 'no_such_setting', 'title_typography' ) as $name ) {
+			$node = array(
+				'tag'  => 'fusion_title',
+				'atts' => array( $name => 'x' ),
+			);
+			$this->assert_refused( aafm_exec_avada_insert_element( $this->insert_input( $id, $node, 'fusion_title', 'after' ) ), 'aafm_builder_attribute_not_writable', 400, $id, $before );
+		}
+	}
+
+	public function test_empty_post_insert_sets_the_builder_status_meta_after_the_content_is_saved(): void {
+		$this->act_as_admin();
+		$id = self::factory()->post->create(
+			array(
+				'post_type'    => 'page',
+				'post_content' => '',
+			)
+		);
+		$this->assertSame( '', get_post_meta( $id, 'fusion_builder_status', true ) );
+		$order = array();
+		$watch = static function ( $check, $object_id, $key ) use ( &$order, $id ) {
+			if ( $object_id === $id && 'fusion_builder_status' === $key ) {
+				$order[] = '' === (string) get_post( $id )->post_content ? 'marker before content' : 'marker after content';
+			}
+			return $check;
+		};
+		add_filter( 'update_post_metadata', $watch, 10, 3 );
+		add_filter( 'add_post_metadata', $watch, 10, 3 );
+		$out = aafm_exec_avada_insert_element( $this->insert_input( $id, $this->container_node(), null ) );
+		remove_filter( 'update_post_metadata', $watch, 10 );
+		remove_filter( 'add_post_metadata', $watch, 10 );
+		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+		$this->assertSame( 0, $out['index'] );
+		$this->assertSame( 'active', get_post_meta( $id, 'fusion_builder_status', true ) );
+		$this->assertSame( array( 'marker after content' ), array_values( array_unique( $order ) ) );
+		$this->assertSame( 'avada', aafm_post_has_foreign_builder_ownership( $id ) );
+
+		// An anchor is needed once the post has content.
+		$before = (string) get_post( $id )->post_content;
+		$this->assert_refused( aafm_exec_avada_insert_element( $this->insert_input( $id, $this->container_node(), null ) ), 'aafm_avada_anchor_required', 400, $id, $before );
+	}
+
+	public function test_a_failed_marker_write_is_reported_with_the_saved_content_and_revision(): void {
+		$this->act_as_admin();
+		$id   = self::factory()->post->create(
+			array(
+				'post_type'    => 'page',
+				'post_content' => '',
+			)
+		);
+		$veto = static fn( $check, $object_id, $key ) => 'fusion_builder_status' === $key ? false : $check;
+		add_filter( 'update_post_metadata', $veto, 10, 3 );
+		add_filter( 'add_post_metadata', $veto, 10, 3 );
+		$out = aafm_exec_avada_insert_element( $this->insert_input( $id, $this->container_node(), null ) );
+		remove_filter( 'update_post_metadata', $veto, 10 );
+		remove_filter( 'add_post_metadata', $veto, 10 );
+		$this->assert_error( $out, 'aafm_avada_marker_unconfirmed', 500 );
+		$stored = (string) get_post( $id )->post_content;
+		$this->assertStringStartsWith( '[fusion_builder_container', $stored );
+		$this->assertSame( aafm_builder_page_fingerprint( $stored ), $out->get_error_data()['page_fingerprint'] );
+		$this->assertArrayHasKey( 'restore_revision_id', $out->get_error_data() );
+		$this->assertSame( $id, $out->get_error_data()['post_id'] );
+	}
+
+	public function test_a_retried_insert_is_refused_and_stores_one_element(): void {
+		$this->act_as_admin();
+		$id    = $this->avada_post();
+		$input = $this->insert_input( $id, $this->container_node() );
+		$this->assertIsArray( aafm_exec_avada_insert_element( $input ) );
+		$after = (string) get_post( $id )->post_content;
+		$this->assert_refused( aafm_exec_avada_insert_element( $input ), 'aafm_builder_page_changed', 409, $id, $after );
+		$this->assertSame( 1, substr_count( $after, 'New title' ) );
+	}
+
+	public function test_chained_inserts_work_with_the_returned_page_fingerprint(): void {
+		$this->act_as_admin();
+		$id    = $this->avada_post();
+		$first = aafm_exec_avada_insert_element( $this->insert_input( $id, $this->container_node() ) );
+		$this->assertIsArray( $first );
+		$input  = array(
+			'post_id'          => $id,
+			'page_fingerprint' => $first['page_fingerprint'],
+			'anchor_index'     => $first['index'],
+			'anchor_expect'    => array(
+				'tag'         => 'fusion_builder_container',
+				'fingerprint' => $first['fingerprint'],
+			),
+			'placement'        => 'after',
+			'element'          => $this->container_node(),
+		);
+		$second = aafm_exec_avada_insert_element( $input );
+		$this->assertIsArray( $second, is_wp_error( $second ) ? $second->get_error_message() : '' );
+		$this->assertSame( $first['index'] + 5, $second['index'] );
+		$this->assertSame( 2, substr_count( (string) get_post( $id )->post_content, 'New title' ) );
+	}
+
 	public function test_the_trusted_path_gates_script_and_body_text_for_a_restricted_editor(): void {
 		$cases = array(
 			'[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1"][fusion_code]eA==[/fusion_code][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]' => 'aafm_builder_needs_unfiltered_html',
@@ -975,5 +1427,32 @@ final class AvadaElementsTest extends TestCase {
 			$this->assertStringContainsString( $source, get_post( $id )->post_content, 'Spliced byte for byte.' );
 			$this->assertInstanceOf( \WP_Post::class, $ok['post'], 'The path returns the post; every executor redacts it.' );
 		}
+	}
+
+	public function test_a_lost_restore_point_on_insert_is_reported_with_reversible_reason(): void {
+		$this->act_as_admin();
+		$id   = $this->avada_post();
+		$keep = static fn(): int => 1;
+		add_filter( 'wp_revisions_to_keep', $keep );
+		$out  = aafm_exec_avada_insert_element( $this->insert_input( $id, $this->container_node() ) );
+		remove_filter( 'wp_revisions_to_keep', $keep );
+		$this->assertIsArray( $out );
+		$this->assertNull( $out['restore_revision_id'] );
+		$this->assertFalse( $out['reversible'] );
+		$this->assertStringContainsString( 'keeps 1 revision per post', $out['reversible_reason'] );
+	}
+
+	public function test_insert_permissions_discovery_audit_and_schema(): void {
+		$args = aafm_args_avada_insert_element();
+		$this->assertSame( 'aafm_perm_avada_post_object', $args['permission_callback'] );
+		$this->assertFalse( $args['input_schema']['additionalProperties'] );
+		$this->assertSame( array( 'post_id', 'page_fingerprint', 'element' ), $args['input_schema']['required'] );
+		$this->assertSame( 'string', $args['output_schema']['properties']['reversible_reason']['type'] );
+		$this->assertFalse( $args['meta']['annotations']['destructive'] );
+		$this->assertSame( 'Ran an element insert on Avada page #%s', aafm_activity_detail_map()['aafm/avada-insert-element']['template'] );
+		$this->assertArrayHasKey( 'aafm/avada-insert-element', aafm_register_avada_elements_definitions( array() ) );
+		$this->act_as_admin();
+		$id = self::factory()->post->create( array( 'post_content' => '<!-- wp:paragraph --><p>x</p><!-- /wp:paragraph -->' ) );
+		$this->assert_refused( aafm_exec_avada_insert_element( $this->insert_input( $id, $this->container_node(), null ) ), 'aafm_not_avada_owned', 409, $id, '<!-- wp:paragraph --><p>x</p><!-- /wp:paragraph -->' );
 	}
 }

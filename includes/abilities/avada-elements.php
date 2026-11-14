@@ -67,6 +67,14 @@ function aafm_avada_elements_registry_definitions(): array {
 			'subject'      => 'avada',
 			'args_builder' => 'aafm_args_avada_update_element',
 		),
+		'aafm/avada-insert-element' => array(
+			'label'        => __( 'Insert an Avada element', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Adds one element, with its children, to an Avada page, layout section, library item, form or off canvas panel: before or after an element named by its index and fingerprint from avada-get-page-content with include_structure, or as that element\'s first or last child. element takes tag, atts (setting names and input forms from avada-list-elements), text and children. Every setting the element has is written with its default, as Avada\'s builder writes a new element; empty ones are left out when Avada\'s remove empty attributes setting is on. A container takes rows, a row takes columns, a column takes elements or nested columns, a nested row takes nested columns, and a parent element such as tabs takes only its own child element; a column needs type, its width, such as 1_2. Refused: an element type Avada\'s element map does not list, a place inside an element that shows a global library item, and a setting or value avada-update-element would refuse. A double quote or a square bracket in a text setting is refused. Code blocks and settings that can carry script need a user who may post unfiltered HTML, and so do square brackets, percent-encoded brackets and data-* attributes in body text. page_fingerprint must be the one from the last read or write; the response returns the new one with the new element\'s index and fingerprint. An empty post takes an insert with no anchor and is then marked as an Avada page. At most 50 elements, nested at most 6 deep. A save that would change other content for this user is refused, and nothing is saved. When a revision is kept, restore_revision_id brings the page back through restore-revision. Not undoable from this plugin\'s change history. Requires edit access to the post, and for a layout section a user who can manage site options; Avada\'s Role Manager settings are not applied. Only while Avada is active.', 'agent-abilities-for-mcp' ),
+			'group'        => 'writes',
+			'risk'         => 'write',
+			'subject'      => 'avada',
+			'args_builder' => 'aafm_args_avada_insert_element',
+		),
 	);
 }
 
@@ -1781,5 +1789,161 @@ function aafm_avada_insert_tree( WP_Post $post, array $tree, array $anchor, bool
 	if ( isset( $result['reversible_reason'] ) ) {
 		$out['reversible_reason'] = $result['reversible_reason'];
 	}
+	return $out;
+}
+
+/**
+ * The input schema parts every Avada structural write shares: post_id and page_fingerprint, the element's own address,
+ * and the anchor.
+ *
+ * @param bool $address Whether the element's own index and expect are included.
+ * @param bool $anchor  Whether anchor_index, anchor_expect and placement are included.
+ * @return array<string,array<string,mixed>>
+ */
+function aafm_avada_structural_schema( bool $address, bool $anchor ): array {
+	$out = array(
+		'post_id'          => array(
+			'type'        => 'integer',
+			'minimum'     => 1,
+			'description' => __( 'ID of the page, post, layout section, library item, form or off canvas panel.', 'agent-abilities-for-mcp' ),
+		),
+		'page_fingerprint' => array(
+			'type'        => 'string',
+			'pattern'     => '^[0-9a-f]{16}$',
+			'description' => __( 'The page fingerprint from the last avada-get-page-content read or the last write\'s response. A page that changed since is refused.', 'agent-abilities-for-mcp' ),
+		),
+	);
+	if ( $address ) {
+		$out += aafm_avada_address_schema();
+	}
+	if ( $anchor ) {
+		$address_fields       = aafm_avada_address_schema();
+		$out['anchor_index']  = array( 'description' => __( 'Index of the element the new place is named against, from the same outline.', 'agent-abilities-for-mcp' ) ) + $address_fields['index'];
+		$out['anchor_expect'] = array( 'description' => __( 'The tag and fingerprint the outline returned for anchor_index.', 'agent-abilities-for-mcp' ) ) + $address_fields['expect'];
+		$out['placement']     = array(
+			'type'        => 'string',
+			'enum'        => array( 'before', 'after', 'inside_start', 'inside_end' ),
+			'description' => __( 'Where, relative to the anchor element: before or after it, or as its first or last child.', 'agent-abilities-for-mcp' ),
+		);
+	}
+	return $out;
+}
+
+/**
+ * Args for aafm/avada-insert-element.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_avada_insert_element(): array {
+	return array(
+		'label'               => aafm_ability_label( 'aafm/avada-insert-element' ),
+		'description'         => aafm_ability_description( 'aafm/avada-insert-element' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => aafm_avada_structural_schema( false, true ) + array(
+				'element' => array(
+					'type'                 => 'object',
+					'properties'           => array(
+						'tag'      => array( 'type' => 'string' ),
+						'atts'     => array(
+							'type'        => 'object',
+							'description' => __( 'Setting name to value, each in the input form of its kind from avada-list-elements. A column needs type, its width: a fraction such as 1_2 or a percentage.', 'agent-abilities-for-mcp' ),
+						),
+						'text'     => array(
+							'type'        => 'string',
+							'description' => __( 'Inner content for an element with no children, such as a text block, a title or a button\'s text.', 'agent-abilities-for-mcp' ),
+						),
+						'children' => array(
+							'type'        => 'array',
+							'items'       => array( 'type' => 'object' ),
+							'description' => __( 'Child elements, each with the same keys: tag, atts, text, children.', 'agent-abilities-for-mcp' ),
+						),
+					),
+					'required'             => array( 'tag' ),
+					'additionalProperties' => false,
+					'description'          => __( 'The element to add, with its children. At most 50 elements, nested at most 6 deep.', 'agent-abilities-for-mcp' ),
+				),
+			),
+			'required'             => array( 'post_id', 'page_fingerprint', 'element' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => aafm_avada_write_output_schema(
+			array(
+				'index'       => array( 'type' => 'integer' ),
+				'fingerprint' => array( 'type' => 'string' ),
+				'inserted'    => array(
+					'type'        => 'integer',
+					'description' => __( 'Number of elements added, children included.', 'agent-abilities-for-mcp' ),
+				),
+			)
+		),
+		'execute_callback'    => 'aafm_exec_avada_insert_element',
+		'permission_callback' => 'aafm_perm_avada_post_object',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/avada-insert-element (design AV-5): a thin wrapper around aafm_avada_insert_tree() with typed input, so
+ * every value goes through the one encoder and every text through the body-text choke point. An insert that starts a
+ * page on an empty post then sets the fusion_builder_status marker Avada's own save writes (A9, Ruling Q7), only after
+ * the content is saved; a marker that does not take is reported with the saved content and the revision that restores
+ * it, never as plain success.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_avada_insert_element( array $input ) {
+	$id   = absint( $input['post_id'] ?? 0 );
+	$post = aafm_exact_object_chain( 'post', $id );
+	if ( ! $post instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	if ( ! aafm_builder_ownership_allows( 'avada', aafm_post_has_foreign_builder_ownership( $id ), $post, true ) ) {
+		return aafm_avada_not_owned_error();
+	}
+	$check = aafm_builder_page_check( (string) $post->post_content, (string) ( $input['page_fingerprint'] ?? '' ) );
+	if ( is_wp_error( $check ) ) {
+		return $check;
+	}
+	$starts = '' === trim( (string) $post->post_content ) && ! in_array( $post->post_type, aafm_builder_own_post_types( 'avada' ), true );
+	$out    = aafm_avada_insert_tree(
+		$post,
+		array( is_array( $input['element'] ?? null ) ? $input['element'] : array() ),
+		array(
+			'index'     => isset( $input['anchor_index'] ) ? (int) $input['anchor_index'] : null,
+			'expect'    => is_array( $input['anchor_expect'] ?? null ) ? $input['anchor_expect'] : null,
+			'placement' => isset( $input['placement'] ) ? (string) $input['placement'] : null,
+		),
+		false
+	);
+	if ( is_wp_error( $out ) ) {
+		return $out;
+	}
+	if ( $starts ) {
+		$marker = aafm_meta_set( 'post', $id, 'fusion_builder_status', 'active', $post->post_type );
+		$status = is_wp_error( $marker ) ? AAFM_WRITE_REFUSED : (string) ( $marker['status'] ?? AAFM_WRITE_REFUSED );
+		if ( ! in_array( $status, array( AAFM_WRITE_WRITTEN, AAFM_WRITE_UNCHANGED ), true ) ) {
+			$writer = aafm_meta_write_error( $status, 'write', 'post', $id, 'fusion_builder_status' );
+			return new WP_Error(
+				'aafm_avada_marker_unconfirmed',
+				__( 'The element was saved, but the marker that makes Avada open this page in its builder could not be confirmed, so the page may open in the default editor. Set the page to use Avada\'s builder there, or restore the page with restore_revision_id.', 'agent-abilities-for-mcp' ),
+				array(
+					'status'              => 500,
+					'write_status'        => $status,
+					'post_id'             => $id,
+					'page_fingerprint'    => $out['page_fingerprint'],
+					'restore_revision_id' => $out['restore_revision_id'],
+				) + $writer->get_error_data()
+			);
+		}
+	}
+	$out['post'] = aafm_redact_post( $out['post'] );
 	return $out;
 }

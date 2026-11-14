@@ -309,7 +309,7 @@ final class BuilderShortcodesTest extends TestCase {
 
 	public function test_every_seam_row_is_a_callable_shape(): void {
 		$rows = aafm_builder_vendor_rows();
-		$this->assertSame( array( 'wpbakery_css_rebuild', 'wpbakery_grid_post_type', 'wpbakery_param_type', 'wpbakery_map_all', 'wpbakery_map_one', 'wpbakery_grid_mapper', 'wpbakery_editor_post_types', 'wpbakery_user_access', 'avada_option_name', 'avada_map_loader', 'avada_map' ), array_keys( $rows ) );
+		$this->assertSame( array( 'wpbakery_css_rebuild', 'wpbakery_grid_post_type', 'wpbakery_param_type', 'wpbakery_map_all', 'wpbakery_map_one', 'wpbakery_grid_mapper', 'wpbakery_editor_post_types', 'wpbakery_user_access', 'wpbakery_settings', 'wpbakery_modules', 'avada_cache_reset', 'avada_template_builder', 'avada_studio', 'avada_studio_import', 'avada_studio_registered', 'avada_option_name', 'avada_map_loader', 'avada_map' ), array_keys( $rows ) );
 		$this->assertSame( 'awb_maybe_init_element_maps', $rows['avada_map_loader']['target'] );
 		$this->assertSame( 'awb_maybe_init_element_maps', $rows['avada_map_loader']['requires'] );
 		$this->assertSame( 'awb_maybe_init_element_maps', $rows['avada_map']['requires'] );
@@ -327,6 +327,22 @@ final class BuilderShortcodesTest extends TestCase {
 		foreach ( array( 'wpbakery_map_all', 'wpbakery_map_one', 'wpbakery_grid_mapper', 'wpbakery_editor_post_types', 'wpbakery_user_access' ) as $absent ) {
 			$this->assertNull( aafm_builder_vendor( $absent ), $absent . ' is absent without WPBakery loaded.' );
 		}
+		foreach ( array(
+			'wpbakery_settings'   => 'vc_settings',
+			'wpbakery_modules'    => 'vc_modules_manager',
+			'avada_cache_reset'   => 'fusion_reset_all_caches',
+			'avada_studio'        => 'AWB_Studio',
+			'avada_studio_import' => 'AWB_Studio_Import',
+		) as $entry => $function ) {
+			$this->assertSame( $function, $rows[ $entry ]['target'], $entry );
+			$this->assertSame( $function, $rows[ $entry ]['requires'], $entry );
+			$this->assertNull( aafm_builder_vendor( $entry ), $entry . ' is absent without the vendor loaded.' );
+		}
+		$this->assertSame( array( 'Fusion_Template_Builder', 'get_instance' ), $rows['avada_template_builder']['target'] );
+		$this->assertNull( aafm_builder_vendor( 'avada_template_builder' ), 'Absent without Avada Builder loaded.' );
+		$this->assertInstanceOf( \Closure::class, $rows['avada_studio_registered']['target'] );
+		$this->assertSame( 'Avada', $rows['avada_studio_registered']['requires'] );
+		$this->assertNull( aafm_builder_vendor( 'avada_studio_registered' ), 'Absent without the theme\'s Avada() function.' );
 		$this->assertSame( array( 'Avada', 'get_option_name' ), $rows['avada_option_name']['target'] );
 		$this->assertSame( 'Avada', $rows['avada_option_name']['requires'], 'The theme\'s own Avada() function, so a loaded stand-in class alone never makes the row present.' );
 		foreach ( $rows as $entry => $row ) {

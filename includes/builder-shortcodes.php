@@ -381,6 +381,49 @@ function aafm_builder_vendor_rows(): array {
 			'target'   => 'vc_user_access',
 			'requires' => 'vc_user_access',
 		),
+		// WPBakery's settings object (vc_settings()): its general tab sanitize callbacks are methods on it (B10).
+		'wpbakery_settings'          => array(
+			'target'   => 'vc_settings',
+			'requires' => 'vc_settings',
+		),
+		// WPBakery's module manager: the custom CSS and custom JS modules' settings objects hold their callbacks.
+		'wpbakery_modules'           => array(
+			'target'   => 'vc_modules_manager',
+			'requires' => 'vc_modules_manager',
+		),
+		// Avada's cache reset; always called with the narrow argument array, never bare (Ruling B2).
+		'avada_cache_reset'          => array(
+			'target'   => 'fusion_reset_all_caches',
+			'requires' => 'fusion_reset_all_caches',
+		),
+		// Avada Builder's layout manager instance; the caller asks it for get_layout_conditions() (A15).
+		'avada_template_builder'     => array(
+			'target'   => array( 'Fusion_Template_Builder', 'get_instance' ),
+			'requires' => null,
+		),
+		// Avada Studio's catalogue (AWB_Studio()->get_data(), A21) and its importer (A22). Avada makes the requests.
+		'avada_studio'               => array(
+			'target'   => 'AWB_Studio',
+			'requires' => 'AWB_Studio',
+		),
+		'avada_studio_import'        => array(
+			'target'   => 'AWB_Studio_Import',
+			'requires' => 'AWB_Studio_Import',
+		),
+		// The one registration question this plugin asks: whether Avada shows Studio (A24). Nothing else is read.
+		'avada_studio_registered'    => array(
+			'target'   => static function (): bool {
+				try {
+					$avada = call_user_func( 'Avada' ); // @phpstan-ignore-line argument.type (Avada's own accessor; this row is present only when the function exists, see requires)
+					return is_object( $avada ) && isset( $avada->registration ) && is_object( $avada->registration )
+						&& method_exists( $avada->registration, 'should_show' ) && true === (bool) $avada->registration->should_show( 'studio' );
+				} catch ( Throwable $e ) {
+					unset( $e );
+					return false;
+				}
+			},
+			'requires' => 'Avada',
+		),
 		// The Global Options name of the active Avada theme; present only with the theme's own Avada() loaded.
 		'avada_option_name'          => array(
 			'target'   => array( 'Avada', 'get_option_name' ),

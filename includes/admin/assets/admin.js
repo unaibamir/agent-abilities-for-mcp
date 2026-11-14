@@ -4582,7 +4582,6 @@
 			};
 			const segs = Array.from( root.querySelectorAll( '[data-qc-seg]' ) );
 			const stepNow = root.querySelector( '[data-qc-stepnow]' );
-			const pct = root.querySelector( '[data-qc-pct]' );
 			const meter = root.querySelector( '.aafm-qc-meter' );
 
 			const setTag = ( job, kind, text ) => {
@@ -4634,9 +4633,6 @@
 					// The meter is a progressbar; its announced value follows the visible step.
 					meter?.setAttribute( 'aria-valuenow', String( state.step ) );
 					meter?.setAttribute( 'aria-valuetext', this.#format( this.#t( 'qcStepOf', 'Step %1$s of 3' ), String( state.step ) ) );
-				}
-				if ( pct ) {
-					pct.textContent = Math.round( ( ( state.step - 1 ) / 3 ) * 100 ) + '%';
 				}
 				const active = jobs[ state.step ];
 				if ( active ) {

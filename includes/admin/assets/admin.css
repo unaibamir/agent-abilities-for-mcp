@@ -3304,7 +3304,6 @@ body:is(.admin-color-light, .admin-color-blue, .admin-color-coffee, .admin-color
 	}
 	& .aafm-qc-count { font-size: 12px; font-weight: 600; color: var(--aafm-text-muted); }
 	& .aafm-qc-count b { color: var(--aafm-accent-text); font-variant-numeric: tabular-nums; }
-	& .aafm-qc-pct { font-size: 11.5px; color: var(--aafm-text-subtle); font-variant-numeric: tabular-nums; }
 	& .aafm-qc-meter-track { display: flex; gap: 5px; }
 	& .aafm-qc-seg {
 		flex: 1;

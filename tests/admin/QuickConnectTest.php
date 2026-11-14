@@ -688,4 +688,19 @@ final class QuickConnectTest extends TestCase {
 		$this->assertStringContainsString( "head?.setAttribute( 'aria-expanded', String( i === state.step ) );", $js );
 		$this->assertStringContainsString( "head?.setAttribute( 'aria-disabled', String( i >= state.step ) );", $js, 'Only a done step head can act.' );
 	}
+
+	public function test_wizard_shows_no_percent_beside_the_step_count(): void {
+		$this->acting_as( 'administrator' );
+		ob_start();
+		aafm_quickconnect_render();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringNotContainsString( 'data-qc-pct', $html );
+		$this->assertStringNotContainsString( '0%', $html );
+		$this->assertStringContainsString( 'data-qc-stepnow', $html );
+		$this->assertStringContainsString( 'aria-valuetext="Step 1 of 3"', $html );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$js = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
+		$this->assertStringNotContainsString( 'qc-pct', $js );
+	}
 }

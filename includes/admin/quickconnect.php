@@ -448,7 +448,6 @@ function aafm_quickconnect_render(): void {
 				<div class="aafm-qc-meter" role="progressbar" aria-valuemin="1" aria-valuemax="3" aria-valuenow="1" aria-valuetext="<?php echo esc_attr( sprintf( /* translators: %1$s: current setup step number. */ __( 'Step %1$s of 3', 'agent-abilities-for-mcp' ), '1' ) ); ?>" aria-label="<?php esc_attr_e( 'Setup progress', 'agent-abilities-for-mcp' ); ?>">
 					<div class="aafm-qc-meter-top">
 						<span class="aafm-qc-count"><?php esc_html_e( 'Step', 'agent-abilities-for-mcp' ); ?> <b data-qc-stepnow>1</b> <?php esc_html_e( 'of 3 to connected', 'agent-abilities-for-mcp' ); ?></span>
-						<span class="aafm-qc-pct" data-qc-pct>0%</span>
 					</div>
 					<div class="aafm-qc-meter-track">
 						<span class="aafm-qc-seg" data-qc-seg="1"></span>

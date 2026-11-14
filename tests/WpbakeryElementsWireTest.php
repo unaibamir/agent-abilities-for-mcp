@@ -47,7 +47,7 @@ final class WpbakeryElementsWireTest extends TestCase {
 		++$counter;
 		$server_id = 'aafm-server-wpbakery-elements-wire-test-' . $counter;
 		$tools     = aafm_build_server_tools(
-			aafm_preflight_bound_server_tools_cached( array( 'aafm/wpbakery-list-elements', 'aafm/wpbakery-update-element' ) )
+			aafm_preflight_bound_server_tools_cached( array( 'aafm/wpbakery-list-elements', 'aafm/wpbakery-update-element', 'aafm/wpbakery-insert-element' ) )
 		);
 		$this->in_action(
 			'mcp_adapter_init',
@@ -89,7 +89,7 @@ final class WpbakeryElementsWireTest extends TestCase {
 			)
 		);
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
-		$this->register_enabled( array( 'aafm/wpbakery-list-elements', 'aafm/wpbakery-update-element' ) );
+		$this->register_enabled( array( 'aafm/wpbakery-list-elements', 'aafm/wpbakery-update-element', 'aafm/wpbakery-insert-element' ) );
 		$this->acting_as( 'editor' );
 		return array( new \AAFM\Tests\Support\McpToolsHandlerShim( $this->build_server( \WP\MCP\Core\McpAdapter::instance() ) ), $id );
 	}
@@ -214,6 +214,63 @@ final class WpbakeryElementsWireTest extends TestCase {
 		$this->assertTrue( $refused->getIsError() );
 		$this->assertCount( 1, $refused->getContent() );
 		$this->assertSame( aafm_builder_error( 'aafm_builder_element_mismatch' )->get_error_message(), $refused->getContent()[0]->getText() );
+		$this->assertSame( $stored, get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
+	public function test_insert_round_trips_over_a_real_tools_call(): void {
+		list( $handler, $id ) = $this->wired();
+		$text                 = '[vc_column_text]<p>Hello</p>[/vc_column_text]';
+		$args                 = array(
+			'post_id'          => $id,
+			'page_fingerprint' => self::fp( self::PAGE ),
+			'anchor_index'     => 3,
+			'anchor_expect'    => array(
+				'tag'         => 'vc_column_text',
+				'fingerprint' => self::fp( $text ),
+			),
+			'placement'        => 'after',
+			'element'          => array(
+				'tag'  => 'vc_custom_heading',
+				'atts' => array( 'text' => 'Added "one"' ),
+			),
+		);
+		$done                 = $this->wire(
+			$handler->call_tool(
+				array(
+					'name'      => aafm_mcp_tool_name( 'aafm/wpbakery-insert-element' ),
+					'arguments' => $args,
+				),
+				'req-wpb-insert-1'
+			)
+		);
+		$added                = '[vc_custom_heading text="Added ``one``"]';
+		$stored               = str_replace( $text, $text . $added, self::PAGE );
+		$this->assertSame( $stored, get_post_field( 'post_content', $id, 'raw' ) );
+		$this->assertSame( array( 'post', 'index', 'fingerprint', 'page_fingerprint', 'inserted', 'restore_revision_id', 'reversible', 'undo' ), array_keys( $done ) );
+		$this->assertSame( 4, $done['index'] );
+		$this->assertSame( self::fp( $added ), $done['fingerprint'] );
+		$this->assertSame( self::fp( $stored ), $done['page_fingerprint'] );
+		$this->assertSame( 1, $done['inserted'] );
+		$this->assertIsInt( $done['restore_revision_id'] );
+		$this->assertTrue( $done['reversible'] );
+		$this->assertSame(
+			array(
+				'undoable'   => false,
+				'change_ids' => array(),
+				'reason'     => 'not_covered',
+			),
+			$done['undo']
+		);
+
+		$refused = $handler->call_tool(
+			array(
+				'name'      => aafm_mcp_tool_name( 'aafm/wpbakery-insert-element' ),
+				'arguments' => $args,
+			),
+			'req-wpb-insert-2'
+		);
+		$this->assertTrue( $refused->getIsError() );
+		$this->assertSame( aafm_builder_error( 'aafm_builder_page_changed' )->get_error_message(), $refused->getContent()[0]->getText() );
 		$this->assertSame( $stored, get_post_field( 'post_content', $id, 'raw' ) );
 	}
 }

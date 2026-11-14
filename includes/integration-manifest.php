@@ -445,6 +445,10 @@ function aafm_integration_ability_order(): array {
 				'name' => 'aafm/wpbakery-update-element',
 				'risk' => 'write',
 			),
+			array(
+				'name' => 'aafm/wpbakery-insert-element',
+				'risk' => 'write',
+			),
 		),
 		'geodirectory'  => array(
 			array(

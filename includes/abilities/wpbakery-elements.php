@@ -67,6 +67,14 @@ function aafm_wpbakery_elements_registry_definitions(): array {
 			'subject'      => 'wpbakery',
 			'args_builder' => 'aafm_args_wpbakery_update_element',
 		),
+		'aafm/wpbakery-insert-element' => array(
+			'label'        => __( 'Insert a WPBakery element', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Adds an element with its children to a WPBakery page or Grid Builder template, before or after an element from the outline of wpbakery-get-page-content or as its first or last child; element takes tag, atts in the input form of each kind from wpbakery-list-elements, text and children. WPBakery\'s own nesting rules apply: the top level takes rows and sections, a row takes columns, a column takes content elements or an inner row. At most 50 elements, nested at most 6 deep. On an empty post with no builder, leave out the anchor to start the page; this one check follows WPBakery\'s own setting for which post types its editor is on for. Raw HTML, raw JS, maps, custom onclick settings and Design Options need a user who may post unfiltered HTML, and only such a user can put square brackets, percent-encoded brackets or data-* attributes in body text. Requires page_fingerprint from the last read or write and returns the new one; a changed page is refused and nothing is saved. Other indexes may move, so read the outline again before the next structural change. When a revision is kept, restore_revision_id brings the page back through restore-revision. The page\'s generated CSS is rebuilt. Not undoable from this plugin\'s change history. Requires edit access to the post; WPBakery\'s Role Manager settings are not applied, though its own save filter still runs. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
+			'group'        => 'writes',
+			'risk'         => 'write',
+			'subject'      => 'wpbakery',
+			'args_builder' => 'aafm_args_wpbakery_insert_element',
+		),
 	);
 }
 
@@ -1879,4 +1887,170 @@ function aafm_wpbakery_insert_tree( WP_Post $post, array $tree, array $anchor, b
 		'restore_revision_id' => $result['restore_revision_id'],
 		'reversible'          => $result['reversible'],
 	);
+}
+
+/**
+ * The opening every structural write shares: the post, the guard call and ownership rule in the executor's own body
+ * (Ruling R-B1), and the page fingerprint check (Ruling R3-P2).
+ *
+ * @param array<string,mixed> $input        Validated input.
+ * @param bool                $empty_insert Whether an insert may start a page on an empty post.
+ * @return WP_Post|WP_Error
+ */
+function aafm_wpbakery_structural_post( array $input, bool $empty_insert ) {
+	$id   = absint( $input['post_id'] ?? 0 );
+	$post = aafm_exact_object_chain( 'post', $id );
+	if ( ! $post instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	if ( ! aafm_builder_ownership_allows( 'wpbakery', aafm_post_has_foreign_builder_ownership( $id ), $post, $empty_insert ) ) {
+		return new WP_Error(
+			'aafm_not_wpbakery_owned',
+			__( 'This post is not a WPBakery page. Edit a page built with another builder in that builder. Nothing was changed.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 409 )
+		);
+	}
+	$check = aafm_builder_page_check( (string) $post->post_content, (string) ( $input['page_fingerprint'] ?? '' ) );
+	return is_wp_error( $check ) ? $check : $post;
+}
+
+/**
+ * The input schema parts every structural write shares.
+ *
+ * @param string $prefix '' for the element itself, 'anchor_' for the anchor.
+ * @return array<string,array<string,mixed>>
+ */
+function aafm_wpbakery_structural_schema( string $prefix ): array {
+	$out = array();
+	if ( '' === $prefix ) {
+		$out['post_id']          = array(
+			'type'        => 'integer',
+			'minimum'     => 1,
+			'description' => __( 'ID of the page, post or Grid Builder template.', 'agent-abilities-for-mcp' ),
+		);
+		$out['page_fingerprint'] = array(
+			'type'        => 'string',
+			'pattern'     => '^[0-9a-f]{16}$',
+			'description' => __( 'The page fingerprint from the last wpbakery-get-page-content read or the last write\'s response. A page that changed since is refused.', 'agent-abilities-for-mcp' ),
+		);
+	}
+	$out[ $prefix . 'index' ]  = array(
+		'type'        => 'integer',
+		'minimum'     => 0,
+		'description' => '' === $prefix
+			? __( 'The element\'s index in the outline from wpbakery-get-page-content with include_structure.', 'agent-abilities-for-mcp' )
+			: __( 'Index of the element the new place is named against, from the same outline.', 'agent-abilities-for-mcp' ),
+	);
+	$out[ $prefix . 'expect' ] = array(
+		'type'                 => 'object',
+		'properties'           => array(
+			'tag'         => array( 'type' => 'string' ),
+			'fingerprint' => array(
+				'type'    => 'string',
+				'pattern' => '^[0-9a-f]{16}$',
+			),
+		),
+		'required'             => array( 'tag', 'fingerprint' ),
+		'additionalProperties' => false,
+		'description'          => __( 'The tag and fingerprint the outline returned for that index.', 'agent-abilities-for-mcp' ),
+	);
+	if ( 'anchor_' === $prefix ) {
+		$out['placement'] = array(
+			'type'        => 'string',
+			'enum'        => array( 'before', 'after', 'inside_start', 'inside_end' ),
+			'description' => __( 'Where, relative to the anchor element: before or after it, or as its first or last child.', 'agent-abilities-for-mcp' ),
+		);
+	}
+	return $out;
+}
+
+/**
+ * Args for aafm/wpbakery-insert-element.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_wpbakery_insert_element(): array {
+	return array(
+		'label'               => aafm_ability_label( 'aafm/wpbakery-insert-element' ),
+		'description'         => aafm_ability_description( 'aafm/wpbakery-insert-element' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => aafm_wpbakery_structural_schema( '' ) + aafm_wpbakery_structural_schema( 'anchor_' ) + array(
+				'element' => array(
+					'type'                 => 'object',
+					'properties'           => array(
+						'tag'      => array( 'type' => 'string' ),
+						'atts'     => array(
+							'type'        => 'object',
+							'description' => __( 'Setting name to value, each in the input form of its kind from wpbakery-list-elements.', 'agent-abilities-for-mcp' ),
+						),
+						'text'     => array(
+							'type'        => 'string',
+							'description' => __( 'Inner content for an element with a content setting and no children, such as a text block.', 'agent-abilities-for-mcp' ),
+						),
+						'children' => array(
+							'type'        => 'array',
+							'items'       => array( 'type' => 'object' ),
+							'description' => __( 'Child elements, each with the same keys: tag, atts, text, children.', 'agent-abilities-for-mcp' ),
+						),
+					),
+					'required'             => array( 'tag' ),
+					'additionalProperties' => false,
+					'description'          => __( 'The element to add, with its children. At most 50 elements, nested at most 6 deep.', 'agent-abilities-for-mcp' ),
+				),
+			),
+			'required'             => array( 'post_id', 'page_fingerprint', 'element' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'post'                => array( 'type' => 'object' ),
+				'index'               => array( 'type' => 'integer' ),
+				'fingerprint'         => array( 'type' => 'string' ),
+				'page_fingerprint'    => array( 'type' => 'string' ),
+				'inserted'            => array( 'type' => 'integer' ),
+				'restore_revision_id' => array( 'type' => array( 'integer', 'null' ) ),
+				'reversible'          => array( 'type' => 'boolean' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_wpbakery_insert_element',
+		'permission_callback' => 'aafm_perm_avada_post_object',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/wpbakery-insert-element (design WB-4): a thin wrapper around aafm_wpbakery_insert_tree() with typed
+ * input, so every value goes through the attribute encoder and every text through the body text choke point.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_wpbakery_insert_element( array $input ) {
+	$post = aafm_wpbakery_structural_post( $input, true );
+	if ( is_wp_error( $post ) ) {
+		return $post;
+	}
+	$out = aafm_wpbakery_insert_tree(
+		$post,
+		array( is_array( $input['element'] ?? null ) ? $input['element'] : array() ),
+		array(
+			'index'     => isset( $input['anchor_index'] ) ? (int) $input['anchor_index'] : null,
+			'expect'    => is_array( $input['anchor_expect'] ?? null ) ? $input['anchor_expect'] : null,
+			'placement' => isset( $input['placement'] ) ? (string) $input['placement'] : null,
+		),
+		false
+	);
+	if ( is_wp_error( $out ) ) {
+		return $out;
+	}
+	$out['post'] = aafm_redact_post( $out['post'] );
+	return $out;
 }

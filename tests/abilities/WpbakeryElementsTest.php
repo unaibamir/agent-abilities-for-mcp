@@ -1749,6 +1749,364 @@ final class WpbakeryElementsTest extends TestCase {
 		}
 	}
 
+	public function test_a_retried_insert_is_refused_and_stores_one_element(): void {
+		$id    = $this->page( self::SIMPLE );
+		$first = $this->page_fp( $id );
+		$this->acting_as( 'editor' );
+		$this->assertIsArray( $this->insert( $id, 2, 'before', self::text_block( '<p>New</p>' ), $first ) );
+		$after = (string) get_post_field( 'post_content', $id, 'raw' );
+
+		$this->assert_refused( $this->insert( $id, 2, 'before', self::text_block( '<p>New</p>' ), $first ), 'aafm_builder_page_changed', 409, $id, $after );
+		$this->assertSame( 1, substr_count( $after, '<p>New</p>' ) );
+	}
+
+	public function test_chained_inserts_work_with_the_returned_page_fingerprint(): void {
+		$id = $this->page( self::SIMPLE );
+		$this->acting_as( 'editor' );
+		$one = $this->insert( $id, 2, 'after', self::text_block( '<p>Two</p>' ) );
+		$this->assertIsArray( $one );
+		$two = $this->insert( $id, 3, 'after', self::text_block( '<p>Three</p>' ), $one['page_fingerprint'] );
+		$this->assertIsArray( $two );
+		$this->assertSame( '[vc_row][vc_column][vc_column_text]<p>One</p>[/vc_column_text][vc_column_text]<p>Two</p>[/vc_column_text][vc_column_text]<p>Three</p>[/vc_column_text][/vc_column][/vc_row]', get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
+	public function test_the_returned_page_fingerprint_is_of_the_stored_content(): void {
+		$id = $this->page( self::SIMPLE );
+		$this->acting_as( 'editor' );
+		$filter = static fn( $content ) => str_replace( 'Two', 'Two!', (string) $content );
+		add_filter( 'content_save_pre', $filter );
+		$out    = $this->insert( $id, 2, 'after', self::text_block( '<p>Two</p>' ) );
+		remove_filter( 'content_save_pre', $filter );
+
+		$this->assertIsArray( $out );
+		$stored = (string) get_post_field( 'post_content', $id, 'raw' );
+		$this->assertStringContainsString( 'Two!', $stored );
+		$this->assertSame( aafm_builder_page_fingerprint( $stored ), $out['page_fingerprint'] );
+	}
+
+	public function test_insert_at_each_of_the_four_placements(): void {
+		$new   = '[vc_column_text]<p>N</p>[/vc_column_text]';
+		$cases = array(
+			array( 2, 'before', '[vc_row][vc_column]' . $new . '[vc_column_text]<p>One</p>[/vc_column_text][/vc_column][/vc_row]', 2 ),
+			array( 2, 'after', '[vc_row][vc_column][vc_column_text]<p>One</p>[/vc_column_text]' . $new . '[/vc_column][/vc_row]', 3 ),
+			array( 1, 'inside_start', '[vc_row][vc_column]' . $new . '[vc_column_text]<p>One</p>[/vc_column_text][/vc_column][/vc_row]', 2 ),
+			array( 1, 'inside_end', '[vc_row][vc_column][vc_column_text]<p>One</p>[/vc_column_text]' . $new . '[/vc_column][/vc_row]', 3 ),
+		);
+		foreach ( $cases as list( $anchor, $placement, $expected, $index ) ) {
+			$id = $this->page( self::SIMPLE );
+			$this->acting_as( 'editor' );
+			$out = $this->insert( $id, $anchor, $placement, self::text_block( '<p>N</p>' ) );
+			$this->assertIsArray( $out, $placement );
+			$this->assertSame( $expected, get_post_field( 'post_content', $id, 'raw' ), $placement );
+			$this->assertSame( $index, $out['index'] );
+			$this->assertSame( substr( hash( 'sha256', $new ), 0, 16 ), $out['fingerprint'] );
+			$this->assertSame( 1, $out['inserted'] );
+			$this->assertIsInt( $out['restore_revision_id'] );
+			$this->assertTrue( $out['reversible'] );
+		}
+	}
+
+	public function test_insert_a_row_with_two_columns_and_three_children(): void {
+		$id = $this->page( self::SIMPLE );
+		$this->acting_as( 'editor' );
+		$out = $this->insert(
+			$id,
+			0,
+			'after',
+			array(
+				'tag'      => 'vc_row',
+				'atts'     => array( 'gap' => '10px' ),
+				'children' => array(
+					array(
+						'tag'      => 'vc_column',
+						'atts'     => array( 'width' => '1/2' ),
+						'children' => array(
+							array(
+								'tag'  => 'vc_custom_heading',
+								'atts' => array( 'text' => 'Hi "you"' ),
+							),
+							self::text_block( '<p>L</p>' ),
+						),
+					),
+					array(
+						'tag'      => 'vc_column',
+						'children' => array( self::text_block( '<p>R</p>' ) ),
+					),
+				),
+			)
+		);
+		$this->assertIsArray( $out );
+		$this->assertSame( 6, $out['inserted'] );
+		$this->assertSame( 3, $out['index'] );
+		$this->assertSame( self::SIMPLE . '[vc_row gap="10px"][vc_column width="1/2"][vc_custom_heading text="Hi ``you``"][vc_column_text]<p>L</p>[/vc_column_text][/vc_column][vc_column][vc_column_text]<p>R</p>[/vc_column_text][/vc_column][/vc_row]', get_post_field( 'post_content', $id, 'raw' ) );
+		$this->assertSame( array( 'vc_row', 'vc_column', 'vc_column_text', 'vc_row', 'vc_column', 'vc_custom_heading', 'vc_column_text', 'vc_column', 'vc_column_text' ), $this->tags_of( $id ) );
+	}
+
+	/**
+	 * One case per fixed nesting rule, plus a leaf as a parent.
+	 *
+	 * @return array<string,array{0:int,1:string,2:array<string,mixed>}>
+	 */
+	public function wrong_nesting(): array {
+		return array(
+			'column at the top level'        => array( 0, 'after', array( 'tag' => 'vc_column' ) ),
+			'column in a section'            => array( 0, 'inside_end', array( 'tag' => 'vc_column' ) ),
+			'text block in a row'            => array( 1, 'inside_end', self::text_block( '<p>x</p>' ) ),
+			'inner column in a column'       => array( 2, 'inside_end', array( 'tag' => 'vc_column_inner' ) ),
+			'text block in an inner row'     => array( 4, 'inside_end', self::text_block( '<p>x</p>' ) ),
+			'inner row in an inner column'   => array( 5, 'inside_end', array( 'tag' => 'vc_row_inner' ) ),
+			'text block inside a text block' => array( 3, 'inside_end', self::text_block( '<p>x</p>' ) ),
+		);
+	}
+
+	/**
+	 * Each wrong nesting is refused with the parent and child named.
+	 *
+	 * @dataProvider wrong_nesting
+	 *
+	 * @param int                 $anchor    Anchor.
+	 * @param string              $placement Placement.
+	 * @param array<string,mixed> $element   Element.
+	 */
+	public function test_insert_refuses_each_wrong_nesting( int $anchor, string $placement, array $element ): void {
+		$id = $this->page( self::SECTION );
+		$this->acting_as( 'administrator' );
+		$out = $this->insert( $id, $anchor, $placement, $element );
+		$this->assert_refused( $out, 'aafm_builder_invalid_nesting', 400, $id, self::SECTION );
+		$this->assertSame( $element['tag'], $out->get_error_data()['child'] );
+	}
+
+	public function test_insert_refuses_a_tag_missing_from_the_map(): void {
+		$id = $this->page( self::SIMPLE );
+		$this->acting_as( 'editor' );
+		$this->assert_refused( $this->insert( $id, 2, 'after', array( 'tag' => 'acme_missing' ) ), 'aafm_builder_unknown_element', 400, $id, self::SIMPLE );
+	}
+
+	public function test_insert_refuses_depth_7_and_51_elements(): void {
+		$id = $this->page( self::SIMPLE );
+		$this->acting_as( 'editor' );
+		$deep = self::text_block( '<p>x</p>' );
+		for ( $i = 0; $i < 6; $i++ ) {
+			$deep = array(
+				'tag'      => 0 === $i % 2 ? 'vc_column' : 'vc_row',
+				'children' => array( $deep ),
+			);
+		}
+		$this->assert_refused( $this->insert( $id, 0, 'after', $deep ), 'aafm_builder_insert_limit', 400, $id, self::SIMPLE );
+
+		$wide = array(
+			'tag'      => 'vc_row',
+			'children' => array(
+				array(
+					'tag'      => 'vc_column',
+					'children' => array_fill( 0, 49, self::text_block( '<p>x</p>' ) ),
+				),
+			),
+		);
+		$this->assert_refused( $this->insert( $id, 0, 'after', $wide ), 'aafm_builder_insert_limit', 400, $id, self::SIMPLE );
+		array_pop( $wide['children'][0]['children'] );
+		$this->assertIsArray( $this->insert( $id, 0, 'after', $wide ), '50 elements are allowed.' );
+	}
+
+	public function test_insert_refuses_a_stale_anchor(): void {
+		$id = $this->page( self::SIMPLE );
+		$this->acting_as( 'editor' );
+		$out = aafm_exec_wpbakery_insert_element(
+			array(
+				'post_id'          => $id,
+				'page_fingerprint' => $this->page_fp( $id ),
+				'anchor_index'     => 2,
+				'anchor_expect'    => array(
+					'tag'         => 'vc_column_text',
+					'fingerprint' => '0000000000000000',
+				),
+				'placement'        => 'after',
+				'element'          => self::text_block( '<p>x</p>' ),
+			)
+		);
+		$this->assert_refused( $out, 'aafm_builder_element_mismatch', 409, $id, self::SIMPLE );
+		$partial = aafm_exec_wpbakery_insert_element(
+			array(
+				'post_id'          => $id,
+				'page_fingerprint' => $this->page_fp( $id ),
+				'anchor_index'     => 2,
+				'element'          => self::text_block( '<p>x</p>' ),
+			)
+		);
+		$this->assert_refused( $partial, 'aafm_wpbakery_anchor_required', 400, $id, self::SIMPLE );
+	}
+
+	public function test_an_editor_cannot_insert_raw_html_or_design_options(): void {
+		$id = $this->page( self::SIMPLE );
+		$this->act_as_restricted_editor();
+		$this->assert_refused(
+			$this->insert(
+				$id,
+				2,
+				'after',
+				array(
+					'tag'  => 'vc_raw_html',
+					'text' => '<script>x</script>',
+				)
+			),
+			'aafm_builder_needs_unfiltered_html',
+			403,
+			$id,
+			self::SIMPLE
+		);
+		$this->assert_refused(
+			$this->insert(
+				$id,
+				2,
+				'after',
+				array(
+					'tag'  => 'vc_column_text',
+					'atts' => array( 'css' => array( 'margin_top' => '10px' ) ),
+					'text' => '<p>x</p>',
+				)
+			),
+			'aafm_builder_needs_unfiltered_html',
+			403,
+			$id,
+			self::SIMPLE
+		);
+		$this->assert_refused(
+			$this->insert(
+				$id,
+				2,
+				'after',
+				array(
+					'tag'  => 'wpb_btn',
+					'atts' => array( 'custom_onclick_code' => 'alert(1)' ),
+				)
+			),
+			'aafm_builder_needs_unfiltered_html',
+			403,
+			$id,
+			self::SIMPLE
+		);
+	}
+
+	/**
+	 * Item 2: insert's body text goes through the one choke point, and its attribute values through the encoder.
+	 */
+	public function test_insert_body_text_and_attributes_go_through_the_choke_point_and_the_encoder(): void {
+		$id = $this->page( self::SIMPLE );
+		$this->act_as_restricted_editor();
+		$this->assert_refused( $this->insert( $id, 2, 'after', self::text_block( '<p>Footnote [1]</p>' ) ), 'aafm_wpbakery_brackets_need_unfiltered_html', 400, $id, self::SIMPLE );
+		$this->assert_refused( $this->insert( $id, 2, 'after', self::text_block( '<p>A %5B b</p>' ) ), 'aafm_wpbakery_encoded_brackets_need_unfiltered_html', 400, $id, self::SIMPLE );
+		$this->assert_refused(
+			$this->insert(
+				$id,
+				2,
+				'after',
+				array(
+					'tag'  => 'vc_custom_heading',
+					'atts' => array( 'text' => '#E-8_aGk=' ),
+				)
+			),
+			'aafm_builder_invalid_value',
+			400,
+			$id,
+			self::SIMPLE
+		);
+		$this->assert_refused(
+			$this->insert(
+				$id,
+				2,
+				'after',
+				array(
+					'tag'  => 'vc_custom_heading',
+					'atts' => array( 'nope' => 'x' ),
+				)
+			),
+			'aafm_builder_attribute_not_writable',
+			400,
+			$id,
+			self::SIMPLE
+		);
+		$this->assert_refused(
+			$this->insert(
+				$id,
+				2,
+				'after',
+				array(
+					'tag'  => 'vc_custom_heading',
+					'text' => '<p>x</p>',
+				)
+			),
+			'aafm_builder_attribute_not_writable',
+			400,
+			$id,
+			self::SIMPLE
+		);
+
+		$this->acting_as( 'administrator' );
+		$this->assert_refused( $this->insert( $id, 2, 'after', self::text_block( '<p>x[/vc_column_text]y</p>' ) ), 'aafm_builder_structure_changed', 400, $id, self::SIMPLE );
+	}
+
+	public function test_insert_asks_for_one_css_rebuild(): void {
+		$id = $this->page( self::SIMPLE );
+		$this->acting_as( 'editor' );
+		WpbakeryMapStub::$calls = array();
+		$this->assertIsArray( $this->insert( $id, 2, 'after', self::text_block( '<p>x</p>' ) ) );
+		$this->assertSame( array( 'rebuild:default', 'rebuild:custom' ), array_values( array_filter( WpbakeryMapStub::$calls, static fn( string $c ): bool => 0 === strpos( $c, 'rebuild:' ) ) ) );
+	}
+
+	public function test_insert_starts_a_page_on_an_empty_post(): void {
+		$id     = $this->page( '' );
+		$filter = $this->editor_types( array( 'page' ) );
+		$this->acting_as( 'editor' );
+		$out = $this->insert(
+			$id,
+			null,
+			'',
+			array(
+				'tag'      => 'vc_row',
+				'children' => array(
+					array(
+						'tag'      => 'vc_column',
+						'children' => array( self::text_block( '<p>First</p>' ) ),
+					),
+				),
+			)
+		);
+		remove_filter( 'aafm_builder_vendor', $filter, 20 );
+		$this->assertIsArray( $out );
+		$this->assertSame( 0, $out['index'] );
+		$this->assertSame( 3, $out['inserted'] );
+		$this->assertSame( '[vc_row][vc_column][vc_column_text]<p>First</p>[/vc_column_text][/vc_column][/vc_row]', get_post_field( 'post_content', $id, 'raw' ) );
+		$this->assertSame( 'wpbakery', aafm_post_has_foreign_builder_ownership( $id ) );
+	}
+
+	public function test_empty_post_insert_refuses_non_empty_content_another_builders_marker_and_a_type_the_editor_is_off_for(): void {
+		$filter = $this->editor_types( array( 'page' ) );
+		$row    = array(
+			'tag'      => 'vc_row',
+			'children' => array( array( 'tag' => 'vc_column' ) ),
+		);
+		$plain  = $this->page( '<p>Plain</p>' );
+		$this->acting_as( 'editor' );
+		$this->assert_refused( $this->insert( $plain, null, '', $row ), 'aafm_not_wpbakery_owned', 409, $plain, '<p>Plain</p>' );
+
+		$marked = $this->page( '' );
+		update_post_meta( $marked, '_elementor_data', '[]' );
+		$this->acting_as( 'editor' );
+		$this->assert_refused( $this->insert( $marked, null, '', $row ), 'aafm_not_wpbakery_owned', 409, $marked, '' );
+
+		$on_page = $this->page( self::SIMPLE );
+		$this->acting_as( 'editor' );
+		$this->assert_refused( $this->insert( $on_page, null, '', $row ), 'aafm_wpbakery_anchor_required', 400, $on_page, self::SIMPLE );
+		remove_filter( 'aafm_builder_vendor', $filter, 20 );
+
+		$off    = $this->editor_types( array( 'post' ) );
+		$closed = $this->page( '' );
+		$this->acting_as( 'editor' );
+		$this->assert_refused( $this->insert( $closed, null, '', $row ), 'aafm_wpbakery_editor_off', 409, $closed, '' );
+		remove_filter( 'aafm_builder_vendor', $off, 20 );
+		$this->assert_refused( $this->insert( $closed, null, '', $row ), 'aafm_wpbakery_editor_off', 409, $closed, '' );
+	}
+
 	public function test_insert_tree_keeps_stored_attribute_text_when_trusted(): void {
 		$source = '[vc_row gap="0px"][vc_column width="1/2"][vc_custom_heading text="Say ``hi`` `{`x`}`"  ][vc_column_text]
 

@@ -1624,7 +1624,7 @@ function aafm_avada_trusted_text_allowed( string $text, array $tags ) {
 /**
  * The shared Avada insert path (design AV-5, handover 2 for S12 and S13). Checks the limits, every tag against the map
  * (a tag the map cannot resolve or no registered shortcode renders, fusion_global included, is refused before any
- * nesting check), the nesting, the place
+ * nesting check; only a trusted root may be a [fusion_global id] reference, Ruling R-S12-1), the nesting, the place
  * (never inside an element that shows a global library item), gates script content, serializes (untrusted) or splices
  * the stored sources (trusted), and saves through aafm_builder_commit() with no CSS step: Avada resets a page's
  * compiled CSS on every save (A11). The caller has already loaded the post, called the ownership check in its own body,
@@ -1647,8 +1647,27 @@ function aafm_avada_trusted_text_allowed( string $text, array $tags ) {
 function aafm_avada_insert_tree( WP_Post $post, array $tree, array $anchor, bool $trusted_vendor_text ) {
 	$tree    = array_values( $tree );
 	$content = (string) $post->post_content;
-	$seen    = array();
-	$stats   = aafm_wpbakery_tree_stats( $tree, 1, $seen );
+	if ( $trusted_vendor_text ) {
+		foreach ( $tree as $i => $root ) {
+			if ( ! is_array( $root ) || ! is_string( $root['source'] ?? null ) ) {
+				return aafm_builder_error( 'aafm_builder_invalid_value' );
+			}
+			if ( 'fusion_global' !== ( $root['tag'] ?? null ) ) {
+				continue;
+			}
+			// Ruling R-S12-1: a global library reference, [fusion_global id], carrying only its id. It is in neither the
+			// map nor the nesting rules, so the limits, the map and nesting check it as the item it shows (place_as, the
+			// item's own root tag); the stored bytes are the reference. Never reachable from the untrusted branch.
+			$atts = $root['atts'] ?? null;
+			if ( ! is_array( $atts ) || array( 'id' ) !== array_keys( $atts ) || 1 !== preg_match( '/^[1-9][0-9]*$/', (string) $atts['id'] )
+				|| array() !== ( $root['children'] ?? array() ) || ! is_string( $root['place_as'] ?? null ) || 'fusion_global' === $root['place_as'] ) {
+				return aafm_builder_error( 'aafm_builder_invalid_value' );
+			}
+			$tree[ $i ]['tag'] = $root['place_as'];
+		}
+	}
+	$seen  = array();
+	$stats = aafm_wpbakery_tree_stats( $tree, 1, $seen );
 	if ( is_wp_error( $stats ) ) {
 		return $stats;
 	}
@@ -1657,13 +1676,6 @@ function aafm_avada_insert_tree( WP_Post $post, array $tree, array $anchor, bool
 	}
 	if ( $stats['count'] > 50 || $stats['depth'] > 6 ) {
 		return aafm_avada_insert_limit_error();
-	}
-	if ( $trusted_vendor_text ) {
-		foreach ( $tree as $root ) {
-			if ( ! is_string( $root['source'] ?? null ) ) {
-				return aafm_builder_error( 'aafm_builder_invalid_value' );
-			}
-		}
 	}
 
 	// The tags the page reads use, so the returned index and fingerprint match the next outline.

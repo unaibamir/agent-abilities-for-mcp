@@ -144,10 +144,7 @@ final class AvadaGlobalOptionsTest extends TestCase {
 			array( 'site_width', 'layout', 'primary_color', 'color_palette', 'link_color', 'body_typography', 'h1_typography', 'h2_typography', 'h3_typography', 'h4_typography', 'h5_typography', 'h6_typography', 'header_position', 'header_layout', 'logo', 'page_title_bar', 'footer_widgets', 'footer_copyright', 'footer_text', 'responsive', 'maintenance_mode' ),
 			$keys
 		);
-		foreach ( $keys as $key ) {
-			// "head" as a whole segment (space_head), so the approved header_* keys pass.
-			$this->assertSame( 0, preg_match( '/key|secret|token|pass|api|code|css|script|(^|_)head(_|$)/', $key ), $key . ' looks like a secret or code setting.' );
-		}
+		$this->assertSame( array(), $this->secret_like_keys( $keys ), 'These look like a secret or code setting.' );
 		$args = aafm_args_avada_get_global_options();
 		$this->assertSame( $keys, $args['input_schema']['properties']['keys']['items']['enum'] );
 	}
@@ -192,5 +189,28 @@ final class AvadaGlobalOptionsTest extends TestCase {
 		$this->assertTrue( $args['meta']['annotations']['readonly'] );
 		$this->assertFalse( $args['meta']['annotations']['destructive'] );
 		$this->assertSame( 'aafm-reads', $args['category'] );
+	}
+
+	public function test_the_secret_check_catches_the_named_avada_ids(): void {
+		$named = array( 'recaptcha_private', 'auth_pages_bypass_param', 'space_body', 'space_body_open', 'space_body_close' );
+		$this->assertSame( $named, $this->secret_like_keys( array_merge( aafm_avada_global_option_keys(), $named ) ) );
+	}
+
+	/**
+	 * Keys that name a secret, a bypass or a code setting: an explicit list of Avada ids that hold
+	 * one, plus a pattern for the rest. "head" and "body" only as space_ segments, so the approved
+	 * header_* and body_typography keys pass.
+	 *
+	 * @param string[] $keys Option ids.
+	 * @return string[]
+	 */
+	private function secret_like_keys( array $keys ): array {
+		$forbidden = array( 'recaptcha_private', 'recaptcha_public', 'auth_pages_bypass_param', 'space_head', 'space_body', 'space_body_open', 'space_body_close', 'custom_css', 'google_analytics' );
+		return array_values(
+			array_filter(
+				$keys,
+				static fn( string $key ): bool => in_array( $key, $forbidden, true ) || 1 === preg_match( '/key|secret|token|pass|api|code|css|script|private|bypass|(^|_)head(_|$)|space_body/', $key )
+			)
+		);
 	}
 }

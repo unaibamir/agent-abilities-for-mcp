@@ -348,6 +348,27 @@ function aafm_builder_vendor_rows(): array {
 			},
 			'requires' => 'vc_map',
 		),
+		// Every element WPBakery has mapped, keyed by tag, each entry as registered (a lean-mapped entry is not
+		// resolved yet); wpbakery_map_one resolves one, so one entry that throws can be skipped on its own.
+		'wpbakery_map_all'        => array(
+			'target'   => static function (): array {
+				return (array) call_user_func( array( 'WPBMap', 'getShortCodes' ) ); // @phpstan-ignore-line argument.type (WPBakery's own map; this row is present only when vc_map() exists, see requires)
+			},
+			'requires' => 'vc_map',
+		),
+		// One element's resolved settings (WPBMap::getShortCode() includes its config file), or null.
+		'wpbakery_map_one'        => array(
+			'target'   => static function ( string $tag ): ?array {
+				$settings = call_user_func( array( 'WPBMap', 'getShortCode' ), $tag ); // @phpstan-ignore-line argument.type (WPBakery's own map; this row is present only when vc_map() exists, see requires)
+				return is_array( $settings ) ? $settings : null;
+			},
+			'requires' => 'vc_map',
+		),
+		// W18: maps the Grid Builder's own elements, which WPBakery maps only inside a grid editor request.
+		'wpbakery_grid_mapper'    => array(
+			'target'   => 'vc_grid_item_map_shortcodes',
+			'requires' => 'vc_grid_item_map_shortcodes',
+		),
 		// The Global Options name of the active Avada theme; present only with the theme's own Avada() loaded.
 		'avada_option_name'       => array(
 			'target'   => array( 'Avada', 'get_option_name' ),

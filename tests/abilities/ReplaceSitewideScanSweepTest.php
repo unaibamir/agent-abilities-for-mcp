@@ -31,6 +31,7 @@ final class ReplaceSitewideScanSweepTest extends TestCase {
 		'includes/abilities/avada.php|aafm_exec_avada_list_layouts|1'   => 'READ',
 		'includes/abilities/avada.php|aafm_exec_avada_list_library|1'   => 'READ',
 		'includes/abilities/search.php|aafm_exec_search_content|1'      => 'READ',
+		'includes/abilities/wpbakery-site.php|aafm_templatera_templates|1' => 'READ',
 		'includes/abilities/geodirectory.php|aafm_exec_geodirectory_get_listings|1' => 'READ',
 		'includes/abilities/geodirectory.php|aafm_exec_geodirectory_get_listings|2' => 'READ',
 		'includes/abilities/media.php|aafm_exec_get_media|1'            => 'READ',

@@ -26,6 +26,8 @@ final class RoleReadSweepTest extends TestCase {
 		'includes/allowlist.php|aafm_ability_allowed_for_principal|2' => 'decision, other id: loaded in the checked-read scope, refuses on error',
 		'includes/abilities/users.php|aafm_exec_update_user|1' => 'decision, last-admin demotion guard: target loaded in the checked-read scope',
 		'includes/abilities/users.php|aafm_exec_delete_user|1' => 'decision, last-admin delete guard: victim loaded in the checked-read scope',
+		'includes/abilities/wpbakery-site.php|aafm_templatera_template_allowed|1' => 'decision, current user: Templatera\'s first-role rule (T3), after the edit_post check on the template',
+		'includes/abilities/wpbakery-site.php|aafm_templatera_template_allowed|2' => 'decision, current user: Templatera\'s first role read for the same rule, after the edit_post check on the template',
 		'includes/oauth/clients.php|aafm_oauth_build_grant_row|1' => 'display: scope, fallback row on error',
 		'includes/admin/dashboard.php|aafm_agent_user_candidates|1' => 'display: scope, no roles and admin on error, only when the cache lost the earlier usermeta load',
 		'includes/helpers.php|aafm_redact_user|1' => 'response field: inside the scope on create/update-user, pure reads as 1.7.5',

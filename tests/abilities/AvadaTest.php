@@ -1441,6 +1441,23 @@ final class AvadaTest extends TestCase {
 		}
 	}
 
+	public function test_read_description_names_only_avada_and_has_no_spaced_hyphen(): void {
+		$registry = aafm_avada_registry_definitions();
+		foreach ( array( 'aafm/avada-get-page-content', 'aafm/avada-replace-text' ) as $slug ) {
+			$text = $registry[ $slug ]['description'] . ' ' . aafm_ability_disclosures()[ $slug ];
+			$this->assertStringNotContainsString( ' - ', $text, $slug );
+			$this->assertStringNotContainsString( 'WPBakery', $text, $slug );
+			$this->assertStringContainsString( 'affects', $text, $slug );
+		}
+		$read = $registry['aafm/avada-get-page-content']['description'];
+		foreach ( array( 'include_page_options', 'Role Manager', 'Only while Avada is active', '2,000' ) as $needle ) {
+			$this->assertStringContainsString( $needle, $read );
+		}
+		$args = aafm_args_avada_get_page_content();
+		$this->assertSame( 'boolean', $args['input_schema']['properties']['include_page_options']['type'] );
+		$this->assertFalse( $args['input_schema']['properties']['include_page_options']['default'] );
+	}
+
 	public function test_replace_output_schema_declares_affects(): void {
 		$this->assertSame( 'string', aafm_args_avada_replace_text()['output_schema']['properties']['affects']['type'] );
 	}

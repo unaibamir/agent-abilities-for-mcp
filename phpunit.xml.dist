@@ -43,6 +43,7 @@
 			<file>tests/AvadaWireTest.php</file>
 			<file>tests/BuilderShortcodesTest.php</file>
 			<file>tests/WpbakeryWireTest.php</file>
+			<file>tests/WpbakeryElementsWireTest.php</file>
 			<file>tests/GeodirectoryWireTest.php</file>
 			<file>tests/AllNew174AbilitiesWireTest.php</file>
 			<file>tests/StaleWpdbReaderSweepTest.php</file>

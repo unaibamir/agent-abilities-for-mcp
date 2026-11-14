@@ -690,4 +690,670 @@ final class WpbakeryElementsTest extends TestCase {
 		$error = $this->encode( 'wpb_btn', 'title', true );
 		$this->assertStringContainsString( 'title', $error->get_error_message(), 'The refusal names the setting.' );
 	}
+
+	/**
+	 * A page with the given content, created as an administrator so stored markup is kept as written.
+	 *
+	 * @param string $content Content.
+	 * @param int    $author  Author, or 0 for the administrator.
+	 * @return int
+	 */
+	private function page( string $content, int $author = 0 ): int {
+		$current = get_current_user_id();
+		$this->acting_as( 'administrator' );
+		$args = array(
+			'post_type'    => 'page',
+			'post_content' => $content,
+		);
+		if ( $author ) {
+			$args['post_author'] = $author;
+		}
+		$id = self::factory()->post->create( $args );
+		wp_set_current_user( $current );
+		$this->assertSame( $content, get_post_field( 'post_content', $id, 'raw' ) );
+		return $id;
+	}
+
+	/**
+	 * The expect object for an element of a post as stored now.
+	 *
+	 * @param int $id    Post.
+	 * @param int $index Outline index.
+	 * @return array{tag:string,fingerprint:string}
+	 */
+	private function expect( int $id, int $index ): array {
+		$content  = (string) get_post_field( 'post_content', $id, 'raw' );
+		$elements = aafm_builder_elements( $content, aafm_wpbakery_shortcode_tags( $content ) );
+		return array(
+			'tag'         => $elements[ $index ]['tag'],
+			'fingerprint' => aafm_builder_fingerprint( $content, $elements[ $index ] ),
+		);
+	}
+
+	/**
+	 * Run the update with index and expect filled in.
+	 *
+	 * @param int                 $id     Post.
+	 * @param int                 $index  Outline index.
+	 * @param array<string,mixed> $change set_atts, remove_atts and text.
+	 * @return array<string,mixed>|WP_Error
+	 */
+	private function update( int $id, int $index, array $change ) {
+		return aafm_exec_wpbakery_update_element(
+			array(
+				'post_id' => $id,
+				'index'   => $index,
+				'expect'  => $this->expect( $id, $index ),
+			) + $change
+		);
+	}
+
+	/**
+	 * Assert a refusal left the page byte-identical.
+	 *
+	 * @param mixed  $out     Result.
+	 * @param string $code    Code.
+	 * @param int    $status  Status.
+	 * @param int    $id      Post.
+	 * @param string $content Content before.
+	 * @return void
+	 */
+	private function assert_refused( $out, string $code, int $status, int $id, string $content ): void {
+		$this->assert_error( $out, $code, $status );
+		$this->assertSame( $content, get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
+	/**
+	 * The fixture with one opening tag swapped, for byte-for-byte expectations.
+	 *
+	 * @param string $old      Stored text.
+	 * @param string $expected Expected text.
+	 * @return string
+	 */
+	private function fixture_with( string $old, string $expected ): string {
+		$this->assertSame( 1, substr_count( $this->fixture(), $old ) );
+		return str_replace( $old, $expected, $this->fixture() );
+	}
+
+	public function test_update_sets_a_heading_with_quotes_and_brackets(): void {
+		$id = $this->page( $this->fixture() );
+		$this->acting_as( 'editor' );
+
+		$out = $this->update( $id, 2, array( 'set_atts' => array( 'text' => 'Ask "why" [twice]' ) ) );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( array( 'text' ), $out['changed'] );
+		$this->assertSame( $this->fixture_with( '[vc_custom_heading text="Say ``hello`` to `{`S8a`}` heading"]', '[vc_custom_heading text="Ask ``why`` `{`twice`}`"]' ), get_post_field( 'post_content', $id, 'raw' ) );
+		$this->assertStringNotContainsString( '[/vc_custom_heading]', get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
+	public function test_update_keeps_a_leaf_without_a_closer_without_one(): void {
+		$this->test_update_sets_a_heading_with_quotes_and_brackets();
+	}
+
+	public function test_update_keeps_a_stored_closer(): void {
+		$content = '[vc_row][vc_column][vc_custom_heading text="Old"][/vc_custom_heading][/vc_column][/vc_row]';
+		$id      = $this->page( $content );
+		$this->acting_as( 'editor' );
+
+		$this->assertIsArray( $this->update( $id, 2, array( 'set_atts' => array( 'text' => 'New' ) ) ) );
+		$this->assertSame( '[vc_row][vc_column][vc_custom_heading text="New"][/vc_custom_heading][/vc_column][/vc_row]', get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
+	public function test_update_sets_a_button_link_with_every_part(): void {
+		$id = $this->page( $this->fixture() );
+		$this->acting_as( 'editor' );
+
+		$out = $this->update(
+			$id,
+			3,
+			array(
+				'set_atts' => array(
+					'title' => 'Pricing',
+					'link'  => array(
+						'url'    => '/pricing?plan=pro&x=1',
+						'title'  => 'See: plans',
+						'target' => '_self',
+						'rel'    => 'noopener',
+					),
+				),
+			)
+		);
+
+		$this->assertIsArray( $out );
+		$this->assertSame( array( 'title', 'link' ), $out['changed'] );
+		$stored = get_post_field( 'post_content', $id, 'raw' );
+		$this->assertStringContainsString( '[wpb_btn title="Pricing" css=".vc_custom_1794659903041{padding-top: 14px !important;padding-right: 20px !important;padding-bottom: 14px !important;padding-left: 20px !important;}" link="url:%2Fpricing%3Fplan%3Dpro%26x%3D1|title:See%3A%20plans|target:_self|rel:noopener"]', $stored );
+	}
+
+	public function test_update_sets_an_image_id(): void {
+		$image = $this->image();
+		$id    = $this->page( $this->fixture() );
+		$this->acting_as( 'editor' );
+
+		$this->assertIsArray( $this->update( $id, 4, array( 'set_atts' => array( 'image' => $image ) ) ) );
+		$this->assertSame( $this->fixture_with( '[vc_single_image image="13"]', '[vc_single_image image="' . $image . '"]' ), get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
+	public function test_update_sets_a_colour(): void {
+		$id = $this->page( $this->fixture() );
+		$this->acting_as( 'editor' );
+
+		$this->assertIsArray( $this->update( $id, 3, array( 'set_atts' => array( 'custom_background' => '#00aa11' ) ) ) );
+		$this->assertStringContainsString( 'rel:nofollow" custom_background="#00aa11"]', get_post_field( 'post_content', $id, 'raw' ), 'A new setting is added after the stored ones.' );
+	}
+
+	public function test_update_sets_a_choice(): void {
+		$id = $this->page( $this->fixture() );
+		$this->acting_as( 'editor' );
+
+		$this->assertIsArray( $this->update( $id, 5, array( 'set_atts' => array( 'onclick' => 'img_link_large' ) ) ) );
+		$this->assertStringContainsString( '[vc_gallery onclick="img_link_large" images="13"', get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
+	public function test_update_sets_a_design_options_rule_and_asks_for_a_css_rebuild(): void {
+		$id = $this->page( $this->fixture() );
+		$this->acting_as( 'administrator' );
+		WpbakeryMapStub::$calls = array();
+
+		$out = $this->update( $id, 0, array( 'set_atts' => array( 'css' => array( 'margin_top' => '40px' ) ) ) );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( array( 'css' ), $out['changed'] );
+		$this->assertMatchesRegularExpression( '/^\[vc_row gap="0px" css="\.vc_custom_\d{13}\{margin-top: 40px !important;\}"\]/', get_post_field( 'post_content', $id, 'raw' ) );
+		$this->assertSame( array( 'rebuild:default', 'rebuild:custom' ), array_values( array_filter( WpbakeryMapStub::$calls, static fn( string $call ): bool => 0 === strpos( $call, 'rebuild:' ) ) ) );
+	}
+
+	public function test_a_text_update_asks_for_no_css_rebuild(): void {
+		$id = $this->page( $this->fixture() );
+		$this->acting_as( 'editor' );
+		WpbakeryMapStub::$calls = array();
+
+		$this->assertIsArray( $this->update( $id, 2, array( 'set_atts' => array( 'text' => 'Plain' ) ) ) );
+		$this->assertSame( array(), array_values( array_filter( WpbakeryMapStub::$calls, static fn( string $call ): bool => 0 === strpos( $call, 'rebuild:' ) ) ) );
+	}
+
+	public function test_update_sets_the_text_of_a_leaf(): void {
+		$id = $this->page( $this->fixture() );
+		$this->acting_as( 'editor' );
+
+		$out = $this->update( $id, 8, array( 'text' => '<p>New <strong>copy</strong></p><script>x()</script>' ) );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( array( 'text' ), $out['changed'] );
+		$this->assertSame( $this->fixture_with( "[vc_column_text]\r\n\r\nSeed text block.\r\n\r\n[/vc_column_text]", '[vc_column_text]<p>New <strong>copy</strong></p>x()[/vc_column_text]' ), get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
+	public function test_update_refuses_text_on_an_element_with_no_content_param(): void {
+		$id = $this->page( $this->fixture() );
+		$this->acting_as( 'editor' );
+
+		$out = $this->update( $id, 2, array( 'text' => 'Inner' ) );
+		$this->assert_refused( $out, 'aafm_builder_attribute_not_writable', 400, $id, $this->fixture() );
+		$this->assertStringContainsString( 'text', $out->get_error_message() );
+	}
+
+	public function test_remove_atts_drops_the_attribute(): void {
+		$id = $this->page( $this->fixture() );
+		$this->acting_as( 'editor' );
+
+		$out = $this->update( $id, 5, array( 'remove_atts' => array( 'interval', 'captions' ) ) );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( array( 'interval' ), $out['changed'], 'A setting that was not stored is not reported.' );
+		$this->assertSame( $this->fixture_with( ' interval="3"', '' ), get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
+	public function test_untouched_attributes_and_every_other_byte_are_identical(): void {
+		$id      = $this->page( $this->fixture() );
+		$content = $this->fixture();
+		$element = aafm_builder_elements( $content, aafm_wpbakery_shortcode_tags( $content ) )[5];
+		$this->acting_as( 'editor' );
+
+		$this->assertIsArray( $this->update( $id, 5, array( 'set_atts' => array( 'interval' => '5' ) ) ) );
+
+		$stored = (string) get_post_field( 'post_content', $id, 'raw' );
+		$this->assertSame( substr( $content, 0, $element['start'] ), substr( $stored, 0, $element['start'] ) );
+		$this->assertSame( substr( $content, $element['open_end'] ), substr( $stored, $element['open_end'] ) );
+		$this->assertSame( str_replace( 'interval="3"', 'interval="5"', substr( $content, $element['start'], $element['open_end'] - $element['start'] ) ), substr( $stored, $element['start'], $element['open_end'] - $element['start'] ) );
+	}
+
+	public function test_untouched_attributes_keep_their_quoting(): void {
+		$content = "[vc_row][vc_column][wpb_btn title='Single' shape=square]a[/wpb_btn][/vc_column][/vc_row]";
+		$id      = $this->page( $content );
+		$this->acting_as( 'editor' );
+
+		$this->assertIsArray( $this->update( $id, 2, array( 'set_atts' => array( 'shape' => 'round' ) ) ) );
+		$this->assertSame( "[vc_row][vc_column][wpb_btn title='Single' shape=\"round\"]a[/wpb_btn][/vc_column][/vc_row]", get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
+	public function test_update_refuses_a_stale_fingerprint(): void {
+		$id = $this->page( $this->fixture() );
+		$this->acting_as( 'editor' );
+		$out = aafm_exec_wpbakery_update_element(
+			array(
+				'post_id'  => $id,
+				'index'    => 2,
+				'expect'   => array(
+					'tag'         => 'vc_custom_heading',
+					'fingerprint' => '0000000000000000',
+				),
+				'set_atts' => array( 'text' => 'x' ),
+			)
+		);
+		$this->assert_refused( $out, 'aafm_builder_element_mismatch', 409, $id, $this->fixture() );
+	}
+
+	public function test_update_refuses_a_setting_that_is_not_in_the_map(): void {
+		$id = $this->page( $this->fixture() );
+		$this->acting_as( 'editor' );
+		foreach ( array( 'onmouseover', 'Title', 'ti-tle', 'content' ) as $name ) {
+			$out = $this->update( $id, 3, array( 'set_atts' => array( $name => 'x' ) ) );
+			$this->assert_refused( $out, 'aafm_builder_attribute_not_writable', 400, $id, $this->fixture() );
+		}
+		$this->assert_refused( $this->update( $id, 3, array( 'remove_atts' => array( 'onmouseover' ) ) ), 'aafm_builder_attribute_not_writable', 400, $id, $this->fixture() );
+	}
+
+	public function test_update_refuses_a_kind_that_is_not_writable(): void {
+		$content = '[vc_row][vc_column width="1/2" offset="vc_col-lg-6"][/vc_column][/vc_row]';
+		$id      = $this->page( $content );
+		$this->acting_as( 'editor' );
+
+		$this->assert_refused( $this->update( $id, 1, array( 'set_atts' => array( 'offset' => 'vc_col-lg-4' ) ) ), 'aafm_builder_attribute_not_writable', 400, $id, $content );
+	}
+
+	public function test_update_refuses_without_the_param_type_row(): void {
+		$id = $this->page( $this->fixture() );
+		WpbakeryMapStub::install( null, array(), array( 'wpbakery_param_type' ) );
+		$this->acting_as( 'editor' );
+
+		$this->assert_refused( $this->update( $id, 2, array( 'set_atts' => array( 'text' => 'x' ) ) ), 'aafm_builder_attribute_not_writable', 400, $id, $this->fixture() );
+	}
+
+	public function test_update_refuses_text_on_an_element_with_children(): void {
+		$content = '[vc_row][vc_column][vc_column_text]a[/vc_column_text][/vc_column][/vc_row]';
+		$id      = $this->page( $content );
+		WpbakeryMapStub::install(
+			array_merge(
+				WpbakeryMapStub::map(),
+				array(
+					'vc_column' => array(
+						'name'         => 'Column',
+						'is_container' => true,
+						'params'       => array(
+							array(
+								'type'       => 'textarea_html',
+								'param_name' => 'content',
+							),
+						),
+					),
+				)
+			)
+		);
+		$this->acting_as( 'editor' );
+
+		$this->assert_refused( $this->update( $id, 1, array( 'text' => 'flat' ) ), 'aafm_builder_attribute_not_writable', 400, $id, $content );
+	}
+
+	public function test_update_refuses_inner_text_that_adds_an_element(): void {
+		$id = $this->page( $this->fixture() );
+		$this->acting_as( 'editor' );
+
+		$this->assert_refused( $this->update( $id, 8, array( 'text' => 'a [vc_custom_heading text="x"] b' ) ), 'aafm_builder_structure_changed', 400, $id, $this->fixture() );
+	}
+
+	public function test_update_refuses_a_value_that_would_end_its_tag(): void {
+		$id = $this->page( $this->fixture() );
+		$this->acting_as( 'editor' );
+
+		$this->assert_refused( $this->update( $id, 3, array( 'set_atts' => array( 'el_class' => 'a"] [x' ) ) ), 'aafm_builder_invalid_value', 400, $id, $this->fixture() );
+	}
+
+	public function test_update_needs_at_least_one_change(): void {
+		$id = $this->page( $this->fixture() );
+		$this->acting_as( 'editor' );
+		foreach ( array( array(), array( 'set_atts' => array() ), array( 'remove_atts' => array() ) ) as $change ) {
+			$this->assert_refused( $this->update( $id, 2, $change ), 'aafm_builder_nothing_to_change', 400, $id, $this->fixture() );
+		}
+	}
+
+	/**
+	 * Every entry on the script list, as an editor whose unfiltered_html is false: 403 before the value is encoded
+	 * (each value is one the encoder would refuse with 400), and the page untouched.
+	 */
+	public function test_an_editor_without_unfiltered_html_cannot_set_design_options_raw_html_or_an_onclick(): void {
+		$id      = $this->page( $this->fixture() );
+		$addon   = '[vc_row][vc_column][acme_embed title="t" code="x"][/vc_column][/vc_row]';
+		$addon_p = $this->page( $addon );
+		$gmaps   = '[vc_row][vc_column][vc_gmaps title="t"][/vc_column][/vc_row]';
+		$gmaps_p = $this->page( $gmaps );
+		$this->act_as_restricted_editor();
+
+		$cases = array(
+			array( $id, 0, array( 'set_atts' => array( 'css' => array( 'margin_top' => '10' ) ) ) ),
+			array( $id, 3, array( 'set_atts' => array( 'css' => array( 'selector' => 'x' ) ) ) ),
+			array( $id, 3, array( 'remove_atts' => array( 'css' ) ) ),
+			array( $id, 11, array( 'text' => array( 'not a string' ) ) ),
+			array( $id, 12, array( 'text' => array( 'not a string' ) ) ),
+			array( $id, 11, array( 'set_atts' => array( 'el_class' => 'a"b' ) ) ),
+			array( $id, 3, array( 'set_atts' => array( 'custom_onclick_code' => array( 'x' ) ) ) ),
+			array( $id, 3, array( 'set_atts' => array( 'btn_custom_onclick_code' => array( 'x' ) ) ) ),
+			array( $id, 3, array( 'set_atts' => array( 'custom_onclick' => 'nope' ) ) ),
+			array( $addon_p, 2, array( 'set_atts' => array( 'code' => array( 'x' ) ) ) ),
+			array( $gmaps_p, 2, array( 'set_atts' => array( 'title' => array( 'x' ) ) ) ),
+		);
+		foreach ( $cases as list( $post, $index, $change ) ) {
+			$before = (string) get_post_field( 'post_content', $post, 'raw' );
+			$this->assert_refused( $this->update( $post, $index, $change ), 'aafm_builder_needs_unfiltered_html', 403, $post, $before );
+		}
+		$this->assertStringContainsString( '[vc_raw_html]', get_post_field( 'post_content', $id, 'raw' ) );
+
+		$add = static fn( $tags ) => array_merge( (array) $tags, array( 'acme_embed' ) );
+		add_filter( 'wpb_custom_html_elements', $add );
+		try {
+			$this->assert_refused( $this->update( $addon_p, 2, array( 'set_atts' => array( 'title' => array( 'x' ) ) ) ), 'aafm_builder_needs_unfiltered_html', 403, $addon_p, $addon );
+		} finally {
+			remove_filter( 'wpb_custom_html_elements', $add );
+		}
+		add_filter( 'wpb_custom_html_elements', '__return_empty_array' );
+		try {
+			$this->assert_refused( $this->update( $gmaps_p, 2, array( 'set_atts' => array( 'title' => array( 'x' ) ) ) ), 'aafm_builder_needs_unfiltered_html', 403, $gmaps_p, $gmaps );
+		} finally {
+			remove_filter( 'wpb_custom_html_elements', '__return_empty_array' );
+		}
+	}
+
+	public function test_an_administrator_can(): void {
+		$id = $this->page( $this->fixture() );
+		$this->acting_as( 'administrator' );
+		$this->assertTrue( current_user_can( 'unfiltered_html' ) );
+
+		$this->assertIsArray( $this->update( $id, 11, array( 'text' => '<b>new</b>' ) ) );
+		$this->assertSame( '<b>new</b>', aafm_wpbakery_decode_raw( (string) $this->between( $id, '[vc_raw_html]', '[/vc_raw_html]' ) ) );
+		$this->assertIsArray( $this->update( $id, 3, array( 'set_atts' => array( 'custom_onclick_code' => 'go("x")' ) ) ) );
+		$this->assertStringContainsString( 'custom_onclick_code="go(``x``)"', get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
+	/**
+	 * The stored text between two markers.
+	 *
+	 * @param int    $id    Post.
+	 * @param string $open  Opening marker.
+	 * @param string $close Closing marker.
+	 * @return string|null
+	 */
+	private function between( int $id, string $open, string $close ): ?string {
+		$content = (string) get_post_field( 'post_content', $id, 'raw' );
+		$start   = strpos( $content, $open );
+		if ( false === $start ) {
+			return null;
+		}
+		$start += strlen( $open );
+		return substr( $content, $start, (int) strpos( $content, $close, $start ) - $start );
+	}
+
+	public function test_update_refuses_when_the_save_would_strip_untouched_content(): void {
+		$content = '[vc_row][vc_column][vc_custom_heading text="Old"][vc_column_text]<iframe></iframe>[/vc_column_text][/vc_column][/vc_row]';
+		$id      = $this->page( $content );
+		$this->acting_as( 'editor' );
+		$strip = static fn( $value ) => str_replace( '<iframe></iframe>', '', (string) $value );
+		add_filter( 'content_save_pre', $strip );
+		try {
+			$out = $this->update( $id, 2, array( 'set_atts' => array( 'text' => 'New' ) ) );
+		} finally {
+			remove_filter( 'content_save_pre', $strip );
+		}
+		$this->assert_refused( $out, 'aafm_wpbakery_save_would_change_page', 409, $id, $content );
+	}
+
+	public function test_update_refuses_when_a_save_filter_deletes_an_element_once_the_new_value_is_present(): void {
+		$id = $this->page( $this->fixture() );
+		$this->acting_as( 'editor' );
+		$react = static function ( $value ) {
+			$value = (string) $value;
+			return false === strpos( $value, 'Trigger' ) ? $value : (string) preg_replace( '/\[vc_single_image[^\]]*\]/', '', $value );
+		};
+		add_filter( 'content_save_pre', $react );
+		try {
+			$out = $this->update( $id, 2, array( 'set_atts' => array( 'text' => 'Trigger' ) ) );
+		} finally {
+			remove_filter( 'content_save_pre', $react );
+		}
+		$this->assert_refused( $out, 'aafm_wpbakery_save_would_change_layout', 409, $id, $this->fixture() );
+	}
+
+	public function test_update_reports_unconfirmed_when_a_filter_alters_the_stored_content(): void {
+		$id = $this->page( $this->fixture() );
+		$this->acting_as( 'editor' );
+		$alter = static function ( $data ) {
+			$data['post_content'] .= ' altered';
+			return $data;
+		};
+		add_filter( 'wp_insert_post_data', $alter );
+		try {
+			$out = $this->update( $id, 2, array( 'set_atts' => array( 'text' => 'New' ) ) );
+		} finally {
+			remove_filter( 'wp_insert_post_data', $alter );
+		}
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_wpbakery_write_unconfirmed', $out->get_error_code() );
+	}
+
+	public function test_update_of_the_second_identical_twin_changes_only_the_second(): void {
+		$twin    = '[wpb_btn title="Learn more"]';
+		$content = '[vc_row][vc_column]' . $twin . $twin . '[/vc_column][/vc_row]';
+		$id      = $this->page( $content );
+		$this->acting_as( 'editor' );
+		$expect = $this->expect( $id, 3 );
+		$this->assertSame( $this->expect( $id, 2 )['fingerprint'], $expect['fingerprint'] );
+
+		$this->assertIsArray( $this->update( $id, 3, array( 'set_atts' => array( 'title' => 'Second' ) ) ) );
+		$stored = (string) get_post_field( 'post_content', $id, 'raw' );
+		$this->assertSame( $twin, substr( $stored, strlen( '[vc_row][vc_column]' ), strlen( $twin ) ) );
+		$this->assertSame( '[vc_row][vc_column]' . $twin . '[wpb_btn title="Second"][/vc_column][/vc_row]', $stored );
+	}
+
+	public function test_update_with_the_stored_value_saves_nothing(): void {
+		$id        = $this->page( $this->fixture() );
+		$modified  = get_post_field( 'post_modified', $id );
+		$revisions = count( wp_get_post_revisions( $id ) );
+		$this->acting_as( 'editor' );
+
+		$out = $this->update(
+			$id,
+			2,
+			array(
+				'set_atts'    => array( 'text' => 'Say "hello" to [S8a] heading' ),
+				'remove_atts' => array( 'link' ),
+			)
+		);
+
+		$this->assertIsArray( $out );
+		$this->assertSame( array(), $out['changed'] );
+		$this->assertNull( $out['restore_revision_id'] );
+		$this->assertSame( aafm_builder_page_fingerprint( $this->fixture() ), $out['page_fingerprint'] );
+		$this->assertSame( $modified, get_post_field( 'post_modified', $id ) );
+		$this->assertSame( $revisions, count( wp_get_post_revisions( $id ) ) );
+		$this->assertSame( $this->fixture(), get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
+	public function test_update_after_multibyte_text_by_a_restricted_editor_passes_the_replay(): void {
+		$content = '[vc_row][vc_column][vc_custom_heading text="مرحبا بالعالم 👋"][vc_custom_heading text="Old"][/vc_column][/vc_row]';
+		$id      = $this->page( $content );
+		$this->act_as_restricted_editor();
+
+		$out = $this->update( $id, 3, array( 'set_atts' => array( 'text' => 'Café & Crème <b>"x"' ) ) );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( '[vc_row][vc_column][vc_custom_heading text="مرحبا بالعالم 👋"][vc_custom_heading text="Café &amp; Crème ``x``"][/vc_column][/vc_row]', get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
+	public function test_a_restricted_editor_can_write_a_value_with_an_ampersand_a_less_than_and_a_quote(): void {
+		$id = $this->page( $this->fixture() );
+		$this->act_as_restricted_editor();
+
+		$out = $this->update( $id, 2, array( 'set_atts' => array( 'text' => 'A & B < C "D"' ) ) );
+
+		$this->assertIsArray( $out );
+		// Core's sanitize_text_field() escapes the run after a lone < (wp_pre_kses_less_than()), quotes included.
+		$this->assertStringContainsString( '[vc_custom_heading text="A &amp; B &lt; C &quot;D&quot;"]', get_post_field( 'post_content', $id, 'raw' ) );
+		$this->assertStringContainsString( '[vc_custom_heading text="Say ``D``"]', $this->stored_after( $id, 'Say "D"' ) );
+	}
+
+	/**
+	 * Write a heading text as the current user and return the stored content.
+	 *
+	 * @param int    $id   Post.
+	 * @param string $text Heading text.
+	 * @return string
+	 */
+	private function stored_after( int $id, string $text ): string {
+		$this->assertIsArray( $this->update( $id, 2, array( 'set_atts' => array( 'text' => $text ) ) ) );
+		return (string) get_post_field( 'post_content', $id, 'raw' );
+	}
+
+	public function test_update_refuses_an_index_past_the_outline(): void {
+		$id = $this->page( $this->fixture() );
+		$this->acting_as( 'editor' );
+		foreach ( array( 13, 2000, 5000 ) as $index ) {
+			$out = aafm_exec_wpbakery_update_element(
+				array(
+					'post_id'  => $id,
+					'index'    => $index,
+					'expect'   => $this->expect( $id, 2 ),
+					'set_atts' => array( 'text' => 'x' ),
+				)
+			);
+			$this->assert_refused( $out, 'aafm_builder_element_mismatch', 409, $id, $this->fixture() );
+		}
+	}
+
+	public function test_update_refuses_a_revision_id_and_an_attachment_id(): void {
+		$id = $this->page( $this->fixture() );
+		wp_update_post(
+			array(
+				'ID'           => $id,
+				'post_content' => $this->fixture() . ' ',
+			)
+		);
+		$revision   = (int) array_key_first( wp_get_post_revisions( $id ) );
+		$attachment = self::factory()->attachment->create( array( 'post_parent' => $id ) );
+		$this->acting_as( 'administrator' );
+		foreach ( array( $revision, $attachment ) as $target ) {
+			$this->assertFalse( aafm_perm_avada_post_object( array( 'post_id' => $target ) ) );
+		}
+	}
+
+	public function test_update_refuses_a_post_wpbakery_does_not_own(): void {
+		$content = '<p>No builder here [vc_custom_heading text="x"]</p>';
+		$id      = $this->page( $content );
+		$this->acting_as( 'editor' );
+		$this->assert_refused( $this->update( $id, 0, array( 'set_atts' => array( 'text' => 'y' ) ) ), 'aafm_not_wpbakery_owned', 409, $id, $content );
+	}
+
+	public function test_update_on_a_grid_template_runs_the_grid_mapper_first(): void {
+		register_post_type(
+			'vc_grid_item',
+			array(
+				'public'          => false,
+				'capability_type' => 'post',
+				'supports'        => array( 'title', 'editor' ),
+			)
+		);
+		$content = (string) file_get_contents( dirname( __DIR__ ) . '/Fixtures/Wpbakery/grid-item.txt' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a local fixture file, not a remote URL.
+		$this->acting_as( 'editor' );
+		$id                     = self::factory()->post->create(
+			array(
+				'post_type'    => 'vc_grid_item',
+				'post_content' => $content,
+			)
+		);
+		$elements               = aafm_builder_elements( $content, aafm_wpbakery_shortcode_tags( $content ) );
+		$index                  = (int) array_search( 'vc_btn', array_column( $elements, 'tag' ), true );
+		WpbakeryMapStub::$calls = array();
+
+		$out = $this->update( $id, $index, array( 'set_atts' => array( 'title' => 'Read on' ) ) );
+
+		$this->assertIsArray( $out );
+		$this->assertFalse( $out['reversible'], 'Grid templates keep no revisions.' );
+		$this->assertNull( $out['restore_revision_id'] );
+		$this->assertSame( array( 'grid_mapper', 'map_one:vc_btn' ), array_slice( WpbakeryMapStub::$calls, 0, 2 ) );
+		$this->assertStringContainsString( 'title="Read on"', get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
+	public function test_the_response_carries_the_new_fingerprints_and_a_way_back(): void {
+		$id = $this->page( $this->fixture() );
+		$this->acting_as( 'editor' );
+
+		$out = $this->update( $id, 2, array( 'set_atts' => array( 'text' => 'New' ) ) );
+
+		$this->assertSame( array( 'post', 'index', 'fingerprint', 'page_fingerprint', 'changed', 'restore_revision_id', 'reversible' ), array_keys( $out ) );
+		$stored = (string) get_post_field( 'post_content', $id, 'raw' );
+		$this->assertSame( 2, $out['index'] );
+		$this->assertSame( $this->expect( $id, 2 )['fingerprint'], $out['fingerprint'] );
+		$this->assertSame( aafm_builder_page_fingerprint( $stored ), $out['page_fingerprint'] );
+		$this->assertTrue( $out['reversible'] );
+		$this->assertIsInt( $out['restore_revision_id'] );
+		$this->assertSame( $this->fixture(), get_post_field( 'post_content', $out['restore_revision_id'], 'raw' ) );
+		$this->assertSame( $id, $out['post']['ID'] ?? $out['post']['id'] ?? null );
+	}
+
+	public function test_update_contributor_is_refused_on_another_users_page_and_editor_allowed(): void {
+		$id = $this->page( $this->fixture(), self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		$this->acting_as( 'contributor' );
+		$this->assertFalse( aafm_perm_avada_post_object( array( 'post_id' => $id ) ) );
+		$this->acting_as( 'editor' );
+		$this->assertTrue( aafm_perm_avada_post_object( array( 'post_id' => $id ) ) );
+		$this->assertSame( 'aafm_perm_avada_post_object', aafm_args_wpbakery_update_element()['permission_callback'] );
+	}
+
+	public function test_discovery_shows_the_update_to_an_editor_and_hides_it_from_a_subscriber(): void {
+		$check = aafm_ability_list_permission( 'aafm/wpbakery-update-element' );
+		$this->assertIsCallable( $check );
+		$this->acting_as( 'editor' );
+		$this->assertTrue( $check() );
+		$this->acting_as( 'subscriber' );
+		$this->assertFalse( $check() );
+	}
+
+	public function test_update_is_reported_as_not_covered_by_undo(): void {
+		$this->assertSame( 'not_covered', aafm_undo_refusals()['aafm/wpbakery-update-element'] );
+	}
+
+	public function test_update_schema_is_closed(): void {
+		$args   = aafm_args_wpbakery_update_element();
+		$schema = $args['input_schema'];
+		$this->assertFalse( $schema['additionalProperties'] );
+		$this->assertSame( array( 'post_id', 'index', 'expect' ), $schema['required'] );
+		$this->assertSame( 0, $schema['properties']['index']['minimum'] );
+		$this->assertFalse( $schema['properties']['expect']['additionalProperties'] );
+		$this->assertSame( array( 'tag', 'fingerprint' ), $schema['properties']['expect']['required'] );
+		$this->assertArrayNotHasKey( 'page_fingerprint', $schema['properties'] );
+		$this->assertArrayNotHasKey( 'anyOf', $schema );
+		$this->assertSame( 'aafm-writes', $args['category'] );
+		$this->assertSame(
+			array(
+				'readonly'    => false,
+				'destructive' => false,
+			),
+			$args['meta']['annotations']
+		);
+	}
+
+	public function test_update_description_says_what_the_design_requires(): void {
+		$row = aafm_get_abilities_registry_full()['aafm/wpbakery-update-element'];
+		$this->assertSame( 'writes', $row['group'] );
+		$this->assertSame( 'write', $row['risk'] );
+		$this->assertSame( 'wpbakery', $row['subject'] );
+		foreach ( array( $row['description'], aafm_ability_disclosures()['aafm/wpbakery-update-element'] ) as $text ) {
+			$this->assertStringNotContainsString( ' - ', $text );
+			foreach ( array( 'Visual Composer', 'Avada', 'Elementor' ) as $other ) {
+				$this->assertStringNotContainsString( $other, $text );
+			}
+			foreach ( array( 'edit access', 'unfiltered', 'Role Manager', 'restore', '2,000' ) as $phrase ) {
+				$this->assertStringContainsString( $phrase, $text );
+			}
+		}
+		$this->assertStringContainsString( 'Only while WPBakery Page Builder is active', $row['description'] );
+	}
 }

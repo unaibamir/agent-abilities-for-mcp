@@ -500,6 +500,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/avada-replace-text':
 		case 'aafm/wpbakery-get-page-content':
 		case 'aafm/wpbakery-replace-text':
+		case 'aafm/wpbakery-update-element':
 			return static function (): bool {
 				if ( aafm_can_edit_post_family() ) {
 					return true;

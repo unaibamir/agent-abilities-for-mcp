@@ -51,13 +51,21 @@ function aafm_register_wpbakery_elements_full_definitions( array $registry ): ar
  */
 function aafm_wpbakery_elements_registry_definitions(): array {
 	return array(
-		'aafm/wpbakery-list-elements' => array(
+		'aafm/wpbakery-list-elements'  => array(
 			'label'        => __( 'List WPBakery elements', 'agent-abilities-for-mcp' ),
 			'description'  => __( 'Lists the elements WPBakery Page Builder has on this site, add-ons included, from WPBakery\'s own element map: tag, name, category, whether it holds other elements, the elements it allows inside it and the ones it may sit in, and whether it is deprecated. With tag it returns one element with its settings: name, kind, label, default, the allowed values of a choice (at most 100), whether wpbakery-update-element can write it, and needs, which is unfiltered_html for Design Options and for settings that can carry script or raw HTML. With context grid it lists the Grid Builder\'s elements too. An element an add-on maps only inside wp-admin is not listed. Requires the edit_posts capability; WPBakery\'s Role Manager settings are not applied. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'wpbakery',
 			'args_builder' => 'aafm_args_wpbakery_list_elements',
+		),
+		'aafm/wpbakery-update-element' => array(
+			'label'        => __( 'Update a WPBakery element', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Changes the settings or the inner text of one element on a WPBakery page or Grid Builder template, named by its index and by the tag and fingerprint wpbakery-get-page-content returned with include_structure. set_atts sets settings, each value in the form wpbakery-list-elements gives as its kind (a link as url, title, target and rel; an image as an attachment id; Design Options as fields such as margin_top, never as CSS); remove_atts returns settings to their default; text replaces the inner content of an element that has a content setting and no child elements. Only the element\'s opening tag and, for text, its inner content change; every other byte of the page stays as it was. Refused: a stale index or fingerprint, a setting the element does not have or that cannot be written, a value its kind does not accept, already encoded values, and any change that would add or remove an element. Design Options and settings that can carry script or raw HTML need a user who may post unfiltered HTML. A save that would change other content for this user is refused, and nothing is saved. When a revision is kept, restore_revision_id brings the page back through restore-revision; the response also returns the element\'s new fingerprint and the page fingerprint. The outline stops at 2,000 elements. Not undoable from this plugin\'s change history. Requires edit access to the post; WPBakery\'s Role Manager settings are not applied, though its own save filter still runs. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
+			'group'        => 'writes',
+			'risk'         => 'write',
+			'subject'      => 'wpbakery',
+			'args_builder' => 'aafm_args_wpbakery_update_element',
 		),
 	);
 }
@@ -1071,5 +1079,306 @@ function aafm_exec_wpbakery_list_elements( array $input ) {
 		'total'      => count( $rows ),
 		'skipped'    => $skipped,
 		'map_source' => 'wpbakery',
+	);
+}
+
+/**
+ * Args for aafm/wpbakery-update-element.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_wpbakery_update_element(): array {
+	return array(
+		'label'               => aafm_ability_label( 'aafm/wpbakery-update-element' ),
+		'description'         => aafm_ability_description( 'aafm/wpbakery-update-element' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'post_id'     => array(
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the page, post or Grid Builder template.', 'agent-abilities-for-mcp' ),
+				),
+				'index'       => array(
+					'type'        => 'integer',
+					'minimum'     => 0,
+					'description' => __( 'The element\'s index in the outline from wpbakery-get-page-content with include_structure.', 'agent-abilities-for-mcp' ),
+				),
+				'expect'      => array(
+					'type'                 => 'object',
+					'properties'           => array(
+						'tag'         => array( 'type' => 'string' ),
+						'fingerprint' => array(
+							'type'    => 'string',
+							'pattern' => '^[0-9a-f]{16}$',
+						),
+					),
+					'required'             => array( 'tag', 'fingerprint' ),
+					'additionalProperties' => false,
+					'description'          => __( 'The tag and fingerprint the outline returned for that index. A page that changed since is refused.', 'agent-abilities-for-mcp' ),
+				),
+				'set_atts'    => array(
+					'type'        => 'object',
+					'description' => __( 'Setting name to value, each value in the input form of its kind from wpbakery-list-elements.', 'agent-abilities-for-mcp' ),
+				),
+				'remove_atts' => array(
+					'type'        => 'array',
+					'items'       => array( 'type' => 'string' ),
+					'description' => __( 'Setting names to remove, which returns them to the element\'s default.', 'agent-abilities-for-mcp' ),
+				),
+				'text'        => array(
+					'type'        => 'string',
+					'description' => __( 'New inner content for an element with a content setting and no child elements, such as a text block. HTML is filtered as in a post; the code of a raw HTML or raw JS element needs unfiltered HTML.', 'agent-abilities-for-mcp' ),
+				),
+			),
+			'required'             => array( 'post_id', 'index', 'expect' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'post'                => array( 'type' => 'object' ),
+				'index'               => array( 'type' => 'integer' ),
+				'fingerprint'         => array( 'type' => 'string' ),
+				'page_fingerprint'    => array( 'type' => 'string' ),
+				'changed'             => array(
+					'type'        => 'array',
+					'items'       => array( 'type' => 'string' ),
+					'description' => __( 'Settings whose stored value changed, and text when the inner content did. Empty when nothing was saved.', 'agent-abilities-for-mcp' ),
+				),
+				'restore_revision_id' => array(
+					'type'        => array( 'integer', 'null' ),
+					'description' => __( 'Pass to restore-revision to put the page back as it was. Null when nothing was saved or no revision is kept.', 'agent-abilities-for-mcp' ),
+				),
+				'reversible'          => array( 'type' => 'boolean' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_wpbakery_update_element',
+		'permission_callback' => 'aafm_perm_avada_post_object',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * The attributes of an opening tag with where each sits, so a change rewrites only that attribute and keeps the
+ * stored text, order and quoting of every other one.
+ *
+ * @param string $attribute_text The text between the tag name and the closing bracket.
+ * @return array<string,array{core_start:int,core_length:int,whole_length:int,value:string}> Keyed by lowercase name.
+ */
+function aafm_wpbakery_attribute_spans( string $attribute_text ): array {
+	$spans = array();
+	if ( false === preg_match_all( get_shortcode_atts_regex(), $attribute_text, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE ) ) {
+		return $spans;
+	}
+	foreach ( $matches as $m ) {
+		foreach ( array(
+			1 => 2,
+			3 => 4,
+			5 => 6,
+		) as $name_group => $value_group ) {
+			if ( isset( $m[ $name_group ] ) && '' !== $m[ $name_group ][0] && -1 !== $m[ $name_group ][1] ) {
+				$whole                                       = (string) $m[0][0];
+				$spans[ strtolower( $m[ $name_group ][0] ) ] = array(
+					'core_start'   => (int) $m[0][1],
+					'core_length'  => strlen( rtrim( $whole ) ),
+					'whole_length' => strlen( $whole ),
+					'value'        => (string) $m[ $value_group ][0],
+				);
+				break;
+			}
+		}
+	}
+	return $spans;
+}
+
+/**
+ * Execute aafm/wpbakery-update-element (design WB-2 with WB-11, WB-12 and the write side of WB-13).
+ *
+ * Resolves the element by index and fingerprint with the tag list the read used, looks its settings up in the
+ * element map (the Grid Builder's mapper first on a grid template), applies the script gate to every touched
+ * setting before any value is encoded, rebuilds only the opening tag and, for text, the inner content, and hands
+ * the result to the one guarded save (aafm_builder_commit()), which asks for a CSS rebuild only when a Design
+ * Options value changed. A stored closer, or its absence, is kept (Ruling R-S9a-0).
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_wpbakery_update_element( array $input ) {
+	$id   = absint( $input['post_id'] ?? 0 );
+	$post = aafm_exact_object_chain( 'post', $id );
+	if ( ! $post instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	if ( ! aafm_builder_ownership_allows( 'wpbakery', aafm_post_has_foreign_builder_ownership( $id ), $post ) ) {
+		return new WP_Error(
+			'aafm_not_wpbakery_owned',
+			__( 'This post is not a WPBakery page. Edit a page built with another builder in that builder. Nothing was changed.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 409 )
+		);
+	}
+
+	$set      = is_array( $input['set_atts'] ?? null ) ? $input['set_atts'] : array();
+	$remove   = is_array( $input['remove_atts'] ?? null ) ? array_values( $input['remove_atts'] ) : array();
+	$has_text = array_key_exists( 'text', $input );
+	if ( array() === $set && array() === $remove && ! $has_text ) {
+		return new WP_Error(
+			'aafm_builder_nothing_to_change',
+			__( 'Give at least one of set_atts, remove_atts or text. Nothing was changed.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
+	}
+
+	$content = (string) $post->post_content;
+	$tags    = aafm_wpbakery_shortcode_tags( $content );
+	if ( null === $tags ) {
+		return aafm_builder_error( 'aafm_builder_unparseable' );
+	}
+	$element = aafm_builder_resolve( $content, $tags, (int) ( $input['index'] ?? -1 ), is_array( $input['expect'] ?? null ) ? $input['expect'] : array() );
+	if ( is_wp_error( $element ) ) {
+		return $element;
+	}
+	$tag   = (string) $element['tag'];
+	$entry = aafm_wpbakery_map( 'vc_grid_item' === $post->post_type ? 'grid' : 'page', $tag );
+	if ( is_wp_error( $entry ) ) {
+		return $entry;
+	}
+	$params = array();
+	foreach ( (array) ( $entry['params'] ?? array() ) as $param ) {
+		if ( is_array( $param ) && isset( $param['param_name'] ) && is_string( $param['param_name'] ) ) {
+			$params[ $param['param_name'] ] = $param;
+		}
+	}
+
+	// Every touched setting is checked, and gated, before any value is encoded.
+	$touched = array();
+	foreach ( array_merge( array_map( 'strval', array_keys( $set ) ), array_map( 'strval', $remove ) ) as $name ) {
+		if ( 1 !== preg_match( '/^[a-z0-9_]+$/', $name ) || 'content' === $name || ! isset( $params[ $name ] ) ) {
+			return aafm_wpbakery_setting_error( 'aafm_builder_attribute_not_writable', $name );
+		}
+		$kind = aafm_wpbakery_param_kind( $tag, $params[ $name ] );
+		if ( ! $kind['writable'] ) {
+			return aafm_wpbakery_setting_error( 'aafm_builder_attribute_not_writable', $name );
+		}
+		$gate = aafm_wpbakery_script_gate( $kind['kind'] );
+		if ( is_wp_error( $gate ) ) {
+			return $gate;
+		}
+		$touched[ $name ] = $kind['kind'];
+	}
+	$has_children = in_array( (int) $element['index'], array_column( (array) aafm_builder_elements( $content, $tags ), 'parent' ), true );
+	if ( $has_text ) {
+		$kind = isset( $params['content'] ) && ! $has_children ? aafm_wpbakery_param_kind( $tag, $params['content'] ) : null;
+		if ( null === $kind || ! $kind['writable'] ) {
+			return aafm_wpbakery_setting_error( 'aafm_builder_attribute_not_writable', 'text' );
+		}
+		$gate = aafm_wpbakery_script_gate( $kind['kind'] );
+		if ( is_wp_error( $gate ) ) {
+			return $gate;
+		}
+	}
+
+	// The opening tag, and its attribute text between the tag name and the closing bracket.
+	$open      = substr( $content, (int) $element['start'], (int) $element['open_end'] - (int) $element['start'] );
+	$tail      = $element['self_closing'] ? (string) preg_replace( '/^.*?(\s*\/\]|\])$/s', '$1', $open ) : ']';
+	$attr_text = substr( $open, strlen( $tag ) + 1, strlen( $open ) - strlen( $tag ) - 1 - strlen( $tail ) );
+	$spans     = aafm_wpbakery_attribute_spans( $attr_text );
+
+	$changed       = array();
+	$design_change = false;
+	$edits         = array();
+	$appended      = '';
+	foreach ( $set as $name => $value ) {
+		$name          = (string) $name;
+		$param         = $params[ $name ];
+		$param['type'] = aafm_wpbakery_param_type( $tag, $name );
+		$encoded       = aafm_wpbakery_encode_value( $touched[ $name ], $value, $param );
+		if ( is_wp_error( $encoded ) ) {
+			return $encoded;
+		}
+		if ( isset( $spans[ $name ] ) && $spans[ $name ]['value'] === $encoded ) {
+			continue;
+		}
+		$changed[]     = $name;
+		$design_change = $design_change || 'css_editor' === $param['type'];
+		if ( isset( $spans[ $name ] ) ) {
+			$edits[ $spans[ $name ]['core_start'] ] = array( $spans[ $name ]['core_length'], $name . '="' . $encoded . '"' );
+		} else {
+			$appended .= ' ' . $name . '="' . $encoded . '"';
+		}
+	}
+	foreach ( $remove as $name ) {
+		$name = (string) $name;
+		if ( ! isset( $spans[ $name ] ) || isset( $edits[ $spans[ $name ]['core_start'] ] ) ) {
+			continue;
+		}
+		$changed[]                              = $name;
+		$design_change                          = $design_change || 'css_editor' === aafm_wpbakery_param_type( $tag, $name );
+		$edits[ $spans[ $name ]['core_start'] ] = array( $spans[ $name ]['whole_length'], '' );
+	}
+	krsort( $edits );
+	$new_attr_text = $attr_text;
+	foreach ( $edits as $start => list( $length, $replacement ) ) {
+		$new_attr_text = substr_replace( $new_attr_text, $replacement, $start, $length );
+	}
+	if ( '' !== $appended || array() !== $edits ) {
+		$trailing      = (string) preg_replace( '/^.*?(\s*)$/s', '$1', $attr_text );
+		$new_attr_text = rtrim( $new_attr_text ) . $appended . $trailing;
+	}
+
+	$inner = substr( $content, (int) $element['open_end'], (int) $element['inner_end'] - (int) $element['open_end'] );
+	if ( $has_text ) {
+		$param         = $params['content'];
+		$param['type'] = aafm_wpbakery_param_type( $tag, 'content' );
+		$new_inner     = aafm_wpbakery_encode_value( aafm_wpbakery_param_kind( $tag, $param )['kind'], $input['text'], $param );
+		if ( is_wp_error( $new_inner ) ) {
+			return $new_inner;
+		}
+		if ( $new_inner !== $inner ) {
+			if ( ! $element['has_closer'] || $element['self_closing'] ) {
+				return aafm_builder_error( 'aafm_builder_structure_changed' );
+			}
+			$changed[] = 'text';
+			$inner     = $new_inner;
+		}
+	}
+
+	$source = '[' . $tag . $new_attr_text . $tail . $inner . substr( $content, (int) $element['inner_end'], (int) $element['end'] - (int) $element['inner_end'] );
+	$new    = substr( $content, 0, (int) $element['start'] ) . $source . substr( $content, (int) $element['end'] );
+	$walk   = aafm_builder_walk( $content, $tags );
+	if ( null === $walk ) {
+		return aafm_builder_error( 'aafm_builder_unparseable' );
+	}
+	$atts     = shortcode_parse_atts( $new_attr_text );
+	$expected = aafm_builder_expected_walk(
+		$walk,
+		array(
+			'op'    => 'update',
+			'index' => (int) $element['index'],
+			'atts'  => is_array( $atts ) ? $atts : array(),
+		)
+	);
+
+	$result = aafm_builder_commit( $post, $content, $new, $tags, $expected, $design_change ? 'aafm_wpbakery_rebuild_css' : null, 'wpbakery' );
+	if ( is_wp_error( $result ) ) {
+		return $result;
+	}
+	$stored   = (string) $result['post']->post_content;
+	$elements = aafm_builder_elements( $stored, (array) aafm_wpbakery_shortcode_tags( $stored ) );
+	$after    = $elements[ (int) $element['index'] ] ?? null;
+	return array(
+		'post'                => aafm_redact_post( $result['post'] ),
+		'index'               => (int) $element['index'],
+		'fingerprint'         => null === $after ? '' : aafm_builder_fingerprint( $stored, $after ),
+		'page_fingerprint'    => $result['page_fingerprint'],
+		'changed'             => $result['unchanged'] ? array() : $changed,
+		'restore_revision_id' => $result['restore_revision_id'],
+		'reversible'          => $result['reversible'],
 	);
 }

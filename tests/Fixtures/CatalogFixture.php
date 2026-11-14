@@ -246,6 +246,7 @@ final class CatalogFixture {
 		'aafm/avada-update-global-options',
 		'aafm/avada-update-layout',
 		'aafm/avada-import-studio-item',
+		'aafm/avada-update-slider-settings',
 		'aafm/geodirectory-create-listing',
 		'aafm/geodirectory-update-listing',
 	);

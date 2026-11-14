@@ -1,6 +1,6 @@
 <?php
 /**
- * Wire-level proof that aafm-avada-list-elements and aafm-avada-update-element round-trip over a real
+ * Wire-level proof that the Avada element tools (list, update, insert, move and remove) round-trip over a real
  * tools/call, with the exact wire body asserted (absent keys asserted absent). Avada Builder's element map is the
  * seam stub (Ruling B14).
  *
@@ -25,19 +25,21 @@ final class AvadaElementsWireTest extends TestCase {
 		parent::set_up();
 		add_filter( 'aafm_integration_active_avada', '__return_true' );
 		AvadaMapStub::install();
+		add_shortcode( 'fusion_title', '__return_empty_string' );
 		aafm_flush_registry_cache();
 	}
 
 	public function tear_down(): void {
 		AvadaMapStub::remove();
 		remove_shortcode( 'fusion_button' );
+		remove_shortcode( 'fusion_title' );
 		remove_filter( 'aafm_integration_active_avada', '__return_true' );
 		aafm_flush_registry_cache();
 		parent::tear_down();
 	}
 
 	/**
-	 * A throwaway MCP server carrying only the two element abilities.
+	 * A throwaway MCP server carrying only the Avada element abilities.
 	 *
 	 * @param \WP\MCP\Core\McpAdapter $adapter Adapter.
 	 * @return \WP\MCP\Core\McpServer
@@ -48,7 +50,7 @@ final class AvadaElementsWireTest extends TestCase {
 		++$counter;
 		$server_id = 'aafm-server-avada-elements-wire-test-' . $counter;
 		$tools     = aafm_build_server_tools(
-			aafm_preflight_bound_server_tools_cached( array( 'aafm/avada-list-elements', 'aafm/avada-update-element' ) )
+			aafm_preflight_bound_server_tools_cached( array( 'aafm/avada-list-elements', 'aafm/avada-update-element', 'aafm/avada-insert-element', 'aafm/avada-move-element', 'aafm/avada-remove-element' ) )
 		);
 		$this->in_action(
 			'mcp_adapter_init',
@@ -91,7 +93,7 @@ final class AvadaElementsWireTest extends TestCase {
 		);
 		update_post_meta( $id, 'fusion_builder_status', 'active' );
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
-		$this->register_enabled( array( 'aafm/avada-list-elements', 'aafm/avada-update-element' ) );
+		$this->register_enabled( array( 'aafm/avada-list-elements', 'aafm/avada-update-element', 'aafm/avada-insert-element', 'aafm/avada-move-element', 'aafm/avada-remove-element' ) );
 		$this->acting_as( 'editor' );
 		// Avada registers its element shortcodes itself; PHPUnit does not load it, and the registration above resets them.
 		add_shortcode( 'fusion_button', '__return_empty_string' );
@@ -235,5 +237,183 @@ final class AvadaElementsWireTest extends TestCase {
 		$this->assertSame( array( 'post', 'index', 'fingerprint', 'page_fingerprint', 'changed', 'restore_revision_id', 'reversible', 'reversible_reason', 'undo' ), array_keys( $done ) );
 		$this->assertNull( $done['restore_revision_id'] );
 		$this->assertFalse( $done['reversible'] );
+	}
+
+	/**
+	 * Call one tool and return its wire body.
+	 *
+	 * @param object              $handler Handler.
+	 * @param string              $ability Ability.
+	 * @param array<string,mixed> $args    Arguments.
+	 * @param string              $req     Request id.
+	 * @return array<string,mixed>
+	 */
+	private function call( $handler, string $ability, array $args, string $req ): array {
+		return $this->wire(
+			$handler->call_tool(
+				array(
+					'name'      => aafm_mcp_tool_name( $ability ),
+					'arguments' => $args,
+				),
+				$req
+			)
+		);
+	}
+
+	public function test_insert_move_and_remove_round_trip_with_exact_keys(): void {
+		list( $handler, $id ) = $this->wired();
+		$container            = array(
+			'tag'      => 'fusion_builder_container',
+			'children' => array(
+				array(
+					'tag'      => 'fusion_builder_row',
+					'children' => array(
+						array(
+							'tag'      => 'fusion_builder_column',
+							'atts'     => array( 'type' => '1_1' ),
+							'children' => array(
+								array(
+									'tag'  => 'fusion_title',
+									'text' => 'Wire',
+								),
+							),
+						),
+					),
+				),
+			),
+		);
+		$ins                  = $this->call(
+			$handler,
+			'aafm/avada-insert-element',
+			array(
+				'post_id'          => $id,
+				'page_fingerprint' => self::fp( self::PAGE ),
+				'anchor_index'     => 0,
+				'anchor_expect'    => array(
+					'tag'         => 'fusion_builder_container',
+					'fingerprint' => self::fp( self::PAGE ),
+				),
+				'placement'        => 'after',
+				'element'          => $container,
+			),
+			'req-avada-insert-1'
+		);
+		$this->assertSame( array( 'post', 'index', 'fingerprint', 'page_fingerprint', 'inserted', 'restore_revision_id', 'reversible', 'undo' ), array_keys( $ins ), 'reversible_reason is absent while the restore point is kept.' );
+		$this->assertSame( 4, $ins['index'] );
+		$this->assertSame( 4, $ins['inserted'] );
+		$this->assertTrue( $ins['reversible'] );
+		$stored = (string) get_post_field( 'post_content', $id, 'raw' );
+		$this->assertSame( self::fp( $stored ), $ins['page_fingerprint'] );
+
+		$mov = $this->call(
+			$handler,
+			'aafm/avada-move-element',
+			array(
+				'post_id'          => $id,
+				'page_fingerprint' => $ins['page_fingerprint'],
+				'index'            => 4,
+				'expect'           => array(
+					'tag'         => 'fusion_builder_container',
+					'fingerprint' => $ins['fingerprint'],
+				),
+				'anchor_index'     => 0,
+				'anchor_expect'    => array(
+					'tag'         => 'fusion_builder_container',
+					'fingerprint' => self::fp( self::PAGE ),
+				),
+				'placement'        => 'before',
+			),
+			'req-avada-move-1'
+		);
+		$this->assertSame( array( 'post', 'index', 'fingerprint', 'page_fingerprint', 'moved', 'restore_revision_id', 'reversible', 'undo' ), array_keys( $mov ) );
+		$this->assertSame( 0, $mov['index'] );
+		$this->assertTrue( $mov['moved'] );
+		$this->assertStringEndsWith( self::PAGE, (string) get_post_field( 'post_content', $id, 'raw' ) );
+
+		$rem = $this->call(
+			$handler,
+			'aafm/avada-remove-element',
+			array(
+				'post_id'          => $id,
+				'page_fingerprint' => $mov['page_fingerprint'],
+				'index'            => 0,
+				'expect'           => array(
+					'tag'         => 'fusion_builder_container',
+					'fingerprint' => $mov['fingerprint'],
+				),
+			),
+			'req-avada-remove-1'
+		);
+		$this->assertSame( array( 'post', 'removed', 'page_fingerprint', 'restore_revision_id', 'reversible', 'undo' ), array_keys( $rem ) );
+		$this->assertSame( 4, $rem['removed'] );
+		$this->assertSame( self::PAGE, get_post_field( 'post_content', $id, 'raw' ) );
+		$this->assertIsInt( $rem['restore_revision_id'] );
+	}
+
+	public function test_a_lost_restore_point_adds_reversible_reason_to_insert_and_move(): void {
+		list( $handler, $id ) = $this->wired();
+		$keep                 = static fn(): int => 1;
+		add_filter( 'wp_revisions_to_keep', $keep );
+		$ins                  = $this->call(
+			$handler,
+			'aafm/avada-insert-element',
+			array(
+				'post_id'          => $id,
+				'page_fingerprint' => self::fp( self::PAGE ),
+				'anchor_index'     => 3,
+				'anchor_expect'    => array(
+					'tag'         => 'fusion_button',
+					'fingerprint' => self::fp( self::BUTTON ),
+				),
+				'placement'        => 'after',
+				'element'          => array(
+					'tag'  => 'fusion_title',
+					'text' => 'Kept one',
+				),
+			),
+			'req-avada-insert-2'
+		);
+		$this->assertSame( array( 'post', 'index', 'fingerprint', 'page_fingerprint', 'inserted', 'restore_revision_id', 'reversible', 'reversible_reason', 'undo' ), array_keys( $ins ) );
+		$this->assertNull( $ins['restore_revision_id'] );
+		$this->assertFalse( $ins['reversible'] );
+		$mov = $this->call(
+			$handler,
+			'aafm/avada-move-element',
+			array(
+				'post_id'          => $id,
+				'page_fingerprint' => $ins['page_fingerprint'],
+				'index'            => 4,
+				'expect'           => array(
+					'tag'         => 'fusion_title',
+					'fingerprint' => $ins['fingerprint'],
+				),
+				'anchor_index'     => 3,
+				'anchor_expect'    => array(
+					'tag'         => 'fusion_button',
+					'fingerprint' => self::fp( self::BUTTON ),
+				),
+				'placement'        => 'before',
+			),
+			'req-avada-move-2'
+		);
+		$this->assertSame( array( 'post', 'index', 'fingerprint', 'page_fingerprint', 'moved', 'restore_revision_id', 'reversible', 'reversible_reason', 'undo' ), array_keys( $mov ) );
+		$refused = $handler->call_tool(
+			array(
+				'name'      => aafm_mcp_tool_name( 'aafm/avada-remove-element' ),
+				'arguments' => array(
+					'post_id'          => $id,
+					'page_fingerprint' => $mov['page_fingerprint'],
+					'index'            => 3,
+					'expect'           => array(
+						'tag'         => 'fusion_title',
+						'fingerprint' => $mov['fingerprint'],
+					),
+				),
+			),
+			'req-avada-remove-2'
+		);
+		remove_filter( 'wp_revisions_to_keep', $keep );
+		$this->assertTrue( $refused->getIsError() );
+		$this->assertStringContainsString( 'keeps only 1 revision', $refused->getContent()[0]->getText() );
 	}
 }

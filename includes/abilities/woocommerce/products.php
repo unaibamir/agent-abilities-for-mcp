@@ -84,7 +84,7 @@ function aafm_wc_products_registry_definitions(): array {
 
 		'aafm/wc-update-product' => array(
 			'label'        => __( 'Update WooCommerce product', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Updates a WooCommerce product by id, changing only the fields you send. remove_attributes takes attributes off the product, refusing any that a variation uses. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Updates a WooCommerce product by id, changing only the fields you send. remove_attributes takes attributes off the product, refusing any that a variation uses and refusing the whole removal on a product with more than 1,000 unpublished variations. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -864,18 +864,23 @@ function aafm_wc_attributes_without( \WC_Product $product, array $stored, array 
 	// as using every attribute, so a failed read never strands one. Any variable product type has
 	// variations (a variable subscription too); a grouped product's children are not variations.
 	// get_children() lists only published and private variations, so the draft and pending ones (the
-	// WooCommerce REST API creates them) are added from the posts table.
+	// WooCommerce REST API creates them) are added from the posts table: the statuses 'any' covers
+	// minus those two, so trash and auto-draft stay out. At most 1,000 are checked; with more the call
+	// refuses, because an unchecked variation could lose an attribute it still uses.
 	$in_use = array();
 	if ( is_a( $product, 'WC_Product_Variable' ) || 0 === strpos( (string) $product->get_type(), 'variable' ) ) {
-		$drafts   = get_posts(
+		$drafts = get_posts(
 			array(
 				'post_parent' => $product->get_id(),
 				'post_type'   => 'product_variation',
-				'post_status' => 'any',
+				'post_status' => array_values( array_diff( get_post_stati( array( 'exclude_from_search' => false ) ), array( 'publish', 'private' ) ) ),
 				'fields'      => 'ids',
-				'numberposts' => -1,
+				'numberposts' => 1001, // phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_numberposts -- ids only, capped one past the limit so a larger set refuses.
 			)
 		);
+		if ( count( $drafts ) > 1000 ) {
+			return new \WP_Error( 'aafm_wc_attribute_too_many_variations', __( 'This product has more than 1,000 unpublished variations, too many to check, so nothing was saved. Remove the attribute in WooCommerce instead.', 'agent-abilities-for-mcp' ), array( 'status' => 400 ) );
+		}
 		$children = array_unique( array_map( 'intval', array_merge( (array) $product->get_children(), $drafts ) ) );
 		foreach ( $children as $child_id ) {
 			$variation = aafm_wc_get_variation( $child_id );
@@ -1311,7 +1316,7 @@ function aafm_args_wc_update_product(): array {
 	);
 	$properties['remove_attributes'] = array(
 		'type'        => 'array',
-		'description' => __( 'Names or slugs of attributes to remove from this product, for example ["Color"] or ["pa_color"]. An attribute any variation of the product uses is refused, naming those variations, and so is a name the product does not have. Do not send the same attribute in attributes too.', 'agent-abilities-for-mcp' ),
+		'description' => __( 'Names or slugs of attributes to remove from this product, for example ["Color"] or ["pa_color"]. An attribute any variation of the product uses is refused, naming those variations, and so is a name the product does not have. A product with more than 1,000 unpublished variations is too many to check, so the removal is refused. Do not send the same attribute in attributes too.', 'agent-abilities-for-mcp' ),
 		'items'       => array(
 			'type'      => 'string',
 			'minLength' => 1,

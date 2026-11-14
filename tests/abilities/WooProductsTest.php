@@ -1639,4 +1639,140 @@ final class WooProductsTest extends TestCase {
 		$this->assertSame( 'aafm_wc_attribute_in_use', $res->get_error_code() );
 		$this->assertStringContainsString( (string) $variation, $res->get_error_message() );
 	}
+
+	public function test_published_and_private_variations_are_still_covered(): void {
+		list( $id ) = $this->product_with_attributes( false );
+		$variations = array(
+			'publish' => 9311,
+			'private' => 9312,
+		);
+		foreach ( $variations as $status => $variation ) {
+			\AAFM\Tests\WcStubStore::seed(
+				$variation,
+				array(
+					'parent_id'  => $id,
+					'type'       => 'variation',
+					'status'     => $status,
+					'attributes' => array( 'size' => 'S' ),
+				)
+			);
+		}
+
+		$res = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id'        => $id,
+				'remove_attributes' => array( 'Size' ),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_attribute_in_use', $res->get_error_code() );
+		$this->assertStringContainsString( '9311', $res->get_error_message() );
+		$this->assertStringContainsString( '9312', $res->get_error_message() );
+	}
+
+	public function test_trashed_variation_does_not_block_removal(): void {
+		list( $id ) = $this->product_with_attributes( false );
+		$variation  = (int) self::factory()->post->create(
+			array(
+				'post_type'   => 'product_variation',
+				'post_status' => 'trash',
+				'post_parent' => $id,
+			)
+		);
+		\AAFM\Tests\WcStubStore::seed(
+			$variation,
+			array(
+				'parent_id'  => $id,
+				'type'       => 'variation',
+				'status'     => 'trash',
+				'attributes' => array( 'size' => 'M' ),
+			)
+		);
+
+		$res = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id'        => $id,
+				'remove_attributes' => array( 'Size' ),
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res, is_wp_error( $res ) ? $res->get_error_message() : '' );
+		$this->assertSame( array( 'Color' ), $this->attribute_names( $id ) );
+	}
+
+	/**
+	 * Answer the draft-variation id query with $count fake ids, and record its query vars.
+	 *
+	 * @param int                 $count Ids to return.
+	 * @param array<string,mixed> $vars  Receives the query vars.
+	 * @return callable The filter, to remove afterwards.
+	 */
+	private function stub_variation_ids( int $count, array &$vars ): callable {
+		$filter = static function ( $posts, \WP_Query $query ) use ( $count, &$vars ) {
+			if ( 'product_variation' !== $query->get( 'post_type' ) ) {
+				return $posts;
+			}
+			$vars = $query->query_vars;
+			return range( 800001, 800000 + min( $count, (int) $query->get( 'posts_per_page' ) ) );
+		};
+		add_filter( 'posts_pre_query', $filter, 10, 2 );
+		return $filter;
+	}
+
+	public function test_variation_query_carries_the_status_list_and_the_1001_limit(): void {
+		list( $id ) = $this->product_with_attributes( false, 'variable' );
+		$vars       = array();
+		$filter     = $this->stub_variation_ids( 0, $vars );
+		wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id'        => $id,
+				'remove_attributes' => array( 'Size' ),
+			)
+		);
+		remove_filter( 'posts_pre_query', $filter, 10 );
+
+		$expected = array_values( array_diff( get_post_stati( array( 'exclude_from_search' => false ) ), array( 'publish', 'private' ) ) );
+		$this->assertEqualsCanonicalizing( $expected, array_values( (array) $vars['post_status'] ) );
+		$this->assertNotContains( 'trash', (array) $vars['post_status'] );
+		$this->assertNotContains( 'auto-draft', (array) $vars['post_status'] );
+		$this->assertContains( 'draft', (array) $vars['post_status'] );
+		$this->assertSame( 1001, (int) $vars['posts_per_page'] );
+	}
+
+	public function test_1001_unpublished_variations_refuse_and_change_nothing(): void {
+		list( $id ) = $this->product_with_attributes( false, 'variable' );
+		$vars       = array();
+		$filter     = $this->stub_variation_ids( 5000, $vars );
+		$res        = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id'        => $id,
+				'remove_attributes' => array( 'Color' ),
+			)
+		);
+		remove_filter( 'posts_pre_query', $filter, 10 );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_attribute_too_many_variations', $res->get_error_code() );
+		$this->assertSame( 400, $res->get_error_data()['status'] ?? null );
+		$this->assertSame( array( 'Color', 'Size' ), $this->attribute_names( $id ) );
+	}
+
+	public function test_exactly_1000_unpublished_variations_are_checked(): void {
+		list( $id ) = $this->product_with_attributes( false, 'variable' );
+		$vars       = array();
+		$filter     = $this->stub_variation_ids( 1000, $vars );
+		$res        = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id'        => $id,
+				'remove_attributes' => array( 'Color' ),
+			)
+		);
+		remove_filter( 'posts_pre_query', $filter, 10 );
+
+		// Each fake id cannot be loaded, so it counts as using the attribute: every one was checked.
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_attribute_in_use', $res->get_error_code() );
+		$this->assertStringContainsString( '801000', $res->get_error_message() );
+	}
 }

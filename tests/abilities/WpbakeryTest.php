@@ -778,4 +778,179 @@ WPB;
 
 		$this->assertTrue( $this->read( array( 'post_id' => $id ) )['is_wpbakery_owned'] );
 	}
+	/**
+	 * The S8a fixture: a page WPBakery 9.1's own editor saved on the smoke site (scratchpad/1113/s8a-confirm.md).
+	 *
+	 * @return string
+	 */
+	private function elements_fixture(): string {
+		return (string) file_get_contents( dirname( __DIR__ ) . '/Fixtures/Wpbakery/page-elements.txt' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a local fixture file, not a remote URL.
+	}
+
+	/**
+	 * The outline of the fixture page read as the given role.
+	 *
+	 * @param string $role Role.
+	 * @return array<string,mixed>
+	 */
+	private function read_elements( string $role = 'editor' ): array {
+		$id = $this->make_page( $this->elements_fixture() );
+		$this->acting_as( $role );
+		return $this->read(
+			array(
+				'post_id'           => $id,
+				'include_structure' => true,
+			)
+		);
+	}
+
+	/**
+	 * The decoded attributes of the first outline item with a tag.
+	 *
+	 * @param array<string,mixed> $out Read output.
+	 * @param string              $tag Tag.
+	 * @return array<string,mixed>
+	 */
+	private function item( array $out, string $tag ): array {
+		foreach ( $out['structure'] as $item ) {
+			if ( $tag === $item['tag'] ) {
+				return $item;
+			}
+		}
+		$this->fail( 'No ' . $tag . ' in the outline.' );
+	}
+
+	public function test_outline_items_carry_a_fingerprint_that_resolves(): void {
+		$content = $this->elements_fixture();
+		$out     = $this->read_elements();
+		$tags    = aafm_wpbakery_shortcode_tags( $content );
+
+		$this->assertSame( 'ok', $out['structure_status'] );
+		$this->assertCount( 13, $out['structure'] );
+		foreach ( $out['structure'] as $item ) {
+			$this->assertMatchesRegularExpression( '/^[0-9a-f]{16}$/', $item['fingerprint'] );
+			$this->assertIsArray(
+				aafm_builder_resolve(
+					$content,
+					$tags,
+					$item['index'],
+					array(
+						'tag'         => $item['tag'],
+						'fingerprint' => $item['fingerprint'],
+					)
+				)
+			);
+		}
+	}
+
+	public function test_the_read_returns_the_page_fingerprint_with_the_outline(): void {
+		$out = $this->read_elements();
+		$this->assertSame( aafm_builder_page_fingerprint( $this->elements_fixture() ), $out['page_fingerprint'] );
+
+		$plain = $this->read( array( 'post_id' => $out['post_id'] ) );
+		$this->assertArrayNotHasKey( 'page_fingerprint', $plain );
+	}
+
+	public function test_decoded_heading_reverses_quotes_and_brackets(): void {
+		$heading = $this->item( $this->read_elements(), 'vc_custom_heading' );
+
+		$this->assertSame( 'Say "hello" to [S8a] heading', ( (array) $heading['atts_decoded'] )['text'] );
+		$this->assertSame( 'Say ``hello`` to `{`S8a`}` heading', ( (array) $heading['atts'] )['text'] );
+	}
+
+	public function test_decoded_link_has_four_parts(): void {
+		$button = $this->item( $this->read_elements(), 'wpb_btn' );
+
+		$this->assertSame(
+			array(
+				'url'    => 'https://example.com/docs?a=1&b=2',
+				'title'  => 'Docs: start here',
+				'target' => '_blank',
+				'rel'    => 'nofollow',
+			),
+			( (array) $button['atts_decoded'] )['link']
+		);
+		$this->assertSame( 'Read the docs', ( (array) $button['atts_decoded'] )['title'] );
+	}
+
+	public function test_decoded_param_group_is_rows(): void {
+		$bar = $this->item( $this->read_elements(), 'vc_progress_bar' );
+
+		$this->assertSame(
+			array(
+				array(
+					'label' => 'Skill "A" [one]',
+					'value' => '90',
+				),
+				array(
+					'label' => 'Design',
+					'value' => '80',
+				),
+				array(
+					'label' => 'Marketing',
+					'value' => '70',
+				),
+			),
+			( (array) $bar['atts_decoded'] )['values']
+		);
+	}
+
+	public function test_decoded_safe_text_reverses_the_e8_form(): void {
+		$gallery = $this->item( $this->read_elements(), 'vc_gallery' );
+
+		$this->assertSame( 'https://example.com/one,https://example.com/two', ( (array) $gallery['atts_decoded'] )['custom_links'] );
+		$this->assertStringStartsWith( '#E-8_', ( (array) $gallery['atts'] )['custom_links'] );
+	}
+
+	public function test_decoded_raw_html_is_the_markup(): void {
+		$out = $this->read_elements();
+
+		$this->assertSame( '<div class="s8a-raw">Raw <strong>HTML</strong> &amp; "quotes"</div>', $this->item( $out, 'vc_raw_html' )['text'] );
+		$this->assertSame( '<script>window.s8aRawJs = "ok";</script>', $this->item( $out, 'vc_raw_js' )['text'] );
+		$this->assertNull( aafm_wpbakery_decode_raw( 'not base64 at all!' ) );
+	}
+
+	public function test_text_is_present_only_on_a_leaf(): void {
+		$out = $this->read_elements();
+
+		$this->assertArrayNotHasKey( 'text', $this->item( $out, 'vc_row' ) );
+		$this->assertArrayNotHasKey( 'text', $this->item( $out, 'vc_column_inner' ) );
+		$this->assertSame( "\r\n\r\nSeed text block.\r\n\r\n", $this->item( $out, 'vc_column_text' )['text'] );
+		$this->assertSame( '', $this->item( $out, 'vc_custom_heading' )['text'] );
+	}
+
+	public function test_a_grid_item_is_readable_by_an_editor_and_refused_for_a_subscriber(): void {
+		register_post_type(
+			'vc_grid_item',
+			array(
+				'public'          => false,
+				'capability_type' => 'post',
+				'supports'        => array( 'title', 'editor' ),
+			)
+		);
+		$content = (string) file_get_contents( dirname( __DIR__ ) . '/Fixtures/Wpbakery/grid-item.txt' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a local fixture file, not a remote URL.
+		$id      = self::factory()->post->create(
+			array(
+				'post_type'    => 'vc_grid_item',
+				'post_content' => $content,
+				'post_author'  => self::factory()->user->create( array( 'role' => 'administrator' ) ),
+			)
+		);
+
+		$this->acting_as( 'editor' );
+		$this->assertTrue( aafm_perm_avada_post_object( array( 'post_id' => $id ) ) );
+		$out = $this->read(
+			array(
+				'post_id'           => $id,
+				'include_structure' => true,
+			)
+		);
+		$this->assertSame( $content, $out['content'] );
+		$this->assertTrue( $out['is_wpbakery_owned'] );
+		$this->assertCount( 25, $out['structure'] );
+		$this->assertSame( "\r\n\r\nGrid card label\r\n\r\n", $this->item( $out, 'vc_column_text' )['text'] );
+
+		$this->acting_as( 'subscriber' );
+		$this->assertFalse( aafm_perm_avada_post_object( array( 'post_id' => $id ) ) );
+	}
 }

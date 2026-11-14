@@ -95,7 +95,7 @@ function aafm_args_wpbakery_get_page_content(): array {
 				'include_structure' => array(
 					'type'        => 'boolean',
 					'default'     => false,
-					'description' => __( 'When true, also returns structure: the shortcode elements in document order with their nesting depth and attributes, and structure_status. Use it to find the element that holds the text you want to change before calling wpbakery-replace-text.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'When true, also returns structure: the shortcode elements in document order with their nesting depth, attributes, decoded attributes, inner text and fingerprint, plus structure_status and page_fingerprint. Use it to find the element that holds the text you want to change before calling wpbakery-replace-text.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id' ),
@@ -124,8 +124,24 @@ function aafm_args_wpbakery_get_page_content(): array {
 							'self_closing' => array( 'type' => 'boolean' ),
 							'has_closer'   => array( 'type' => 'boolean' ),
 							'atts'         => array( 'type' => 'object' ),
+							'fingerprint'  => array(
+								'type'        => 'string',
+								'description' => __( 'First 16 hex characters of the SHA-256 of the element\'s stored source, children included. A later element write names the element by index, tag and this fingerprint.', 'agent-abilities-for-mcp' ),
+							),
+							'atts_decoded' => array(
+								'type'        => 'object',
+								'description' => __( 'The attributes as WPBakery reads them: escaped quotes and brackets restored, a link split into url, title, target and rel, a param group as rows, and a #E-8_ value decoded.', 'agent-abilities-for-mcp' ),
+							),
+							'text'         => array(
+								'type'        => 'string',
+								'description' => __( 'Only on an element with no child element: its inner content as stored. For raw HTML and raw JS elements, the decoded code; absent when the stored value does not decode.', 'agent-abilities-for-mcp' ),
+							),
 						),
 					),
+				),
+				'page_fingerprint'  => array(
+					'type'        => 'string',
+					'description' => __( 'Only with include_structure: first 16 hex characters of the SHA-256 of the whole stored content.', 'agent-abilities-for-mcp' ),
 				),
 			),
 		),
@@ -143,8 +159,8 @@ function aafm_args_wpbakery_get_page_content(): array {
 
 /**
  * Execute aafm/wpbakery-get-page-content: raw post_content, unrendered, an ownership flag
- * decided from the content as the guard decides it, and on request the outline the write guards.
- * No _wpb_* meta is read or returned.
+ * decided from the content as the guard decides it, on request the outline the writes guard (with
+ * fingerprints, decoded attributes and leaf text, design WB-1) and the page fingerprint.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
@@ -163,13 +179,121 @@ function aafm_exec_wpbakery_get_page_content( array $input ) {
 		'is_wpbakery_owned' => aafm_builder_ownership_allows( 'wpbakery', aafm_post_has_foreign_builder_ownership( $id, true ), $post ),
 	);
 	if ( ! empty( $input['include_structure'] ) ) {
-		$tags = aafm_wpbakery_shortcode_tags( $content );
-		$out  = array_merge(
+		$tags                    = aafm_wpbakery_shortcode_tags( $content );
+		$out                     = array_merge(
 			$out,
-			null === $tags ? array( 'structure_status' => 'unparseable' ) : aafm_avada_structure( $content, $tags )
+			null === $tags ? array( 'structure_status' => 'unparseable' ) : aafm_wpbakery_structure( $content, $tags )
 		);
+		$out['page_fingerprint'] = aafm_builder_page_fingerprint( $content );
 	}
 	return $out;
+}
+
+/**
+ * The include_structure outline: aafm_avada_structure()'s items with each one's fingerprint, decoded
+ * attributes and, on an element with no child element, its text. The offsets come from
+ * aafm_builder_elements() with the same tag list; an outline that does not line up with it is
+ * reported unparseable rather than with fingerprints of the wrong element.
+ *
+ * @param string        $content Content.
+ * @param array<string> $tags    Tags scanned from the content.
+ * @return array<string,mixed>
+ */
+function aafm_wpbakery_structure( string $content, array $tags ): array {
+	$out = aafm_avada_structure( $content, $tags );
+	if ( ! isset( $out['structure'] ) ) {
+		return $out;
+	}
+	$elements = aafm_builder_elements( $content, $tags );
+	if ( null === $elements ) {
+		return array( 'structure_status' => 'unparseable' );
+	}
+	$parents = array_flip( array_filter( array_column( $elements, 'parent' ), 'is_int' ) );
+	foreach ( $out['structure'] as $i => $item ) {
+		$element = $elements[ $item['index'] ] ?? null;
+		if ( null === $element || $element['tag'] !== $item['tag'] ) {
+			return array( 'structure_status' => 'unparseable' );
+		}
+		$item['fingerprint']  = aafm_builder_fingerprint( $content, $element );
+		$item['atts_decoded'] = (object) aafm_wpbakery_decode_atts( $element['tag'], $element['atts'] );
+		if ( ! isset( $parents[ $element['index'] ] ) ) {
+			$inner = substr( $content, $element['open_end'], $element['inner_end'] - $element['open_end'] );
+			$text  = in_array( $element['tag'], array( 'vc_raw_html', 'vc_raw_js' ), true ) ? aafm_wpbakery_decode_raw( $inner ) : $inner;
+			if ( null !== $text ) {
+				$item['text'] = $text;
+			}
+		}
+		$out['structure'][ $i ] = $item;
+	}
+	return $out;
+}
+
+/**
+ * Attribute values as WPBakery 9.1 reads them, decided by each stored value's shape (the element map
+ * is not consulted): W2's escaped quote and brackets restored on every value, as prepareAtts() does;
+ * then a url:..|title:.. value split into url, title, target and rel as vc_build_link() does (W3); a
+ * URL-encoded JSON list decoded to rows as vc_param_group_parse_atts() does (W6); a #E-8_ value
+ * decoded as vc_value_from_safe() does (W17). The S9a encoder is the inverse.
+ *
+ * @param string              $tag  Shortcode tag (kept for the encoder's signature; unused by the shape rules).
+ * @param array<string,mixed> $atts Stored attributes.
+ * @return array<string,mixed>
+ */
+function aafm_wpbakery_decode_atts( string $tag, array $atts ): array {
+	unset( $tag );
+	$decoded = array();
+	foreach ( $atts as $name => $value ) {
+		$decoded[ $name ] = is_string( $value ) ? aafm_wpbakery_decode_value( $value ) : $value;
+	}
+	return $decoded;
+}
+
+/**
+ * One attribute value, decoded by shape (see aafm_wpbakery_decode_atts()).
+ *
+ * @param string $value Stored value.
+ * @return string|array<mixed>
+ */
+function aafm_wpbakery_decode_value( string $value ) {
+	$escapes = array( '`{`', '`}`', '``' );
+	$plain   = array( '[', ']', '"' );
+	$value   = str_replace( $escapes, $plain, $value );
+	if ( 0 === strpos( $value, '#E-8_' ) ) {
+		$raw = base64_decode( substr( $value, 5 ), true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- reading WPBakery's own #E-8_ form back (W17), never executed.
+		return false === $raw ? $value : str_replace( $escapes, $plain, rawurldecode( $raw ) );
+	}
+	if ( 1 === preg_match( '/^(url|title|target|rel):[^|]*(\|(url|title|target|rel):[^|]*)*$/', $value ) ) {
+		$link = array(
+			'url'    => '',
+			'title'  => '',
+			'target' => '',
+			'rel'    => '',
+		);
+		foreach ( explode( '|', $value ) as $pair ) {
+			$parts             = explode( ':', $pair );
+			$link[ $parts[0] ] = trim( rawurldecode( $parts[1] ) );
+		}
+		return $link;
+	}
+	if ( 0 === stripos( $value, '%5B' ) ) {
+		$rows = json_decode( urldecode( $value ), true );
+		if ( is_array( $rows ) && array_values( $rows ) === $rows && array() === array_filter( $rows, static fn( $row ): bool => ! is_array( $row ) ) ) {
+			return $rows;
+		}
+	}
+	return $value;
+}
+
+/**
+ * The code a raw HTML or raw JS element holds, as WPBakery's template decodes it (W7): tags stripped,
+ * base64, then URL decoding.
+ *
+ * @param string $inner Stored inner content.
+ * @return string|null Null when the stored value is not base64.
+ */
+function aafm_wpbakery_decode_raw( string $inner ): ?string {
+	$raw = base64_decode( wp_strip_all_tags( $inner ), true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- reading WPBakery's own raw element form back (W7), never executed.
+	return false === $raw ? null : rawurldecode( $raw );
 }
 
 /**

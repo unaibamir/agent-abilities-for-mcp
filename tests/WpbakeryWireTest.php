@@ -70,6 +70,22 @@ final class WpbakeryWireTest extends TestCase {
 
 	public const PAGE = '[vc_row][vc_column][vc_column_text]<p>Hello world</p>[/vc_column_text][vc_custom_heading text="Heading bravo"][/vc_column][/vc_row]';
 
+	private const COLUMN = '[vc_column][vc_column_text]<p>Hello world</p>[/vc_column_text][vc_custom_heading text="Heading bravo"][/vc_column]';
+
+	private const TEXT = '[vc_column_text]<p>Hello world</p>[/vc_column_text]';
+
+	private const HEADING = '[vc_custom_heading text="Heading bravo"]';
+
+	/**
+	 * A fingerprint worked out here, independent of the engine: the first 16 hex characters of SHA-256.
+	 *
+	 * @param string $source Element source.
+	 * @return string
+	 */
+	private static function fp( string $source ): string {
+		return substr( hash( 'sha256', $source ), 0, 16 );
+	}
+
 	/**
 	 * A server, a handler and a WPBakery page the editor can edit.
 	 *
@@ -147,6 +163,8 @@ final class WpbakeryWireTest extends TestCase {
 						'self_closing' => false,
 						'has_closer'   => true,
 						'atts'         => array(),
+						'fingerprint'  => self::fp( self::PAGE ),
+						'atts_decoded' => array(),
 					),
 					array(
 						'index'        => 1,
@@ -155,6 +173,8 @@ final class WpbakeryWireTest extends TestCase {
 						'self_closing' => false,
 						'has_closer'   => true,
 						'atts'         => array(),
+						'fingerprint'  => self::fp( self::COLUMN ),
+						'atts_decoded' => array(),
 					),
 					array(
 						'index'        => 2,
@@ -163,6 +183,9 @@ final class WpbakeryWireTest extends TestCase {
 						'self_closing' => false,
 						'has_closer'   => true,
 						'atts'         => array(),
+						'fingerprint'  => self::fp( self::TEXT ),
+						'atts_decoded' => array(),
+						'text'         => '<p>Hello world</p>',
 					),
 					array(
 						'index'        => 3,
@@ -171,8 +194,12 @@ final class WpbakeryWireTest extends TestCase {
 						'self_closing' => false,
 						'has_closer'   => false,
 						'atts'         => array( 'text' => 'Heading bravo' ),
+						'fingerprint'  => self::fp( self::HEADING ),
+						'atts_decoded' => array( 'text' => 'Heading bravo' ),
+						'text'         => '',
 					),
 				),
+				'page_fingerprint'  => self::fp( self::PAGE ),
 			),
 			$outline
 		);

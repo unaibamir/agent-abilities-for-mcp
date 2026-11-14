@@ -50,7 +50,7 @@ function aafm_register_avada_site_full_definitions( array $registry ): array {
  */
 function aafm_avada_site_registry_definitions(): array {
 	return array(
-		'aafm/avada-insert-library-item'   => array(
+		'aafm/avada-insert-library-item'    => array(
 			'label'        => __( 'Insert an Avada library item', 'agent-abilities-for-mcp' ),
 			'description'  => __( 'Places an item from Avada\'s library, named by its id from avada-list-library, on an Avada page, layout section or library item, before or after an element from the outline of avada-get-page-content or as its first or last child. A saved section goes at the top level, a saved column inside a row and a saved element inside a column, by Avada\'s own nesting rules. An ordinary item is copied byte for byte; a global item is placed as a reference to the item, as Avada\'s builder does, so every page that shows it keeps showing the item itself, and placing one needs a user who can edit private posts. An item may hold at most 50 elements, nested at most 6 deep. An item holding a code block, a raw setting or a setting named like an event handler needs a user who may post unfiltered HTML, and for any other user its text may hold no square bracket, percent-encoded bracket, data-* attribute, unfinished tag or HTML that WordPress would remove, for a copy and for a reference alike. Requires page_fingerprint from the last read or write and returns the new one; a changed page is refused and nothing is saved. Other indexes may move, so read the outline again before the next structural change. When a revision is kept, restore_revision_id brings the page back through restore-revision. Not undoable from this plugin\'s change history. Requires edit access to the page and to the item; Avada\'s Role Manager is not applied. Only while Avada is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
@@ -58,7 +58,7 @@ function aafm_avada_site_registry_definitions(): array {
 			'subject'      => 'avada',
 			'args_builder' => 'aafm_args_avada_insert_library_item',
 		),
-		'aafm/avada-update-page-css'       => array(
+		'aafm/avada-update-page-css'        => array(
 			'label'        => __( 'Update Avada page CSS', 'agent-abilities-for-mcp' ),
 			'description'  => __( 'Sets the custom CSS of one Avada page, layout section or library item, the CSS field of Avada\'s builder settings for that page. The value given replaces the page\'s existing CSS, and an empty string removes it; previous returns the old CSS, which is the way back. CSS is stored without HTML tags. A value equal to what is stored is left alone and changed is false. No revision is kept, and the change is not undoable from this plugin\'s change history. Requires edit access to the post and a user who may post unfiltered HTML; Avada\'s Role Manager is not applied. Only while Avada is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
@@ -66,7 +66,7 @@ function aafm_avada_site_registry_definitions(): array {
 			'subject'      => 'avada',
 			'args_builder' => 'aafm_args_avada_update_page_css',
 		),
-		'aafm/avada-update-page-options'   => array(
+		'aafm/avada-update-page-options'    => array(
 			'label'        => __( 'Update Avada page options', 'agent-abilities-for-mcp' ),
 			'description'  => __( 'Sets or removes Avada page options on one post, the settings of Avada\'s page options panel: layout, title bar, sidebars, slider, header, footer, off canvas, form appearance, steps and confirmation, SEO and template settings from the fixed list avada-get-page-content returns with include_page_options. set maps option ids to values and remove lists ids to drop, so Avada\'s default applies; give at least one. Every other stored option is kept. A choice is its stored value, a colour a hex, rgba, hsla or Avada colour variable, an image an attachment id, and a multi choice a list. Text may hold no straight double quote or square bracket; for a user who may not post unfiltered HTML, a text area value WordPress would filter is refused, never stored altered. Option groups stored as several sub-values (dimensions, typography, sortable lists, media and display conditions) are not writable, and form notification, submission and privacy settings and code fields are never reachable. An empty value or default removes the option, as Avada\'s own save does. previous returns the old value of every option that changed, null where none was stored, which is the way back. A value equal to what is stored is left alone and not listed in changed. No revision is kept, and the change is not undoable from this plugin\'s change history. Needs the Avada theme active and a post Avada owns, one of Avada\'s own types, or a page, post or portfolio item that no other builder owns. Requires edit access to the post; layout sections need a user who can manage site options. Avada\'s Role Manager is not applied. Only while Avada is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
@@ -74,7 +74,7 @@ function aafm_avada_site_registry_definitions(): array {
 			'subject'      => 'avada',
 			'args_builder' => 'aafm_args_avada_update_page_options',
 		),
-		'aafm/avada-update-global-options' => array(
+		'aafm/avada-update-global-options'  => array(
 			'label'        => __( 'Update Avada Global Options', 'agent-abilities-for-mcp' ),
 			'description'  => __( 'Overwrites site-wide Avada Global Options from the fixed list avada-get-global-options returns, apart from maintenance_mode, which stays read only. set maps option keys to values: a colour as a hex, rgba, hsla or Avada colour variable; site_width as a number with px or %; layout, header_position, header_layout, page_title_bar, footer_widgets, footer_copyright and responsive as one of their stored choices; logo as an image attachment id, whose URL and size are written with it; footer_text as HTML with unsafe tags removed; a typography option as an object of the sub-values to change (font-family, font-size, line-height, letter-spacing, font-weight, font-style, text-transform, color); color_palette as an object of the colour slots to change, each with a color and a label. A value that fits no rule is refused and nothing is written. Every other stored option is kept. previous returns the old value of every option that changed, null where none was stored, which is the way back. The change applies to the whole site at once, and Avada\'s compiled CSS is rebuilt; a page cache plugin keeps serving its cached pages until the owner purges it. Not undoable from this plugin\'s change history. Needs the Avada theme active and a user who can manage site options (manage_options). Only while Avada is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
@@ -82,7 +82,7 @@ function aafm_avada_site_registry_definitions(): array {
 			'subject'      => 'avada',
 			'args_builder' => 'aafm_args_avada_update_global_options',
 		),
-		'aafm/avada-update-layout'         => array(
+		'aafm/avada-update-layout'          => array(
 			'label'        => __( 'Update an Avada layout', 'agent-abilities-for-mcp' ),
 			'description'  => __( 'Overwrites the sections and conditions of one Avada layout, named by its id from avada-list-layouts or "global" for the Global Layout. sections assigns a published layout section of the matching type to header, page_title_bar, content or footer, or 0 to clear that slot; the other slots are kept. conditions replaces the whole stored list: each condition takes mode (include or exclude), type, and under the key named by type a condition id that Avada\'s Layouts screen offers, plus an optional parent naming another condition in the list. Give at least one of sections and conditions. Pages pick their layout from these conditions, so the change applies site-wide at once. previous returns the old sections and conditions, which is the way back. A layout is never created or deleted. A change equal to what is stored is left alone and changed is false. Not undoable from this plugin\'s change history. Requires a user who can manage site options (manage_options). Only while Avada is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
@@ -90,7 +90,7 @@ function aafm_avada_site_registry_definitions(): array {
 			'subject'      => 'avada',
 			'args_builder' => 'aafm_args_avada_update_layout',
 		),
-		'aafm/avada-list-studio-items'     => array(
+		'aafm/avada-list-studio-items'      => array(
 			'label'        => __( 'List Avada Studio items', 'agent-abilities-for-mcp' ),
 			'description'  => __( 'Lists the ready-made items in Avada Studio, Avada\'s own library of templates, sections, elements, icons, forms and off canvas panels, from the catalogue Avada itself loads: id, type, title and, where Avada has them, a category and a preview URL, plus total and from_cache. Filter by type and by a word in the title; at most 50 per page. When Avada has no cached catalogue, this call makes Avada download it from Avada\'s servers under the site\'s own Avada registration and cache it for a day; this plugin sends nothing itself and never reads the registration. Refused until the site owner has unlocked the high-risk category and switched on the Avada Studio import, and while Studio is unavailable (the Avada theme off, Studio switched off in Avada, or the product not registered). Requires a user who can manage site options (manage_options). Only while Avada is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
@@ -98,13 +98,21 @@ function aafm_avada_site_registry_definitions(): array {
 			'subject'      => 'avada',
 			'args_builder' => 'aafm_args_avada_list_studio_items',
 		),
-		'aafm/avada-import-studio-item'    => array(
+		'aafm/avada-import-studio-item'     => array(
 			'label'        => __( 'Import an Avada Studio item', 'agent-abilities-for-mcp' ),
 			'description'  => __( 'Imports one Avada Studio item, named by its id and type from avada-list-studio-items, into Avada\'s library on this site, through Avada\'s own importer: Avada downloads the item from Avada\'s servers under the site\'s own Avada registration and creates a published post of that type, and with media import (the default) also its images and whatever the item depends on, such as forms, menus and icons; with media placeholders, images become placeholders. Avada makes these requests and this plugin sends nothing itself; it never reads the registration. An item imported before is not imported again; was_imported is then true. Only the item\'s own post is confirmed, by its type and Avada\'s Studio marker; the media and other posts Avada adds are not checked one by one. Nothing is placed on a page: place the item with avada-insert-library-item. There is no undo from this plugin; the owner can delete the item in Avada\'s Library. Locked with the other high-risk tools until the site owner unlocks the category, then off until switched on. Requires a user who can manage site options (manage_options). Only while Avada is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'avada',
 			'args_builder' => 'aafm_args_avada_import_studio_item',
+		),
+		'aafm/avada-update-slider-settings' => array(
+			'label'        => __( 'Update Avada Slider settings', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Changes the settings of one Avada Slider, the slider as a whole and not its slides, for every page that shows it. A slider is a term of Avada\'s slide-page taxonomy, named by term_id. set maps setting keys to values: slider_width, slider_height, nav_box_width, nav_box_height and nav_arrow_size as a number with px, %, em, rem, vh or vw; full_screen, parallax, nav_arrows, autoplay and loop as true or false; animation as fade or slide; slideshow_speed and animation_speed as whole milliseconds; typo_sensitivity and typo_factor as numbers; slider_indicator as an empty string (none), scroll_down_indicator or pagination_circles; slider_indicator_color as a colour or an empty string. Values are stored as Avada\'s slider screen stores them, written through Avada\'s own slider settings code and read back. A value equal to what is stored is left alone and not listed in changed. previous returns the old value of every setting that changed, null where none was stored, which is the way back. When a slider still holds settings from an old Avada version, Avada itself copies them into its current store on the first read. Not undoable from this plugin\'s change history. Requires a user who can manage site options (manage_options). Only while Avada is active, and the slider needs Avada Core active.', 'agent-abilities-for-mcp' ),
+			'group'        => 'writes',
+			'risk'         => 'write',
+			'subject'      => 'avada',
+			'args_builder' => 'aafm_args_avada_update_slider_settings',
 		),
 	);
 }
@@ -1644,4 +1652,229 @@ function aafm_exec_avada_import_studio_item( array $input ) {
 		'media'        => $media,
 		'note'         => __( 'Only the item\'s own post was confirmed; the attachments, forms, menus and icons Avada imports with it are not checked one by one. Place the item on a page with avada-insert-library-item.', 'agent-abilities-for-mcp' ),
 	);
+}
+
+/**
+ * The slider-wide settings of an Avada Slider (Ruling R3-P8, scratchpad/1113/s14-slider-keys.md): the 17 keys of the
+ * defaults in Avada Core's slider edit screen (fusion-slider/class-fusion-slider.php:540-557), each with its kind.
+ *
+ * @return array<string,string> Key to kind.
+ */
+function aafm_avada_slider_setting_keys(): array {
+	return array(
+		'slider_indicator'       => 'indicator',
+		'slider_indicator_color' => 'colour',
+		'typo_sensitivity'       => 'number',
+		'typo_factor'            => 'number',
+		'nav_box_width'          => 'size',
+		'nav_box_height'         => 'size',
+		'nav_arrow_size'         => 'size',
+		'slider_width'           => 'size',
+		'slider_height'          => 'size',
+		'full_screen'            => 'boolean',
+		'parallax'               => 'boolean',
+		'nav_arrows'             => 'boolean',
+		'autoplay'               => 'boolean',
+		'loop'                   => 'boolean',
+		'animation'              => 'animation',
+		'slideshow_speed'        => 'integer',
+		'animation_speed'        => 'integer',
+	);
+}
+
+/**
+ * One slider setting in the form Avada's slider screen stores it (every value a string; a checkbox "1" or "0"), or
+ * null when the value fits no rule. Each kind also takes its own stored form, so a previous value goes back as it is.
+ *
+ * @param string $kind  Kind from aafm_avada_slider_setting_keys().
+ * @param mixed  $value Input.
+ * @param string $key   Key, for the colour check.
+ * @return string|null
+ */
+function aafm_avada_slider_setting_value( string $kind, $value, string $key ): ?string {
+	switch ( $kind ) {
+		case 'boolean':
+			if ( is_bool( $value ) ) {
+				return $value ? '1' : '0';
+			}
+			return in_array( $value, array( '1', '0' ), true ) ? $value : null;
+		case 'indicator':
+			return in_array( $value, array( '', 'scroll_down_indicator', 'pagination_circles' ), true ) ? $value : null;
+		case 'animation':
+			return in_array( $value, array( 'fade', 'slide' ), true ) ? $value : null;
+		case 'colour':
+			return '' === $value ? '' : aafm_avada_global_colour( $value, $key );
+		case 'integer':
+			if ( is_int( $value ) && $value >= 0 ) {
+				return (string) $value;
+			}
+			return is_string( $value ) && 1 === preg_match( '/^(0|[1-9][0-9]{0,6})$/', $value ) ? $value : null;
+		case 'number':
+			if ( ( is_int( $value ) || is_float( $value ) ) && $value >= 0 && $value < 1000 ) {
+				return (string) $value;
+			}
+			return is_string( $value ) && 1 === preg_match( '/^[0-9]{1,3}(\.[0-9]{1,3})?$/', $value ) ? $value : null;
+		case 'size':
+			return is_string( $value ) && 1 === preg_match( '/^[0-9]{1,5}(\.[0-9]{1,3})?(px|%|em|rem|vh|vw)$/', $value ) ? $value : null;
+	}
+	return null;
+}
+
+/**
+ * Args for aafm/avada-update-slider-settings.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_avada_update_slider_settings(): array {
+	return array(
+		'label'               => aafm_ability_label( 'aafm/avada-update-slider-settings' ),
+		'description'         => aafm_ability_description( 'aafm/avada-update-slider-settings' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'term_id' => array(
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'The slider: a term ID of Avada\'s slide-page taxonomy.', 'agent-abilities-for-mcp' ),
+				),
+				'set'     => array(
+					'type'        => 'object',
+					'description' => __( 'Setting key to its new value, keys from the fixed slider settings list in the description.', 'agent-abilities-for-mcp' ),
+				),
+			),
+			'required'             => array( 'term_id', 'set' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'term_id'  => array( 'type' => 'integer' ),
+				'changed'  => array(
+					'type'  => 'array',
+					'items' => array( 'type' => 'string' ),
+				),
+				'previous' => array(
+					'type'        => 'object',
+					'description' => __( 'The old value of each changed setting, null where none was stored.', 'agent-abilities-for-mcp' ),
+				),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_avada_update_slider_settings',
+		'permission_callback' => 'aafm_perm_manage_options',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+				'idempotent'  => true,
+			),
+		),
+	);
+}
+
+/**
+ * The refusal when Avada Slider is not there: Avada Core off (no slide-page taxonomy) or Avada's term meta class
+ * missing.
+ *
+ * @return WP_Error
+ */
+function aafm_avada_slider_unavailable(): WP_Error {
+	return new WP_Error(
+		'aafm_avada_slider_unavailable',
+		__( 'Avada Slider is not available on this site: it needs the Avada theme and the Avada Core plugin active. Nothing was changed.', 'agent-abilities-for-mcp' ),
+		array( 'status' => 409 )
+	);
+}
+
+/**
+ * Execute aafm/avada-update-slider-settings (design AV-15, Ruling R3-P7). Every key and value is checked before
+ * anything is read. The settings are read and written only through the term meta object Avada's own slider screen
+ * uses (the avada_term_meta seam row): get_all_meta(), then set() per changed key, then a fresh get_all_meta() after
+ * the object's cache is reset, compared key by key.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_avada_update_slider_settings( array $input ) {
+	$factory = aafm_builder_vendor( 'avada_term_meta' );
+	if ( null === $factory || ! taxonomy_exists( 'slide-page' ) ) {
+		return aafm_avada_slider_unavailable();
+	}
+	$term = aafm_exact_object_chain( 'term', absint( $input['term_id'] ?? 0 ), 'slide-page' );
+	if ( ! $term instanceof WP_Term ) {
+		return aafm_generic_error();
+	}
+	$set = $input['set'] ?? null;
+	if ( $set instanceof stdClass ) {
+		$set = (array) $set;
+	}
+	if ( ! is_array( $set ) || array() === $set ) {
+		return aafm_builder_error( 'aafm_builder_invalid_value' );
+	}
+	$keys  = aafm_avada_slider_setting_keys();
+	$apply = array();
+	foreach ( $set as $key => $value ) {
+		$key = (string) $key;
+		if ( ! isset( $keys[ $key ] ) ) {
+			return aafm_wpbakery_setting_error( 'aafm_builder_attribute_not_writable', $key );
+		}
+		$clean = aafm_avada_slider_setting_value( $keys[ $key ], $value, $key );
+		if ( null === $clean ) {
+			return aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $key );
+		}
+		$apply[ $key ] = $clean;
+	}
+
+	try {
+		$meta = $factory( (int) $term->term_id );
+		if ( ! is_object( $meta ) || ! method_exists( $meta, 'get_all_meta' ) || ! method_exists( $meta, 'set' ) ) {
+			return aafm_avada_slider_unavailable();
+		}
+		$stored   = (array) $meta->get_all_meta();
+		$changed  = array();
+		$previous = array();
+		foreach ( $apply as $key => $value ) {
+			$before = $stored[ $key ] ?? null;
+			// Avada's set() drops a key set to '', so an absent key already holds ''.
+			if ( ( is_scalar( $before ) ? (string) $before : null ) === $value || ( null === $before && '' === $value ) ) {
+				continue;
+			}
+			$changed[]        = $key;
+			$previous[ $key ] = $before;
+		}
+		$out = array(
+			'term_id'  => (int) $term->term_id,
+			'changed'  => $changed,
+			// An empty previous goes out as {} so the wire shape matches the object the schema declares.
+			'previous' => array() === $previous ? new stdClass() : $previous,
+		);
+		if ( array() === $changed ) {
+			return $out;
+		}
+		foreach ( $changed as $key ) {
+			$meta->set( $key, $apply[ $key ] );
+		}
+		if ( method_exists( $meta, 'reset_data' ) ) {
+			$meta->reset_data();
+		}
+		$after = (array) $meta->get_all_meta();
+	} catch ( Throwable $e ) {
+		unset( $e );
+		return aafm_avada_slider_unavailable();
+	}
+	foreach ( $changed as $key ) {
+		$got = $after[ $key ] ?? '';
+		if ( ! is_scalar( $got ) || (string) $got !== $apply[ $key ] ) {
+			return new WP_Error(
+				'aafm_avada_slider_write_unconfirmed',
+				/* translators: %s: the slider setting key. */
+				sprintf( __( 'The slider settings were written, but reading them back does not show the new value of %s. Check the slider in Avada\'s Sliders screen; previous in this error holds the old values.', 'agent-abilities-for-mcp' ), $key ),
+				array(
+					'status'   => 500,
+					'previous' => $previous,
+				)
+			);
+		}
+	}
+	return $out;
 }

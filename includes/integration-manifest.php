@@ -475,6 +475,10 @@ function aafm_integration_ability_order(): array {
 				'name' => 'aafm/avada-import-studio-item',
 				'risk' => 'write',
 			),
+			array(
+				'name' => 'aafm/avada-update-slider-settings',
+				'risk' => 'write',
+			),
 		),
 		'wpbakery'      => array(
 			array(

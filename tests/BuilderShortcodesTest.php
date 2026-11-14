@@ -308,7 +308,7 @@ final class BuilderShortcodesTest extends TestCase {
 
 	public function test_every_seam_row_is_a_callable_shape(): void {
 		$rows = aafm_builder_vendor_rows();
-		$this->assertSame( array( 'wpbakery_css_rebuild', 'wpbakery_grid_post_type', 'wpbakery_param_type', 'wpbakery_map_all', 'wpbakery_map_one', 'wpbakery_grid_mapper', 'wpbakery_editor_post_types', 'wpbakery_user_access', 'wpbakery_settings', 'wpbakery_modules', 'avada_cache_reset', 'avada_template_builder', 'avada_studio', 'avada_studio_import', 'avada_studio_registered', 'avada_option_name', 'avada_map_loader', 'avada_map' ), array_keys( $rows ) );
+		$this->assertSame( array( 'wpbakery_css_rebuild', 'wpbakery_grid_post_type', 'wpbakery_param_type', 'wpbakery_map_all', 'wpbakery_map_one', 'wpbakery_grid_mapper', 'wpbakery_editor_post_types', 'wpbakery_user_access', 'wpbakery_settings', 'wpbakery_modules', 'avada_cache_reset', 'avada_template_builder', 'avada_studio', 'avada_studio_import', 'avada_studio_registered', 'avada_term_meta', 'avada_option_name', 'avada_map_loader', 'avada_map' ), array_keys( $rows ) );
 		$this->assertSame( 'awb_maybe_init_element_maps', $rows['avada_map_loader']['target'] );
 		$this->assertSame( 'awb_maybe_init_element_maps', $rows['avada_map_loader']['requires'] );
 		$this->assertSame( 'awb_maybe_init_element_maps', $rows['avada_map']['requires'] );
@@ -342,6 +342,9 @@ final class BuilderShortcodesTest extends TestCase {
 		$this->assertInstanceOf( \Closure::class, $rows['avada_studio_registered']['target'] );
 		$this->assertSame( 'Avada', $rows['avada_studio_registered']['requires'] );
 		$this->assertNull( aafm_builder_vendor( 'avada_studio_registered' ), 'Absent without the theme\'s Avada() function.' );
+		$this->assertInstanceOf( \Closure::class, $rows['avada_term_meta']['target'] );
+		$this->assertSame( 'fusion_data', $rows['avada_term_meta']['requires'] );
+		$this->assertNull( aafm_builder_vendor( 'avada_term_meta' ), 'Absent without the theme\'s fusion_data() function.' );
 		$this->assertSame( array( 'Avada', 'get_option_name' ), $rows['avada_option_name']['target'] );
 		$this->assertSame( 'Avada', $rows['avada_option_name']['requires'], 'The theme\'s own Avada() function, so a loaded stand-in class alone never makes the row present.' );
 		foreach ( $rows as $entry => $row ) {

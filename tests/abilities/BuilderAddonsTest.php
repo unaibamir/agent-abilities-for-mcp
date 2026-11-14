@@ -39,6 +39,15 @@ final class BuilderAddonsTest extends TestCase {
 	}
 
 	public function tear_down(): void {
+		if ( null !== $this->slider_seam ) {
+			remove_filter( 'aafm_builder_vendor', $this->slider_seam, 10 );
+		}
+		if ( taxonomy_exists( 'slide-page' ) ) {
+			unregister_taxonomy( 'slide-page' );
+		}
+		if ( post_type_exists( 'slide' ) ) {
+			unregister_post_type( 'slide' );
+		}
 		WpbakeryMapStub::remove();
 		unregister_post_type( 'templatera' );
 		remove_filter( 'aafm_integration_active_wpbakery', '__return_true' );
@@ -533,5 +542,400 @@ final class BuilderAddonsTest extends TestCase {
 		$schema = aafm_args_wpbakery_list_templates()['output_schema'];
 		$this->assertSame( array( 'saved', 'templatera' ), $schema['properties']['templates']['items']['properties']['source']['enum'] );
 		$this->assertTrue( rest_validate_value_from_schema( $out, $schema, 'output' ) );
+	}
+
+	/**
+	 * A recording stand-in for Avada's term meta object (Fusion_Data_TermMeta), served through the avada_term_meta
+	 * seam row: get_all_meta(), set() (which drops a key set to '' as Avada's does) and reset_data().
+	 *
+	 * @param array<string,mixed> $stored  Stored settings.
+	 * @param bool                $sticky  Whether set() is lost (the read back keeps the old values).
+	 * @return object
+	 */
+	private function slider_meta( array $stored, bool $sticky = false ): object {
+		$meta              = new class( $stored, $sticky ) {
+			/**
+			 * Stored settings.
+			 *
+			 * @var array<string,mixed>
+			 */
+			public $db;
+			/**
+			 * Loaded settings, null until read.
+			 *
+			 * @var array<string,mixed>|null
+			 */
+			public $data;
+			/**
+			 * Calls made, in order.
+			 *
+			 * @var list<string>
+			 */
+			public $calls = array();
+			/**
+			 * Whether set() is lost.
+			 *
+			 * @var bool
+			 */
+			private $sticky;
+			/**
+			 * Constructor.
+			 *
+			 * @param array<string,mixed> $stored Stored.
+			 * @param bool                $sticky Sticky.
+			 */
+			public function __construct( array $stored, bool $sticky ) {
+				$this->db     = $stored;
+				$this->sticky = $sticky;
+			}
+			/**
+			 * Avada's getter.
+			 *
+			 * @return array<string,mixed>
+			 */
+			public function get_all_meta(): array {
+				$this->calls[] = 'get_all_meta';
+				if ( null === $this->data ) {
+					$this->data = $this->db;
+				}
+				return $this->data;
+			}
+			/**
+			 * Avada's setter.
+			 *
+			 * @param string $key   Key.
+			 * @param mixed  $value Value.
+			 * @return bool
+			 */
+			public function set( string $key, $value ): bool {
+				$this->calls[] = 'set:' . $key . '=' . (string) $value;
+				// Avada's set() loads the data first, as get_all_meta() does.
+				if ( null === $this->data ) {
+					$this->data = $this->db;
+				}
+				$this->data[ $key ] = $value;
+				if ( '' === $value ) {
+					unset( $this->data[ $key ] );
+				}
+				if ( ! $this->sticky ) {
+					$this->db = (array) $this->data;
+				}
+				return true;
+			}
+			/**
+			 * Avada's cache reset.
+			 *
+			 * @return void
+			 */
+			public function reset_data(): void {
+				$this->calls[] = 'reset_data';
+				$this->data    = null;
+			}
+		};
+		$this->slider_seam = static function ( $resolved, string $entry ) use ( $meta ) {
+			return 'avada_term_meta' === $entry ? static fn(): object => $meta : $resolved;
+		};
+		add_filter( 'aafm_builder_vendor', $this->slider_seam, 10, 2 );
+		return $meta;
+	}
+
+	/**
+	 * The avada_term_meta seam filter.
+	 *
+	 * @var callable|null
+	 */
+	private $slider_seam;
+
+	/**
+	 * A slider: a term of a registered slide-page taxonomy, as Avada Core registers it.
+	 *
+	 * @return int
+	 */
+	private function slider(): int {
+		register_post_type( 'slide', array( 'public' => true ) );
+		register_taxonomy( 'slide-page', 'slide' );
+		return (int) self::factory()->term->create( array( 'taxonomy' => 'slide-page' ) );
+	}
+
+	/**
+	 * The stored form of a fresh slider after one save through Avada's slider screen (s14-slider-keys.md).
+	 *
+	 * @return array<string,string>
+	 */
+	private static function screen_saved(): array {
+		return array(
+			'slider_width'           => '100%',
+			'slider_height'          => '500px',
+			'slider_content_width'   => '',
+			'full_screen'            => '0',
+			'parallax'               => '0',
+			'slider_indicator'       => '',
+			'slider_indicator_color' => '',
+			'nav_arrows'             => '1',
+			'nav_arrow_size'         => '25px',
+			'nav_box_width'          => '63px',
+			'nav_box_height'         => '63px',
+			'slideshow_speed'        => '7000',
+			'loop'                   => '1',
+			'autoplay'               => '1',
+			'orderby'                => 'date',
+			'order'                  => 'DESC',
+			'animation'              => 'fade',
+			'animation_speed'        => '600',
+			'typo_sensitivity'       => '0.1',
+			'typo_factor'            => '1.5',
+		);
+	}
+
+	/**
+	 * Run the slider settings tool.
+	 *
+	 * @param int   $term Term.
+	 * @param mixed $set  Set.
+	 * @return array<string,mixed>|WP_Error
+	 */
+	private function slider_update( int $term, $set ) {
+		return aafm_exec_avada_update_slider_settings(
+			array(
+				'term_id' => $term,
+				'set'     => $set,
+			)
+		);
+	}
+
+	public function test_the_slider_keys_allowlist_is_pinned(): void {
+		$this->assertSame(
+			array( 'slider_indicator', 'slider_indicator_color', 'typo_sensitivity', 'typo_factor', 'nav_box_width', 'nav_box_height', 'nav_arrow_size', 'slider_width', 'slider_height', 'full_screen', 'parallax', 'nav_arrows', 'autoplay', 'loop', 'animation', 'slideshow_speed', 'animation_speed' ),
+			array_keys( aafm_avada_slider_setting_keys() )
+		);
+	}
+
+	public function test_set_writes_only_the_named_keys_through_avadas_object(): void {
+		$term = $this->slider();
+		$meta = $this->slider_meta( self::screen_saved() );
+		$this->acting_as( 'administrator' );
+		$out = $this->slider_update(
+			$term,
+			array(
+				'slider_width' => '80%',
+				'autoplay'     => false,
+				'animation'    => 'slide',
+			)
+		);
+		$this->assertIsArray( $out );
+		$this->assertSame( array( 'get_all_meta', 'set:slider_width=80%', 'set:autoplay=0', 'set:animation=slide', 'reset_data', 'get_all_meta' ), $meta->calls );
+		$this->assertSame( array( 'slider_width', 'autoplay', 'animation' ), $out['changed'] );
+		$this->assertSame(
+			array_replace(
+				self::screen_saved(),
+				array(
+					'slider_width' => '80%',
+					'autoplay'     => '0',
+					'animation'    => 'slide',
+				)
+			),
+			$meta->db
+		);
+	}
+
+	public function test_previous_holds_the_old_values_from_avadas_getter(): void {
+		$term = $this->slider();
+		$this->slider_meta( array( 'loop' => '1' ) );
+		$this->acting_as( 'administrator' );
+		$out = $this->slider_update(
+			$term,
+			array(
+				'loop'         => '0',
+				'nav_arrows'   => true,
+				'slider_width' => '90%',
+			)
+		);
+		$this->assertSame( $term, $out['term_id'] );
+		$this->assertSame(
+			array(
+				'loop'         => '1',
+				'nav_arrows'   => null,
+				'slider_width' => null,
+			),
+			$out['previous']
+		);
+	}
+
+	public function test_a_key_outside_the_allowlist_is_refused(): void {
+		$term = $this->slider();
+		$meta = $this->slider_meta( self::screen_saved() );
+		$this->acting_as( 'administrator' );
+		foreach ( array( 'orderby', 'slider_content_width', 'nope' ) as $key ) {
+			$out = $this->slider_update( $term, array( $key => 'x' ) );
+			$this->assert_error( $out, 'aafm_builder_attribute_not_writable', 400 );
+			$this->assertStringContainsString( $key, $out->get_error_message() );
+		}
+		$this->assertSame( array(), $meta->calls, 'Refused before anything is read.' );
+	}
+
+	/**
+	 * Values per kind: key, input, stored form or null when refused.
+	 *
+	 * @return array<string,array{0:string,1:mixed,2:string|null}>
+	 */
+	public function slider_value_cases(): array {
+		return array(
+			'size px'              => array( 'slider_height', '420px', '420px' ),
+			'size percent'         => array( 'slider_width', '75%', '75%' ),
+			'size no unit'         => array( 'slider_width', '75', null ),
+			'size css injection'   => array( 'slider_width', '1px;background:url(x)', null ),
+			'size number'          => array( 'nav_box_width', 60, null ),
+			'boolean true'         => array( 'parallax', true, '1' ),
+			'boolean stored'       => array( 'parallax', '0', '0' ),
+			'boolean word'         => array( 'parallax', 'yes', null ),
+			'animation'            => array( 'animation', 'slide', 'slide' ),
+			'animation other'      => array( 'animation', 'zoom', null ),
+			'indicator'            => array( 'slider_indicator', 'pagination_circles', 'pagination_circles' ),
+			'indicator none'       => array( 'slider_indicator', '', '' ),
+			'indicator other'      => array( 'slider_indicator', 'dots', null ),
+			'colour'               => array( 'slider_indicator_color', '#ff0000', '#ff0000' ),
+			'colour bad'           => array( 'slider_indicator_color', 'red;}', null ),
+			'integer'              => array( 'slideshow_speed', 5000, '5000' ),
+			'integer stored'       => array( 'animation_speed', '800', '800' ),
+			'integer negative'     => array( 'animation_speed', -1, null ),
+			'integer float string' => array( 'animation_speed', '1.5', null ),
+			'number'               => array( 'typo_factor', 2.5, '2.5' ),
+			'number stored'        => array( 'typo_sensitivity', '0.2', '0.2' ),
+			'number word'          => array( 'typo_sensitivity', 'big', null ),
+		);
+	}
+
+	/**
+	 * Each kind's rule, alone and through the tool.
+	 *
+	 * @dataProvider slider_value_cases
+	 *
+	 * @param string      $key      Key.
+	 * @param mixed       $value    Input.
+	 * @param string|null $expected Stored form, null when refused.
+	 */
+	public function test_each_kind_validates_its_value( string $key, $value, ?string $expected ): void {
+		$this->assertSame( $expected, aafm_avada_slider_setting_value( aafm_avada_slider_setting_keys()[ $key ], $value, $key ) );
+		$term = $this->slider();
+		$this->slider_meta( array( 'animation' => 'fade' ) );
+		$this->acting_as( 'administrator' );
+		$out = $this->slider_update( $term, array( $key => $value ) );
+		if ( null === $expected ) {
+			$this->assert_error( $out, 'aafm_builder_invalid_value', 400 );
+		} else {
+			$this->assertIsArray( $out );
+		}
+	}
+
+	public function test_a_term_of_another_taxonomy_is_refused(): void {
+		$this->slider();
+		$meta = $this->slider_meta( array() );
+		$cat  = (int) self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+		$this->acting_as( 'administrator' );
+		$out = $this->slider_update( $cat, array( 'loop' => true ) );
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+		$this->assertSame( array(), $meta->calls );
+	}
+
+	public function test_an_editor_is_refused_and_cannot_discover_the_tool(): void {
+		$args = aafm_args_avada_update_slider_settings();
+		$this->assertSame( 'aafm_perm_manage_options', $args['permission_callback'] );
+		$this->assertNull( aafm_ability_list_permission( 'aafm/avada-update-slider-settings' ), 'Object independent: discovery runs the real callback.' );
+		$this->acting_as( 'editor' );
+		$this->assertFalse( aafm_perm_manage_options() );
+		$this->acting_as( 'administrator' );
+		$this->assertTrue( aafm_perm_manage_options() );
+	}
+
+	public function test_the_tool_is_unavailable_without_avada_core(): void {
+		$term = $this->slider();
+		$this->acting_as( 'administrator' );
+		$absent = static fn( $resolved, string $entry ) => 'avada_term_meta' === $entry ? null : $resolved;
+		add_filter( 'aafm_builder_vendor', $absent, 20, 2 );
+		$this->assert_error( $this->slider_update( $term, array( 'loop' => true ) ), 'aafm_avada_slider_unavailable', 409 );
+		remove_filter( 'aafm_builder_vendor', $absent, 20 );
+
+		$this->slider_meta( array() );
+		unregister_taxonomy( 'slide-page' );
+		$this->assert_error( $this->slider_update( $term, array( 'loop' => true ) ), 'aafm_avada_slider_unavailable', 409 );
+		$this->assertInstanceOf( \Closure::class, aafm_builder_vendor_rows()['avada_term_meta']['target'] );
+		$this->assertSame( 'fusion_data', aafm_builder_vendor_rows()['avada_term_meta']['requires'] );
+	}
+
+	public function test_a_write_the_read_back_does_not_show_is_unconfirmed(): void {
+		$term = $this->slider();
+		$this->slider_meta( self::screen_saved(), true );
+		$this->acting_as( 'administrator' );
+		$out = $this->slider_update( $term, array( 'slider_height' => '300px' ) );
+		$this->assert_error( $out, 'aafm_avada_slider_write_unconfirmed', 500 );
+		$this->assertSame( array( 'slider_height' => '500px' ), $out->get_error_data()['previous'] );
+	}
+
+	public function test_setting_the_stored_values_writes_nothing(): void {
+		$term = $this->slider();
+		$meta = $this->slider_meta( self::screen_saved() );
+		$this->acting_as( 'administrator' );
+		$out = $this->slider_update(
+			$term,
+			array(
+				'slider_width'     => '100%',
+				'autoplay'         => true,
+				'slideshow_speed'  => 7000,
+				'slider_indicator' => '',
+			)
+		);
+		$this->assertSame( array(), $out['changed'] );
+		$this->assertEquals( new \stdClass(), $out['previous'] );
+		$this->assertSame( array( 'get_all_meta' ), $meta->calls );
+	}
+
+	public function test_wrong_json_types_are_refused_cleanly(): void {
+		$term = $this->slider();
+		$this->slider_meta( array() );
+		$this->acting_as( 'administrator' );
+		foreach ( array( 'x', array(), array( 'loop' => array( 1 ) ), array( 'slider_width' => null ), array( 'animation' => 1 ) ) as $set ) {
+			$out = $this->slider_update( $term, $set );
+			$this->assertInstanceOf( WP_Error::class, $out );
+			$this->assertSame( 400, $out->get_error_data()['status'] ?? null );
+		}
+		$schema = aafm_args_avada_update_slider_settings()['input_schema'];
+		$this->assertFalse( $schema['additionalProperties'] );
+		$this->assertSame( array( 'term_id', 'set' ), $schema['required'] );
+		$this->assertSame( array( 'term_id', 'set' ), array_keys( $schema['properties'] ) );
+	}
+
+	public function test_the_slider_tool_starts_off_and_is_in_no_preset_and_is_described(): void {
+		$name = 'aafm/avada-update-slider-settings';
+		delete_option( 'aafm_enabled_abilities' );
+		$this->assertNotContains( $name, aafm_get_enabled_abilities() );
+		foreach ( array( 'read_only', 'content_editor', 'shop_manager' ) as $preset ) {
+			$this->assertFalse( aafm_preset_permits( $preset, $name ), $preset );
+		}
+		$this->assertSame( 'not_covered', aafm_undo_refusals()[ $name ] );
+		$this->assertSame( 'Ran an Avada slider settings update on slider #12', aafm_build_activity_detail( $name, array( 'term_id' => 12 ) ) );
+		$args = aafm_args_avada_update_slider_settings();
+		$this->assertSame( 'aafm-writes', $args['category'] );
+		$this->assertSame(
+			array(
+				'readonly'    => false,
+				'destructive' => false,
+				'idempotent'  => true,
+			),
+			$args['meta']['annotations']
+		);
+		$row = aafm_get_abilities_registry_full()[ $name ];
+		$this->assertSame( 'writes', $row['group'] );
+		$this->assertSame( 'write', $row['risk'] );
+		$this->assertSame( 'avada', $row['subject'] );
+		$this->assertNotContains( $name, aafm_non_removal_destructive_abilities() );
+		foreach ( array( $row['description'], aafm_ability_disclosures()[ $name ] ) as $text ) {
+			$this->assertStringNotContainsString( ' - ', $text );
+			foreach ( array( 'Avada', 'every page', 'previous', 'manage site options', 'Avada Core' ) as $phrase ) {
+				$this->assertStringContainsString( $phrase, $text, $phrase );
+			}
+			$this->assertStringNotContainsString( 'Revolution', $text );
+		}
+		$this->assertStringContainsString( 'first read', $row['description'] );
 	}
 }

@@ -45,6 +45,7 @@
 			<file>tests/WpbakeryWireTest.php</file>
 			<file>tests/AvadaElementsWireTest.php</file>
 			<file>tests/AvadaSiteWireTest.php</file>
+			<file>tests/BuilderAddonsWireTest.php</file>
 			<file>tests/WpbakeryElementsWireTest.php</file>
 			<file>tests/WpbakerySiteWireTest.php</file>
 			<file>tests/GeodirectoryWireTest.php</file>

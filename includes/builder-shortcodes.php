@@ -425,6 +425,18 @@ function aafm_builder_vendor_rows(): array {
 			},
 			'requires' => 'Avada',
 		),
+		// Avada's own term meta object for one term (fusion_data()->term_meta(), Fusion_Data_TermMeta), the store Avada
+		// Core's slider screen reads and writes slider settings through (R3-P7).
+		'avada_term_meta'            => array(
+			'target'   => static function ( int $term_id ) {
+				$data = call_user_func( 'fusion_data' ); // @phpstan-ignore-line argument.type (Avada's own accessor; this row is present only when the function exists, see requires)
+				if ( ! is_object( $data ) || ! method_exists( $data, 'term_meta' ) ) {
+					throw new RuntimeException( 'Avada term meta is not available.' );
+				}
+				return $data->term_meta( $term_id );
+			},
+			'requires' => 'fusion_data',
+		),
 		// The Global Options name of the active Avada theme; present only with the theme's own Avada() loaded.
 		'avada_option_name'          => array(
 			'target'   => array( 'Avada', 'get_option_name' ),

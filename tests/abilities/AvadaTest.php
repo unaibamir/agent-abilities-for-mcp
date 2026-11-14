@@ -1555,4 +1555,37 @@ final class AvadaTest extends TestCase {
 		$this->assertSame( 1, QueryFaultInjector::fired_count() );
 		$this->assertFalse( $allowed, 'Fail closed: an unread marker is not taken as "not global".' );
 	}
+
+	public function test_the_encoded_settings_are_every_setting_avadas_renderers_decode(): void {
+		// Every base64_decode() and fusion_decode_if_needed() a renderer applies to a setting in Avada Builder
+		// 3.16.1, Avada Core 5.16.4 and Avada 7.16.1 (scratchpad/1113/s8b-decode-sites.md). S10's encoder inverts it.
+		$sites = array(
+			'*'                            => array( 'dynamic_params', 'html_attributes', 'render_logics', 'conditional_logic', 'logics', 'motion_effects' ),
+			'fusion_image_hotspot_point'   => array( 'long_text' ),
+			'fusion_tagline_box'           => array( 'title', 'description' ),
+			'fusion_openstreetmap_marker'  => array( 'tooltip_content' ),
+			'fusion_sharing'               => array( 'description' ),
+			'fusion_map'                   => array( 'infobox_content' ),
+			'fusion_popover'               => array( 'content' ),
+			'fusion_video'                 => array( 'track_tags' ),
+			'fusion_post_cards'            => array( 'alternate_post_cards' ),
+			'fusion_tb_post_card_archives' => array( 'alternate_post_cards' ),
+			'fusion_form_notice'           => array( 'success', 'error' ),
+			'fusion_form_consent'          => array( 'description' ),
+			'fusion_form_select'           => array( 'options' ),
+			'fusion_form_checkbox'         => array( 'options' ),
+			'fusion_form_radio'            => array( 'options' ),
+			'fusion_form_email'            => array( 'pattern' ),
+			'fusion_form_phone_number'     => array( 'pattern' ),
+			'fusion_form_password'         => array( 'pattern' ),
+			'fusion_form_text'             => array( 'custom_pattern' ),
+		);
+		$table = aafm_avada_encoded_settings();
+		$this->assertSame( array_keys( $sites ), array_keys( $table ) );
+		foreach ( $sites as $tag => $names ) {
+			$this->assertSame( $names, array_keys( $table[ $tag ] ), $tag );
+		}
+		$this->assertSame( '[{"label":"en"}]', aafm_avada_decode_atts( 'fusion_video', array( 'track_tags' => base64_encode( '[{"label":"en"}]' ) ) )['track_tags'] ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- builds Avada's stored form.
+		$this->assertSame( '[["a","A"]]', aafm_avada_decode_atts( 'fusion_form_radio', array( 'options' => base64_encode( '[["a","A"]]' ) ) )['options'] ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- builds Avada's stored form.
+	}
 }

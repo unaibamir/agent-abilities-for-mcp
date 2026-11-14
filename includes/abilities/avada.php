@@ -439,8 +439,9 @@ function aafm_avada_decode_atts( string $tag, array $atts ): array {
 }
 
 /**
- * The settings Avada's renderers base64-decode (fusion-builder 3.16.1: the fusion_decode_if_needed() and
- * base64_decode() calls under shortcodes/ and inc/), by tag, with '*' for the settings any element can
+ * The settings Avada's renderers base64-decode (fusion-builder 3.16.1: every fusion_decode_if_needed() and
+ * base64_decode() call under shortcodes/ and inc/, mapped in scratchpad/1113/s8b-decode-sites.md; Avada Core and
+ * the theme decode no element setting of their own), by tag, with '*' for the settings any element can
  * carry. raw_text marks a text input the dialog escapes before it encodes; the rest are raw_textarea,
  * repeater or JSON values stored as encoded.
  *
@@ -448,7 +449,7 @@ function aafm_avada_decode_atts( string $tag, array $atts ): array {
  */
 function aafm_avada_encoded_settings(): array {
 	return array(
-		'*'                           => array(
+		'*'                            => array(
 			'dynamic_params'    => 'json',
 			'html_attributes'   => 'repeater',
 			'render_logics'     => 'json',
@@ -456,26 +457,31 @@ function aafm_avada_encoded_settings(): array {
 			'logics'            => 'json',
 			'motion_effects'    => 'json',
 		),
-		'fusion_image_hotspot_point'  => array( 'long_text' => 'raw_textarea' ),
-		'fusion_tagline_box'          => array(
+		'fusion_image_hotspot_point'   => array( 'long_text' => 'raw_textarea' ),
+		'fusion_tagline_box'           => array(
 			'title'       => 'raw_textarea',
 			'description' => 'raw_textarea',
 		),
-		'fusion_openstreetmap_marker' => array( 'tooltip_content' => 'raw_textarea' ),
-		'fusion_sharing'              => array( 'description' => 'raw_textarea' ),
-		'fusion_map'                  => array( 'infobox_content' => 'raw_textarea' ),
-		'fusion_popover'              => array( 'content' => 'raw_textarea' ),
-		'fusion_form_notice'          => array(
+		'fusion_openstreetmap_marker'  => array( 'tooltip_content' => 'raw_textarea' ),
+		'fusion_sharing'               => array( 'description' => 'raw_textarea' ),
+		'fusion_map'                   => array( 'infobox_content' => 'raw_textarea' ),
+		'fusion_popover'               => array( 'content' => 'raw_textarea' ),
+		'fusion_video'                 => array( 'track_tags' => 'repeater' ),
+		'fusion_post_cards'            => array( 'alternate_post_cards' => 'repeater' ),
+		// The archives component hands its own settings to the post cards renderer (post-card-archives.php:200).
+		'fusion_tb_post_card_archives' => array( 'alternate_post_cards' => 'repeater' ),
+		'fusion_form_notice'           => array(
 			'success' => 'raw_textarea',
 			'error'   => 'raw_textarea',
 		),
-		'fusion_form_consent'         => array( 'description' => 'raw_textarea' ),
-		'fusion_form_select'          => array( 'options' => 'json' ),
-		'fusion_form_checkbox'        => array( 'options' => 'json' ),
-		'fusion_form_email'           => array( 'pattern' => 'raw_text' ),
-		'fusion_form_phone_number'    => array( 'pattern' => 'raw_text' ),
-		'fusion_form_password'        => array( 'pattern' => 'raw_text' ),
-		'fusion_form_text'            => array( 'custom_pattern' => 'raw_text' ),
+		'fusion_form_consent'          => array( 'description' => 'raw_textarea' ),
+		'fusion_form_select'           => array( 'options' => 'json' ),
+		'fusion_form_checkbox'         => array( 'options' => 'json' ),
+		'fusion_form_radio'            => array( 'options' => 'json' ),
+		'fusion_form_email'            => array( 'pattern' => 'raw_text' ),
+		'fusion_form_phone_number'     => array( 'pattern' => 'raw_text' ),
+		'fusion_form_password'         => array( 'pattern' => 'raw_text' ),
+		'fusion_form_text'             => array( 'custom_pattern' => 'raw_text' ),
 	);
 }
 

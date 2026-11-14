@@ -21,7 +21,7 @@ final class WpbakerySiteWireTest extends TestCase {
 
 	private const TEMPLATE = '[vc_row][vc_column][vc_column_text]<p>From the template</p>[/vc_column_text][/vc_column][/vc_row]';
 
-	private const TOOLS = array( 'aafm/wpbakery-list-templates', 'aafm/wpbakery-insert-template', 'aafm/wpbakery-update-page-code' );
+	private const TOOLS = array( 'aafm/wpbakery-list-templates', 'aafm/wpbakery-insert-template', 'aafm/wpbakery-update-page-code', 'aafm/wpbakery-get-settings' );
 
 	public function set_up(): void {
 		parent::set_up();
@@ -354,5 +354,30 @@ final class WpbakerySiteWireTest extends TestCase {
 		$visible = $names();
 		$this->assertNotContains( aafm_mcp_tool_name( 'aafm/wpbakery-update-page-code' ), $visible );
 		$this->assertContains( aafm_mcp_tool_name( 'aafm/wpbakery-insert-template' ), $visible );
+	}
+
+	public function test_get_settings_round_trips_over_a_real_tools_call(): void {
+		update_option( 'wpb_js_css_loading', 'legacy' );
+		update_option( 'wpb_js_js_composer_purchase_code', 'MARKER-WIRE-PURCHASE' );
+		list( $handler ) = $this->wired();
+		$raw             = $handler->call_tool(
+			array(
+				'name'      => aafm_mcp_tool_name( 'aafm/wpbakery-get-settings' ),
+				'arguments' => array(),
+			),
+			'req-wpb-settings-1'
+		);
+		$this->assertStringNotContainsString( 'MARKER-WIRE-PURCHASE', (string) $raw->getContent()[0]->getText() );
+		$this->assertSame(
+			array(
+				'settings'          => array( 'css_loading' => 'legacy' ),
+				'not_set'           => array( 'not_responsive_css', 'google_fonts_subsets', 'local_google_fonts', 'shortcuts', 'js_loading', 'gutenberg_disable', 'auto_save', 'use_custom', 'custom_css', 'custom_js_header', 'custom_js_footer' ),
+				'editor_post_types' => array(),
+				'version'           => '',
+			),
+			$this->wire( $raw )
+		);
+		delete_option( 'wpb_js_css_loading' );
+		delete_option( 'wpb_js_js_composer_purchase_code' );
 	}
 }

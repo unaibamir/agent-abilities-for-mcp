@@ -934,4 +934,101 @@ final class WpbakerySiteTest extends TestCase {
 		$this->assertSame( self::TEMPLATE, get_post_field( 'post_content', $id, 'raw' ) );
 		$this->assertStringContainsString( 'empty post', aafm_get_abilities_registry_full()['aafm/wpbakery-insert-template']['description'] );
 	}
+
+	/**
+	 * Delete every listed WPBakery setting row and the planted licence rows.
+	 *
+	 * @return void
+	 */
+	private function clear_settings(): void {
+		foreach ( array_merge( aafm_wpbakery_settings_keys(), array( 'js_composer_purchase_code', 'license_key_token' ) ) as $key ) {
+			delete_option( 'wpb_js_' . $key );
+		}
+	}
+
+	public function test_the_settings_allowlist_is_pinned(): void {
+		$this->assertSame(
+			array( 'not_responsive_css', 'google_fonts_subsets', 'local_google_fonts', 'shortcuts', 'css_loading', 'js_loading', 'gutenberg_disable', 'auto_save', 'use_custom', 'custom_css', 'custom_js_header', 'custom_js_footer' ),
+			aafm_wpbakery_settings_keys()
+		);
+	}
+
+	public function test_the_licence_code_and_its_token_are_not_in_the_list(): void {
+		foreach ( array( 'js_composer_purchase_code', 'license_key_token' ) as $secret ) {
+			$this->assertNotContains( $secret, aafm_wpbakery_settings_keys() );
+		}
+	}
+
+	public function test_get_returns_only_listed_options_and_lists_the_rest_as_not_set(): void {
+		$this->clear_settings();
+		update_option( 'wpb_js_js_composer_purchase_code', 'MARKER-PURCHASE-CODE-7731' );
+		update_option( 'wpb_js_license_key_token', 'MARKER-TOKEN-7731' );
+		update_option( 'wpb_js_css_loading', 'optimized' );
+		update_option( 'wpb_js_not_responsive_css', '' );
+		$this->acting_as( 'administrator' );
+		$out = aafm_exec_wpbakery_get_settings( array() );
+		$this->assertSame(
+			array(
+				'not_responsive_css' => '',
+				'css_loading'        => 'optimized',
+			),
+			$out['settings']
+		);
+		$this->assertSame( array( 'google_fonts_subsets', 'local_google_fonts', 'shortcuts', 'js_loading', 'gutenberg_disable', 'auto_save', 'use_custom', 'custom_css', 'custom_js_header', 'custom_js_footer' ), $out['not_set'] );
+		$this->assertSame( array( 'settings', 'not_set', 'editor_post_types', 'version' ), array_keys( $out ) );
+		$encoded = (string) wp_json_encode( $out );
+		$this->assertStringNotContainsString( 'MARKER', $encoded );
+		$this->assertStringNotContainsString( 'purchase', $encoded );
+		$this->clear_settings();
+	}
+
+	public function test_global_js_is_returned_only_with_unfiltered_html(): void {
+		$this->clear_settings();
+		update_option( 'wpb_js_custom_js_header', 'console.info(1);' );
+		$this->acting_as( 'administrator' );
+		$this->assertSame( 'console.info(1);', aafm_exec_wpbakery_get_settings( array() )['settings']['custom_js_header'] );
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		( new \WP_User( $admin ) )->add_cap( 'unfiltered_html', false );
+		wp_set_current_user( $admin );
+		$this->assertFalse( current_user_can( 'unfiltered_html' ) );
+		$out = aafm_exec_wpbakery_get_settings( array() );
+		$this->assertInstanceOf( \stdClass::class, $out['settings'] );
+		$this->assertNotContains( 'custom_js_header', $out['not_set'] );
+		$this->assertNotContains( 'custom_js_footer', $out['not_set'] );
+		$this->assertStringNotContainsString( 'console.info', (string) wp_json_encode( $out ) );
+		$this->clear_settings();
+	}
+
+	public function test_get_settings_lists_wpbakerys_editor_post_types(): void {
+		$types = static fn( $resolved, string $entry ) => 'wpbakery_editor_post_types' === $entry ? static fn(): array => array( 'page', 'post' ) : $resolved;
+		add_filter( 'aafm_builder_vendor', $types, 20, 2 );
+		$this->acting_as( 'administrator' );
+		$this->assertSame( array( 'page', 'post' ), aafm_exec_wpbakery_get_settings( array() )['editor_post_types'] );
+		remove_filter( 'aafm_builder_vendor', $types, 20 );
+	}
+
+	public function test_get_settings_schema_permission_and_description(): void {
+		$name = 'aafm/wpbakery-get-settings';
+		$args = aafm_args_wpbakery_get_settings();
+		$this->assertSame( 'aafm_perm_manage_options', $args['permission_callback'] );
+		$this->assertFalse( $args['input_schema']['additionalProperties'] );
+		$this->assertSame( array(), $args['input_schema']['properties'] );
+		$this->assertTrue( $args['meta']['annotations']['readonly'] );
+		// No server.php case: discovery falls through to aafm_perm_manage_options() itself.
+		$this->assertNull( aafm_ability_list_permission( $name ) );
+		$this->acting_as( 'administrator' );
+		$this->assertTrue( aafm_perm_manage_options() );
+		$this->acting_as( 'editor' );
+		$this->assertFalse( aafm_perm_manage_options() );
+		$row = aafm_get_abilities_registry_full()[ $name ];
+		$this->assertSame( 'reads', $row['group'] );
+		$this->assertSame( 'read', $row['risk'] );
+		foreach ( array( $row['description'], aafm_ability_disclosures()[ $name ] ) as $text ) {
+			$this->assertStringNotContainsString( ' - ', $text );
+			foreach ( array( 'licence code', 'unfiltered HTML', 'manage site options' ) as $phrase ) {
+				$this->assertStringContainsString( $phrase, $text, $phrase );
+			}
+		}
+		$this->assertStringContainsString( 'Only while WPBakery Page Builder is active', $row['description'] );
+	}
 }

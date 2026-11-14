@@ -73,6 +73,14 @@ function aafm_wpbakery_site_registry_definitions(): array {
 			'subject'      => 'wpbakery',
 			'args_builder' => 'aafm_args_wpbakery_update_page_code',
 		),
+		'aafm/wpbakery-get-settings'     => array(
+			'label'        => __( 'Get WPBakery settings', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Reads a fixed list of WPBakery Page Builder\'s site-wide settings from its settings screen: responsive elements, Google Fonts subsets, local Google Fonts, keyboard shortcuts, CSS and JS loading, the Gutenberg switch, auto save, Design Options use, and the global custom CSS; the global header and footer JS only for a user who may post unfiltered HTML. Values come back as stored, and listed settings with no stored value are in not_set. Also returns the post types WPBakery\'s editor is on for and WPBakery\'s version. The licence code and every other setting are never returned. Requires a user who can manage site options. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
+			'group'        => 'reads',
+			'risk'         => 'read',
+			'subject'      => 'wpbakery',
+			'args_builder' => 'aafm_args_wpbakery_get_settings',
+		),
 	);
 }
 
@@ -511,5 +519,115 @@ function aafm_exec_wpbakery_update_page_code( array $input ) {
 		'changed'  => $changed,
 		// An empty previous goes out as {} so the wire shape matches the object the schema declares.
 		'previous' => array() === $previous ? new stdClass() : $previous,
+	);
+}
+
+/**
+ * The WPBakery site-wide settings this plugin reads, each stored as the option wpb_js_ plus the key (design WB-14,
+ * class-vc-settings.php:430-486). A fixed allowlist, never a prefix scan: the licence code and its token are wpb_js_
+ * options too, and are outside it.
+ *
+ * @return list<string>
+ */
+function aafm_wpbakery_settings_keys(): array {
+	return array( 'not_responsive_css', 'google_fonts_subsets', 'local_google_fonts', 'shortcuts', 'css_loading', 'js_loading', 'gutenberg_disable', 'auto_save', 'use_custom', 'custom_css', 'custom_js_header', 'custom_js_footer' );
+}
+
+/**
+ * The settings that hold global JS, returned and written only for a user who may post unfiltered HTML.
+ *
+ * @return list<string>
+ */
+function aafm_wpbakery_settings_js_keys(): array {
+	return array( 'custom_js_header', 'custom_js_footer' );
+}
+
+/**
+ * Args for aafm/wpbakery-get-settings.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_wpbakery_get_settings(): array {
+	return array(
+		'label'               => aafm_ability_label( 'aafm/wpbakery-get-settings' ),
+		'description'         => aafm_ability_description( 'aafm/wpbakery-get-settings' ),
+		'category'            => 'aafm-reads',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'settings'          => array(
+					'type'        => 'object',
+					'description' => __( 'Setting key to its stored value, unchanged.', 'agent-abilities-for-mcp' ),
+				),
+				'not_set'           => array(
+					'type'        => 'array',
+					'items'       => array( 'type' => 'string' ),
+					'description' => __( 'Listed settings with no stored value; WPBakery\'s default applies.', 'agent-abilities-for-mcp' ),
+				),
+				'editor_post_types' => array(
+					'type'  => 'array',
+					'items' => array( 'type' => 'string' ),
+				),
+				'version'           => array( 'type' => 'string' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_wpbakery_get_settings',
+		'permission_callback' => 'aafm_perm_manage_options',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => true,
+				'destructive' => false,
+				'idempotent'  => true,
+			),
+		),
+	);
+}
+
+/**
+ * The stored rows of the given settings: key => value for each row that exists. One get_option() per key with a
+ * sentinel default, so an absent row is told apart from a stored empty value.
+ *
+ * @param array<int,string> $keys Setting keys.
+ * @return array<string,mixed>
+ */
+function aafm_wpbakery_stored_settings( array $keys ): array {
+	$absent = new stdClass();
+	$out    = array();
+	foreach ( $keys as $key ) {
+		$value = get_option( 'wpb_js_' . $key, $absent );
+		if ( $value !== $absent ) {
+			$out[ $key ] = $value;
+		}
+	}
+	return $out;
+}
+
+/**
+ * Execute aafm/wpbakery-get-settings (design WB-14). The global JS keys are left out entirely, from settings and
+ * from not_set, for a user who may not post unfiltered HTML.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>
+ */
+function aafm_exec_wpbakery_get_settings( array $input ): array {
+	unset( $input );
+	$keys = aafm_wpbakery_settings_keys();
+	if ( ! current_user_can( 'unfiltered_html' ) ) {
+		$keys = array_values( array_diff( $keys, aafm_wpbakery_settings_js_keys() ) );
+	}
+	$stored = aafm_wpbakery_stored_settings( $keys );
+	$types  = aafm_builder_vendor( 'wpbakery_editor_post_types' );
+	$types  = null !== $types ? $types() : array();
+	return array(
+		// An empty map goes out as {} so the wire shape matches the object the schema declares.
+		'settings'          => array() === $stored ? new stdClass() : $stored,
+		'not_set'           => array_values( array_diff( $keys, array_keys( $stored ) ) ),
+		'editor_post_types' => array_values( array_map( 'strval', array_filter( is_array( $types ) ? $types : array(), 'is_string' ) ) ),
+		'version'           => defined( 'WPB_VC_VERSION' ) ? (string) constant( 'WPB_VC_VERSION' ) : '',
 	);
 }

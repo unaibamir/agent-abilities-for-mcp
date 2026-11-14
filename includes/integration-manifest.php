@@ -501,6 +501,10 @@ function aafm_integration_ability_order(): array {
 				'name' => 'aafm/wpbakery-update-page-code',
 				'risk' => 'write',
 			),
+			array(
+				'name' => 'aafm/wpbakery-get-settings',
+				'risk' => 'read',
+			),
 		),
 		'geodirectory'  => array(
 			array(

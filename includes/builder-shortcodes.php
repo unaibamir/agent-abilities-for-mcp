@@ -274,7 +274,8 @@ function aafm_builder_serialize( string $tag, array $atts, ?string $inner, strin
 
 /**
  * The closed list of a builder's own post types (design 4.3). The permission check, the ownership
- * rule and the restore rule all read this one list. templatera is not here until S14 (Ruling B13).
+ * rule and the restore rule all read this one list. templatera (Templatera's template posts, T1) joined in S14
+ * (Ruling B13): not public, capability type post, no revisions.
  *
  * @param string $builder avada or wpbakery.
  * @return array<string>
@@ -282,7 +283,7 @@ function aafm_builder_serialize( string $tag, array $atts, ?string $inner, strin
 function aafm_builder_own_post_types( string $builder ): array {
 	$types = array(
 		'avada'    => array( 'fusion_tb_section', 'fusion_template', 'fusion_element', 'fusion_form', 'awb_off_canvas' ),
-		'wpbakery' => array( 'vc_grid_item' ),
+		'wpbakery' => array( 'vc_grid_item', 'templatera' ),
 	);
 	return $types[ $builder ] ?? array();
 }

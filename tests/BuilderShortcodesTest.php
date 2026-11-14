@@ -256,9 +256,8 @@ final class BuilderShortcodesTest extends TestCase {
 
 	public function test_own_post_types_are_the_closed_lists(): void {
 		$this->assertSame( array( 'fusion_tb_section', 'fusion_template', 'fusion_element', 'fusion_form', 'awb_off_canvas' ), aafm_builder_own_post_types( 'avada' ) );
-		$this->assertSame( array( 'vc_grid_item' ), aafm_builder_own_post_types( 'wpbakery' ) );
+		$this->assertSame( array( 'vc_grid_item', 'templatera' ), aafm_builder_own_post_types( 'wpbakery' ) );
 		$this->assertSame( array(), aafm_builder_own_post_types( 'elementor' ) );
-		$this->assertNotContains( 'templatera', aafm_builder_own_post_types( 'wpbakery' ) );
 	}
 
 	public function test_ownership_allows_only_the_three_cases(): void {

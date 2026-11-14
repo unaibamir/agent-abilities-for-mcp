@@ -470,6 +470,7 @@ final class AvadaSiteWireTest extends TestCase {
 				array(
 					'ID'         => 601,
 					'post_title' => 'Landing',
+					'post_type'  => 'fusion_template',
 				),
 			),
 		);
@@ -553,9 +554,10 @@ final class AvadaSiteWireTest extends TestCase {
 			array(
 				'items'      => array(
 					array(
-						'id'    => 601,
-						'type'  => 'fusion_template',
-						'title' => 'Landing',
+						'id'       => 601,
+						'type'     => 'fusion_template',
+						'title'    => 'Landing',
+						'category' => 'fusion_template',
 					),
 				),
 				'total'      => 1,

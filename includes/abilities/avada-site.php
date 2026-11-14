@@ -1350,30 +1350,49 @@ function aafm_avada_studio_catalogue() {
 }
 
 /**
- * One catalogue item trimmed to what the list returns, every string capped, or null when it has no positive id.
+ * One catalogue item trimmed to what the list returns, every string capped, or null when it has no positive id or its
+ * post_type is not one of Avada's Studio types. The catalogue is grouped by Studio section (elements, sections, columns,
+ * post_cards, header, footer, content, forms, icons and so on, seen on the smoke site 2026-11-15), and each item names
+ * its own post_type; the group is returned as category.
  *
- * @param mixed  $item Catalogue row.
- * @param string $type Item type.
+ * @param mixed  $item  Catalogue row.
+ * @param string $group Catalogue group.
  * @return array<string,mixed>|null
  */
-function aafm_avada_studio_row( $item, string $type ): ?array {
-	if ( ! is_array( $item ) || ! is_numeric( $item['ID'] ?? null ) || (int) $item['ID'] < 1 ) {
+function aafm_avada_studio_row( $item, string $group ): ?array {
+	if ( ! is_array( $item ) || ! is_numeric( $item['ID'] ?? null ) || (int) $item['ID'] < 1 || ! in_array( $item['post_type'] ?? null, aafm_avada_studio_types(), true ) ) {
 		return null;
 	}
-	$row  = array(
-		'id'    => (int) $item['ID'],
-		'type'  => $type,
-		'title' => mb_substr( is_string( $item['post_title'] ?? null ) ? wp_strip_all_tags( $item['post_title'] ) : '', 0, 200 ),
+	$row = array(
+		'id'       => (int) $item['ID'],
+		'type'     => (string) $item['post_type'],
+		'title'    => mb_substr( is_string( $item['post_title'] ?? null ) ? wp_strip_all_tags( $item['post_title'] ) : '', 0, 200 ),
+		'category' => mb_substr( sanitize_key( $group ), 0, 100 ),
 	);
-	$tags = is_array( $item['tags'] ?? null ) ? array_values( array_filter( $item['tags'], 'is_string' ) ) : array();
-	if ( array() !== $tags ) {
-		$row['category'] = mb_substr( sanitize_text_field( $tags[0] ), 0, 100 );
-	}
 	$url = is_string( $item['url'] ?? null ) ? esc_url_raw( $item['url'] ) : '';
 	if ( '' !== $url && strlen( $url ) <= 500 ) {
 		$row['preview_url'] = $url;
 	}
 	return $row;
+}
+
+/**
+ * Every item of a catalogue as list rows, in catalogue order, each type and id once.
+ *
+ * @param array<string,mixed> $data Catalogue from aafm_avada_studio_catalogue().
+ * @return list<array<string,mixed>>
+ */
+function aafm_avada_studio_items( array $data ): array {
+	$rows = array();
+	foreach ( $data as $group => $items ) {
+		foreach ( is_array( $items ) ? $items : array() as $item ) {
+			$row = aafm_avada_studio_row( $item, (string) $group );
+			if ( null !== $row && ! isset( $rows[ $row['type'] . ':' . $row['id'] ] ) ) {
+				$rows[ $row['type'] . ':' . $row['id'] ] = $row;
+			}
+		}
+	}
+	return array_values( $rows );
 }
 
 /**
@@ -1463,15 +1482,12 @@ function aafm_exec_avada_list_studio_items( array $input ) {
 	if ( is_wp_error( $data ) ) {
 		return $data;
 	}
-	$type   = isset( $input['type'] ) && in_array( $input['type'], aafm_avada_studio_types(), true ) ? array( (string) $input['type'] ) : aafm_avada_studio_types();
+	$type   = isset( $input['type'] ) && is_string( $input['type'] ) ? $input['type'] : '';
 	$search = isset( $input['search'] ) && is_string( $input['search'] ) ? trim( $input['search'] ) : '';
 	$rows   = array();
-	foreach ( $type as $one ) {
-		foreach ( is_array( $data[ $one ] ?? null ) ? $data[ $one ] : array() as $item ) {
-			$row = aafm_avada_studio_row( $item, $one );
-			if ( null !== $row && ( '' === $search || false !== mb_stripos( $row['title'], $search ) ) ) {
-				$rows[] = $row;
-			}
+	foreach ( aafm_avada_studio_items( $data ) as $row ) {
+		if ( ( '' === $type || $type === $row['type'] ) && ( '' === $search || false !== mb_stripos( $row['title'], $search ) ) ) {
+			$rows[] = $row;
 		}
 	}
 	$per_page = min( 50, max( 1, (int) ( $input['per_page'] ?? 20 ) ) );
@@ -1569,9 +1585,8 @@ function aafm_exec_avada_import_studio_item( array $input ) {
 		return $data;
 	}
 	$listed = false;
-	foreach ( is_array( $data[ $type ] ?? null ) ? $data[ $type ] : array() as $item ) {
-		$row = aafm_avada_studio_row( $item, $type );
-		if ( null !== $row && $item_id === $row['id'] ) {
+	foreach ( aafm_avada_studio_items( $data ) as $row ) {
+		if ( $type === $row['type'] && $item_id === $row['id'] ) {
 			$listed = true;
 			break;
 		}

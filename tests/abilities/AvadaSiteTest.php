@@ -1805,27 +1805,38 @@ final class AvadaSiteTest extends TestCase {
 	private function studio_seam( $catalogue = null, array $absent = array(), bool $registered = true, $result = null ): callable {
 		self::$studio_calls = array();
 		$catalogue          = null === $catalogue ? array(
-			'fusion_element'  => array(
+			'sections'        => array(
 				array(
 					'ID'         => 501,
 					'post_title' => 'Hero <b>block</b>',
+					'post_type'  => 'fusion_element',
 					'url'        => 'https://avada.studio/item/501/',
 					'tags'       => array( 'heroes', 'dark' ),
-					'thumbnail'  => array( 'url' => 'https://avada.studio/501.jpg' ),
 				),
 				array(
 					'ID'         => 502,
 					'post_title' => str_repeat( 'x', 300 ),
+					'post_type'  => 'fusion_element',
 				),
-				array( 'post_title' => 'no id' ),
+				array(
+					'post_title' => 'no id',
+					'post_type'  => 'fusion_element',
+				),
+				array(
+					'ID'         => 503,
+					'post_title' => 'Not a Studio type',
+					'post_type'  => 'page',
+				),
 			),
 			'fusion_template' => array(
 				array(
 					'ID'         => 601,
 					'post_title' => 'Landing',
+					'post_type'  => 'fusion_template',
 				),
 			),
-			'studio_tags'     => array(),
+			'studio_tags'     => array( 'sections' => array( 'heroes' ) ),
+			'studio_elements' => array( 'count' => 3 ),
 		) : $catalogue;
 		$studio             = new class( $catalogue ) {
 			/**
@@ -1971,35 +1982,43 @@ final class AvadaSiteTest extends TestCase {
 				'id'          => 501,
 				'type'        => 'fusion_element',
 				'title'       => 'Hero block',
-				'category'    => 'heroes',
+				'category'    => 'sections',
 				'preview_url' => 'https://avada.studio/item/501/',
 			),
 			aafm_avada_studio_row(
 				array(
 					'ID'         => '501',
 					'post_title' => 'Hero <b>block</b>',
+					'post_type'  => 'fusion_element',
 					'url'        => 'https://avada.studio/item/501/',
-					'tags'       => array( 'heroes' ),
 					'secret'     => 'x',
 				),
-				'fusion_element'
+				'sections'
 			)
 		);
-		$this->assertSame(
-			200,
-			mb_strlen(
-				aafm_avada_studio_row(
-					array(
-						'ID'         => 2,
-						'post_title' => str_repeat( 'é', 300 ),
-					),
-					'fusion_element'
-				)['title']
+		$long = array(
+			'ID'         => 2,
+			'post_type'  => 'fusion_element',
+			'post_title' => str_repeat( 'é', 300 ),
+		);
+		$this->assertSame( 200, mb_strlen( aafm_avada_studio_row( $long, 'elements' )['title'] ) );
+		$no_id = array(
+			'post_title' => 'x',
+			'post_type'  => 'fusion_element',
+		);
+		$this->assertNull( aafm_avada_studio_row( $no_id, 'elements' ) );
+		$this->assertNull(
+			aafm_avada_studio_row(
+				array(
+					'ID'        => 3,
+					'post_type' => 'post',
+				),
+				'elements'
 			)
 		);
-		$this->assertNull( aafm_avada_studio_row( array( 'post_title' => 'x' ), 'fusion_element' ) );
-		$this->assertNull( aafm_avada_studio_row( 'x', 'fusion_element' ) );
+		$this->assertNull( aafm_avada_studio_row( 'x', 'elements' ) );
 	}
+
 
 	public function test_the_studio_source_never_names_the_registration_data(): void {
 		$source = (string) file_get_contents( dirname( __DIR__, 2 ) . '/includes/abilities/avada-site.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- source scan.
@@ -2097,7 +2116,7 @@ final class AvadaSiteTest extends TestCase {
 				'id'          => 501,
 				'type'        => 'fusion_element',
 				'title'       => 'Hero block',
-				'category'    => 'heroes',
+				'category'    => 'sections',
 				'preview_url' => 'https://avada.studio/item/501/',
 			),
 			$out['items'][0]

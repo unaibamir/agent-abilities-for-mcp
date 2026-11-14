@@ -433,4 +433,114 @@ final class AvadaTest extends TestCase {
 		$this->assertSame( array( 'ok', 'unparseable', 'truncated' ), $args['output_schema']['properties']['structure_status']['enum'] );
 		$this->assertSame( 'array', $args['output_schema']['properties']['structure']['type'] );
 	}
+
+	/* ---------------------------------------------------------------- S7-3: the extended permission */
+
+	private function av1_replace( int $id, string $search, string $replace ) {
+		return aafm_exec_avada_replace_text(
+			array(
+				'post_id' => $id,
+				'search'  => $search,
+				'replace' => $replace,
+			)
+		);
+	}
+
+	/**
+	 * Register one of Avada's own types the way fusion-builder does (A8): not public, capability type post.
+	 */
+	private function register_avada_type( string $type, bool $map_meta_cap = true ): void {
+		register_post_type(
+			$type,
+			array(
+				'public'          => false,
+				'capability_type' => 'post',
+				'map_meta_cap'    => $map_meta_cap,
+				'supports'        => array( 'title', 'editor', 'revisions' ),
+			)
+		);
+	}
+
+	public function test_replace_works_on_a_layout_section_for_an_administrator(): void {
+		$this->register_avada_type( 'fusion_tb_section' );
+		$this->acting_as( 'administrator' );
+		$content = '[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1"][fusion_text]Footer note.[/fusion_text][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]';
+		$id      = self::factory()->post->create(
+			array(
+				'post_type'    => 'fusion_tb_section',
+				'post_content' => $content,
+			)
+		);
+		$this->assertFalse( aafm_post_has_foreign_builder_ownership( $id ) );
+		$this->assertTrue( aafm_perm_avada_post_object( array( 'post_id' => $id ) ) );
+
+		$out = $this->av1_replace( $id, 'Footer note.', 'New footer note.' );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( 1, $out['replacements'] );
+		$this->assertSame( str_replace( 'Footer note.', 'New footer note.', $content ), get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
+	public function test_a_section_is_refused_without_manage_options(): void {
+		$this->register_avada_type( 'fusion_tb_section' );
+		$this->acting_as( 'administrator' );
+		$id = self::factory()->post->create( array( 'post_type' => 'fusion_tb_section' ) );
+		$this->acting_as( 'editor' );
+
+		$this->assertTrue( current_user_can( 'edit_post', $id ) );
+		$this->assertFalse( aafm_perm_avada_post_object( array( 'post_id' => $id ) ) );
+	}
+
+	public function test_a_library_element_is_editable_by_an_editor(): void {
+		$this->register_avada_type( 'fusion_element' );
+		$this->acting_as( 'editor' );
+		$id = self::factory()->post->create( array( 'post_type' => 'fusion_element' ) );
+
+		$this->assertTrue( aafm_perm_avada_post_object( array( 'post_id' => $id ) ) );
+	}
+
+	public function test_an_own_type_that_is_not_registered_is_refused(): void {
+		$this->acting_as( 'administrator' );
+		$this->assertNull( get_post_type_object( 'fusion_form' ) );
+		$id = self::factory()->post->create( array( 'post_type' => 'fusion_form' ) );
+
+		$this->assertFalse( aafm_perm_avada_post_object( array( 'post_id' => $id ) ) );
+	}
+
+	public function test_an_own_type_without_map_meta_cap_is_refused(): void {
+		$this->register_avada_type( 'awb_off_canvas', false );
+		$this->acting_as( 'administrator' );
+		$id = self::factory()->post->create( array( 'post_type' => 'awb_off_canvas' ) );
+
+		$this->assertFalse( aafm_perm_avada_post_object( array( 'post_id' => $id ) ) );
+	}
+
+	public function test_permission_refuses_a_revision_id_and_an_attachment_id(): void {
+		$this->register_avada_type( 'fusion_tb_section' );
+		$this->acting_as( 'administrator' );
+		$page    = self::factory()->post->create( array( 'post_content' => 'v1' ) );
+		$section = self::factory()->post->create(
+			array(
+				'post_type'    => 'fusion_tb_section',
+				'post_content' => 'v1',
+			)
+		);
+		foreach ( array( $page, $section ) as $id ) {
+			wp_update_post(
+				array(
+					'ID'           => $id,
+					'post_content' => 'v2',
+				)
+			);
+		}
+		$page_rev    = (int) array_key_first( wp_get_post_revisions( $page ) );
+		$section_rev = (int) array_key_first( wp_get_post_revisions( $section ) );
+		$attachment  = self::factory()->attachment->create( array( 'post_mime_type' => 'image/jpeg' ) );
+		$this->assertGreaterThan( 0, $page_rev );
+		$this->assertGreaterThan( 0, $section_rev );
+
+		foreach ( array( $page_rev, $section_rev, $attachment ) as $id ) {
+			$this->assertFalse( aafm_perm_avada_post_object( array( 'post_id' => $id ) ), (string) $id );
+		}
+	}
 }

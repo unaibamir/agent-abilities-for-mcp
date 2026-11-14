@@ -774,4 +774,24 @@ final class RevisionsTest extends TestCase {
 		$this->assertTrue( $out['restored'] );
 		$this->assertSame( $oldest->post_content, get_post( $pid )->post_content );
 	}
+
+	/* ---------------------------------------------------------------- S7-3: the extended permission */
+
+	public function test_revision_tools_reach_a_layout_section(): void {
+		register_post_type(
+			'fusion_tb_section',
+			array(
+				'public'          => false,
+				'capability_type' => 'post',
+				'map_meta_cap'    => true,
+				'supports'        => array( 'title', 'editor', 'revisions' ),
+			)
+		);
+		$this->acting_as( 'administrator' );
+		$id = self::factory()->post->create( array( 'post_type' => 'fusion_tb_section' ) );
+		$this->assertTrue( aafm_perm_list_revisions( array( 'post_id' => $id ) ) );
+
+		$this->acting_as( 'editor' );
+		$this->assertFalse( aafm_perm_list_revisions( array( 'post_id' => $id ) ) );
+	}
 }

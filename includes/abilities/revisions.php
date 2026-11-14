@@ -63,15 +63,15 @@ function aafm_register_revisions_definitions( array $registry ): array {
 }
 
 /**
- * Shared gate: the parent post must be editable by the agent (Unit 1 resolver).
+ * Shared gate: the parent post must be editable by the agent. The same check as the page builder
+ * tools (aafm_perm_avada_post_object()), so the revision tools reach a builder's own types that keep
+ * revisions, such as an Avada layout section for a user with manage_options.
  *
  * @param array<string,mixed> $input Ability input.
  * @return bool
  */
 function aafm_revision_parent_editable( array $input ): bool {
-	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	$post = $id ? aafm_exact_object( 'post', $id ) : null;
-	return $post instanceof WP_Post && aafm_can_edit_post_object( $post );
+	return aafm_perm_avada_post_object( $input );
 }
 
 /**

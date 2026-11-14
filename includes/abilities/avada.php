@@ -100,9 +100,13 @@ function aafm_avada_registry_definitions(): array {
 }
 
 /**
- * Shared per-object gate for both Avada abilities: ordinary edit access to the target post,
- * exactly like aafm/replace-in-post's aafm_perm_replace_in_post() - Avada content is not a
- * distinct capability family, per this task's own research.
+ * Shared per-object gate for the Avada and WPBakery page tools and the revision tools (design 325
+ * section 4.3). A post of an ordinary type needs ordinary edit access, exactly like
+ * aafm/replace-in-post's aafm_perm_replace_in_post(): page builder content is not a distinct
+ * capability family. A post of a builder's own type (aafm_builder_own_post_types(), not public, so
+ * never on the owner's exposed list) needs a registered type with map_meta_cap and edit_post on that
+ * post, the check aafm_exec_avada_list_library() makes; an Avada layout section also needs
+ * manage_options, because a header or footer section changes every page (Ruling Q3).
  *
  * @param array<string,mixed> $input Input.
  * @return bool
@@ -110,7 +114,16 @@ function aafm_avada_registry_definitions(): array {
 function aafm_perm_avada_post_object( array $input ): bool {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
 	$post = $id ? aafm_exact_object( 'post', $id ) : null;
-	return $post instanceof WP_Post && aafm_can_edit_post_object( $post );
+	if ( ! $post instanceof WP_Post ) {
+		return false;
+	}
+	$own = array_merge( aafm_builder_own_post_types( 'avada' ), aafm_builder_own_post_types( 'wpbakery' ) );
+	if ( ! in_array( $post->post_type, $own, true ) ) {
+		return aafm_can_edit_post_object( $post );
+	}
+	return aafm_type_caps( $post->post_type )['mapped']
+		&& aafm_user_can_checked( 'edit_post', $id )
+		&& ( 'fusion_tb_section' !== $post->post_type || current_user_can( 'manage_options' ) );
 }
 
 /**
@@ -522,7 +535,7 @@ function aafm_exec_avada_replace_text( array $input ) {
 	// signatures come back empty and equal) even though the generic write path
 	// (aafm_exec_replace_in_post()) explicitly refuses those same posts. Require genuine,
 	// verified Avada ownership, not merely "no foreign builder marker at all".
-	if ( 'avada' !== aafm_post_has_foreign_builder_ownership( $id ) ) {
+	if ( ! aafm_builder_ownership_allows( 'avada', aafm_post_has_foreign_builder_ownership( $id ), $post ) ) {
 		return new WP_Error(
 			'aafm_not_avada_owned',
 			__( 'This post is not owned by Avada/Fusion Builder.', 'agent-abilities-for-mcp' ),

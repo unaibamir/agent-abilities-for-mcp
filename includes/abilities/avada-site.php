@@ -90,6 +90,22 @@ function aafm_avada_site_registry_definitions(): array {
 			'subject'      => 'avada',
 			'args_builder' => 'aafm_args_avada_update_layout',
 		),
+		'aafm/avada-list-studio-items'     => array(
+			'label'        => __( 'List Avada Studio items', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Lists the ready-made items in Avada Studio, Avada\'s own library of templates, sections, elements, icons, forms and off canvas panels, from the catalogue Avada itself loads: id, type, title and, where Avada has them, a category and a preview URL, plus total and from_cache. Filter by type and by a word in the title; at most 50 per page. When Avada has no cached catalogue, this call makes Avada download it from Avada\'s servers under the site\'s own Avada registration and cache it for a day; this plugin sends nothing itself and never reads the registration. Refused until the site owner has unlocked the high-risk category and switched on the Avada Studio import, and while Studio is unavailable (the Avada theme off, Studio switched off in Avada, or the product not registered). Requires a user who can manage site options. Only while Avada is active.', 'agent-abilities-for-mcp' ),
+			'group'        => 'reads',
+			'risk'         => 'read',
+			'subject'      => 'avada',
+			'args_builder' => 'aafm_args_avada_list_studio_items',
+		),
+		'aafm/avada-import-studio-item'    => array(
+			'label'        => __( 'Import an Avada Studio item', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Imports one Avada Studio item, named by its id and type from avada-list-studio-items, into Avada\'s library on this site, through Avada\'s own importer: Avada downloads the item from Avada\'s servers under the site\'s own Avada registration and creates a published post of that type, and with media import (the default) also its images and whatever the item depends on, such as forms, menus and icons; with media placeholders, images become placeholders. Avada makes these requests and this plugin sends nothing itself; it never reads the registration. An item imported before is not imported again; was_imported is then true. Only the item\'s own post is confirmed, by its type and Avada\'s Studio marker; the media and other posts Avada adds are not checked one by one. Nothing is placed on a page: place the item with avada-insert-library-item. There is no undo from this plugin; the owner can delete the item in Avada\'s Library. Locked with the other high-risk tools until the site owner unlocks the category, then off until switched on. Requires a user who can manage site options. Only while Avada is active.', 'agent-abilities-for-mcp' ),
+			'group'        => 'writes',
+			'risk'         => 'write',
+			'subject'      => 'avada',
+			'args_builder' => 'aafm_args_avada_import_studio_item',
+		),
 	);
 }
 

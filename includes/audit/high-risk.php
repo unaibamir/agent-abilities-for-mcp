@@ -63,6 +63,17 @@ function aafm_high_risk_bridged_builtin(): array {
 }
 
 /**
+ * Native builder tools held by the high-risk lock, beside the money and authority list (Ruling Q17, operator): the
+ * Avada Studio import adds Avada-authored content and media to the site, so the owner's approval is the unlock of this
+ * category plus the tool's own switch (Ruling Q19).
+ *
+ * @return list<string>
+ */
+function aafm_high_risk_vendor_builtin(): array {
+	return array( 'aafm/avada-import-studio-item' );
+}
+
+/**
  * The full high-risk set: the native and bridged built-ins, plus anything a filter adds.
  *
  * The built-ins are re-merged AFTER the filter runs, so a filter can only ever add an ability to
@@ -73,7 +84,7 @@ function aafm_high_risk_bridged_builtin(): array {
  * @return list<string>
  */
 function aafm_high_risk_abilities(): array {
-	$builtin = array_merge( aafm_high_risk_abilities_builtin(), aafm_high_risk_bridged_builtin() );
+	$builtin = array_merge( aafm_high_risk_abilities_builtin(), aafm_high_risk_bridged_builtin(), aafm_high_risk_vendor_builtin() );
 
 	/**
 	 * Filters EXTRA ability names to treat as high-risk. Built-ins are re-merged after, so

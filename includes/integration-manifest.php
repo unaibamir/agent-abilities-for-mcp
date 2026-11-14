@@ -467,6 +467,14 @@ function aafm_integration_ability_order(): array {
 				'name' => 'aafm/avada-update-layout',
 				'risk' => 'destructive',
 			),
+			array(
+				'name' => 'aafm/avada-list-studio-items',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/avada-import-studio-item',
+				'risk' => 'write',
+			),
 		),
 		'wpbakery'      => array(
 			array(

@@ -20,7 +20,7 @@ final class AvadaSiteWireTest extends TestCase {
 
 	private const SECTION = '[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1"][fusion_text]<p>Saved section</p>[/fusion_text][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]';
 
-	private const TOOLS = array( 'aafm/avada-insert-library-item', 'aafm/avada-update-page-css', 'aafm/avada-update-page-options', 'aafm/avada-update-global-options', 'aafm/avada-update-layout' );
+	private const TOOLS = array( 'aafm/avada-insert-library-item', 'aafm/avada-update-page-css', 'aafm/avada-update-page-options', 'aafm/avada-update-global-options', 'aafm/avada-update-layout', 'aafm/avada-list-studio-items', 'aafm/avada-import-studio-item' );
 
 	public function set_up(): void {
 		parent::set_up();
@@ -460,5 +460,152 @@ final class AvadaSiteWireTest extends TestCase {
 		delete_option( 'fusion_tb_layout_default' );
 		unregister_taxonomy( 'fusion_tb_category' );
 		unregister_post_type( 'fusion_tb_section' );
+	}
+
+	public function test_the_studio_pair_round_trips_over_a_real_tools_call_once_approved(): void {
+		update_option( 'aafm_high_risk_abilities_unlocked', true );
+		register_post_type( 'fusion_template', array( 'public' => false ) );
+		$catalogue = array(
+			'fusion_template' => array(
+				array(
+					'ID'         => 601,
+					'post_title' => 'Landing',
+				),
+			),
+		);
+		$importer  = new class() {
+			/**
+			 * Avada's own switch.
+			 *
+			 * @var bool
+			 */
+			public $update_post = false;
+
+			/**
+			 * Record nothing.
+			 *
+			 * @param array<string,mixed> $options Options.
+			 * @return void
+			 */
+			public function set_import_options( $options ): void {
+				unset( $options );
+			}
+
+			/**
+			 * Create the post Avada would.
+			 *
+			 * @param array<string,mixed> $studio_post Studio post.
+			 * @return array<string,mixed>
+			 */
+			public function import_post( $studio_post = array() ): array {
+				$id = wp_insert_post(
+					array(
+						'post_type'   => $studio_post['post_type'],
+						'post_title'  => 'Landing',
+						'post_status' => 'publish',
+					)
+				);
+				update_post_meta( $id, '_avada_studio_post', $studio_post['post_id'] );
+				return array(
+					'post_id'      => $id,
+					'was_imported' => false,
+				);
+			}
+		};
+		$studio    = new class( $catalogue ) {
+			/**
+			 * Catalogue.
+			 *
+			 * @var array<string,mixed>
+			 */
+			private $data;
+
+			/**
+			 * Constructor.
+			 *
+			 * @param array<string,mixed> $data Catalogue.
+			 */
+			public function __construct( array $data ) {
+				$this->data = $data;
+			}
+
+			/**
+			 * Avada's own method name.
+			 *
+			 * @return array<string,mixed>
+			 */
+			public function get_data(): array {
+				return $this->data;
+			}
+		};
+		$filter    = static function ( $resolved, string $entry ) use ( $studio, $importer ) {
+			$map = array(
+				'avada_option_name'       => static fn(): string => 'fusion_options',
+				'avada_studio'            => static fn() => $studio,
+				'avada_studio_import'     => static fn() => $importer,
+				'avada_studio_registered' => static fn(): bool => true,
+			);
+			return $map[ $entry ] ?? $resolved;
+		};
+		add_filter( 'aafm_builder_vendor', $filter, 20, 2 );
+		list( $handler ) = $this->wired();
+		$this->assertSame(
+			array(
+				'items'      => array(
+					array(
+						'id'    => 601,
+						'type'  => 'fusion_template',
+						'title' => 'Landing',
+					),
+				),
+				'total'      => 1,
+				'from_cache' => false,
+			),
+			$this->wire(
+				$handler->call_tool(
+					array(
+						'name'      => aafm_mcp_tool_name( 'aafm/avada-list-studio-items' ),
+						'arguments' => array(),
+					),
+					'req-avada-studio-list'
+				)
+			)
+		);
+		$done = $this->wire(
+			$handler->call_tool(
+				array(
+					'name'      => aafm_mcp_tool_name( 'aafm/avada-import-studio-item' ),
+					'arguments' => array(
+						'item_id' => 601,
+						'type'    => 'fusion_template',
+					),
+				),
+				'req-avada-studio-import'
+			)
+		);
+		remove_filter( 'aafm_builder_vendor', $filter, 20 );
+		$this->assertSame( array( 'post_id', 'post_type', 'title', 'was_imported', 'media', 'note', 'undo' ), array_keys( $done ) );
+		$this->assertSame( 'fusion_template', $done['post_type'] );
+		$this->assertSame( 'Landing', $done['title'] );
+		$this->assertFalse( $done['was_imported'] );
+		$this->assertSame( 'import', $done['media'] );
+		delete_option( 'aafm_high_risk_abilities_unlocked' );
+	}
+
+	public function test_the_studio_import_is_refused_on_the_wire_while_locked(): void {
+		list( $handler ) = $this->wired();
+		$this->assertNotContains( 'aafm/avada-import-studio-item', aafm_get_enabled_abilities(), 'The registered set drops a locked tool, so the real server never lists it.' );
+		$refused = $handler->call_tool(
+			array(
+				'name'      => aafm_mcp_tool_name( 'aafm/avada-import-studio-item' ),
+				'arguments' => array(
+					'item_id' => 601,
+					'type'    => 'fusion_template',
+				),
+			),
+			'req-avada-studio-locked'
+		);
+		$this->assertTrue( $refused->getIsError() );
+		$this->assertSame( aafm_avada_studio_not_approved_error()->get_error_message(), $refused->getContent()[0]->getText() );
 	}
 }

@@ -364,4 +364,15 @@ final class HighRiskUiTest extends TestCase {
 
 		$this->assertStringContainsString( 'Your host or a site setting keeps this locked, whatever this switch says.', $forced );
 	}
+
+	public function test_the_studio_import_shows_as_locked_like_the_other_locked_tools(): void {
+		$html = $this->render_integration_row( 'aafm/avada-import-studio-item' );
+		$this->assertStringNotContainsString( 'type="checkbox"', $html );
+		$this->assertStringContainsString( 'aafm-ability-locked', $html );
+		$this->assertStringContainsString( 'aafm-badge-high-risk', $html );
+		update_option( 'aafm_high_risk_abilities_unlocked', true );
+		$html = $this->render_integration_row( 'aafm/avada-import-studio-item' );
+		$this->assertStringContainsString( 'name="aafm_abilities[]" value="aafm/avada-import-studio-item"', $html );
+		$this->assertStringContainsString( 'aafm-badge-high-risk', $html );
+	}
 }

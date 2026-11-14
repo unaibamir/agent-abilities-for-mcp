@@ -2017,4 +2017,274 @@ final class AvadaSiteTest extends TestCase {
 			$this->assertStringNotContainsString( $needle, $rows, $needle );
 		}
 	}
+
+	/**
+	 * The owner's approval: the import switched on and the high-risk category unlocked, or either undone.
+	 *
+	 * @param bool $enabled  Import switched on.
+	 * @param bool $unlocked Category unlocked.
+	 * @return void
+	 */
+	private function studio_approval( bool $enabled, bool $unlocked ): void {
+		aafm_flush_registry_cache();
+		update_option( 'aafm_enabled_abilities', $enabled ? array( 'aafm/avada-import-studio-item', 'aafm/avada-list-studio-items' ) : array() );
+		if ( $unlocked ) {
+			update_option( 'aafm_high_risk_abilities_unlocked', true );
+		} else {
+			delete_option( 'aafm_high_risk_abilities_unlocked' );
+		}
+	}
+
+	/**
+	 * Run a Studio executor as an administrator with the seam in place.
+	 *
+	 * @param string              $tool    list or import.
+	 * @param array<string,mixed> $input   Input.
+	 * @param array<int,mixed>    $seam    Arguments for studio_seam().
+	 * @return array<string,mixed>|WP_Error
+	 */
+	private function studio_call( string $tool, array $input, array $seam = array() ) {
+		$filter = $this->studio_seam( ...$seam );
+		$this->acting_as( 'administrator' );
+		$out = 'list' === $tool ? aafm_exec_avada_list_studio_items( $input ) : aafm_exec_avada_import_studio_item( $input );
+		remove_filter( 'aafm_builder_vendor', $filter, 20 );
+		return $out;
+	}
+
+	public function test_both_studio_tools_start_off(): void {
+		delete_option( 'aafm_enabled_abilities' );
+		delete_option( 'aafm_high_risk_abilities_unlocked' );
+		$this->assertNotContains( 'aafm/avada-list-studio-items', aafm_get_enabled_abilities() );
+		$this->assertNotContains( 'aafm/avada-import-studio-item', aafm_get_enabled_abilities() );
+		$this->assertFalse( aafm_avada_studio_approved() );
+	}
+
+	public function test_the_list_and_import_are_refused_while_the_import_is_locked_or_off(): void {
+		foreach ( array( array( true, false ), array( false, true ), array( false, false ) ) as $case ) {
+			$this->studio_approval( $case[0], $case[1] );
+			foreach ( array( 'list', 'import' ) as $tool ) {
+				$out = $this->studio_call(
+					$tool,
+					array(
+						'item_id' => 501,
+						'type'    => 'fusion_element',
+					)
+				);
+				$this->assertSame( 'aafm_avada_studio_not_approved', $out->get_error_code(), $tool );
+				$this->assertSame( 403, $out->get_error_data()['status'] );
+			}
+		}
+		$this->assertSame( array(), self::$studio_calls );
+	}
+
+	public function test_both_studio_tools_need_manage_options_and_an_editor_cannot_discover_either(): void {
+		foreach ( array( 'aafm_args_avada_list_studio_items', 'aafm_args_avada_import_studio_item' ) as $args ) {
+			$this->assertSame( 'aafm_perm_manage_options', $args()['permission_callback'] );
+		}
+		$this->assertNull( aafm_ability_list_permission( 'aafm/avada-list-studio-items' ) );
+		$this->assertNull( aafm_ability_list_permission( 'aafm/avada-import-studio-item' ) );
+		$this->acting_as( 'editor' );
+		$this->assertFalse( aafm_perm_manage_options() );
+	}
+
+	public function test_studio_list_returns_trimmed_rows_by_type_search_and_page(): void {
+		$this->studio_approval( true, true );
+		$out = $this->studio_call( 'list', array( 'type' => 'fusion_element' ) );
+		$this->assertSame( 2, $out['total'] );
+		$this->assertFalse( $out['from_cache'] );
+		$this->assertSame(
+			array(
+				'id'          => 501,
+				'type'        => 'fusion_element',
+				'title'       => 'Hero block',
+				'category'    => 'heroes',
+				'preview_url' => 'https://avada.studio/item/501/',
+			),
+			$out['items'][0]
+		);
+		$this->assertSame( 200, mb_strlen( $out['items'][1]['title'] ) );
+		$this->assertSame( array( 601 ), array_column( $this->studio_call( 'list', array( 'search' => 'land' ) )['items'], 'id' ) );
+		$this->assertSame(
+			array( 502 ),
+			array_column(
+				$this->studio_call(
+					'list',
+					array(
+						'type'     => 'fusion_element',
+						'per_page' => 1,
+						'page'     => 2,
+					)
+				)['items'],
+				'id'
+			)
+		);
+		set_transient( 'avada_studio', array( 'x' ), 60 );
+		$this->assertTrue( $this->studio_call( 'list', array() )['from_cache'] );
+		delete_transient( 'avada_studio' );
+		$this->assertSame( 'aafm_avada_studio_fetch_failed', $this->studio_call( 'list', array(), array( false ) )->get_error_code() );
+		$this->assertSame( 'aafm_avada_studio_unavailable', $this->studio_call( 'list', array(), array( null, array(), false ) )->get_error_code() );
+	}
+
+	public function test_an_item_not_in_the_catalogue_or_of_another_type_is_refused_before_avada_is_called(): void {
+		$this->studio_approval( true, true );
+		foreach ( array( array( 999, 'fusion_element' ), array( 601, 'fusion_element' ), array( 501, 'fusion_template' ) ) as $case ) {
+			$out = $this->studio_call(
+				'import',
+				array(
+					'item_id' => $case[0],
+					'type'    => $case[1],
+				)
+			);
+			$this->assertSame( 'aafm_builder_unknown_template', $out->get_error_code() );
+		}
+		$this->assertSame( array(), self::$studio_calls );
+	}
+
+	public function test_import_calls_avada_with_the_item_and_never_sets_update_post(): void {
+		$this->studio_approval( true, true );
+		register_post_type( 'fusion_element', array( 'public' => false ) );
+		$out = $this->studio_call(
+			'import',
+			array(
+				'item_id' => 501,
+				'type'    => 'fusion_element',
+			)
+		);
+		$this->assertIsArray( $out );
+		$this->assertSame(
+			array(
+				array( 'set_import_options', array( array( 'images' => 'do-import-images' ) ) ),
+				array(
+					'import_post',
+					array(
+						array(
+							'post_id'   => 501,
+							'post_type' => 'fusion_element',
+						),
+						array(),
+						true,
+						true,
+						true,
+						true,
+					),
+				),
+			),
+			self::$studio_calls
+		);
+		$this->assertSame( array( 'post_id', 'post_type', 'title', 'was_imported', 'media', 'note' ), array_keys( $out ) );
+		$this->assertSame( 'fusion_element', $out['post_type'] );
+		$this->assertFalse( $out['was_imported'] );
+		$this->assertSame( 'import', $out['media'] );
+		$this->assertSame( '501', get_post_meta( $out['post_id'], '_avada_studio_post', true ) );
+		$this->assertStringContainsString( 'avada-insert-library-item', $out['note'] );
+	}
+
+	public function test_media_placeholders_sets_the_images_option(): void {
+		$this->studio_approval( true, true );
+		$out = $this->studio_call(
+			'import',
+			array(
+				'item_id' => 601,
+				'type'    => 'fusion_template',
+				'media'   => 'placeholders',
+			)
+		);
+		$this->assertSame( 'placeholders', $out['media'] );
+		$this->assertSame( array( 'images' => 'dont-import-images' ), self::$studio_calls[0][1][0] );
+	}
+
+	public function test_a_false_post_id_and_a_bad_read_back_are_import_failed_and_was_imported_passes_through(): void {
+		$this->studio_approval( true, true );
+		$args  = array(
+			'item_id' => 501,
+			'type'    => 'fusion_element',
+		);
+		$wrong = self::factory()->post->create( array( 'post_type' => 'page' ) );
+		$plain = self::factory()->post->create( array( 'post_type' => 'fusion_element' ) );
+		foreach ( array( array( 'post_id' => false ), 'x', array( 'post_id' => $wrong ), array( 'post_id' => $plain ) ) as $result ) {
+			$this->assertSame( 'aafm_avada_studio_import_failed', $this->studio_call( 'import', $args, array( null, array(), true, $result ) )->get_error_code() );
+		}
+		update_post_meta( $plain, '_avada_studio_post', '501' );
+		$out = $this->studio_call(
+			'import',
+			$args,
+			array(
+				null,
+				array(),
+				true,
+				array(
+					'post_id'      => $plain,
+					'was_imported' => true,
+				),
+			)
+		);
+		$this->assertTrue( $out['was_imported'] );
+		$this->assertSame( $plain, $out['post_id'] );
+	}
+
+	public function test_this_plugins_code_makes_no_http_request_and_no_output_holds_a_token(): void {
+		$this->studio_approval( true, true );
+		update_option( 'fusion_registration_data', array( 'avada' => array( 'purchase_code' => 'MARKER-TOKEN-55' ) ) );
+		$fired = 0;
+		$block = static function ( $pre ) use ( &$fired ) {
+			++$fired;
+			return $pre;
+		};
+		add_filter( 'pre_http_request', $block );
+		$list   = $this->studio_call( 'list', array() );
+		$import = $this->studio_call(
+			'import',
+			array(
+				'item_id' => 501,
+				'type'    => 'fusion_element',
+			)
+		);
+		remove_filter( 'pre_http_request', $block );
+		$this->assertSame( 0, $fired );
+		foreach ( array(
+			$list,
+			$import,
+			aafm_build_activity_detail(
+				'aafm/avada-import-studio-item',
+				array(
+					'item_id' => 501,
+					'type'    => 'fusion_element',
+				)
+			),
+		) as $out ) {
+			$this->assertStringNotContainsString( 'MARKER-TOKEN-55', (string) wp_json_encode( $out ) );
+		}
+		delete_option( 'fusion_registration_data' );
+	}
+
+	public function test_studio_audit_detail_schemas_and_descriptions(): void {
+		$this->assertSame(
+			'Ran an Avada Studio import of fusion_element item #501',
+			aafm_build_activity_detail(
+				'aafm/avada-import-studio-item',
+				array(
+					'item_id' => 501,
+					'type'    => 'fusion_element',
+					'media'   => 'import',
+				)
+			)
+		);
+		$this->assertFalse( aafm_args_avada_list_studio_items()['input_schema']['additionalProperties'] );
+		$this->assertSame( 50, aafm_args_avada_list_studio_items()['input_schema']['properties']['per_page']['maximum'] );
+		$import = aafm_args_avada_import_studio_item()['input_schema'];
+		$this->assertFalse( $import['additionalProperties'] );
+		$this->assertSame( array( 'item_id', 'type' ), $import['required'] );
+		$this->assertSame( array( 'import', 'placeholders' ), $import['properties']['media']['enum'] );
+		$registry = aafm_get_abilities_registry_full();
+		$this->assertSame( 'read', $registry['aafm/avada-list-studio-items']['risk'] );
+		$this->assertSame( 'write', $registry['aafm/avada-import-studio-item']['risk'] );
+		foreach ( array( 'aafm/avada-list-studio-items', 'aafm/avada-import-studio-item' ) as $name ) {
+			foreach ( array( $registry[ $name ]['description'], aafm_ability_disclosures()[ $name ] ) as $text ) {
+				$this->assertStringNotContainsString( ' - ', $text );
+				foreach ( array( 'Avada\'s servers', 'this plugin sends nothing', 'manage site options', 'high-risk' ) as $phrase ) {
+					$this->assertStringContainsString( $phrase, $text, $name . ': ' . $phrase );
+				}
+			}
+		}
+	}
 }

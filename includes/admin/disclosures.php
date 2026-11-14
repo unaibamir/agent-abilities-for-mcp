@@ -133,7 +133,11 @@ function aafm_ability_disclosures(): array {
 		'aafm/update-term'                 => __( 'Updates a term. Reparenting is guarded against hierarchy loops.', 'agent-abilities-for-mcp' ),
 		'aafm/add-post-terms'              => __( 'Adds terms to a post without removing its existing terms. Requires edit access to the post and the taxonomy\'s assign capability; only existing terms in that taxonomy can be added.', 'agent-abilities-for-mcp' ),
 		'aafm/update-term-meta'            => __( 'Writes one allowlisted scalar meta value to a term you can edit. Only allowlisted keys; protected keys are blocked. The response returns the old value when it is plain text or a number.', 'agent-abilities-for-mcp' ),
-		'aafm/restore-revision'            => __( 'Restores a post to one of its revisions. The current state is saved as a fresh revision first, so the change is reversible. Refuses to run when revisions are disabled for the post, because that snapshot could not be taken.', 'agent-abilities-for-mcp' ),
+		'aafm/restore-revision'            => sprintf(
+			/* translators: %s: page builder names, for example Elementor and Divi. */
+			__( 'Restores a post to one of its revisions. The current state is saved as a fresh revision first, so the change is reversible. Refuses to run when revisions are disabled for the post, because that snapshot could not be taken. Refuses a post owned by a page builder (%s), except an Avada or WPBakery page while that builder is active, and refuses even those when saving the revision as this user would change it.', 'agent-abilities-for-mcp' ),
+			aafm_page_builder_names()
+		),
 		'aafm/update-user'                 => __( 'Edits a user\'s display name, name, or email. Changing a role needs the promote-users capability and never demotes the last administrator. Requires edit access to that user.', 'agent-abilities-for-mcp' ),
 		'aafm/create-block'                => __( 'Creates a reusable block. Its markup is sanitized, and the author is always the agent. Requires the edit-posts capability, and respects force-draft if you turned it on.', 'agent-abilities-for-mcp' ),
 		'aafm/update-block'                => __( "Updates a reusable block's title or markup by id. The markup is sanitized. Requires edit access to that block.", 'agent-abilities-for-mcp' ),

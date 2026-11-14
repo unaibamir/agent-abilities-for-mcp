@@ -1021,4 +1021,12 @@ final class RevisionsTest extends TestCase {
 		$this->assertSame( 'aafm_wpbakery_css_stale', $out->get_error_code() );
 		$this->assertSame( self::WPB_A, get_post_field( 'post_content', $pid, 'raw' ) );
 	}
+
+	public function test_restore_description_lists_the_refused_builders_and_names_the_two_exceptions(): void {
+		$text = aafm_get_abilities_registry()['aafm/restore-revision']['description'];
+
+		$this->assertStringContainsString( aafm_page_builder_names(), $text );
+		$this->assertStringContainsString( 'except an Avada or WPBakery page while that builder is active', $text );
+		$this->assertStringNotContainsString( ' - ', $text );
+	}
 }

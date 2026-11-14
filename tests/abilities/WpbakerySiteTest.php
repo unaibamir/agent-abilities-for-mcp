@@ -275,7 +275,7 @@ final class WpbakerySiteTest extends TestCase {
 	public function test_list_schema_is_closed_and_read_only(): void {
 		$args = aafm_args_wpbakery_list_templates();
 		$this->assertFalse( $args['input_schema']['additionalProperties'] );
-		$this->assertSame( array( 'include_content', 'page', 'per_page' ), array_keys( $args['input_schema']['properties'] ) );
+		$this->assertSame( array( 'include_content', 'for_post_id', 'page', 'per_page' ), array_keys( $args['input_schema']['properties'] ) );
 		$this->assertSame( 'aafm-reads', $args['category'] );
 		$this->assertTrue( $args['meta']['annotations']['readonly'] );
 		$this->assertFalse( $args['meta']['annotations']['destructive'] );

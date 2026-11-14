@@ -185,4 +185,106 @@ final class BuilderAddonsTest extends TestCase {
 		$this->assertNull( $out['restore_revision_id'] );
 		$this->assertFalse( $out['reversible'] );
 	}
+
+	/**
+	 * The list's rows as id to source.
+	 *
+	 * @param array<string,mixed> $input Input.
+	 * @return array<string,string>
+	 */
+	private function listed( array $input = array() ): array {
+		$out = aafm_exec_wpbakery_list_templates( $input );
+		$this->assertIsArray( $out );
+		return array_column( $out['templates'], 'source', 'id' );
+	}
+
+	public function test_templatera_posts_are_listed_only_while_templatera_is_active(): void {
+		update_option(
+			'wpb_js_templates',
+			array(
+				't_1' => array(
+					'name'     => 'Saved',
+					'template' => self::TEMPLATE,
+				),
+			),
+			false
+		);
+		$id    = $this->template( self::TEMPLATE, null, array(), 'Posted' );
+		$draft = $this->template( self::TEMPLATE );
+		wp_update_post(
+			array(
+				'ID'          => $draft,
+				'post_status' => 'draft',
+			)
+		);
+		$this->acting_as( 'editor' );
+		$this->assertSame( array( 't_1' => 'saved' ), $this->listed() );
+
+		add_filter( 'aafm_templatera_active', '__return_true' );
+		$out = aafm_exec_wpbakery_list_templates( array( 'include_content' => true ) );
+		$this->assertSame(
+			array(
+				array(
+					'id'      => (string) $id,
+					'source'  => 'templatera',
+					'name'    => 'Posted',
+					'content' => self::TEMPLATE,
+				),
+			),
+			$out['templates'],
+			'Only published template posts, as Templatera\'s getTemplateList(); the option rows are gone.'
+		);
+		$this->assertSame( 1, $out['total'] );
+		$this->assertTrue( $out['templatera_active'] );
+	}
+
+	public function test_a_template_is_hidden_from_a_role_outside_its_user_role_list(): void {
+		add_filter( 'aafm_templatera_active', '__return_true' );
+		$admins = $this->template( self::TEMPLATE, null, array( 'administrator' ) );
+		$both   = $this->template( self::TEMPLATE, null, array( 'administrator', 'editor' ) );
+		$this->acting_as( 'editor' );
+		$this->assertSame( array( (string) $both => 'templatera' ), $this->listed() );
+		$this->acting_as( 'administrator' );
+		$this->assertEqualsCanonicalizing( array( (string) $admins, (string) $both ), array_keys( $this->listed() ) );
+		$this->acting_as( 'editor' );
+		$this->assertFalse( aafm_templatera_template_allowed( get_post( $admins ) ) );
+	}
+
+	public function test_for_post_id_applies_the_templates_post_type_list(): void {
+		add_filter( 'aafm_templatera_active', '__return_true' );
+		$pages = $this->template( self::TEMPLATE, array( 'page' ) );
+		$posts = $this->template( self::TEMPLATE, array( 'post' ) );
+		$page  = self::factory()->post->create( array( 'post_type' => 'page' ) );
+		$this->acting_as( 'editor' );
+		$this->assertSame( array( (string) $pages => 'templatera' ), $this->listed( array( 'for_post_id' => $page ) ) );
+		$this->assertEqualsCanonicalizing( array( (string) $pages, (string) $posts ), array_keys( $this->listed() ), 'Without for_post_id the post type list is not applied.' );
+		$this->assertTrue( aafm_templatera_template_allowed( get_post( $pages ), get_post( $page ) ) );
+		$this->assertFalse( aafm_templatera_template_allowed( get_post( $posts ), get_post( $page ) ) );
+
+		$other = self::factory()->post->create(
+			array(
+				'post_type'   => 'page',
+				'post_author' => self::factory()->user->create( array( 'role' => 'editor' ) ),
+				'post_status' => 'private',
+			)
+		);
+		$this->acting_as( 'author' );
+		$out = aafm_exec_wpbakery_list_templates( array( 'for_post_id' => $other ) );
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+	}
+
+	public function test_empty_lists_mean_everyone(): void {
+		add_filter( 'aafm_templatera_active', '__return_true' );
+		$open  = $this->template( self::TEMPLATE, array(), array() );
+		$plain = $this->template( self::TEMPLATE );
+		$page  = self::factory()->post->create( array( 'post_type' => 'page' ) );
+		foreach ( array( 'editor', 'administrator' ) as $role ) {
+			$this->acting_as( $role );
+			$this->assertEqualsCanonicalizing( array( (string) $open, (string) $plain ), array_keys( $this->listed( array( 'for_post_id' => $page ) ) ), $role );
+		}
+		$this->acting_as( 'author' );
+		$this->assertSame( array(), $this->listed(), 'Each row still needs edit access to the template post.' );
+		$this->assertFalse( aafm_templatera_template_allowed( get_post( $page ) ), 'Only a templatera post is a template.' );
+	}
 }

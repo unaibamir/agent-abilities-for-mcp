@@ -249,7 +249,7 @@ For layout, the AI can list block types and read one block's attributes, plus fi
 
 = Will an agent break my Elementor or Divi page? =
 
-Before any content write the plugin checks whether a page builder owns the post, and if one does it refuses with an error that names the builder. Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks and WPBakery are covered, so edit those pages in the builder itself. The one write it lets through is an edit that only sets the excerpt, which leaves the stored content as it was. Avada's own write tool, avada-replace-text, can replace text in a page and refuses changes to its shortcodes. The other Avada tools only read.
+Before any content write the plugin checks whether a page builder owns the post, and if one does it refuses with an error that names the builder. Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks and WPBakery are covered, so edit those pages in the builder itself. The one write it lets through is an edit that only sets the excerpt, which leaves the stored content as it was. Avada's own write tool, avada-replace-text, can replace text in a page and refuses changes to its shortcodes. The other Avada tools only read. On a WPBakery page, wpbakery-get-page-content reads the page and wpbakery-replace-text changes text between its elements, refusing heading and button text and any change to an element.
 
 = Can an AI agent manage my WooCommerce store? =
 

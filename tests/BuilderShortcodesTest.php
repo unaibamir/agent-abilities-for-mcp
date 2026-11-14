@@ -198,4 +198,69 @@ final class BuilderShortcodesTest extends TestCase {
 		$this->assertSame( '[fusion_text][/fusion_text]', aafm_builder_serialize( 'fusion_text', array(), '', 'avada_closed' ) );
 		$this->assertSame( '[fusion_text][/fusion_text]', aafm_builder_serialize( 'fusion_text', array(), null, 'avada_closed' ) );
 	}
+
+	public function test_own_post_types_are_the_closed_lists(): void {
+		$this->assertSame( array( 'fusion_tb_section', 'fusion_template', 'fusion_element', 'fusion_form', 'awb_off_canvas' ), aafm_builder_own_post_types( 'avada' ) );
+		$this->assertSame( array( 'vc_grid_item' ), aafm_builder_own_post_types( 'wpbakery' ) );
+		$this->assertSame( array(), aafm_builder_own_post_types( 'elementor' ) );
+		$this->assertNotContains( 'templatera', aafm_builder_own_post_types( 'wpbakery' ) );
+	}
+
+	public function test_ownership_allows_only_the_three_cases(): void {
+		$page    = new WP_Post(
+			(object) array(
+				'post_type'    => 'page',
+				'post_content' => 'x',
+			)
+		);
+		$empty   = new WP_Post(
+			(object) array(
+				'post_type'    => 'page',
+				'post_content' => "  \n",
+			)
+		);
+		$section = new WP_Post(
+			(object) array(
+				'post_type'    => 'fusion_tb_section',
+				'post_content' => 'x',
+			)
+		);
+
+		$this->assertTrue( aafm_builder_ownership_allows( 'avada', 'avada', $page ) );
+		$this->assertTrue( aafm_builder_ownership_allows( 'avada', false, $section ) );
+		$this->assertTrue( aafm_builder_ownership_allows( 'avada', false, $empty, true ) );
+		$this->assertFalse( aafm_builder_ownership_allows( 'avada', 'elementor', $section ) );
+		$this->assertFalse( aafm_builder_ownership_allows( 'avada', 'unknown', $page ) );
+		$this->assertFalse( aafm_builder_ownership_allows( 'avada', false, $page ) );
+		$this->assertFalse( aafm_builder_ownership_allows( 'avada', false, $page, true ) );
+		$this->assertFalse( aafm_builder_ownership_allows( 'avada', false, $empty ) );
+		$this->assertFalse( aafm_builder_ownership_allows( 'wpbakery', false, $section ) );
+		$this->assertFalse( aafm_builder_ownership_allows( 'avada', 'unknown', $empty, true ) );
+	}
+
+	public function test_vendor_entry_can_be_forced_absent_and_present(): void {
+		$absent = static fn() => null;
+		add_filter( 'aafm_builder_vendor', $absent );
+		$this->assertNull( aafm_builder_vendor( 'wpbakery_css_rebuild' ) );
+		remove_filter( 'aafm_builder_vendor', $absent );
+
+		$present = static fn() => static function (): void {};
+		add_filter( 'aafm_builder_vendor', $present );
+		$this->assertIsCallable( aafm_builder_vendor( 'wpbakery_css_rebuild' ) );
+		remove_filter( 'aafm_builder_vendor', $present );
+
+		$this->assertNull( aafm_builder_vendor( 'no_such_entry' ) );
+	}
+
+	public function test_every_seam_row_is_a_callable_shape(): void {
+		$rows = aafm_builder_vendor_rows();
+		$this->assertSame( array( 'wpbakery_css_rebuild' ), array_keys( $rows ) );
+		foreach ( $rows as $entry => $row ) {
+			$target = $row['target'];
+			$ok     = $target instanceof \Closure
+				|| ( is_string( $target ) && '' !== $target && ! class_exists( $target, false ) )
+				|| ( is_array( $target ) && 2 === count( $target ) && is_string( $target[0] ) && is_string( $target[1] ) );
+			$this->assertTrue( $ok, $entry );
+		}
+	}
 }

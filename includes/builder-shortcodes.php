@@ -266,3 +266,86 @@ function aafm_builder_serialize( string $tag, array $atts, ?string $inner, strin
 	}
 	return $open . ']' . (string) $inner . '[/' . $tag . ']';
 }
+
+/**
+ * The closed list of a builder's own post types (design 4.3). The permission check, the ownership
+ * rule and the restore rule all read this one list. templatera is not here until S14 (Ruling B13).
+ *
+ * @param string $builder avada or wpbakery.
+ * @return array<string>
+ */
+function aafm_builder_own_post_types( string $builder ): array {
+	$types = array(
+		'avada'    => array( 'fusion_tb_section', 'fusion_template', 'fusion_element', 'fusion_form', 'awb_off_canvas' ),
+		'wpbakery' => array( 'vc_grid_item' ),
+	);
+	return $types[ $builder ] ?? array();
+}
+
+/**
+ * The one statement of the design 4.3 ownership rule. True when the guard answers this builder; or
+ * the guard answers false and the post is one of the builder's own types; or, for an insert, the guard
+ * answers false and the post is empty.
+ *
+ * @param string       $builder      avada or wpbakery.
+ * @param string|false $guard_answer aafm_post_has_foreign_builder_ownership() as the executor read it.
+ * @param WP_Post      $post         Post.
+ * @param bool         $empty_insert Whether an insert may start a builder page on an empty post.
+ * @return bool
+ */
+function aafm_builder_ownership_allows( string $builder, $guard_answer, WP_Post $post, bool $empty_insert = false ): bool {
+	if ( $guard_answer === $builder ) {
+		return true;
+	}
+	if ( false !== $guard_answer ) {
+		return false;
+	}
+	return in_array( $post->post_type, aafm_builder_own_post_types( $builder ), true )
+		|| ( $empty_insert && '' === trim( (string) $post->post_content ) );
+}
+
+/**
+ * The seam's rows. A row's target is a function name, a class and static method pair, or a closure,
+ * never a bare class name; requires names a function that must exist for the row to be present.
+ * Each row is added in the session that first calls it (Ruling R3-P4).
+ *
+ * @return array<string,array{target:string|array{0:string,1:string}|Closure,requires:?string}>
+ */
+function aafm_builder_vendor_rows(): array {
+	return array(
+		'wpbakery_css_rebuild' => array(
+			'target'   => static function ( int $id, string $type ): void {
+				$vc = call_user_func( 'wpbakery' ); // @phpstan-ignore-line argument.type (WPBakery's own accessor; this row is present only when the function exists, see requires)
+				if ( ! is_object( $vc ) || ! method_exists( $vc, 'buildShortcodesCss' ) ) {
+					throw new RuntimeException( 'WPBakery CSS rebuild is not available.' );
+				}
+				$vc->buildShortcodesCss( $id, $type );
+			},
+			'requires' => 'wpbakery',
+		),
+	);
+}
+
+/**
+ * The one way a tool reaches vendor code (Ruling B14). Tests force an entry present or absent through
+ * the aafm_builder_vendor filter, never by defining a vendor symbol.
+ *
+ * @param string $entry Entry name.
+ * @return callable|null
+ */
+function aafm_builder_vendor( string $entry ): ?callable {
+	$rows     = aafm_builder_vendor_rows();
+	$row      = $rows[ $entry ] ?? null;
+	$callable = null;
+	if ( null !== $row && ( null === $row['requires'] || function_exists( $row['requires'] ) ) && is_callable( $row['target'] ) ) {
+		$callable = $row['target'];
+	}
+	/**
+	 * Filters the callable a builder vendor entry resolves to; null means absent.
+	 *
+	 * @param callable|null $callable Resolved entry.
+	 * @param string        $entry    Entry name.
+	 */
+	$callable = apply_filters( 'aafm_builder_vendor', $callable, $entry );
+	return is_callable( $callable ) ? $callable : null;
+}

@@ -83,6 +83,14 @@ function aafm_wpbakery_elements_registry_definitions(): array {
 			'subject'      => 'wpbakery',
 			'args_builder' => 'aafm_args_wpbakery_move_element',
 		),
+		'aafm/wpbakery-remove-element' => array(
+			'label'        => __( 'Remove a WPBakery element', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Removes one element, with everything inside it, from a WPBakery page or Grid Builder template, named by its index and by the tag and fingerprint from the outline of wpbakery-get-page-content. The fingerprint covers the whole element, so one that gained content since the read is refused. Refused when the post keeps no revisions (a Grid Builder template keeps none), for the page\'s last row or section, and when a row would be left with no column. Requires page_fingerprint from the last read or write and returns the new one; a changed page is refused and nothing is saved. Other indexes may move, so read the outline again before the next structural change. restore_revision_id brings the page back through restore-revision. The page\'s generated CSS is rebuilt. Not undoable from this plugin\'s change history. Requires edit access to the post; WPBakery\'s Role Manager settings are not applied, though its own save filter still runs. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
+			'group'        => 'writes',
+			'risk'         => 'destructive',
+			'subject'      => 'wpbakery',
+			'args_builder' => 'aafm_args_wpbakery_remove_element',
+		),
 	);
 }
 
@@ -2210,5 +2218,105 @@ function aafm_exec_wpbakery_move_element( array $input ) {
 		'moved'               => ! $result['unchanged'],
 		'restore_revision_id' => $result['restore_revision_id'],
 		'reversible'          => $result['reversible'],
+	);
+}
+
+/**
+ * Args for aafm/wpbakery-remove-element.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_wpbakery_remove_element(): array {
+	return array(
+		'label'               => aafm_ability_label( 'aafm/wpbakery-remove-element' ),
+		'description'         => aafm_ability_description( 'aafm/wpbakery-remove-element' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => aafm_wpbakery_structural_schema( '' ),
+			'required'             => array( 'post_id', 'page_fingerprint', 'index', 'expect' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'post'                => array( 'type' => 'object' ),
+				'removed'             => array( 'type' => 'integer' ),
+				'page_fingerprint'    => array( 'type' => 'string' ),
+				'restore_revision_id' => array( 'type' => array( 'integer', 'null' ) ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_wpbakery_remove_element',
+		'permission_callback' => 'aafm_perm_avada_post_object',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => true,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/wpbakery-remove-element (design WB-6). Removes the element's stored bytes, children included. Refused
+ * when no revision can be kept (Ruling Q5; a grid template keeps none, W16), for the page's last root row or section
+ * (Ruling B8), and when a row would be left with no column.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_wpbakery_remove_element( array $input ) {
+	$post = aafm_wpbakery_structural_post( $input, false );
+	if ( is_wp_error( $post ) ) {
+		return $post;
+	}
+	if ( ! post_type_supports( $post->post_type, 'revisions' ) || ! wp_revisions_enabled( $post ) ) {
+		return aafm_builder_error( 'aafm_builder_remove_irreversible' );
+	}
+	$content  = (string) $post->post_content;
+	$tags     = aafm_wpbakery_shortcode_tags( $content );
+	$elements = null === $tags ? null : aafm_builder_elements( $content, $tags );
+	if ( null === $tags || null === $elements ) {
+		return aafm_builder_error( 'aafm_builder_unparseable' );
+	}
+	$element = aafm_builder_resolve( $content, $tags, (int) ( $input['index'] ?? -1 ), is_array( $input['expect'] ?? null ) ? $input['expect'] : array() );
+	if ( is_wp_error( $element ) ) {
+		return $element;
+	}
+	$index = (int) $element['index'];
+	if ( null === $element['parent'] ) {
+		$roots = 0;
+		foreach ( $elements as $e ) {
+			$roots += null === $e['parent'] && in_array( $e['tag'], array( 'vc_row', 'vc_section' ), true ) ? 1 : 0;
+		}
+		if ( $roots <= 1 && in_array( $element['tag'], array( 'vc_row', 'vc_section' ), true ) ) {
+			return aafm_builder_error( 'aafm_builder_remove_last_root' );
+		}
+	}
+	if ( aafm_wpbakery_empties_a_row( $elements, $index ) ) {
+		return aafm_wpbakery_row_needs_column_error();
+	}
+
+	$new  = substr( $content, 0, (int) $element['start'] ) . substr( $content, (int) $element['end'] );
+	$walk = aafm_builder_walk( $content, $tags );
+	if ( null === $walk ) {
+		return aafm_builder_error( 'aafm_builder_unparseable' );
+	}
+	$expected = aafm_builder_expected_walk(
+		$walk,
+		array(
+			'op'    => 'remove',
+			'index' => $index,
+		)
+	);
+	$result   = aafm_builder_commit( $post, $content, $new, $tags, $expected, 'aafm_wpbakery_rebuild_css', 'wpbakery' );
+	if ( is_wp_error( $result ) ) {
+		return $result;
+	}
+	return array(
+		'post'                => aafm_redact_post( $result['post'] ),
+		'removed'             => aafm_builder_subtree_size( $elements, $index ),
+		'page_fingerprint'    => $result['page_fingerprint'],
+		'restore_revision_id' => $result['restore_revision_id'],
 	);
 }

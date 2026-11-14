@@ -503,6 +503,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/wpbakery-update-element':
 		case 'aafm/wpbakery-insert-element':
 		case 'aafm/wpbakery-move-element':
+		case 'aafm/wpbakery-remove-element':
 			return static function (): bool {
 				if ( aafm_can_edit_post_family() ) {
 					return true;

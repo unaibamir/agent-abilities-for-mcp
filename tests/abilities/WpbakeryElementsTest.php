@@ -2213,4 +2213,158 @@ final class WpbakeryElementsTest extends TestCase {
 		$this->assertSame( $revisions, count( wp_get_post_revisions( $id ) ) );
 	}
 
+	public function test_move_and_remove_refuse_a_stale_page_fingerprint(): void {
+		$id = $this->page( self::TWO_ROWS );
+		$this->acting_as( 'editor' );
+		$this->assert_refused( $this->move( $id, 3, 0, 'before', '0000000000000000' ), 'aafm_builder_page_changed', 409, $id, self::TWO_ROWS );
+		$this->assert_refused( $this->remove( $id, 2, '0000000000000000' ), 'aafm_builder_page_changed', 409, $id, self::TWO_ROWS );
+	}
+
+	public function test_remove_a_leaf(): void {
+		$id = $this->page( self::TWO_ROWS );
+		$this->acting_as( 'editor' );
+		$out = $this->remove( $id, 2 );
+		$this->assertIsArray( $out );
+		$this->assertSame( array( 'post', 'removed', 'page_fingerprint', 'restore_revision_id' ), array_keys( $out ) );
+		$this->assertSame( 1, $out['removed'] );
+		$this->assertSame( str_replace( '[vc_column_text]<p>A</p>[/vc_column_text]', '', self::TWO_ROWS ), get_post_field( 'post_content', $id, 'raw' ) );
+		$this->assertSame( self::TWO_ROWS, get_post( $out['restore_revision_id'] )->post_content );
+	}
+
+	public function test_remove_a_row_with_its_children(): void {
+		$id = $this->page( self::TWO_ROWS );
+		$this->acting_as( 'editor' );
+		WpbakeryMapStub::$calls = array();
+		$out                    = $this->remove( $id, 3 );
+		$this->assertIsArray( $out );
+		$this->assertSame( 3, $out['removed'] );
+		$this->assertSame( substr( self::TWO_ROWS, 0, strpos( self::TWO_ROWS, '[vc_row el_id="b"]' ) ), get_post_field( 'post_content', $id, 'raw' ) );
+		$this->assertContains( 'rebuild:default', WpbakeryMapStub::$calls );
+	}
+
+	public function test_remove_the_last_column_is_refused(): void {
+		$id = $this->page( self::TWO_ROWS );
+		$this->acting_as( 'editor' );
+		$this->assert_refused( $this->remove( $id, 1 ), 'aafm_builder_row_needs_column', 400, $id, self::TWO_ROWS );
+	}
+
+	public function test_remove_the_last_root_row_is_refused(): void {
+		$id = $this->page( self::SIMPLE );
+		$this->acting_as( 'editor' );
+		$this->assert_refused( $this->remove( $id, 0 ), 'aafm_builder_remove_last_root', 409, $id, self::SIMPLE );
+	}
+
+	public function test_remove_is_refused_when_revisions_are_off(): void {
+		$id = $this->page( self::TWO_ROWS );
+		$this->acting_as( 'editor' );
+		add_filter( 'wp_revisions_to_keep', '__return_zero' );
+		$out = $this->remove( $id, 2 );
+		remove_filter( 'wp_revisions_to_keep', '__return_zero' );
+		$this->assert_refused( $out, 'aafm_builder_remove_irreversible', 409, $id, self::TWO_ROWS );
+	}
+
+	public function test_remove_is_refused_on_a_grid_item(): void {
+		register_post_type(
+			'vc_grid_item',
+			array(
+				'public'          => false,
+				'capability_type' => 'post',
+				'supports'        => array( 'title', 'editor' ),
+			)
+		);
+		$content = (string) file_get_contents( dirname( __DIR__ ) . '/Fixtures/Wpbakery/grid-item.txt' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a local fixture file, not a remote URL.
+		$this->acting_as( 'editor' );
+		$id       = self::factory()->post->create(
+			array(
+				'post_type'    => 'vc_grid_item',
+				'post_content' => $content,
+			)
+		);
+		$elements = aafm_builder_elements( $content, aafm_wpbakery_shortcode_tags( $content ) );
+		$index    = (int) array_search( 'vc_btn', array_column( $elements, 'tag' ), true );
+		$this->assert_refused( $this->remove( $id, $index ), 'aafm_builder_remove_irreversible', 409, $id, $content );
+	}
+
+	public function test_remove_refuses_a_stale_fingerprint_after_a_child_changed(): void {
+		$id = $this->page( self::TWO_ROWS );
+		$this->acting_as( 'editor' );
+		$stale = $this->expect( $id, 3 );
+		$this->assertIsArray( $this->update( $id, 5, array( 'text' => '<p>Changed</p>' ) ) );
+		$content = (string) get_post_field( 'post_content', $id, 'raw' );
+		$this->assert_refused( $this->remove( $id, 3, null, $stale ), 'aafm_builder_element_mismatch', 409, $id, $content );
+	}
+
+	public function test_structural_tools_permissions_discovery_undo_and_audit(): void {
+		$id = $this->page( self::SIMPLE, self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		foreach ( array(
+			'insert' => 'insertion',
+			'move'   => 'move',
+			'remove' => 'removal',
+		) as $tool => $noun ) {
+			$name = 'aafm/wpbakery-' . $tool . '-element';
+			$args = call_user_func( 'aafm_args_wpbakery_' . $tool . '_element' );
+			$this->assertSame( 'aafm_perm_avada_post_object', $args['permission_callback'] );
+			$this->acting_as( 'contributor' );
+			$this->assertFalse( aafm_perm_avada_post_object( array( 'post_id' => $id ) ) );
+			$check = aafm_ability_list_permission( $name );
+			$this->assertIsCallable( $check, $name );
+			$this->acting_as( 'editor' );
+			$this->assertTrue( $check() );
+			$this->acting_as( 'subscriber' );
+			$this->assertFalse( $check() );
+			$this->assertSame( 'not_covered', aafm_undo_refusals()[ $name ] );
+			$this->assertStringContainsString( 'Ran an element ' . ( 'insert' === $tool ? 'insert' : $noun ) . ' on WPBakery page #42', (string) aafm_build_activity_detail( $name, array( 'post_id' => 42 ) ) );
+		}
+	}
+
+	public function test_structural_tool_schemas_are_closed(): void {
+		$required = array(
+			'insert' => array( 'post_id', 'page_fingerprint', 'element' ),
+			'move'   => array( 'post_id', 'page_fingerprint', 'index', 'expect', 'anchor_index', 'anchor_expect', 'placement' ),
+			'remove' => array( 'post_id', 'page_fingerprint', 'index', 'expect' ),
+		);
+		foreach ( $required as $tool => $fields ) {
+			$args   = call_user_func( 'aafm_args_wpbakery_' . $tool . '_element' );
+			$schema = $args['input_schema'];
+			$this->assertFalse( $schema['additionalProperties'], $tool );
+			$this->assertSame( $fields, $schema['required'], $tool );
+			$this->assertSame( '^[0-9a-f]{16}$', $schema['properties']['page_fingerprint']['pattern'] );
+			$this->assertArrayNotHasKey( 'anyOf', $schema );
+			$this->assertSame( 'aafm-writes', $args['category'] );
+			$this->assertSame(
+				array(
+					'readonly'    => false,
+					'destructive' => 'remove' === $tool,
+				),
+				$args['meta']['annotations']
+			);
+		}
+		$element = aafm_args_wpbakery_insert_element()['input_schema']['properties']['element'];
+		$this->assertFalse( $element['additionalProperties'] );
+		$this->assertSame( array( 'tag' ), $element['required'] );
+		$this->assertSame( array( 'before', 'after', 'inside_start', 'inside_end' ), aafm_args_wpbakery_move_element()['input_schema']['properties']['placement']['enum'] );
+	}
+
+	public function test_structural_tool_descriptions_say_what_the_design_requires(): void {
+		$registry = aafm_get_abilities_registry_full();
+		foreach ( array( 'insert', 'move', 'remove' ) as $tool ) {
+			$name = 'aafm/wpbakery-' . $tool . '-element';
+			$row  = $registry[ $name ];
+			$this->assertSame( 'writes', $row['group'] );
+			$this->assertSame( 'remove' === $tool ? 'destructive' : 'write', $row['risk'] );
+			$this->assertSame( 'wpbakery', $row['subject'] );
+			foreach ( array( $row['description'], aafm_ability_disclosures()[ $name ] ) as $text ) {
+				$this->assertStringNotContainsString( ' - ', $text );
+				foreach ( array( 'Visual Composer', 'Avada', 'Elementor' ) as $other ) {
+					$this->assertStringNotContainsString( $other, $text );
+				}
+				foreach ( array( 'edit access', 'page_fingerprint', 'restore', 'Role Manager' ) as $phrase ) {
+					$this->assertStringContainsString( $phrase, $text, $name );
+				}
+			}
+			$this->assertStringContainsString( 'Only while WPBakery Page Builder is active', $row['description'] );
+		}
+		$this->assertStringContainsString( 'WPBakery\'s own setting', $registry['aafm/wpbakery-insert-element']['description'] );
+		$this->assertStringContainsString( 'unfiltered HTML', $registry['aafm/wpbakery-insert-element']['description'] );
+	}
 }

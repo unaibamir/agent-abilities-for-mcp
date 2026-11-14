@@ -453,6 +453,10 @@ function aafm_integration_ability_order(): array {
 				'name' => 'aafm/wpbakery-move-element',
 				'risk' => 'write',
 			),
+			array(
+				'name' => 'aafm/wpbakery-remove-element',
+				'risk' => 'destructive',
+			),
 		),
 		'geodirectory'  => array(
 			array(

@@ -198,11 +198,11 @@ Yes. Each approved OAuth connection on the Connection tab has Pause next to Revo
 
 For an OAuth connection, yes. Set an end date on its row on the Connection tab and the connection stops at the end of that day and stays refused until a site administrator renews it, and its old tokens never work again. An Application Password has no end date, so revoke it when the job is done.
 
-= Can the AI read my site without changing anything? =
+= How do I give Claude read-only access to WordPress? =
 
 Turn on read-only mode in Settings and no write tool is loaded, whatever else is ticked, including write abilities you bridged from other plugins. Search and read keep working, and your selections come back when you switch it off. To limit a single connection instead, pick the Read only preset when you approve it.
 
-= Can the agent only save drafts so I approve before anything goes live? =
+= Can I let ChatGPT draft posts without publishing them? =
 
 With Force draft on create switched on in Settings, anything the AI creates and any request to publish is saved as a draft, which covers posts, pages, custom content items, reusable blocks and WooCommerce products. Product variations save as disabled instead, because a draft variation disappears from WooCommerce's editor. Edits to a post that's already live still go live, so if every change should be reviewed, connect the AI as a Contributor, who can't edit published posts. The drafts wait on the Needs review card on the Dashboard.
 

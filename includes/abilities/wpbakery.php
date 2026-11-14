@@ -353,7 +353,8 @@ function aafm_wpbakery_parse_link( string $value ): array {
 
 /**
  * The fallback when the element map does not know a setting: a link only when every pair names one of
- * WPBakery's four link keys and every part is in the URL-encoded form WPBakery stores (W3), so plain
+ * WPBakery's four link keys and every part is in the URL-encoded form WPBakery stores (W3; the editor's
+ * encodeURIComponent() leaves ! ' ( ) * as they are), so plain
  * text such as "url:https://example.com" or "title: our services" stays text. Empty segments, as in the
  * legacy url:%23||| form, are skipped the way vc_parse_multi_attribute() skips them.
  *
@@ -361,7 +362,7 @@ function aafm_wpbakery_parse_link( string $value ): array {
  * @return bool
  */
 function aafm_wpbakery_looks_like_link( string $value ): bool {
-	return 1 === preg_match( '/^(url|title|target|rel):[A-Za-z0-9._~%-]*(\|((url|title|target|rel):[A-Za-z0-9._~%-]*)?)*$/', $value );
+	return 1 === preg_match( '/^(url|title|target|rel):[A-Za-z0-9._~!*\'()%-]*(\|((url|title|target|rel):[A-Za-z0-9._~!*\'()%-]*)?)*$/', $value );
 }
 
 /**

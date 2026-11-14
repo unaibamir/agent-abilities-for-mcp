@@ -1232,4 +1232,18 @@ WPB;
 		$this->assertSame( array( 'link' => $expect ), aafm_wpbakery_decode_atts( 'vc_btn', array( 'link' => 'url:%23|' ) ) );
 		$this->assertSame( array( 'link' => 'url:%23|||plain' ), aafm_wpbakery_decode_atts( 'vc_btn', array( 'link' => 'url:%23|||plain' ) ), 'A segment that names no link key is not a link.' );
 	}
+	public function test_an_unmapped_link_with_an_apostrophe_and_parentheses_decodes(): void {
+		$this->assertSame(
+			array(
+				'link' => array(
+					'url'    => 'https://example.com/a_(b)!*',
+					'title'  => "Bob's page",
+					'target' => '',
+					'rel'    => '',
+				),
+			),
+			aafm_wpbakery_decode_atts( 'vc_btn', array( 'link' => "url:https%3A%2F%2Fexample.com%2Fa_(b)!*|title:Bob's%20page" ) )
+		);
+		$this->assertSame( array( 'text' => 'url:https://example.com/docs' ), aafm_wpbakery_decode_atts( 'vc_custom_heading', array( 'text' => 'url:https://example.com/docs' ) ) );
+	}
 }

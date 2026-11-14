@@ -222,4 +222,22 @@ final class AvadaLibraryTest extends TestCase {
 		$this->assertTrue( $args['meta']['annotations']['readonly'] );
 		$this->assertSame( 'aafm-reads', $args['category'] );
 	}
+
+	public function test_a_global_items_content_needs_edit_private_posts_as_avada_requires(): void {
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		$global = $this->item( 'fusion_element', 'Shared promo', 'sections', array( '_fusion_is_global' => 'yes' ), array( 'post_author' => $author ) );
+		$plain  = $this->item( 'fusion_element', 'Own button', 'elements', array(), array( 'post_author' => $author ) );
+
+		wp_set_current_user( $author );
+		$items = $this->by_id( aafm_exec_avada_list_library( array( 'include_content' => true ) ) );
+		$this->assertTrue( $items[ $global ]['is_global'], 'The global item is still listed.' );
+		$this->assertSame( 'Shared promo', $items[ $global ]['title'] );
+		$this->assertArrayNotHasKey( 'content', $items[ $global ], 'wp-admin refuses this author the item, so its source stays out.' );
+		$this->assertSame( '[fusion_text]Own button[/fusion_text]', $items[ $plain ]['content'] );
+
+		$this->acting_as( 'editor' );
+		$items = $this->by_id( aafm_exec_avada_list_library( array( 'include_content' => true ) ) );
+		$this->assertSame( '[fusion_text]Shared promo[/fusion_text]', $items[ $global ]['content'] );
+		$this->assertSame( '[fusion_text]Own button[/fusion_text]', $items[ $plain ]['content'] );
+	}
 }

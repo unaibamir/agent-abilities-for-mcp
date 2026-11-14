@@ -134,18 +134,31 @@ function aafm_perm_avada_post_object( array $input ): bool {
 		|| ( 'fusion_tb_section' === $post->post_type && ! current_user_can( 'manage_options' ) ) ) {
 		return false;
 	}
-	// A global library item changes every page that shows it, and Avada refuses its edit screen to a user without
-	// edit_private_posts (AWB_Role_Manager::check_global_element_and_backend_builder_access()). Only that fixed
-	// default is mirrored; the Role Manager's per-role settings are still not consulted (Ruling R-S8b-4). An
-	// unreadable marker counts as global.
-	if ( in_array( $post->post_type, array( 'fusion_element', 'fusion_template' ), true ) && ! current_user_can( 'edit_private_posts' ) ) {
-		$global = aafm_with_checked_reads(
-			static fn(): array => array( 'is_global' => 'yes' === aafm_meta_get( 'post', $id, '_fusion_is_global', true ) ),
+	// An unreadable marker counts as global (Ruling R-S8b-4).
+	if ( in_array( $post->post_type, array( 'fusion_element', 'fusion_template' ), true ) ) {
+		$locked = aafm_with_checked_reads(
+			static fn(): array => array( 'locked' => aafm_avada_global_item_locked( $post ) ),
 			aafm_generic_error()
 		);
-		return ! is_wp_error( $global ) && false === $global['is_global'];
+		return ! is_wp_error( $locked ) && false === $locked['locked'];
 	}
 	return true;
+}
+
+/**
+ * Whether the current user is kept out of a global library item: it changes every page that shows it, and Avada
+ * refuses its edit screen to a user without edit_private_posts
+ * (AWB_Role_Manager::check_global_element_and_backend_builder_access()). Only that fixed default is mirrored; the
+ * Role Manager's per-role settings are still not consulted (Rulings R-S8b-4, R-S8b-5). Reads the marker with
+ * aafm_meta_get(), so the caller holds the checked scope and refuses when it fails.
+ *
+ * @param WP_Post $post Post.
+ * @return bool
+ */
+function aafm_avada_global_item_locked( WP_Post $post ): bool {
+	return in_array( $post->post_type, array( 'fusion_element', 'fusion_template' ), true )
+		&& ! current_user_can( 'edit_private_posts' )
+		&& 'yes' === aafm_meta_get( 'post', $post->ID, '_fusion_is_global', true );
 }
 
 /**
@@ -1707,7 +1720,8 @@ function aafm_exec_avada_list_library( array $input ) {
 					'is_global'    => 'yes' === aafm_meta_get( 'post', $post->ID, '_fusion_is_global', true ),
 					'modified_gmt' => $post->post_modified_gmt,
 				);
-				if ( $with_content ) {
+				// A global item's source stays out for a user Avada keeps off its edit screen (Ruling R-S8b-5).
+				if ( $with_content && ! aafm_avada_global_item_locked( $post ) ) {
 					$row['content'] = $post->post_content;
 				}
 				$rows[] = $row;

@@ -263,4 +263,329 @@ final class BuilderShortcodesTest extends TestCase {
 			$this->assertTrue( $ok, $entry );
 		}
 	}
+
+	public function test_expected_walk_for_update_insert_move_and_remove(): void {
+		$walk = aafm_fusion_shortcode_walk( self::TREE, 0, self::TAGS );
+		$t    = static fn( string $tag, int $depth, array $atts = array() ) => array(
+			'tag'          => $tag,
+			'self_closing' => false,
+			'has_closer'   => true,
+			'atts'         => $atts,
+			'depth'        => $depth,
+		);
+		$half = array( 'width' => '1/2' );
+
+		$update = aafm_builder_expected_walk(
+			$walk,
+			array(
+				'op'    => 'update',
+				'index' => 4,
+				'atts'  => array( 'title' => 'Four' ),
+			)
+		);
+		$this->assertSame( array( $t( 'vc_row', 0 ), $t( 'vc_column', 1, $half ), $t( 'vc_column_text', 2 ), $t( 'vc_custom_heading', 2, array( 'text' => 'Two' ) ), $t( 'vc_btn', 2, array( 'title' => 'Four' ) ), $t( 'vc_column', 1, $half ) ), $update );
+
+		$insert = aafm_builder_expected_walk(
+			$walk,
+			array(
+				'op'     => 'insert',
+				'at'     => 6,
+				'depth'  => 2,
+				'tuples' => array( $t( 'vc_btn', 0, array( 'title' => 'New' ) ) ),
+			)
+		);
+		$this->assertSame( array_merge( $walk, array( $t( 'vc_btn', 2, array( 'title' => 'New' ) ) ) ), $insert );
+
+		$move = aafm_builder_expected_walk(
+			$walk,
+			array(
+				'op'    => 'move',
+				'index' => 1,
+				'at'    => 0,
+				'depth' => 0,
+			)
+		);
+		$this->assertSame( array( $t( 'vc_column', 0, $half ), $t( 'vc_column_text', 1 ), $t( 'vc_custom_heading', 1, array( 'text' => 'Two' ) ), $t( 'vc_btn', 1, array( 'title' => 'Three' ) ), $t( 'vc_row', 0 ), $t( 'vc_column', 1, $half ) ), $move );
+
+		$remove = aafm_builder_expected_walk(
+			$walk,
+			array(
+				'op'    => 'remove',
+				'index' => 1,
+			)
+		);
+		$this->assertSame( array( $t( 'vc_row', 0 ), $t( 'vc_column', 1, $half ) ), $remove );
+	}
+
+	public function test_anchor_point_for_each_placement(): void {
+		$content = '[vc_column][vc_column_text]A[/vc_column_text][vc_btn title="x" /][/vc_column][vc_column][/vc_column]';
+		$els     = aafm_builder_elements( $content, array( 'vc_column', 'vc_column_text', 'vc_btn' ) );
+		$col     = $els[0];
+
+		$this->assertSame(
+			array(
+				'offset' => 0,
+				'at'     => 0,
+				'depth'  => 0,
+				'parent' => null,
+			),
+			aafm_builder_anchor_point( $els, $col, 'before' )
+		);
+		$this->assertSame(
+			array(
+				'offset' => $col['end'],
+				'at'     => 3,
+				'depth'  => 0,
+				'parent' => null,
+			),
+			aafm_builder_anchor_point( $els, $col, 'after' )
+		);
+		$this->assertSame(
+			array(
+				'offset' => $col['open_end'],
+				'at'     => 1,
+				'depth'  => 1,
+				'parent' => 0,
+			),
+			aafm_builder_anchor_point( $els, $col, 'inside_start' )
+		);
+		$this->assertSame(
+			array(
+				'offset' => $col['inner_end'],
+				'at'     => 3,
+				'depth'  => 1,
+				'parent' => 0,
+			),
+			aafm_builder_anchor_point( $els, $col, 'inside_end' )
+		);
+		foreach ( array( 'inside_start', 'inside_end' ) as $placement ) {
+			$out = aafm_builder_anchor_point( $els, $els[2], $placement );
+			$this->assertInstanceOf( WP_Error::class, $out );
+			$this->assertSame( 'aafm_builder_invalid_nesting', $out->get_error_code() );
+		}
+	}
+
+	/* ---------------------------------------------------------------- commit chain */
+
+	private const PAGE = '[vc_row][vc_column][vc_column_text]<p>Old text.</p>[/vc_column_text][/vc_column][/vc_row]';
+
+	private function page( string $content = self::PAGE ): WP_Post {
+		$this->acting_as( 'administrator' );
+		$id = self::factory()->post->create(
+			array(
+				'post_type'    => 'page',
+				'post_content' => $content,
+			)
+		);
+		$this->assertSame( $content, get_post_field( 'post_content', $id, 'raw' ) );
+		return get_post( $id );
+	}
+
+	/**
+	 * Commit a text change on PAGE.
+	 *
+	 * @param WP_Post       $post  Post.
+	 * @param string        $new   New content.
+	 * @param callable|null $after After step.
+	 * @return array<string,mixed>|WP_Error
+	 */
+	private function commit_text( WP_Post $post, string $new, ?callable $after = null ) {
+		$old = (string) $post->post_content;
+		return aafm_builder_commit( $post, $old, $new, (array) aafm_wpbakery_shortcode_tags( $old ), (array) aafm_fusion_shortcode_walk( $old, 0, aafm_wpbakery_shortcode_tags( $old ) ), $after, 'wpbakery' );
+	}
+
+	private function assert_untouched( $out, string $code, WP_Post $post, ?int $status ): void {
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( $code, $out->get_error_code() );
+		if ( null !== $status ) {
+			$this->assertSame( $status, $out->get_error_data()['status'] );
+		}
+		$this->assertSame( $post->post_content, get_post_field( 'post_content', $post->ID, 'raw' ) );
+	}
+
+	public function test_commit_with_identical_content_saves_nothing(): void {
+		$post      = $this->page();
+		$modified  = get_post_field( 'post_modified', $post->ID );
+		$revisions = count( wp_get_post_revisions( $post->ID ) );
+
+		$out = $this->commit_text( $post, self::PAGE );
+
+		$this->assertIsArray( $out );
+		$this->assertTrue( $out['unchanged'] );
+		$this->assertNull( $out['restore_revision_id'] );
+		$this->assertTrue( $out['reversible'] );
+		$this->assertSame( aafm_builder_page_fingerprint( self::PAGE ), $out['page_fingerprint'] );
+		$this->assertSame( $modified, get_post_field( 'post_modified', $post->ID ) );
+		$this->assertSame( $revisions, count( wp_get_post_revisions( $post->ID ) ) );
+	}
+
+	public function test_commit_accepts_an_insert_of_a_tag_the_page_did_not_have(): void {
+		$post   = $this->page();
+		$old    = self::PAGE;
+		$new    = str_replace( '[/vc_column][/vc_row]', '[vc_custom_heading text="Hi"][/vc_custom_heading][/vc_column][/vc_row]', $old );
+		$tags   = (array) aafm_wpbakery_shortcode_tags( $old );
+		$expect = aafm_builder_expected_walk(
+			(array) aafm_fusion_shortcode_walk( $old, 0, $tags ),
+			array(
+				'op'     => 'insert',
+				'at'     => 3,
+				'depth'  => 2,
+				'tuples' => array(
+					array(
+						'tag'          => 'vc_custom_heading',
+						'self_closing' => false,
+						'has_closer'   => true,
+						'atts'         => array( 'text' => 'Hi' ),
+						'depth'        => 0,
+					),
+				),
+			)
+		);
+
+		$out = aafm_builder_commit( $post, $old, $new, $tags, $expect, null, 'wpbakery' );
+
+		$this->assertIsArray( $out );
+		$this->assertFalse( $out['unchanged'] );
+		$this->assertSame( $new, get_post_field( 'post_content', $post->ID, 'raw' ) );
+	}
+
+	public function test_commit_returns_the_page_fingerprint_of_the_stored_content(): void {
+		$post = $this->page();
+		$new  = str_replace( 'Old text.', 'New text.', self::PAGE );
+
+		$out = $this->commit_text( $post, $new );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( aafm_builder_page_fingerprint( get_post_field( 'post_content', $post->ID, 'raw' ) ), $out['page_fingerprint'] );
+		$this->assertInstanceOf( WP_Post::class, $out['post'] );
+	}
+
+	public function test_commit_refuses_content_whose_outline_is_not_the_prediction(): void {
+		$post = $this->page();
+		$new  = str_replace( 'Old text.', 'Old [vc_raw_html]eA==[/vc_raw_html]', self::PAGE );
+
+		$this->assert_untouched( $this->commit_text( $post, $new ), 'aafm_builder_structure_changed', $post, 400 );
+	}
+
+	public function test_commit_refuses_unparseable_content(): void {
+		$post = $this->page();
+		$new  = str_replace( '[vc_column_text]', '[vc_column_text el_class="a[1]"]', self::PAGE );
+
+		$this->assert_untouched( $this->commit_text( $post, $new ), 'aafm_builder_unparseable', $post, 409 );
+	}
+
+	public function test_commit_refuses_a_page_its_own_save_would_change(): void {
+		$post  = $this->page( self::PAGE . '<iframe></iframe>' );
+		$strip = static fn( $value ) => str_replace( '<iframe></iframe>', '', (string) $value );
+		add_filter( 'content_save_pre', $strip );
+		try {
+			$out = $this->commit_text( $post, str_replace( 'Old text.', 'New text.', (string) $post->post_content ) );
+		} finally {
+			remove_filter( 'content_save_pre', $strip );
+		}
+
+		$this->assert_untouched( $out, 'aafm_wpbakery_save_would_change_page', $post, 409 );
+	}
+
+	public function test_commit_refuses_when_the_save_would_change_the_layout(): void {
+		$post  = $this->page();
+		$react = static fn( $value ) => false === strpos( (string) $value, 'Trigger' ) ? $value : (string) preg_replace( '/\[vc_column_text\].*?\[\/vc_column_text\]/s', '', (string) $value );
+		add_filter( 'content_save_pre', $react );
+		try {
+			$out = $this->commit_text( $post, str_replace( 'Old text.', 'Trigger.', self::PAGE ) );
+		} finally {
+			remove_filter( 'content_save_pre', $react );
+		}
+
+		$this->assert_untouched( $out, 'aafm_wpbakery_save_would_change_layout', $post, 409 );
+	}
+
+	public function test_commit_returns_the_revision_that_holds_the_old_content(): void {
+		$post = $this->page();
+
+		$out = $this->commit_text( $post, str_replace( 'Old text.', 'New text.', self::PAGE ) );
+
+		$this->assertIsArray( $out );
+		$this->assertTrue( $out['reversible'] );
+		$this->assertIsInt( $out['restore_revision_id'] );
+		$this->assertSame( self::PAGE, get_post( $out['restore_revision_id'] )->post_content );
+		$this->assertSame( $post->ID, (int) get_post( $out['restore_revision_id'] )->post_parent );
+	}
+
+	public function test_commit_runs_without_a_way_back_when_revisions_are_off(): void {
+		$post = $this->page();
+		add_filter( 'wp_revisions_to_keep', '__return_zero' );
+		try {
+			$out = $this->commit_text( $post, str_replace( 'Old text.', 'New text.', self::PAGE ) );
+		} finally {
+			remove_filter( 'wp_revisions_to_keep', '__return_zero' );
+		}
+
+		$this->assertIsArray( $out );
+		$this->assertNull( $out['restore_revision_id'] );
+		$this->assertFalse( $out['reversible'] );
+		$this->assertStringContainsString( 'New text.', get_post_field( 'post_content', $post->ID, 'raw' ) );
+	}
+
+	public function test_commit_refuses_before_saving_when_the_after_step_is_unavailable(): void {
+		$post      = $this->page();
+		$revisions = count( wp_get_post_revisions( $post->ID ) );
+		$after     = static fn( int $id, bool $probe ): bool => false;
+
+		$this->assert_untouched( $this->commit_text( $post, str_replace( 'Old text.', 'New text.', self::PAGE ), $after ), 'aafm_wpbakery_css_rebuild_unavailable', $post, 409 );
+		$this->assertSame( $revisions, count( wp_get_post_revisions( $post->ID ) ) );
+	}
+
+	public function test_commit_reports_stale_css_when_the_after_step_fails(): void {
+		$post  = $this->page();
+		$calls = array();
+		$after = static function ( int $id, bool $probe ) use ( &$calls ): bool {
+			$calls[] = $probe;
+			return $probe;
+		};
+
+		$out = $this->commit_text( $post, str_replace( 'Old text.', 'New text.', self::PAGE ), $after );
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_wpbakery_css_stale', $out->get_error_code() );
+		$this->assertSame( array( true, false ), $calls );
+		$this->assertStringContainsString( 'New text.', get_post_field( 'post_content', $post->ID, 'raw' ) );
+		$this->assertIsInt( $out->get_error_data()['restore_revision_id'] );
+	}
+
+	public function test_commit_reports_unconfirmed_when_a_filter_alters_the_stored_content(): void {
+		$post  = $this->page();
+		$alter = static function ( $data ) {
+			$data['post_content'] = str_replace( 'New text.', 'Other text.', (string) $data['post_content'] );
+			return $data;
+		};
+		add_filter( 'wp_insert_post_data', $alter );
+		try {
+			$out = $this->commit_text( $post, str_replace( 'Old text.', 'New text.', self::PAGE ) );
+		} finally {
+			remove_filter( 'wp_insert_post_data', $alter );
+		}
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_wpbakery_write_unconfirmed', $out->get_error_code() );
+	}
+
+	public function test_replay_check_refuses_an_exact_replay_that_differs(): void {
+		$post  = $this->page();
+		$new   = str_replace( 'Old text.', 'Old <iframe></iframe>', self::PAGE );
+		$tags  = (array) aafm_wpbakery_shortcode_tags( self::PAGE );
+		$walk  = (array) aafm_fusion_shortcode_walk( self::PAGE, 0, $tags );
+		$strip = static fn( $value ) => str_replace( '<iframe></iframe>', '', (string) $value );
+		add_filter( 'content_save_pre', $strip );
+		try {
+			$loose = aafm_builder_replay_check( 'avada', $post->ID, self::PAGE, $new, $tags, $walk );
+			$exact = aafm_builder_replay_check( 'avada', $post->ID, self::PAGE, $new, $tags, $walk, true );
+		} finally {
+			remove_filter( 'content_save_pre', $strip );
+		}
+
+		$this->assertTrue( $loose );
+		$this->assertInstanceOf( WP_Error::class, $exact );
+		$this->assertSame( 'aafm_avada_save_would_change_page', $exact->get_error_code() );
+	}
 }

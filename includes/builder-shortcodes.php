@@ -349,3 +349,314 @@ function aafm_builder_vendor( string $entry ): ?callable {
 	$callable = apply_filters( 'aafm_builder_vendor', $callable, $entry );
 	return is_callable( $callable ) ? $callable : null;
 }
+
+/**
+ * The five walker keys of a tuple, in the walker's own order, so outlines compare with ===.
+ *
+ * @param array<string,mixed> $tuple Tuple or element.
+ * @return array{tag:mixed,self_closing:mixed,has_closer:mixed,atts:mixed,depth:mixed}
+ */
+function aafm_builder_tuple( array $tuple ): array {
+	return array(
+		'tag'          => $tuple['tag'] ?? null,
+		'self_closing' => $tuple['self_closing'] ?? null,
+		'has_closer'   => $tuple['has_closer'] ?? null,
+		'atts'         => $tuple['atts'] ?? null,
+		'depth'        => $tuple['depth'] ?? null,
+	);
+}
+
+/**
+ * The number of tuples in the subtree that starts at $index (the tuple itself included).
+ *
+ * @param list<array<string,mixed>> $walk  Walker tuples or elements.
+ * @param int                       $index Root of the subtree.
+ * @return int
+ */
+function aafm_builder_subtree_size( array $walk, int $index ): int {
+	$size  = 1;
+	$count = count( $walk );
+	while ( $index + $size < $count && (int) $walk[ $index + $size ]['depth'] > (int) $walk[ $index ]['depth'] ) {
+		++$size;
+	}
+	return $size;
+}
+
+/**
+ * The outline a page must have after one change, worked out from the outline before it.
+ *
+ * @param list<array<string,mixed>> $walk   Walker tuples before the change.
+ * @param array<string,mixed>       $change op update (index, atts), insert (at, depth, tuples with
+ *                                         depths relative to 0), move (index, at, depth: the subtree
+ *                                         is placed before the original tuple at `at`) or remove (index).
+ * @return list<array<string,mixed>>
+ */
+function aafm_builder_expected_walk( array $walk, array $change ): array {
+	$walk  = array_values( array_map( 'aafm_builder_tuple', $walk ) );
+	$op    = (string) ( $change['op'] ?? '' );
+	$index = (int) ( $change['index'] ?? 0 );
+
+	if ( 'update' === $op ) {
+		$walk[ $index ]['atts'] = (array) $change['atts'];
+		return $walk;
+	}
+	if ( 'insert' === $op ) {
+		$new = array();
+		foreach ( (array) $change['tuples'] as $tuple ) {
+			$tuple          = aafm_builder_tuple( (array) $tuple );
+			$tuple['depth'] = (int) $tuple['depth'] + (int) $change['depth'];
+			$new[]          = $tuple;
+		}
+		array_splice( $walk, (int) $change['at'], 0, $new );
+		return $walk;
+	}
+	$size = aafm_builder_subtree_size( $walk, $index );
+	if ( 'remove' === $op ) {
+		array_splice( $walk, $index, $size );
+		return $walk;
+	}
+	// move.
+	$subtree = array_slice( $walk, $index, $size );
+	$shift   = (int) $change['depth'] - (int) $walk[ $index ]['depth'];
+	foreach ( $subtree as $i => $tuple ) {
+		$subtree[ $i ]['depth'] = (int) $tuple['depth'] + $shift;
+	}
+	$at  = (int) $change['at'];
+	$out = array();
+	foreach ( $walk as $i => $tuple ) {
+		if ( $i === $at ) {
+			$out = array_merge( $out, $subtree );
+		}
+		if ( $i < $index || $i >= $index + $size ) {
+			$out[] = $tuple;
+		}
+	}
+	if ( $at >= count( $walk ) ) {
+		$out = array_merge( $out, $subtree );
+	}
+	return $out;
+}
+
+/**
+ * Where a new element goes relative to an anchor element.
+ *
+ * @param list<array<string,mixed>> $elements  Outline from aafm_builder_elements().
+ * @param array<string,mixed>       $anchor    The anchor element.
+ * @param string                    $placement before, after, inside_start or inside_end.
+ * @return array{offset:int,at:int,depth:int,parent:?int}|WP_Error
+ */
+function aafm_builder_anchor_point( array $elements, array $anchor, string $placement ) {
+	$index = (int) $anchor['index'];
+	$after = $index + aafm_builder_subtree_size( $elements, $index );
+	if ( 'before' === $placement || 'after' === $placement ) {
+		return array(
+			'offset' => (int) ( 'before' === $placement ? $anchor['start'] : $anchor['end'] ),
+			'at'     => 'before' === $placement ? $index : $after,
+			'depth'  => (int) $anchor['depth'],
+			'parent' => null === $anchor['parent'] ? null : (int) $anchor['parent'],
+		);
+	}
+	if ( ( 'inside_start' !== $placement && 'inside_end' !== $placement ) || $anchor['self_closing'] || ! $anchor['has_closer'] ) {
+		return aafm_builder_error( 'aafm_builder_invalid_nesting' );
+	}
+	return array(
+		'offset' => (int) ( 'inside_start' === $placement ? $anchor['open_end'] : $anchor['inner_end'] ),
+		'at'     => 'inside_start' === $placement ? $index + 1 : $after,
+		'depth'  => (int) $anchor['depth'] + 1,
+		'parent' => $index,
+	);
+}
+
+/**
+ * The walker's tuples for content, normalised for === comparison; null when it cannot be parsed.
+ *
+ * @param string             $content Content.
+ * @param array<string>|null $tags    Tags.
+ * @return list<array<string,mixed>>|null
+ */
+function aafm_builder_walk( string $content, ?array $tags ): ?array {
+	$walk = aafm_fusion_shortcode_walk( $content, 0, $tags );
+	return null === $walk ? null : array_values( array_map( 'aafm_builder_tuple', $walk ) );
+}
+
+/**
+ * Steps 3 and 4 of the guard chain, the one copy the commit, avada-replace-text (AV-1) and
+ * restore-revision (X-1) all call. Step 3: saving the stored page as this user must leave it as it is.
+ * Step 4: the new content, replayed through the same save, must keep the expected outline (for
+ * WPBakery with the replayed string's tags merged in). With $exact, the replay must also equal the new
+ * content byte for byte (a restore must not lose an embed that is not an element).
+ *
+ * @param string                    $builder  avada or wpbakery; picks the code prefix.
+ * @param int                       $id       Post id the replay sanitizes for.
+ * @param string                    $old      Stored content.
+ * @param string                    $new      Content about to be saved.
+ * @param array<string>             $tags     Tags the outline uses.
+ * @param list<array<string,mixed>> $expected Outline the new content must have.
+ * @param bool                      $exact    Whether the replay must equal $new byte for byte.
+ * @return true|WP_Error
+ */
+function aafm_builder_replay_check( string $builder, int $id, string $old, string $new, array $tags, array $expected, bool $exact = false ) { // phpcs:ignore Universal.NamingConventions.NoReservedKeywordParameterNames.newFound -- $new is the contracted parameter name (plan 326 S7-2).
+	$prefix = 'wpbakery' === $builder ? 'wpbakery' : 'avada';
+	if ( aafm_post_field_canonical_replay( 'post_content', $old, $id ) !== $old ) {
+		return new WP_Error(
+			'aafm_' . $prefix . '_save_would_change_page',
+			__( 'Saving this page as the current user would change content outside the requested change, for example by removing embedded HTML or elements this user is not allowed to keep. Ask a user with fuller rights to make the edit, or make it in the page builder. Nothing was changed.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 409 )
+		);
+	}
+	$replayed = aafm_post_field_canonical_replay( 'post_content', $new, $id );
+	$all_tags = $tags;
+	if ( 'wpbakery' === $builder ) {
+		$merged   = aafm_wpbakery_shortcode_tags( $old, $new, $replayed );
+		$all_tags = null === $merged ? null : array_values( array_unique( array_merge( $tags, $merged ) ) );
+	}
+	$walk = null === $all_tags ? null : aafm_builder_walk( $replayed, $all_tags );
+	if ( null === $walk || array_values( array_map( 'aafm_builder_tuple', $expected ) ) !== $walk ) {
+		return new WP_Error(
+			'aafm_' . $prefix . '_save_would_change_layout',
+			__( 'Saving the change as the current user would remove or change page builder elements, so it was not saved. Nothing was changed.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 409 )
+		);
+	}
+	if ( $exact && $replayed !== $new ) {
+		return new WP_Error(
+			'aafm_' . $prefix . '_save_would_change_page',
+			__( 'Saving this content as the current user would change it, for example by removing embedded HTML this user is not allowed to keep. Ask a user with fuller rights to make the change. Nothing was changed.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 409 )
+		);
+	}
+	return true;
+}
+
+/**
+ * The guarded save every element write goes through (design 4.4, plan 326 steps 0 to 9).
+ *
+ * @param WP_Post                   $post     Post, as the executor loaded it.
+ * @param string                    $old      Stored content the change was worked out from.
+ * @param string                    $new      New content.
+ * @param array<string>             $tags     Tags the outline uses. For wpbakery the commit scans the
+ *                                            tags of $old and $new itself (Ruling R3-PR2-2).
+ * @param list<array<string,mixed>> $expected Outline $new must have.
+ * @param callable|null             $after    callable( int $post_id, bool $probe ): bool, or null.
+ * @param string                    $builder  avada or wpbakery.
+ * @return array{post:WP_Post,restore_revision_id:?int,reversible:bool,unchanged:bool,page_fingerprint:string}|WP_Error
+ */
+function aafm_builder_commit( WP_Post $post, string $old, string $new, array $tags, array $expected, ?callable $after, string $builder ) { // phpcs:ignore Universal.NamingConventions.NoReservedKeywordParameterNames.newFound -- $new is the contracted parameter name (plan 326 S7-2).
+	$id         = (int) $post->ID;
+	$prefix     = 'wpbakery' === $builder ? 'wpbakery' : 'avada';
+	$reversible = post_type_supports( $post->post_type, 'revisions' ) && wp_revisions_enabled( $post );
+
+	// Step 0 (Ruling R3-PR2-8): nothing to save.
+	if ( $new === $old ) {
+		return array(
+			'post'                => $post,
+			'restore_revision_id' => null,
+			'reversible'          => $reversible,
+			'unchanged'           => true,
+			'page_fingerprint'    => aafm_builder_page_fingerprint( $old ),
+		);
+	}
+
+	// Steps 1 and 2.
+	if ( 'wpbakery' === $builder ) {
+		$scanned = aafm_wpbakery_shortcode_tags( $old, $new );
+		if ( null === $scanned ) {
+			return aafm_builder_error( 'aafm_builder_unparseable' );
+		}
+		$tags = $scanned;
+	}
+	$old_walk = aafm_builder_walk( $old, $tags );
+	$new_walk = aafm_builder_walk( $new, $tags );
+	if ( null === $old_walk || null === $new_walk ) {
+		return aafm_builder_error( 'aafm_builder_unparseable' );
+	}
+	$expected = array_values( array_map( 'aafm_builder_tuple', $expected ) );
+	if ( $expected !== $new_walk ) {
+		return aafm_builder_error( 'aafm_builder_structure_changed' );
+	}
+
+	// Steps 3 and 4.
+	$replay = aafm_builder_replay_check( $builder, $id, $old, $new, $tags, $expected );
+	if ( is_wp_error( $replay ) ) {
+		return $replay;
+	}
+
+	// Step 6 runs before step 5 so a refusal does not leave a revision behind.
+	if ( null !== $after && ! $after( $id, true ) ) {
+		return new WP_Error(
+			'aafm_' . $prefix . '_css_rebuild_unavailable',
+			__( 'The page builder cannot rebuild this page\'s generated CSS right now, so the change was not saved. Nothing was changed.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 409 )
+		);
+	}
+
+	// Step 5: the state before the write as a revision.
+	$restore_revision_id = null;
+	if ( $reversible ) {
+		$saved = wp_save_post_revision( $id );
+		if ( is_int( $saved ) && $saved > 0 ) {
+			$restore_revision_id = $saved;
+		} else {
+			$latest = wp_get_post_revisions(
+				$id,
+				array(
+					'posts_per_page' => 1,
+					'orderby'        => 'ID',
+					'order'          => 'DESC',
+				)
+			);
+			$latest = reset( $latest );
+			if ( $latest instanceof WP_Post && $latest->post_content === $old ) {
+				$restore_revision_id = (int) $latest->ID;
+			}
+		}
+		$reversible = null !== $restore_revision_id;
+	}
+
+	// Step 7.
+	$updated = wp_update_post(
+		wp_slash(
+			array(
+				'ID'           => $id,
+				'post_content' => $new,
+			)
+		),
+		true
+	);
+	if ( is_wp_error( $updated ) || ! $updated ) {
+		return aafm_generic_error();
+	}
+
+	// Step 8.
+	if ( ! aafm_post_field_confirm_logged( $id, 'post_content', $new, $old ) ) {
+		return new WP_Error(
+			'aafm_' . $prefix . '_write_unconfirmed',
+			__( 'The change could not be confirmed as saved. Read the page to check its current state.', 'agent-abilities-for-mcp' ),
+			array( 'restore_revision_id' => $restore_revision_id )
+		);
+	}
+
+	// Step 9.
+	if ( null !== $after && ! $after( $id, false ) ) {
+		return new WP_Error(
+			'aafm_' . $prefix . '_css_stale',
+			null === $restore_revision_id
+				? __( 'The content was saved, but the page builder could not rebuild the page\'s generated CSS, so the page may look out of date until it is saved again in the builder.', 'agent-abilities-for-mcp' )
+				/* translators: %d: revision id. */
+				: sprintf( __( 'The content was saved, but the page builder could not rebuild the page\'s generated CSS, so the page may look out of date until it is saved again in the builder. Revision %d restores the content as it was before.', 'agent-abilities-for-mcp' ), $restore_revision_id ),
+			array( 'restore_revision_id' => $restore_revision_id )
+		);
+	}
+
+	$fresh = aafm_exact_object( 'post', $id );
+	if ( ! $fresh instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	return array(
+		'post'                => $fresh,
+		'restore_revision_id' => $restore_revision_id,
+		'reversible'          => $reversible,
+		'unchanged'           => false,
+		'page_fingerprint'    => aafm_builder_page_fingerprint( (string) $fresh->post_content ),
+	);
+}

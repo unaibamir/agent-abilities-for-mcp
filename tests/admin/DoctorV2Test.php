@@ -395,4 +395,150 @@ final class DoctorV2Test extends TestCase {
 			$this->assertStringNotContainsString( '/', $origin, 'No path in the report, only the slug.' );
 		}
 	}
+
+	/**
+	 * Switch this process to an environment type. Only for tests that run in their own process:
+	 * core caches the type unless WP_RUN_CORE_TESTS is defined, and both settings stay in that process.
+	 *
+	 * @param string $type Environment type.
+	 * @return void
+	 */
+	private function environment( string $type ): void {
+		if ( ! defined( 'WP_RUN_CORE_TESTS' ) ) {
+			define( 'WP_RUN_CORE_TESTS', true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- core's own switch, own process only.
+		}
+		putenv( 'WP_ENVIRONMENT_TYPE=' . $type ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.runtime_configuration_putenv -- own process only.
+		$this->assertSame( $type, wp_get_environment_type() );
+	}
+
+	public function test_host_looks_local_matches_the_one_list(): void {
+		foreach ( array( 'localhost', '127.0.0.1', 'a.test', 'a.local', 'a.localhost', 'a.ddev.site', 'a.wip', 'A.TEST' ) as $host ) {
+			$this->assertTrue( aafm_host_looks_local( $host ), $host );
+		}
+		foreach ( array( 'example.com', 'test.example.com', 'example.org', '' ) as $host ) {
+			$this->assertFalse( aafm_host_looks_local( $host ), $host );
+		}
+	}
+
+	/**
+	 * Own process: the environment type or the constant must not leak into the shared suite.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_oauth_http_row_names_environment_local_on_a_public_host(): void {
+		$this->environment( 'local' );
+		$this->respond( fn() => $this->http( 200, $this->answer() ) );
+		update_option( 'aafm_oauth_enabled', '1' );
+		$row = $this->row( aafm_doctor_run_checks(), 'oauth_http' );
+		$this->assertNotNull( $row );
+		$this->assertSame( 'warn', $row['status'] );
+		$this->assertSame( 'you', $row['who'] );
+		$this->assertStringContainsString( 'local', $row['detail'] );
+		$this->assertStringContainsString( 'WP_ENVIRONMENT_TYPE', $row['detail'] );
+	}
+
+	/**
+	 * Own process: the environment type or the constant must not leak into the shared suite.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_oauth_http_row_follows_the_https_row(): void {
+		$this->environment( 'local' );
+		$this->respond( fn() => $this->http( 200, $this->answer() ) );
+		update_option( 'aafm_oauth_enabled', '1' );
+		$ids = wp_list_pluck( aafm_doctor_run_checks(), 'id' );
+		$this->assertSame( array_search( 'https', $ids, true ) + 1, array_search( 'oauth_http', $ids, true ) );
+	}
+
+	/**
+	 * Own process: the environment type or the constant must not leak into the shared suite.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_no_oauth_http_row_on_a_local_host(): void {
+		$this->environment( 'local' );
+		$this->respond( fn() => $this->http( 200, $this->answer() ) );
+		update_option( 'aafm_oauth_enabled', '1' );
+		$local = static fn(): string => 'http://site.test';
+		add_filter( 'pre_option_home', $local );
+		$rows  = aafm_doctor_run_checks();
+		remove_filter( 'pre_option_home', $local );
+		$this->assertNull( $this->row( $rows, 'oauth_http' ) );
+		$this->assertStringNotContainsString( 'OAuth over HTTP', aafm_doctor_build_report( $rows ) );
+	}
+
+	/**
+	 * Own process: the environment type or the constant must not leak into the shared suite.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_no_oauth_http_row_with_oauth_off(): void {
+		$this->environment( 'local' );
+		$this->respond( fn() => $this->http( 200, $this->answer() ) );
+		$this->assertNull( $this->row( aafm_doctor_run_checks(), 'oauth_http' ) );
+	}
+
+	/**
+	 * Own process: the environment type or the constant must not leak into the shared suite.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_report_says_oauth_over_http_allowed(): void {
+		$this->environment( 'local' );
+		$this->respond( fn() => $this->http( 200, $this->answer() ) );
+		update_option( 'aafm_oauth_enabled', '1' );
+		$this->assertStringContainsString( "\nOAuth over HTTP: allowed\n", aafm_doctor_build_report( aafm_doctor_run_checks() ) );
+	}
+
+	/**
+	 * Own process: the environment type or the constant must not leak into the shared suite.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_oauth_http_row_for_the_constant_on_a_public_host(): void {
+		$this->assertTrue( aafm_oauth_https_required(), 'A fresh process starts on the production environment type.' );
+		define( 'AAFM_OAUTH_ALLOW_HTTP', true );
+		$this->respond( fn() => $this->http( 200, $this->answer() ) );
+		update_option( 'aafm_oauth_enabled', '1' );
+		$row = $this->row( aafm_doctor_run_checks(), 'oauth_http' );
+		$this->assertNotNull( $row );
+		$this->assertStringContainsString( 'AAFM_OAUTH_ALLOW_HTTP', $row['detail'] );
+	}
+
+	/**
+	 * Own process: the environment type or the constant must not leak into the shared suite.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_oauth_http_row_for_a_development_environment_on_a_public_host(): void {
+		$this->environment( 'development' );
+		$this->respond( fn() => $this->http( 200, $this->answer() ) );
+		update_option( 'aafm_oauth_enabled', '1' );
+		$row = $this->row( aafm_doctor_run_checks(), 'oauth_http' );
+		$this->assertNotNull( $row );
+		$this->assertStringContainsString( 'development', $row['detail'] );
+		$this->assertStringNotContainsString( 'AAFM_OAUTH_ALLOW_HTTP', $row['detail'] );
+	}
+
+	/**
+	 * Own process: the environment type or the constant must not leak into the shared suite.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_no_oauth_http_row_when_https_is_required(): void {
+		$this->assertTrue( aafm_oauth_https_required() );
+		$this->respond( fn() => $this->http( 200, $this->answer() ) );
+		update_option( 'aafm_oauth_enabled', '1' );
+		$rows = aafm_doctor_run_checks();
+		$this->assertNull( $this->row( $rows, 'oauth_http' ) );
+		$this->assertStringNotContainsString( 'OAuth over HTTP', aafm_doctor_build_report( $rows ) );
+	}
 }

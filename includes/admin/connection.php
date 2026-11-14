@@ -73,20 +73,8 @@ function aafm_site_is_local(): bool {
 	$is_local = in_array( wp_get_environment_type(), array( 'local', 'development' ), true );
 
 	if ( ! $is_local ) {
-		$host = wp_parse_url( home_url(), PHP_URL_HOST );
-		if ( is_string( $host ) ) {
-			$host = strtolower( $host );
-			if ( 'localhost' === $host || '127.0.0.1' === $host ) {
-				$is_local = true;
-			} else {
-				foreach ( array( '.test', '.local', '.localhost', '.ddev.site', '.wip' ) as $suffix ) {
-					if ( str_ends_with( $host, $suffix ) ) {
-						$is_local = true;
-						break;
-					}
-				}
-			}
-		}
+		$host     = wp_parse_url( home_url(), PHP_URL_HOST );
+		$is_local = is_string( $host ) && aafm_host_looks_local( $host );
 	}
 
 	/**
@@ -95,6 +83,26 @@ function aafm_site_is_local(): bool {
 	 * @param bool $is_local Whether the site is considered local/development.
 	 */
 	return (bool) apply_filters( 'aafm_site_is_local', $is_local );
+}
+
+/**
+ * Whether a host name looks like a local install: localhost, 127.0.0.1, or a common local suffix.
+ * The one list of local hosts, shared by aafm_site_is_local() and the Connection Doctor.
+ *
+ * @param string $host Host name, any case.
+ * @return bool
+ */
+function aafm_host_looks_local( string $host ): bool {
+	$host = strtolower( $host );
+	if ( 'localhost' === $host || '127.0.0.1' === $host ) {
+		return true;
+	}
+	foreach ( array( '.test', '.local', '.localhost', '.ddev.site', '.wip' ) as $suffix ) {
+		if ( str_ends_with( $host, $suffix ) ) {
+			return true;
+		}
+	}
+	return false;
 }
 
 /**

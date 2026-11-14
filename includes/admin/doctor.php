@@ -606,6 +606,32 @@ function aafm_doctor_check_https(): array {
 }
 
 /**
+ * Row: OAuth accepts plain HTTP on a site whose address does not look local. Only the warning case
+ * has a row: a site set to development by mistake, or a leftover AAFM_OAUTH_ALLOW_HTTP, would
+ * otherwise let sign-in codes and tokens travel unencrypted with nothing on screen saying so.
+ *
+ * @return array<string,mixed>|null
+ */
+function aafm_doctor_check_oauth_http(): ?array {
+	if ( ! aafm_oauth_enabled() || aafm_oauth_https_required() ) {
+		return null;
+	}
+	$host = wp_parse_url( home_url(), PHP_URL_HOST );
+	if ( is_string( $host ) && aafm_host_looks_local( $host ) ) {
+		return null;
+	}
+	$detail = defined( 'AAFM_OAUTH_ALLOW_HTTP' ) && AAFM_OAUTH_ALLOW_HTTP
+		? __( 'OAuth accepts plain HTTP because AAFM_OAUTH_ALLOW_HTTP is set, and this site address does not look local. Sign-in codes and tokens can then travel unencrypted. Remove the constant from wp-config.php once the site uses HTTPS.', 'agent-abilities-for-mcp' )
+		: sprintf(
+			/* translators: %s: the WordPress environment type, e.g. "development". */
+			__( 'OAuth accepts plain HTTP because the WordPress environment type is %s, and this site address does not look local. Sign-in codes and tokens can then travel unencrypted. If this is a live site, set WP_ENVIRONMENT_TYPE to production in wp-config.php.', 'agent-abilities-for-mcp' ),
+			wp_get_environment_type()
+		);
+
+	return aafm_doctor_row( 'oauth_http', __( 'OAuth requires HTTPS', 'agent-abilities-for-mcp' ), 'warn', 'you', $detail );
+}
+
+/**
  * Row: permalinks. Plain permalinks make the endpoint address awkward and break some clients.
  *
  * @return array<string,mixed>
@@ -845,10 +871,13 @@ function aafm_doctor_run_checks(): array {
 		array(
 			aafm_doctor_check_app_passwords(),
 			aafm_doctor_check_https(),
+			aafm_doctor_check_oauth_http(),
 			aafm_doctor_check_permalinks(),
 			aafm_doctor_check_security_plugins(),
 		)
 	);
+	// The OAuth-over-HTTP row exists only in its warning case.
+	$rows = array_values( array_filter( $rows ) );
 	if ( $oauth_on ) {
 		$rows = array_merge( $rows, aafm_doctor_check_oauth_discovery() );
 	}
@@ -920,9 +949,11 @@ function aafm_doctor_build_report( array $rows ): string {
 		'Environment: ' . wp_get_environment_type() . ' | Server: ' . ( '' !== $software ? $software : 'unknown' ),
 		'Permalinks: ' . ( '' === (string) get_option( 'permalink_structure', '' ) ? 'plain' : 'pretty' ) . ' | HTTPS: ' . ( 'https' === $scheme ? 'yes' : 'no' ) . ' | OAuth: ' . ( aafm_oauth_enabled() ? 'on' : 'off' ),
 		'Active plugins (' . count( $names ) . '): ' . implode( ', ', $names ),
-		'',
-		'Checks:',
 	);
+	if ( in_array( 'oauth_http', array_column( $rows, 'id' ), true ) ) {
+		$lines[] = 'OAuth over HTTP: allowed';
+	}
+	array_push( $lines, '', 'Checks:' );
 	foreach ( $rows as $row ) {
 		$line = '- ' . $row['id'] . ': ' . $row['status'];
 		if ( '' !== $row['who'] ) {

@@ -2288,6 +2288,68 @@ final class WpbakeryElementsTest extends TestCase {
 		$this->assert_refused( $this->insert( $id, 2, 'after', array( 'tag' => 'vc_flexbox_container_item' ) ), 'aafm_builder_unknown_element', 400, $id, $page );
 	}
 
+	/**
+	 * R3-1: a deprecated leaf WPBakery maps with content_element false (vc_gmaps, vc_facebook, vc_cta_button) is still
+	 * content, so it moves between columns and reorders in its own column.
+	 */
+	public function test_move_and_reorder_deprecated_leaf_elements(): void {
+		$map = self::container_map();
+		foreach ( array( 'vc_gmaps', 'vc_facebook', 'vc_cta_button' ) as $leaf ) {
+			$map[ $leaf ] = array( 'content_element' => false ) + ( $map[ $leaf ] ?? array() );
+		}
+		WpbakeryMapStub::install( $map );
+		foreach ( array( 'vc_gmaps', 'vc_facebook', 'vc_cta_button' ) as $leaf ) {
+			$el   = '[' . $leaf . ' title="x"]';
+			$page = '[vc_row][vc_column]' . $el . '[vc_column_text]<p>A</p>[/vc_column_text][/vc_column][vc_column][vc_column_text]<p>B</p>[/vc_column_text][/vc_column][/vc_row]';
+			$id   = $this->page( $page );
+			$this->acting_as( 'editor' );
+			$this->assertIsArray( $this->move( $id, 2, 3, 'after' ), $leaf . ' reorder' );
+			$this->assertIsArray( $this->move( $id, 3, 5, 'after' ), $leaf . ' into the other column' );
+			$this->assertStringContainsString( '<p>B</p>[/vc_column_text]' . $el . '[/vc_column]', (string) get_post_field( 'post_content', $id, 'raw' ) );
+		}
+	}
+
+	/**
+	 * R3-1: a Grid Builder column reorders inside its row; a reorder keeps the parent, so it needs no nesting rule.
+	 */
+	public function test_reorder_grid_builder_columns_inside_their_row(): void {
+		register_post_type(
+			'vc_grid_item',
+			array(
+				'public'          => false,
+				'capability_type' => 'post',
+				'supports'        => array( 'title', 'editor' ),
+			)
+		);
+		WpbakeryMapStub::install(
+			self::container_map() + array(
+				'vc_gitem'        => array( 'is_container' => true ),
+				'vc_gitem_zone_c' => array( 'is_container' => true ),
+				'vc_gitem_row'    => array(
+					'is_container'    => true,
+					'content_element' => false,
+				),
+				'vc_gitem_col'    => array(
+					'is_container'    => true,
+					'content_element' => false,
+				),
+			)
+		);
+		$one     = '[vc_gitem_col width="1/2"][vc_column_text]<p>a</p>[/vc_column_text][/vc_gitem_col]';
+		$two     = '[vc_gitem_col width="1/2"][/vc_gitem_col]';
+		$content = '[vc_gitem][vc_gitem_zone_c][vc_gitem_row]' . $one . $two . '[/vc_gitem_row][/vc_gitem_zone_c][/vc_gitem]';
+		$this->acting_as( 'editor' );
+		$id  = self::factory()->post->create(
+			array(
+				'post_type'    => 'vc_grid_item',
+				'post_content' => $content,
+			)
+		);
+		$out = $this->move( $id, 5, 3, 'before' );
+		$this->assertIsArray( $out );
+		$this->assertSame( str_replace( $one . $two, $two . $one, $content ), get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
 	public function test_move_to_the_same_place_saves_nothing(): void {
 		$id = $this->page( self::TWO_ROWS );
 		$this->acting_as( 'editor' );

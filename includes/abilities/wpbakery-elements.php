@@ -1482,9 +1482,10 @@ function aafm_wpbakery_nesting_allows( string $parent_tag, string $child_tag, ar
 		'vc_row'       => array( 'vc_column' ),
 		'vc_row_inner' => array( 'vc_column_inner' ),
 	);
-	// An element WPBakery maps with content_element false (a column, a tab section, a flexbox or grid item) is never
-	// free content: it goes only where a fixed rule or its parent's as_parent list names it.
-	$free = false !== ( $map[ $child_tag ]['content_element'] ?? true );
+	// A container WPBakery maps with content_element false (a column, a tab section, a flexbox or grid item) is never
+	// free content: it goes only where a fixed rule or its parent's as_parent list names it. A leaf with that flag (the
+	// deprecated vc_gmaps, vc_facebook and vc_cta_button) is still content; the flag only hides it from Add Element.
+	$free = false !== ( $map[ $child_tag ]['content_element'] ?? true ) || empty( $map[ $child_tag ]['is_container'] );
 	if ( isset( $fixed[ $parent_tag ] ) ) {
 		$ok = in_array( $child_tag, $fixed[ $parent_tag ], true );
 	} elseif ( 'vc_column' === $parent_tag || 'vc_column_inner' === $parent_tag ) {
@@ -2204,7 +2205,8 @@ function aafm_exec_wpbakery_move_element( array $input ) {
 			return $entry;
 		}
 	}
-	$nesting = aafm_wpbakery_nesting_allows( $parent_tag, $tag, $map );
+	// A reorder keeps the element under the parent it already has, so only a move to a new parent is checked.
+	$nesting = $point['parent'] === $element['parent'] ? true : aafm_wpbakery_nesting_allows( $parent_tag, $tag, $map );
 	if ( is_wp_error( $nesting ) ) {
 		return $nesting;
 	}

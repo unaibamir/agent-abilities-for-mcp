@@ -313,10 +313,22 @@ function aafm_render_grants_card( array $data ): void {
 				)
 			);
 			if ( $data['page'] > 1 ) {
-				$html .= sprintf( '<a class="aafm-btn aafm-btn-secondary aafm-btn-sm" href="%1$s">%2$s</a>', esc_url( aafm_connection_grants_page_url( $data['page'] - 1 ) ), esc_html__( 'Previous', 'agent-abilities-for-mcp' ) );
+				$html .= sprintf(
+					'<a class="aafm-btn aafm-btn-secondary aafm-btn-sm" href="%1$s" aria-label="%3$s">%2$s</a>',
+					esc_url( aafm_connection_grants_page_url( $data['page'] - 1 ) ),
+					esc_html__( 'Previous', 'agent-abilities-for-mcp' ),
+					/* translators: 1: target page number, 2: total pages. Starts with the visible word "Previous". */
+					esc_attr( sprintf( __( 'Previous page, %1$s of %2$s', 'agent-abilities-for-mcp' ), number_format_i18n( $data['page'] - 1 ), number_format_i18n( $data['pages'] ) ) )
+				);
 			}
 			if ( $data['page'] < $data['pages'] ) {
-				$html .= sprintf( '<a class="aafm-btn aafm-btn-secondary aafm-btn-sm" href="%1$s">%2$s</a>', esc_url( aafm_connection_grants_page_url( $data['page'] + 1 ) ), esc_html__( 'Next', 'agent-abilities-for-mcp' ) );
+				$html .= sprintf(
+					'<a class="aafm-btn aafm-btn-secondary aafm-btn-sm" href="%1$s" aria-label="%3$s">%2$s</a>',
+					esc_url( aafm_connection_grants_page_url( $data['page'] + 1 ) ),
+					esc_html__( 'Next', 'agent-abilities-for-mcp' ),
+					/* translators: 1: target page number, 2: total pages. Starts with the visible word "Next". */
+					esc_attr( sprintf( __( 'Next page, %1$s of %2$s', 'agent-abilities-for-mcp' ), number_format_i18n( $data['page'] + 1 ), number_format_i18n( $data['pages'] ) ) )
+				);
 			}
 			return $html . '</nav>';
 		};

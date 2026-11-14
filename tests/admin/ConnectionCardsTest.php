@@ -603,4 +603,26 @@ class ConnectionCardsTest extends TestCase {
 		$stale = substr( $js, $at, 1600 );
 		$this->assertStringContainsString( "btn.closest( '.aafm-stale-tokens' )?.querySelector( '.aafm-notice' )?.remove();", $stale, 'The warning goes once the tokens are ended.' );
 	}
+
+	public function test_pager_links_name_the_target_page_on_a_middle_page(): void {
+		$this->seed_grants( 105 );
+		$_GET['grants_page'] = '2';
+		$html                = $this->grants_html();
+
+		$this->assertSame( 2, preg_match_all( '/<a [^>]*aria-label="Previous page, 1 of 3"[^>]*>Previous<\/a>/', $html ) );
+		$this->assertSame( 2, preg_match_all( '/<a [^>]*aria-label="Next page, 3 of 3"[^>]*>Next<\/a>/', $html ) );
+	}
+
+	public function test_first_and_last_page_have_no_label_for_the_absent_link(): void {
+		$this->seed_grants( 105 );
+		$_GET['grants_page'] = '1';
+		$first               = $this->grants_html();
+		$this->assertStringNotContainsString( 'Previous page', $first );
+		$this->assertSame( 2, substr_count( $first, 'aria-label="Next page, 2 of 3"' ) );
+
+		$_GET['grants_page'] = '3';
+		$last                = $this->grants_html();
+		$this->assertStringNotContainsString( 'Next page', $last );
+		$this->assertSame( 2, substr_count( $last, 'aria-label="Previous page, 2 of 3"' ) );
+	}
 }

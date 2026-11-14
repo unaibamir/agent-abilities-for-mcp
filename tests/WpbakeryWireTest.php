@@ -221,7 +221,15 @@ final class WpbakeryWireTest extends TestCase {
 				'req-wpb-replace-1'
 			)
 		);
-		$this->assertSame( array( 'post', 'replacements' ), array_keys( $done ) );
+		$this->assertSame( array( 'post', 'replacements', 'undo' ), array_keys( $done ) );
+		$this->assertSame(
+			array(
+				'undoable'   => false,
+				'change_ids' => array(),
+				'reason'     => 'not_covered',
+			),
+			$done['undo']
+		);
 		$this->assertSame( 1, $done['replacements'] );
 		$this->assertSame( $id, $done['post']['id'] ?? $done['post']['ID'] ?? null );
 		$this->assertSame( str_replace( 'Hello world', 'Greetings world', self::PAGE ), get_post_field( 'post_content', $id, 'raw' ) );

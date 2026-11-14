@@ -345,7 +345,7 @@ final class WpbakeryElementsWireTest extends TestCase {
 		$text                 = '[vc_column_text]<p>Hello</p>[/vc_column_text]';
 		$one                  = static fn(): int => 1;
 		add_filter( 'wp_revisions_to_keep', $one );
-		$done = $this->wire(
+		$done                 = $this->wire(
 			$handler->call_tool(
 				array(
 					'name'      => aafm_mcp_tool_name( 'aafm/wpbakery-insert-element' ),
@@ -371,6 +371,7 @@ final class WpbakeryElementsWireTest extends TestCase {
 		$this->assertSame( array( 'post', 'index', 'fingerprint', 'page_fingerprint', 'inserted', 'restore_revision_id', 'reversible', 'reversible_reason', 'undo' ), array_keys( $done ) );
 		$this->assertNull( $done['restore_revision_id'] );
 		$this->assertFalse( $done['reversible'] );
-		$this->assertNotSame( '', $done['reversible_reason'] );
+		$this->assertStringContainsString( 'no longer there after the save', $done['reversible_reason'] );
+		$this->assertStringContainsString( 'revision limit', $done['reversible_reason'] );
 	}
 }

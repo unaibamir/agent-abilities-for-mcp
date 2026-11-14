@@ -2450,7 +2450,7 @@ final class WpbakeryElementsTest extends TestCase {
 			$this->assertIsArray( $out, $tool );
 			$this->assertFalse( $out['reversible'], $tool );
 			$this->assertNull( $out['restore_revision_id'], $tool );
-			$this->assertStringContainsString( 'keeps only 1 revision', $out['reversible_reason'], $tool );
+			$this->assertStringContainsString( 'no longer there after the save', $out['reversible_reason'], $tool );
 		}
 
 		$two    = static fn(): int => 2;

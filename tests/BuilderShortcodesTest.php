@@ -750,7 +750,8 @@ final class BuilderShortcodesTest extends TestCase {
 			$this->assertArrayNotHasKey( 'reversible_reason', $out );
 		} else {
 			$this->assertNull( $out['restore_revision_id'] );
-			$this->assertStringContainsString( 'keeps only 1 revision', $out['reversible_reason'] );
+			$this->assertStringContainsString( 'no longer there after the save', $out['reversible_reason'] );
+			$this->assertStringContainsString( 'keeps 1 revision', $out['reversible_reason'] );
 		}
 	}
 

@@ -725,16 +725,20 @@ function aafm_builder_commit( WP_Post $post, string $old, string $new, array $ta
 	}
 
 	// Core saves its own revision inside the update and prunes the oldest down to wp_revisions_to_keep(); with one kept,
-	// that deletes the revision saved above. Never report a restore point that is gone.
+	// that deletes the revision saved above, and a plugin can delete it too. Never report a restore point that is gone.
 	$reversible_reason = null;
 	if ( null !== $restore_revision_id && ! aafm_exact_object( 'post', $restore_revision_id ) instanceof WP_Post ) {
 		$restore_revision_id = null;
 		$reversible          = false;
+		$keep                = wp_revisions_to_keep( $post );
 		$reversible_reason   = sprintf(
 			/* translators: %d: the number of revisions the site keeps per post. */
-			_n( 'This site keeps only %d revision per post (WP_POST_REVISIONS or the wp_revisions_to_keep filter), so WordPress deleted the revision that held the page before this change. There is no way back from this plugin.', 'This site keeps only %d revisions per post (WP_POST_REVISIONS or the wp_revisions_to_keep filter), so WordPress deleted the revision that held the page before this change. There is no way back from this plugin.', max( 1, wp_revisions_to_keep( $post ) ), 'agent-abilities-for-mcp' ),
-			max( 1, wp_revisions_to_keep( $post ) )
+			_n( 'The revision that held the page before this change was no longer there after the save, so there is no way back from this plugin. The usual cause is the site\'s revision limit (WP_POST_REVISIONS or the wp_revisions_to_keep filter); this site keeps %d revision per post.', 'The revision that held the page before this change was no longer there after the save, so there is no way back from this plugin. The usual cause is the site\'s revision limit (WP_POST_REVISIONS or the wp_revisions_to_keep filter); this site keeps %d revisions per post.', $keep, 'agent-abilities-for-mcp' ),
+			$keep
 		);
+		if ( $keep < 0 ) {
+			$reversible_reason = __( 'The revision that held the page before this change was no longer there after the save, so there is no way back from this plugin. This site keeps every revision, so something other than the revision limit deleted it.', 'agent-abilities-for-mcp' );
+		}
 	}
 
 	// Step 8.

@@ -680,4 +680,11 @@ WPB;
 			);
 		}
 	}
+
+	public function test_audit_detail_reads_replaced_text_in_wpbakery_page(): void {
+		$this->assertStringContainsString(
+			'Replaced text in WPBakery page #42',
+			(string) aafm_build_activity_detail( 'aafm/wpbakery-replace-text', array( 'post_id' => 42 ) )
+		);
+	}
 }

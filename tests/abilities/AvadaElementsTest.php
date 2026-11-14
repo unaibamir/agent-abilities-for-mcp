@@ -154,6 +154,92 @@ final class AvadaElementsTest extends TestCase {
 		return $admin;
 	}
 
+	public function test_list_rows_have_the_four_keys(): void {
+		$this->acting_as( 'editor' );
+		$out = aafm_exec_avada_list_elements( array( 'per_page' => 50 ) );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( array( 'elements', 'total', 'skipped', 'map_source' ), array_keys( $out ) );
+		$this->assertSame( 'avada', $out['map_source'] );
+		$this->assertSame( count( AvadaMapStub::map() ) - 1, $out['total'] );
+		foreach ( $out['elements'] as $row ) {
+			$this->assertSame( array( 'tag', 'name', 'is_container', 'child_tag' ), array_keys( $row ) );
+		}
+		$rows = array_column( $out['elements'], null, 'tag' );
+		$this->assertTrue( $rows['fusion_builder_container']['is_container'] );
+		$this->assertTrue( $rows['fusion_tabs']['is_container'] );
+		$this->assertSame( 'fusion_tab', $rows['fusion_tabs']['child_tag'] );
+		$this->assertFalse( $rows['fusion_button']['is_container'] );
+		$this->assertNull( $rows['fusion_button']['child_tag'] );
+		$this->assertSame( array( 'loader', 'map' ), AvadaMapStub::$calls );
+	}
+
+	public function test_search_and_pagination(): void {
+		$this->acting_as( 'editor' );
+		$out = aafm_exec_avada_list_elements( array( 'search' => 'butt' ) );
+		$this->assertSame( array( 'fusion_button' ), array_column( $out['elements'], 'tag' ) );
+
+		$page = aafm_exec_avada_list_elements(
+			array(
+				'per_page' => 2,
+				'page'     => 2,
+			)
+		);
+		$this->assertCount( 2, $page['elements'] );
+		$this->assertSame( 'fusion_builder_column', $page['elements'][0]['tag'] );
+	}
+
+	public function test_tag_detail_lists_settings(): void {
+		$this->acting_as( 'editor' );
+		$out = aafm_exec_avada_list_elements( array( 'tag' => 'fusion_button' ) );
+
+		$this->assertSame( 1, $out['total'] );
+		$row      = $out['elements'][0];
+		$settings = array_column( $row['settings'], null, 'name' );
+		$this->assertSame( array( 'tag', 'name', 'is_container', 'child_tag', 'settings' ), array_keys( $row ) );
+		$this->assertSame( array( 'name', 'kind', 'label', 'default', 'allowed_values', 'writable', 'needs' ), array_keys( $settings['link'] ) );
+		$this->assertSame( 'link', $settings['link']['kind'] );
+		$this->assertSame( 'choice', $settings['target']['kind'] );
+		$this->assertSame( '_self', $settings['target']['default'] );
+		$this->assertSame( array( '_self', '_blank', 'lightbox' ), $settings['target']['allowed_values'] );
+		$this->assertSame( 'raw', $settings['link_attributes']['kind'] );
+		$this->assertSame( 'unfiltered_html', $settings['link_attributes']['needs'] );
+		// A dimension is one setting per side, named as Avada stores it.
+		$this->assertSame( 'size', $settings['padding_top']['kind'] );
+		$this->assertArrayNotHasKey( 'padding', $settings );
+		// Typography sub-values are listed under their stored names and are not writable.
+		$this->assertSame( 'typography', $settings['fusion_font_family_button_font']['kind'] );
+		$this->assertFalse( $settings['fusion_font_family_button_font']['writable'] );
+		// The inner content is text, not a setting.
+		$this->assertArrayNotHasKey( 'element_content', $settings );
+		$this->assertSame( '', $settings['title']['default'] );
+
+		$this->assert_error( aafm_exec_avada_list_elements( array( 'tag' => 'no_such_tag' ) ), 'aafm_builder_unknown_element', 400 );
+	}
+
+	public function test_empty_placeholders_are_skipped(): void {
+		$this->acting_as( 'editor' );
+		$out = aafm_exec_avada_list_elements( array( 'per_page' => 50 ) );
+		$this->assertNotContains( 'fusion_placeholder_empty', array_column( $out['elements'], 'tag' ) );
+
+		$map = aafm_exec_avada_list_elements( array( 'tag' => 'fusion_google_map' ) );
+		$this->assertSame( 1, $map['skipped'], 'The group with no setting name is skipped and counted.' );
+	}
+
+	public function test_a_missing_loader_is_refused(): void {
+		$this->acting_as( 'editor' );
+		AvadaMapStub::absent( 'avada_map_loader' );
+		$this->assert_error( aafm_exec_avada_list_elements( array() ), 'aafm_avada_map_unavailable', 409 );
+		$this->assert_error( aafm_avada_map(), 'aafm_avada_map_unavailable', 409 );
+	}
+
+	public function test_an_empty_map_after_the_loader_is_refused(): void {
+		$this->acting_as( 'editor' );
+		AvadaMapStub::install( array( 'fusion_placeholder_empty' => array() ) );
+		$this->assert_error( aafm_exec_avada_list_elements( array() ), 'aafm_avada_map_unavailable', 409 );
+		$this->assertSame( array( 'loader', 'map' ), AvadaMapStub::$calls );
+	}
+
 	public function test_a_throwing_loader_is_refused(): void {
 		$this->acting_as( 'editor' );
 		$throw = static fn( $cb, string $entry ) => 'avada_map_loader' === $entry ? static function (): void {
@@ -161,6 +247,21 @@ final class AvadaElementsTest extends TestCase {
 		} : $cb;
 		add_filter( 'aafm_builder_vendor', $throw, 20, 2 );
 		$this->assert_error( aafm_avada_map(), 'aafm_avada_map_unavailable', 409 );
+	}
+
+	public function test_a_secret_in_extras_never_leaves(): void {
+		$this->acting_as( 'editor' );
+		$result = array(
+			aafm_exec_avada_list_elements( array( 'per_page' => 50 ) ),
+			aafm_exec_avada_list_elements( array( 'tag' => 'fusion_google_map' ) ),
+		);
+		$this->assertStringNotContainsString( 'AIzaSECRET', (string) wp_json_encode( $result ) );
+	}
+
+	public function test_a_subscriber_is_refused(): void {
+		$this->acting_as( 'subscriber' );
+		$this->assertFalse( aafm_perm_blocks_floor( array() ) );
+		$this->assertSame( 'aafm_perm_blocks_floor', aafm_args_avada_list_elements()['permission_callback'] );
 	}
 
 	public function test_link_attributes_and_any_attributes_setting_are_the_raw_kind(): void {

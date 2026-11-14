@@ -51,6 +51,14 @@ function aafm_register_avada_elements_full_definitions( array $registry ): array
  */
 function aafm_avada_elements_registry_definitions(): array {
 	return array(
+		'aafm/avada-list-elements' => array(
+			'label'        => __( 'List Avada elements', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Lists the elements Avada Builder has on this site, from Avada\'s own element map: tag, name, whether it holds other elements, and the one child element a parent element such as tabs takes. With tag it returns one element with its settings, each under the name Avada stores it (a padding setting is one per side): kind, label, default, the allowed values of a choice (at most 100), whether avada-update-element can write it, and needs, which is unfiltered_html for settings that can carry script or raw HTML. Typography and dynamic data settings are listed but cannot be written. Settings Avada adds only inside its own editor, such as the tablet and phone variants, are not listed. Requires the edit_posts capability; Avada\'s Role Manager settings are not applied. Only while Avada is active.', 'agent-abilities-for-mcp' ),
+			'group'        => 'reads',
+			'risk'         => 'read',
+			'subject'      => 'avada',
+			'args_builder' => 'aafm_args_avada_list_elements',
+		),
 	);
 }
 
@@ -239,6 +247,11 @@ function aafm_avada_settings( array $entry, int &$skipped = 0 ): array {
 			continue;
 		}
 		$out[ $name ] = $param;
+	}
+	// An image element's picture is its inner URL with the id beside it (A4): one setting, image_id, of the image kind.
+	$content = aafm_avada_content_param( $entry );
+	if ( null !== $content && 'upload' === ( $content['type'] ?? null ) ) {
+		$out['image_id'] = $content;
 	}
 	return $out;
 }
@@ -600,4 +613,166 @@ function aafm_avada_content_has_script( string $content ): bool {
 		}
 	}
 	return false;
+}
+
+/**
+ * Args for aafm/avada-list-elements.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_avada_list_elements(): array {
+	return array(
+		'label'               => aafm_ability_label( 'aafm/avada-list-elements' ),
+		'description'         => aafm_ability_description( 'aafm/avada-list-elements' ),
+		'category'            => 'aafm-reads',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array_merge(
+				array(
+					'tag'    => array(
+						'type'        => 'string',
+						'description' => __( 'One element\'s shortcode tag, such as fusion_button. Returns that element with its settings.', 'agent-abilities-for-mcp' ),
+					),
+					'search' => array(
+						'type'        => 'string',
+						'description' => __( 'Only elements whose name or tag contains this text.', 'agent-abilities-for-mcp' ),
+					),
+				),
+				aafm_pagination_schema_props(
+					50,
+					__( 'Number of elements per page, clamped to the 1-50 range. Defaults to 20 when omitted.', 'agent-abilities-for-mcp' ),
+					__( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' )
+				)
+			),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'elements'   => array(
+					'type'  => 'array',
+					'items' => array(
+						'type'       => 'object',
+						'properties' => array(
+							'tag'          => array( 'type' => 'string' ),
+							'name'         => array( 'type' => 'string' ),
+							'is_container' => array( 'type' => 'boolean' ),
+							'child_tag'    => array(
+								'type'        => array( 'string', 'null' ),
+								'description' => __( 'The one element a parent element such as tabs takes as its children, or null.', 'agent-abilities-for-mcp' ),
+							),
+							'settings'     => array(
+								'type'        => 'array',
+								'description' => __( 'Only with tag. kind is how avada-update-element takes the value; writable says whether it can; needs is unfiltered_html for settings that can carry script or raw HTML.', 'agent-abilities-for-mcp' ),
+							),
+						),
+					),
+				),
+				'total'      => array( 'type' => 'integer' ),
+				'skipped'    => array(
+					'type'        => 'integer',
+					'description' => __( 'Settings left out because the map gave them no setting name.', 'agent-abilities-for-mcp' ),
+				),
+				'map_source' => array( 'type' => 'string' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_avada_list_elements',
+		'permission_callback' => 'aafm_perm_blocks_floor',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => true,
+				'destructive' => false,
+				'idempotent'  => true,
+			),
+		),
+	);
+}
+
+/**
+ * One catalog row, with settings on request. Only the setting's own default or value is read; the element-level
+ * defaults and extras Avada merges in for its live editor never are (A20).
+ *
+ * @param string              $tag           Tag.
+ * @param array<string,mixed> $entry         Map entry.
+ * @param bool                $with_settings Whether to add settings.
+ * @param int                 $skipped       Skip counter, added to.
+ * @return array<string,mixed>
+ */
+function aafm_avada_catalog_row( string $tag, array $entry, bool $with_settings, int &$skipped ): array {
+	$parent = 'multi_element_parent' === ( $entry['multi'] ?? null ) && is_string( $entry['element_child'] ?? null ) ? aafm_wpbakery_map_text( $entry['element_child'] ) : '';
+	$row    = array(
+		'tag'          => $tag,
+		'name'         => aafm_wpbakery_map_text( $entry['name'] ?? $tag ),
+		'is_container' => in_array( $tag, aafm_avada_layout_tags(), true ) || '' !== $parent,
+		'child_tag'    => '' === $parent ? null : $parent,
+	);
+	if ( ! $with_settings ) {
+		return $row;
+	}
+	$row['settings'] = array();
+	foreach ( aafm_avada_settings( $entry, $skipped ) as $name => $param ) {
+		$kind    = aafm_avada_param_kind( $tag, $param );
+		$allowed = 'choice' === aafm_avada_type_kind( is_string( $param['type'] ?? null ) ? $param['type'] : '' )
+			? array_slice( array_map( 'aafm_wpbakery_map_text', aafm_avada_choice_values( $param ) ), 0, 100 )
+			: array();
+		$default = $param['default'] ?? null;
+		if ( ! is_scalar( $default ) ) {
+			$default = is_scalar( $param['value'] ?? null ) ? $param['value'] : '';
+		}
+		$row['settings'][] = array(
+			'name'           => $name,
+			'kind'           => $kind['kind'],
+			'label'          => aafm_wpbakery_map_text( $param['heading'] ?? '' ),
+			'default'        => aafm_wpbakery_map_text( $default ),
+			'allowed_values' => $allowed,
+			'writable'       => $kind['writable'],
+			'needs'          => $kind['needs'],
+		);
+	}
+	return $row;
+}
+
+/**
+ * Execute aafm/avada-list-elements (design AV-4).
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_avada_list_elements( array $input ) {
+	$skipped = 0;
+	if ( isset( $input['tag'] ) && '' !== (string) $input['tag'] ) {
+		$tag   = (string) $input['tag'];
+		$entry = aafm_avada_map( $tag );
+		if ( is_wp_error( $entry ) ) {
+			return $entry;
+		}
+		$row = aafm_avada_catalog_row( $tag, $entry, true, $skipped );
+		return array(
+			'elements'   => array( $row ),
+			'total'      => 1,
+			'skipped'    => $skipped,
+			'map_source' => 'avada',
+		);
+	}
+
+	$map = aafm_avada_map();
+	if ( is_wp_error( $map ) ) {
+		return $map;
+	}
+	$search = isset( $input['search'] ) ? strtolower( aafm_sanitize_plain_text( (string) $input['search'] ) ) : '';
+	$rows   = array();
+	foreach ( $map as $tag => $entry ) {
+		$row = aafm_avada_catalog_row( (string) $tag, $entry, false, $skipped );
+		if ( '' !== $search && false === strpos( strtolower( $row['tag'] ), $search ) && false === strpos( strtolower( $row['name'] ), $search ) ) {
+			continue;
+		}
+		$rows[] = $row;
+	}
+	$paging = aafm_paginate_args( $input + array( 'per_page' => 20 ), 50 );
+	return array(
+		'elements'   => array_slice( $rows, ( $paging['page'] - 1 ) * $paging['per_page'], $paging['per_page'] ),
+		'total'      => count( $rows ),
+		'skipped'    => $skipped,
+		'map_source' => 'avada',
+	);
 }

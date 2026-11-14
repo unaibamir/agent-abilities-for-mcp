@@ -427,6 +427,10 @@ function aafm_integration_ability_order(): array {
 				'name' => 'aafm/avada-list-library',
 				'risk' => 'read',
 			),
+			array(
+				'name' => 'aafm/avada-list-elements',
+				'risk' => 'read',
+			),
 		),
 		'wpbakery'      => array(
 			array(

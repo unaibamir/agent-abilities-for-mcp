@@ -1703,11 +1703,16 @@ function aafm_render_admin_page(): void {
 		aafm_pause_all() ? '' : ' hidden',
 		esc_html__( 'Access paused', 'agent-abilities-for-mcp' )
 	);
+	// The label stays short (a listing caption quotes it); the title and the screen-reader text say
+	// what it means, since "Read + write" alone reads as if everything were exposed.
+	$posture_note = __( 'Shows what your settings allow. Only abilities you switched on are exposed.', 'agent-abilities-for-mcp' );
 	printf(
-		'<span class="aafm-status-pill aafm-pill aafm-pill-%1$s" data-posture="%2$s">%3$s</span>',
+		'<span class="aafm-status-pill aafm-pill aafm-pill-%1$s" data-posture="%2$s" title="%4$s">%3$s<span class="screen-reader-text"> %5$s</span></span>',
 		esc_attr( $posture['variant'] ),
 		esc_attr( $posture['state'] ),
-		esc_html( $posture['label'] )
+		esc_html( $posture['label'] ),
+		esc_attr( $posture_note ),
+		esc_html( $posture_note )
 	);
 	printf(
 		'<span class="aafm-status-pill %1$s">%2$s</span>',

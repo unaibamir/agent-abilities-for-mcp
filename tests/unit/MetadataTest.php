@@ -84,6 +84,16 @@ final class MetadataTest extends TestCase {
 		$this->assertSame( AAFM_VERSION, $manifest['version'] );
 	}
 
+	public function test_server_json_hostname_description_scopes_the_exposure_claim(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$manifest = json_decode( (string) file_get_contents( AAFM_PLUGIN_DIR . 'server.json' ), true );
+		$this->assertIsArray( $manifest );
+		$this->assertStringContainsString(
+			'Nothing from this plugin is exposed until you enable abilities in wp-admin.',
+			(string) ( $manifest['remotes'][0]['variables']['hostname']['description'] ?? '' )
+		);
+	}
+
 	/**
 	 * The blanket "argument values are never stored" claim is false and has been since
 	 * activity-log v5 (1.5.0): aafm_activity_detail_field() stores ids, meta key names, slugs,

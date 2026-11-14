@@ -2825,7 +2825,7 @@ function aafm_render_activity_tab(): void {
 		esc_url( $export_url ),
 		esc_html__( 'Export CSV', 'agent-abilities-for-mcp' )
 	);
-	echo '<button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-clear-log">' . esc_html__( 'Clear log', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-clear-status" aria-live="polite"></span>';
+	echo '<button type="button" class="aafm-btn aafm-btn-danger" id="aafm-clear-log">' . esc_html__( 'Clear log', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-clear-status" aria-live="polite"></span>';
 	echo '<button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-log-live" aria-pressed="false">' . esc_html__( 'Live', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-log-live-note" aria-live="polite"></span>';
 	echo '</div>';
 

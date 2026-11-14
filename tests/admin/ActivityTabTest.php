@@ -532,4 +532,22 @@ final class ActivityTabTest extends TestCase {
 		$json = json_decode( $body, true );
 		return is_array( $json ) ? $json : array();
 	}
+
+	/**
+	 * The Activity tab markup for the current log.
+	 *
+	 * @return string
+	 */
+	private function activity_html(): string {
+		$this->acting_as( 'administrator' );
+		ob_start();
+		aafm_render_activity_tab();
+		return (string) ob_get_clean();
+	}
+
+	public function test_clear_log_is_a_danger_button_and_export_stays_secondary(): void {
+		$html = $this->activity_html();
+		$this->assertStringContainsString( '<button type="button" class="aafm-btn aafm-btn-danger" id="aafm-clear-log">', $html );
+		$this->assertMatchesRegularExpression( '/class="aafm-btn aafm-btn-secondary" id="aafm-export-log"/', $html );
+	}
 }

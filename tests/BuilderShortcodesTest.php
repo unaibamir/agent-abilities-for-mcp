@@ -588,4 +588,59 @@ final class BuilderShortcodesTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $exact );
 		$this->assertSame( 'aafm_avada_save_would_change_page', $exact->get_error_code() );
 	}
+
+	/* ---------------------------------------------------------------- S7-3: the WPBakery CSS rebuild */
+
+	public function test_rebuild_css_calls_default_then_custom_once_each(): void {
+		$calls = array();
+		$seam  = static function ( $callable, string $entry ) use ( &$calls ) {
+			return 'wpbakery_css_rebuild' !== $entry ? $callable : static function ( int $id, string $type ) use ( &$calls ): void {
+				$calls[] = array( $id, $type );
+			};
+		};
+		add_filter( 'aafm_builder_vendor', $seam, 10, 2 );
+		try {
+			$this->assertTrue( aafm_wpbakery_rebuild_css( 42 ) );
+		} finally {
+			remove_filter( 'aafm_builder_vendor', $seam, 10 );
+		}
+
+		$this->assertSame( array( array( 42, 'default' ), array( 42, 'custom' ) ), $calls );
+	}
+
+	public function test_rebuild_css_is_false_without_the_vendor(): void {
+		$absent = static fn() => null;
+		add_filter( 'aafm_builder_vendor', $absent );
+		try {
+			$this->assertFalse( aafm_wpbakery_rebuild_css( 42 ) );
+			$this->assertFalse( aafm_wpbakery_rebuild_css( 42, true ) );
+		} finally {
+			remove_filter( 'aafm_builder_vendor', $absent );
+		}
+
+		$throws = static fn() => static function (): void {
+			throw new \RuntimeException( 'boom' );
+		};
+		add_filter( 'aafm_builder_vendor', $throws );
+		try {
+			$this->assertFalse( aafm_wpbakery_rebuild_css( 42 ) );
+		} finally {
+			remove_filter( 'aafm_builder_vendor', $throws );
+		}
+	}
+
+	public function test_rebuild_css_probe_changes_nothing(): void {
+		$calls = 0;
+		$seam  = static fn() => static function () use ( &$calls ): void {
+			++$calls;
+		};
+		add_filter( 'aafm_builder_vendor', $seam );
+		try {
+			$this->assertTrue( aafm_wpbakery_rebuild_css( 42, true ) );
+		} finally {
+			remove_filter( 'aafm_builder_vendor', $seam );
+		}
+
+		$this->assertSame( 0, $calls );
+	}
 }

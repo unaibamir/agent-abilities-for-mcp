@@ -362,3 +362,26 @@ function aafm_exec_wpbakery_replace_text( array $input ) {
 		'replacements' => $replacements,
 	);
 }
+
+/**
+ * Rebuild a page's WPBakery generated CSS the way WPBakery's own save does (W9): the default then the
+ * custom kind, through the vendor seam. Runs after a structural or Design Options write and after a
+ * revision restore (design 325 section 4.5).
+ *
+ * @param int  $id    Post id.
+ * @param bool $probe When true, only report whether the rebuild is available; nothing runs.
+ * @return bool False when the entry is missing or the rebuild throws.
+ */
+function aafm_wpbakery_rebuild_css( int $id, bool $probe = false ): bool {
+	$rebuild = aafm_builder_vendor( 'wpbakery_css_rebuild' );
+	if ( null === $rebuild || $probe ) {
+		return null !== $rebuild;
+	}
+	try {
+		$rebuild( $id, 'default' );
+		$rebuild( $id, 'custom' );
+	} catch ( Throwable $e ) {
+		return false;
+	}
+	return true;
+}

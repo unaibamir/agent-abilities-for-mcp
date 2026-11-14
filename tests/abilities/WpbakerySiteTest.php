@@ -915,4 +915,23 @@ final class WpbakerySiteTest extends TestCase {
 		}
 		$this->assertStringContainsString( 'Only while WPBakery Page Builder is active', $row['description'] );
 	}
+
+	public function test_a_template_can_start_an_empty_page_where_wpbakerys_editor_is_on(): void {
+		$this->one_template( self::TEMPLATE );
+		$id = $this->page( '' );
+		$this->acting_as( 'editor' );
+		$input = array(
+			'post_id'          => $id,
+			'page_fingerprint' => aafm_builder_page_fingerprint( '' ),
+			'template_id'      => 't_1',
+		);
+		$types = static fn( $resolved, string $entry ) => 'wpbakery_editor_post_types' === $entry ? static fn(): array => array( 'page' ) : $resolved;
+		$this->assert_refused( aafm_exec_wpbakery_insert_template( $input ), 'aafm_wpbakery_editor_off', 409, $id, '' );
+		add_filter( 'aafm_builder_vendor', $types, 20, 2 );
+		$out = aafm_exec_wpbakery_insert_template( $input );
+		remove_filter( 'aafm_builder_vendor', $types, 20 );
+		$this->assertIsArray( $out );
+		$this->assertSame( self::TEMPLATE, get_post_field( 'post_content', $id, 'raw' ) );
+		$this->assertStringContainsString( 'empty post', aafm_get_abilities_registry_full()['aafm/wpbakery-insert-template']['description'] );
+	}
 }

@@ -1167,3 +1167,619 @@ function aafm_exec_avada_update_element( array $input ) {
 		'reversible'          => $result['reversible'],
 	) + aafm_avada_reversible_reason( $result );
 }
+
+/**
+ * The refusal for an insert over its limits: 50 elements and 6 levels per call, as for WPBakery.
+ *
+ * @return WP_Error
+ */
+function aafm_avada_insert_limit_error(): WP_Error {
+	return new WP_Error(
+		'aafm_builder_insert_limit',
+		__( 'One insert may add at most 50 elements, nested at most 6 deep. Split the change into smaller inserts. Nothing was changed.', 'agent-abilities-for-mcp' ),
+		array( 'status' => 400 )
+	);
+}
+
+/**
+ * Whether a tag is a child element: one a parent element names as its element_child (A6), or one Avada maps as a
+ * multi element child. Such an element goes only inside that parent.
+ *
+ * @param string                            $tag Tag.
+ * @param array<string,array<string,mixed>> $map Map entries keyed by tag.
+ * @return bool
+ */
+function aafm_avada_is_child_element( string $tag, array $map ): bool {
+	if ( 'multi_element_child' === ( $map[ $tag ]['multi'] ?? null ) ) {
+		return true;
+	}
+	foreach ( $map as $entry ) {
+		if ( 'multi_element_parent' === ( $entry['multi'] ?? null ) && ( $entry['element_child'] ?? null ) === $tag ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * Whether Avada's builder lets $child_tag sit inside $parent_tag (design AV-5). The top level ('') takes a container, a
+ * container takes rows, a row takes columns, an inner row takes inner columns, a column takes content elements or an
+ * inner row, an inner column takes content elements, and a parent element takes only the child element it names (A6).
+ * The child's own rule counts too: a child element such as a tab goes only inside its parent element. Anything else,
+ * including a parent the map does not know, is refused.
+ *
+ * @param string                            $parent_tag Parent tag, '' for the top level.
+ * @param string                            $child_tag  Child tag.
+ * @param array<string,array<string,mixed>> $map        Map entries keyed by tag.
+ * @return true|WP_Error aafm_builder_invalid_nesting (400) naming parent and child.
+ */
+function aafm_avada_nesting_allows( string $parent_tag, string $child_tag, array $map ) {
+	$layout = aafm_avada_layout_tags();
+	$fixed  = array(
+		''                         => 'fusion_builder_container',
+		'fusion_builder_container' => 'fusion_builder_row',
+		'fusion_builder_row'       => 'fusion_builder_column',
+		'fusion_builder_row_inner' => 'fusion_builder_column_inner',
+	);
+	$child  = aafm_avada_is_child_element( $child_tag, $map );
+	if ( isset( $fixed[ $parent_tag ] ) ) {
+		$ok = $fixed[ $parent_tag ] === $child_tag;
+	} elseif ( 'fusion_builder_column' === $parent_tag || 'fusion_builder_column_inner' === $parent_tag ) {
+		$ok = ( ! in_array( $child_tag, $layout, true ) && ! $child && isset( $map[ $child_tag ] ) )
+			|| ( 'fusion_builder_column' === $parent_tag && 'fusion_builder_row_inner' === $child_tag );
+	} else {
+		$entry = $map[ $parent_tag ] ?? array();
+		$ok    = 'multi_element_parent' === ( $entry['multi'] ?? null ) && ( $entry['element_child'] ?? null ) === $child_tag;
+	}
+	if ( $ok ) {
+		return true;
+	}
+	$error = aafm_builder_error(
+		'aafm_builder_invalid_nesting',
+		array(
+			'parent' => $parent_tag,
+			'child'  => $child_tag,
+		)
+	);
+	return new WP_Error(
+		'aafm_builder_invalid_nesting',
+		/* translators: 1: the refusal, 2: the parent tag or "top level", 3: the child tag. */
+		sprintf( __( '%1$s Parent: %2$s. Child: %3$s.', 'agent-abilities-for-mcp' ), $error->get_error_message(), '' === $parent_tag ? __( 'top level', 'agent-abilities-for-mcp' ) : $parent_tag, $child_tag ),
+		$error->get_error_data()
+	);
+}
+
+/**
+ * Checks nesting through a tree: each node inside its parent, then its own children inside it.
+ *
+ * @param array<int,array<string,mixed>>    $nodes      Nodes.
+ * @param string                            $parent_tag Parent tag, '' for the top level.
+ * @param array<string,array<string,mixed>> $map        Map entries keyed by tag.
+ * @return true|WP_Error
+ */
+function aafm_avada_tree_nesting( array $nodes, string $parent_tag, array $map ) {
+	foreach ( $nodes as $node ) {
+		$ok = aafm_avada_nesting_allows( $parent_tag, (string) $node['tag'], $map );
+		if ( true === $ok ) {
+			$ok = aafm_avada_tree_nesting( array_values( (array) ( $node['children'] ?? array() ) ), (string) $node['tag'], $map );
+		}
+		if ( is_wp_error( $ok ) ) {
+			return $ok;
+		}
+	}
+	return true;
+}
+
+/**
+ * A column width as the editor stores it in a column's type (A27): a fraction such as 1_2, or a percentage.
+ *
+ * @param mixed $value Input.
+ * @return string|null Null when refused.
+ */
+function aafm_avada_column_width( $value ): ?string {
+	if ( ! is_string( $value ) ) {
+		return null;
+	}
+	if ( 1 === preg_match( '/^([1-9][0-9]?)_([1-9][0-9]?)$/', $value, $m ) ) {
+		return (int) $m[1] <= (int) $m[2] ? $value : null;
+	}
+	return 1 === preg_match( '/^(100|[1-9]?[0-9](\.[0-9]{1,2})?)%$/', $value ) && (float) $value > 0 ? $value : null;
+}
+
+/**
+ * The editor's first and last flags for columns, worked out as its legacy column spacing pass does (app.js
+ * legacyColumnSpacing()): columns, in page order, are grouped while their widths add up to at most 1 (the running sum
+ * carries across rows; a new row starts a new group), and the first and last column of each group are flagged.
+ *
+ * @param list<array{tag:string,width:string}> $items Rows and columns in page order.
+ * @return list<array{first:string,last:string}> One per column item, in order.
+ */
+function aafm_avada_column_flags( array $items ): array {
+	$ids    = array(
+		'fusion_builder_column'       => 0,
+		'fusion_builder_column_inner' => 0,
+	);
+	$sums   = array(
+		'fusion_builder_column'       => 0.0,
+		'fusion_builder_column_inner' => 0.0,
+	);
+	$rows   = array(
+		'fusion_builder_row'       => 'fusion_builder_column',
+		'fusion_builder_row_inner' => 'fusion_builder_column_inner',
+	);
+	$groups = array();
+	$order  = array();
+	foreach ( $items as $item ) {
+		if ( isset( $rows[ $item['tag'] ] ) ) {
+			++$ids[ $rows[ $item['tag'] ] ];
+			continue;
+		}
+		$kind = $item['tag'];
+		$w    = $item['width'];
+		if ( 1 === preg_match( '/^(\d+)_(\d+)$/', $w, $m ) && 0 < (int) $m[2] ) {
+			$width = (int) $m[1] / (int) $m[2];
+		} else {
+			$width = (float) $w > 1 ? (float) $w / 100 : (float) $w;
+		}
+		$sums[ $kind ] += $width;
+		if ( $sums[ $kind ] > 1 ) {
+			++$ids[ $kind ];
+			$sums[ $kind ] = $width;
+		}
+		$key              = $kind . ':' . $ids[ $kind ];
+		$groups[ $key ][] = count( $order );
+		$order[]          = $key;
+	}
+	$out = array();
+	foreach ( $order as $i => $key ) {
+		$out[] = array(
+			'first' => $groups[ $key ][0] === $i ? 'true' : 'false',
+			'last'  => end( $groups[ $key ] ) === $i ? 'true' : 'false',
+		);
+	}
+	return $out;
+}
+
+/**
+ * The value the editor writes for a setting the caller did not set (design 4.7, Ruling B4): the setting's own default,
+ * else its value when that is not a choice list; a typography sub-value is empty. Null for a setting the editor never
+ * writes (remove_from_atts, other than the sides and sub-values that stand in for it) and for a default that could not
+ * sit inside a double-quoted shortcode attribute.
+ *
+ * @param string              $name  Stored name.
+ * @param array<string,mixed> $param Param from aafm_avada_settings().
+ * @return string|null
+ */
+function aafm_avada_default_value( string $name, array $param ): ?string {
+	$type = is_string( $param['type'] ?? null ) ? $param['type'] : '';
+	if ( 'image_id' === $name || ( ! empty( $param['remove_from_atts'] ) && 'size' !== aafm_avada_type_kind( $type ) && 'typography' !== $type ) ) {
+		return null;
+	}
+	if ( 'typography' === $type ) {
+		return '';
+	}
+	$default = $param['default'] ?? null;
+	if ( ! is_scalar( $default ) ) {
+		$default = is_scalar( $param['value'] ?? null ) ? $param['value'] : '';
+	}
+	$default = (string) $default;
+	return false === strpbrk( $default, "\"[]\\\r\n" ) ? $default : null;
+}
+
+/**
+ * Serializes untrusted nodes the way Avada's editor writes a new element (design AV-5, Ruling B4, probe B and C in
+ * s10b-report.md): every setting of the element in map order with its default, the caller's values in their place
+ * through the one encoder, inner text through the body-text choke point, every script kind gated before anything is
+ * encoded. A column leads with its width as type and layout and ends with the first, last and border_position the
+ * editor adds; a row carries nothing; an inner row only its non-empty settings; empty settings are dropped when the
+ * site's remove_empty_attributes is on. The tag form follows A1.
+ *
+ * @param array<int,array<string,mixed>>        $nodes        Nodes.
+ * @param array<string,array<string,mixed>>     $map          Map entries keyed by tag.
+ * @param array<string>                         $tags         Shortcode names, for the closer check.
+ * @param list<array{first:string,last:string}> $flags    Column flags in page order, consumed.
+ * @param bool                                  $remove_empty Whether the site drops empty attributes.
+ * @return string|WP_Error
+ */
+function aafm_avada_serialize_nodes( array $nodes, array $map, array $tags, array &$flags, bool $remove_empty ) {
+	$out = '';
+	foreach ( $nodes as $node ) {
+		$tag       = (string) $node['tag'];
+		$entry     = $map[ $tag ];
+		$settings  = aafm_avada_settings( $entry );
+		$inner_par = aafm_avada_content_param( $entry );
+		$children  = array_values( (array) ( $node['children'] ?? array() ) );
+		$set       = (array) ( $node['atts'] ?? array() );
+		$column    = in_array( $tag, array( 'fusion_builder_column', 'fusion_builder_column_inner' ), true );
+		$width     = null;
+		if ( $column ) {
+			$width = aafm_avada_column_width( $set['type'] ?? null );
+			if ( null === $width ) {
+				return new WP_Error(
+					'aafm_avada_column_needs_width',
+					__( 'A column needs type set to its width, a fraction such as 1_2 or a percentage such as 25%. Nothing was changed.', 'agent-abilities-for-mcp' ),
+					array( 'status' => 400 )
+				);
+			}
+			unset( $set['type'] );
+		}
+
+		// Every setting is checked, and gated, before any value is encoded.
+		$kinds = array();
+		foreach ( array_map( 'strval', array_keys( $set ) ) as $name ) {
+			$kind = 1 === preg_match( '/^[a-z0-9_]+$/', $name ) && isset( $settings[ $name ] ) ? aafm_avada_param_kind( $tag, $settings[ $name ] ) : null;
+			if ( null === $kind || ! $kind['writable'] ) {
+				return aafm_wpbakery_setting_error( 'aafm_builder_attribute_not_writable', $name );
+			}
+			$gate = aafm_avada_script_gate( $kind['kind'] );
+			if ( is_wp_error( $gate ) ) {
+				return $gate;
+			}
+			$kinds[ $name ] = $kind['kind'];
+		}
+		$text_kind = null;
+		if ( isset( $node['text'] ) ) {
+			$kind = null !== $inner_par && array() === $children && 'upload' !== ( $inner_par['type'] ?? null ) ? aafm_avada_param_kind( $tag, $inner_par ) : null;
+			if ( null === $kind || ! $kind['writable'] ) {
+				return aafm_wpbakery_setting_error( 'aafm_builder_attribute_not_writable', 'text' );
+			}
+			$gate = aafm_avada_script_gate( $kind['kind'] );
+			if ( is_wp_error( $gate ) ) {
+				return $gate;
+			}
+			$text_kind = $kind['kind'];
+		}
+
+		$atts = null === $width ? array() : array(
+			'type'   => $width,
+			'layout' => $width,
+		);
+		foreach ( $settings as $name => $param ) {
+			$default = $column && in_array( $name, array( 'type', 'layout' ), true ) ? null : aafm_avada_default_value( (string) $name, $param );
+			if ( null !== $default ) {
+				$atts[ (string) $name ] = $default;
+			}
+		}
+		$inner = '';
+		foreach ( $set as $name => $value ) {
+			$encoded = aafm_avada_encode_value( $kinds[ (string) $name ], $value, $settings[ (string) $name ] );
+			if ( is_wp_error( $encoded ) ) {
+				return $encoded;
+			}
+			foreach ( is_array( $encoded ) ? $encoded : array( (string) $name => $encoded ) as $attr => $stored ) {
+				if ( '' === (string) $attr ) {
+					$inner = (string) $stored;
+				} else {
+					$atts[ (string) $attr ] = (string) $stored;
+				}
+			}
+		}
+		if ( $column ) {
+			$flag = array_shift( $flags ) ?? array(
+				'first' => 'true',
+				'last'  => 'true',
+			);
+			unset( $atts['first'], $atts['last'] );
+			$atts['first'] = $flag['first'];
+			$atts['last']  = $flag['last'];
+			if ( ! isset( $atts['border_position'] ) ) {
+				$atts['border_position'] = 'all';
+			}
+		}
+		if ( $remove_empty || 'fusion_builder_row_inner' === $tag ) {
+			$atts = array_filter(
+				$atts,
+				static function ( string $value ): bool {
+					return '' !== $value;
+				}
+			);
+		}
+		// A value that would leave its quotes changes the outline; the commit would refuse it, so refuse it here by name.
+		foreach ( $atts as $name => $value ) {
+			$parsed = shortcode_parse_atts( $name . '="' . $value . '"' );
+			if ( ! is_array( $parsed ) || array( $name => $value ) !== $parsed ) {
+				return aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', (string) $name );
+			}
+		}
+
+		if ( null !== $text_kind ) {
+			$encoded = aafm_avada_encode_value( $text_kind, $node['text'], (array) $inner_par );
+			if ( is_wp_error( $encoded ) ) {
+				return $encoded;
+			}
+			$inner = is_string( $encoded ) ? $encoded : $inner;
+		} elseif ( array() !== $children ) {
+			$inner = aafm_avada_serialize_nodes( $children, $map, $tags, $flags, $remove_empty );
+			if ( is_wp_error( $inner ) ) {
+				return $inner;
+			}
+		}
+		if ( array() === $children && aafm_wpbakery_text_closes_a_tag( $inner, array_values( array_unique( array_merge( $tags, (array) aafm_wpbakery_shortcode_tags( $inner ) ) ) ) ) ) {
+			return aafm_builder_error( 'aafm_builder_structure_changed' );
+		}
+		$void = 'awb_dd' === $tag || ( '' === $inner && ! in_array( $tag, aafm_avada_layout_tags(), true ) && ! in_array( $tag, array( 'fusion_text', 'fusion_code' ), true ) );
+		$out .= aafm_builder_serialize( $tag, $atts, $void ? null : $inner, $void ? 'avada_void' : 'avada_closed' );
+	}
+	return $out;
+}
+
+/**
+ * The refusal for an insert that names no anchor on a post that has content.
+ *
+ * @return WP_Error
+ */
+function aafm_avada_anchor_required_error(): WP_Error {
+	return new WP_Error(
+		'aafm_avada_anchor_required',
+		__( 'Give anchor_index, anchor_expect and placement together. Only an empty post takes an insert without them. Nothing was changed.', 'agent-abilities-for-mcp' ),
+		array( 'status' => 400 )
+	);
+}
+
+/**
+ * Whether the element at $index sits inside an element that shows a global library item (Ruling R-S8b-5): a change
+ * there would be a change to this page's copy of the item, which Avada's builder keeps in step with the item itself.
+ *
+ * @param list<array<string,mixed>> $elements Outline.
+ * @param int|null                  $index    Element, or null for the top level.
+ * @return int|null The item's post id, or null.
+ */
+function aafm_avada_global_ancestor( array $elements, ?int $index ): ?int {
+	while ( null !== $index && isset( $elements[ $index ] ) ) {
+		$global = aafm_avada_global_id( (string) $elements[ $index ]['tag'], (array) $elements[ $index ]['atts'] );
+		if ( null !== $global ) {
+			return $global;
+		}
+		$index = null === $elements[ $index ]['parent'] ? null : (int) $elements[ $index ]['parent'];
+	}
+	return null;
+}
+
+/**
+ * The refusal for a change inside an element that shows a global library item.
+ *
+ * @param int $item_id Library item post id.
+ * @return WP_Error
+ */
+function aafm_avada_inside_global_error( int $item_id ): WP_Error {
+	return new WP_Error(
+		'aafm_avada_global_element',
+		/* translators: %1$d: the library item's post id. */
+		sprintf( __( 'That place is inside the global library item %1$d, which every page that shows it shares. Change item %1$d itself instead. Nothing was changed.', 'agent-abilities-for-mcp' ), $item_id ),
+		array(
+			'status'  => 409,
+			'item_id' => $item_id,
+		)
+	);
+}
+
+/**
+ * The trusted-path text check (Ruling R-S11-1 applied to Avada): for a user who may not post unfiltered HTML, stored
+ * text that carries a script kind is refused, and so is the inner text of every leaf that the body-text choke point
+ * refuses or would change.
+ *
+ * @param string        $text Stored shortcode text.
+ * @param array<string> $tags Tags to read.
+ * @return true|WP_Error
+ */
+function aafm_avada_trusted_text_allowed( string $text, array $tags ) {
+	if ( current_user_can( 'unfiltered_html' ) ) {
+		return true;
+	}
+	if ( aafm_avada_content_has_script( $text ) ) {
+		return aafm_builder_error( 'aafm_builder_needs_unfiltered_html' );
+	}
+	$elements = aafm_builder_elements( $text, $tags );
+	if ( null === $elements ) {
+		return aafm_builder_error( 'aafm_builder_unparseable' );
+	}
+	$parents = array_column( $elements, 'parent' );
+	foreach ( $elements as $element ) {
+		if ( in_array( (int) $element['index'], $parents, true ) ) {
+			continue;
+		}
+		$inner = substr( $text, (int) $element['open_end'], (int) $element['inner_end'] - (int) $element['open_end'] );
+		if ( '' === $inner ) {
+			continue;
+		}
+		$clean = aafm_avada_body_text( $inner );
+		if ( is_wp_error( $clean ) ) {
+			return $clean;
+		}
+		if ( $clean !== $inner ) {
+			return new WP_Error(
+				'aafm_avada_stored_text_needs_unfiltered_html',
+				__( 'This stored content holds HTML that would be filtered out for this user, so it needs a user who may post unfiltered HTML. Nothing was changed.', 'agent-abilities-for-mcp' ),
+				array( 'status' => 400 )
+			);
+		}
+	}
+	return true;
+}
+
+/**
+ * The shared Avada insert path (design AV-5, handover 2 for S12 and S13). Checks the limits, every tag against the map
+ * (a tag the map cannot resolve, fusion_global included, is refused before any nesting check), the nesting, the place
+ * (never inside an element that shows a global library item), gates script content, serializes (untrusted) or splices
+ * the stored sources (trusted), and saves through aafm_builder_commit() with no CSS step: Avada resets a page's
+ * compiled CSS on every save (A11). The caller has already loaded the post, called the ownership check in its own body,
+ * applied aafm_builder_ownership_allows() and run aafm_builder_page_check().
+ *
+ * With $trusted_vendor_text the nodes come from aafm_builder_tree() and each root carries source, spliced in byte for
+ * byte; tag and children are read only for the limits, the map and nesting. For a user who may not post unfiltered HTML
+ * the stored text must pass aafm_avada_trusted_text_allowed(). Without it each atts value is the input form of its kind
+ * and goes through the one encoder, and text through the body-text choke point (aafm_avada_serialize_nodes()).
+ *
+ * $anchor is array{index:?int,expect:?array,placement:?string}; all null only for an empty post (Ruling Q7). The
+ * returned post is not redacted: every executor redacts it.
+ *
+ * @param WP_Post                        $post                Post.
+ * @param array<int,array<string,mixed>> $tree                Root nodes.
+ * @param array<string,mixed>            $anchor              Anchor.
+ * @param bool                           $trusted_vendor_text Whether the nodes are stored vendor text.
+ * @return array{post:WP_Post,index:int,fingerprint:string,page_fingerprint:string,inserted:int,restore_revision_id:?int,reversible:bool,reversible_reason?:string}|WP_Error
+ */
+function aafm_avada_insert_tree( WP_Post $post, array $tree, array $anchor, bool $trusted_vendor_text ) {
+	$tree    = array_values( $tree );
+	$content = (string) $post->post_content;
+	$seen    = array();
+	$stats   = aafm_wpbakery_tree_stats( $tree, 1, $seen );
+	if ( is_wp_error( $stats ) ) {
+		return $stats;
+	}
+	if ( 0 === $stats['count'] ) {
+		return aafm_builder_error( 'aafm_builder_invalid_value' );
+	}
+	if ( $stats['count'] > 50 || $stats['depth'] > 6 ) {
+		return aafm_avada_insert_limit_error();
+	}
+	if ( $trusted_vendor_text ) {
+		foreach ( $tree as $root ) {
+			if ( ! is_string( $root['source'] ?? null ) ) {
+				return aafm_builder_error( 'aafm_builder_invalid_value' );
+			}
+		}
+	}
+
+	$tags     = array_values( array_unique( array_merge( aafm_fusion_shortcode_tags(), $seen ) ) );
+	$elements = aafm_builder_elements( $content, $tags );
+	if ( null === $elements ) {
+		return aafm_builder_error( 'aafm_builder_unparseable' );
+	}
+	$index     = $anchor['index'] ?? null;
+	$expect    = $anchor['expect'] ?? null;
+	$placement = $anchor['placement'] ?? null;
+	if ( null === $index && null === $expect && null === $placement ) {
+		if ( '' !== trim( $content ) ) {
+			return aafm_avada_anchor_required_error();
+		}
+		$point = array(
+			'offset' => strlen( $content ),
+			'at'     => count( $elements ),
+			'depth'  => 0,
+			'parent' => null,
+		);
+	} else {
+		if ( ! is_int( $index ) || ! is_array( $expect ) || ! is_string( $placement ) ) {
+			return aafm_avada_anchor_required_error();
+		}
+		$anchor_element = aafm_builder_resolve( $content, $tags, $index, $expect );
+		if ( is_wp_error( $anchor_element ) ) {
+			return $anchor_element;
+		}
+		$point = aafm_builder_anchor_point( $elements, $anchor_element, $placement );
+		if ( is_wp_error( $point ) ) {
+			return $point;
+		}
+	}
+	$global = aafm_avada_global_ancestor( $elements, $point['parent'] );
+	if ( null !== $global ) {
+		return aafm_avada_inside_global_error( $global );
+	}
+
+	$map = aafm_avada_map();
+	if ( is_wp_error( $map ) ) {
+		return $map;
+	}
+	foreach ( array_unique( $seen ) as $tag ) {
+		if ( ! isset( $map[ $tag ] ) ) {
+			return aafm_builder_error( 'aafm_builder_unknown_element' );
+		}
+	}
+	$parent_tag = null === $point['parent'] ? '' : (string) $elements[ $point['parent'] ]['tag'];
+	$nesting    = aafm_avada_tree_nesting( $tree, $parent_tag, $map );
+	if ( is_wp_error( $nesting ) ) {
+		return $nesting;
+	}
+
+	if ( $trusted_vendor_text ) {
+		$text  = implode( '', array_column( $tree, 'source' ) );
+		$allow = aafm_avada_trusted_text_allowed( $text, $tags );
+		if ( is_wp_error( $allow ) ) {
+			return $allow;
+		}
+	} else {
+		// The editor's first and last column flags for the page as it will be, so its next save keeps them.
+		$items = array();
+		$flat  = static function ( array $nodes ) use ( &$flat, &$items ): void {
+			foreach ( $nodes as $node ) {
+				$items[] = array(
+					'tag'   => (string) $node['tag'],
+					'width' => is_string( $node['atts']['type'] ?? null ) ? $node['atts']['type'] : '',
+				);
+				$flat( array_values( (array) ( $node['children'] ?? array() ) ) );
+			}
+		};
+		foreach ( $elements as $i => $element ) {
+			if ( $i === $point['at'] ) {
+				$flat( $tree );
+			}
+			$items[] = array(
+				'tag'   => (string) $element['tag'],
+				'width' => is_string( $element['atts']['type'] ?? null ) ? $element['atts']['type'] : '',
+			);
+		}
+		if ( $point['at'] >= count( $elements ) ) {
+			$flat( $tree );
+		}
+		$layout = array( 'fusion_builder_row', 'fusion_builder_row_inner', 'fusion_builder_column', 'fusion_builder_column_inner' );
+		$items  = array_values(
+			array_filter(
+				$items,
+				static function ( array $item ) use ( $layout ): bool {
+					return in_array( $item['tag'], $layout, true );
+				}
+			)
+		);
+		$all    = aafm_avada_column_flags( $items );
+		$before = 0;
+		foreach ( array_slice( $elements, 0, $point['at'] ) as $element ) {
+			$before += in_array( $element['tag'], array( 'fusion_builder_column', 'fusion_builder_column_inner' ), true ) ? 1 : 0;
+		}
+		$flags    = array_slice( $all, $before );
+		$settings = get_option( 'fusion_builder_settings', array() );
+		$text     = aafm_avada_serialize_nodes( $tree, $map, $tags, $flags, is_array( $settings ) && 'on' === ( $settings['remove_empty_attributes'] ?? 'off' ) );
+		if ( is_wp_error( $text ) ) {
+			return $text;
+		}
+	}
+	$tuples = aafm_builder_walk( $text, $tags );
+	if ( null === $tuples || count( $tuples ) !== $stats['count'] ) {
+		return aafm_builder_error( 'aafm_builder_unparseable' );
+	}
+
+	$new  = substr( $content, 0, $point['offset'] ) . $text . substr( $content, $point['offset'] );
+	$walk = aafm_builder_walk( $content, $tags );
+	if ( null === $walk ) {
+		return aafm_builder_error( 'aafm_builder_unparseable' );
+	}
+	$expected = aafm_builder_expected_walk(
+		$walk,
+		array(
+			'op'     => 'insert',
+			'at'     => $point['at'],
+			'depth'  => $point['depth'],
+			'tuples' => $tuples,
+		)
+	);
+	$result   = aafm_builder_commit( $post, $content, $new, $tags, $expected, null, 'avada' );
+	if ( is_wp_error( $result ) ) {
+		return $result;
+	}
+	$stored = (string) $result['post']->post_content;
+	$after  = aafm_builder_elements( $stored, $tags );
+	$root   = $after[ $point['at'] ] ?? null;
+	$out    = array(
+		'post'                => $result['post'],
+		'index'               => (int) $point['at'],
+		'fingerprint'         => null === $root ? '' : aafm_builder_fingerprint( $stored, $root ),
+		'page_fingerprint'    => $result['page_fingerprint'],
+		'inserted'            => (int) $stats['count'],
+		'restore_revision_id' => $result['restore_revision_id'],
+		'reversible'          => $result['reversible'],
+	);
+	if ( isset( $result['reversible_reason'] ) ) {
+		$out['reversible_reason'] = $result['reversible_reason'];
+	}
+	return $out;
+}

@@ -844,4 +844,136 @@ final class AvadaElementsTest extends TestCase {
 		$this->assertSame( array(), aafm_register_avada_elements_definitions( array() ) );
 		add_filter( 'aafm_integration_active_avada', '__return_true' );
 	}
+
+	// S10b: nesting and the insert path.
+	/**
+	 * Parent, child and whether Avada allows it.
+	 *
+	 * @return array<string,array{0:string,1:string,2:bool}>
+	 */
+	public function nesting_cases(): array {
+		return array(
+			'top level takes a container'       => array( '', 'fusion_builder_container', true ),
+			'top level refuses a row'           => array( '', 'fusion_builder_row', false ),
+			'top level refuses an element'      => array( '', 'fusion_title', false ),
+			'container takes a row'             => array( 'fusion_builder_container', 'fusion_builder_row', true ),
+			'container refuses a column'        => array( 'fusion_builder_container', 'fusion_builder_column', false ),
+			'row takes a column'                => array( 'fusion_builder_row', 'fusion_builder_column', true ),
+			'row refuses an inner column'       => array( 'fusion_builder_row', 'fusion_builder_column_inner', false ),
+			'row refuses an element'            => array( 'fusion_builder_row', 'fusion_title', false ),
+			'column takes an element'           => array( 'fusion_builder_column', 'fusion_title', true ),
+			'column takes an inner row'         => array( 'fusion_builder_column', 'fusion_builder_row_inner', true ),
+			'column refuses a container'        => array( 'fusion_builder_column', 'fusion_builder_container', false ),
+			'column refuses a child element'    => array( 'fusion_builder_column', 'fusion_tab', false ),
+			'inner row takes an inner column'   => array( 'fusion_builder_row_inner', 'fusion_builder_column_inner', true ),
+			'inner row refuses a column'        => array( 'fusion_builder_row_inner', 'fusion_builder_column', false ),
+			'inner column takes an element'     => array( 'fusion_builder_column_inner', 'fusion_button', true ),
+			'inner column refuses an inner row' => array( 'fusion_builder_column_inner', 'fusion_builder_row_inner', false ),
+			'parent element takes its child'    => array( 'fusion_tabs', 'fusion_tab', true ),
+			'parent element refuses another'    => array( 'fusion_tabs', 'fusion_title', false ),
+			'leaf element takes nothing'        => array( 'fusion_title', 'fusion_text', false ),
+			'unknown parent takes nothing'      => array( 'fusion_unknown_box', 'fusion_title', false ),
+		);
+	}
+
+	/**
+	 * Each nesting rule.
+	 *
+	 * @dataProvider nesting_cases
+	 *
+	 * @param string $outer Parent tag.
+	 * @param string $child Child tag.
+	 * @param bool   $ok    Whether allowed.
+	 */
+	public function test_nesting_follows_avadas_six_rules( string $outer, string $child, bool $ok ): void {
+		$out = aafm_avada_nesting_allows( $outer, $child, AvadaMapStub::map() );
+		if ( $ok ) {
+			$this->assertTrue( $out );
+			return;
+		}
+		$this->assert_error( $out, 'aafm_builder_invalid_nesting', 400 );
+		$this->assertSame( $outer, $out->get_error_data()['parent'] );
+		$this->assertSame( $child, $out->get_error_data()['child'] );
+	}
+
+	public function test_a_child_element_is_refused_from_its_own_side(): void {
+		$map                         = AvadaMapStub::map();
+		$map['fusion_tab']['multi']  = 'multi_element_child';
+		$map['fusion_tabs']['multi'] = 'none';
+		$this->assert_error( aafm_avada_nesting_allows( 'fusion_builder_column', 'fusion_tab', $map ), 'aafm_builder_invalid_nesting', 400 );
+	}
+
+	public function test_column_flags_follow_the_editors_running_width(): void {
+		$this->assertSame(
+			array(
+				array(
+					'first' => 'true',
+					'last'  => 'false',
+				),
+				array(
+					'first' => 'false',
+					'last'  => 'true',
+				),
+				array(
+					'first' => 'true',
+					'last'  => 'true',
+				),
+			),
+			aafm_avada_column_flags(
+				array(
+					array(
+						'tag'   => 'fusion_builder_row',
+						'width' => '',
+					),
+					array(
+						'tag'   => 'fusion_builder_column',
+						'width' => '1_2',
+					),
+					array(
+						'tag'   => 'fusion_builder_column',
+						'width' => '50%',
+					),
+					array(
+						'tag'   => 'fusion_builder_row',
+						'width' => '',
+					),
+					array(
+						'tag'   => 'fusion_builder_column',
+						'width' => '1_1',
+					),
+				)
+			)
+		);
+	}
+
+	public function test_the_trusted_path_gates_script_and_body_text_for_a_restricted_editor(): void {
+		$cases = array(
+			'[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1"][fusion_code]eA==[/fusion_code][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]' => 'aafm_builder_needs_unfiltered_html',
+			'[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1"][fusion_button link_attributes="onclick=x"]B[/fusion_button][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]' => 'aafm_builder_needs_unfiltered_html',
+			'[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1"][fusion_text]a %5Bb%5D[/fusion_text][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]' => 'aafm_avada_encoded_brackets_need_unfiltered_html',
+			'[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1"][fusion_text]<p onmouseover="x">a</p>[/fusion_text][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]' => 'aafm_avada_stored_text_needs_unfiltered_html',
+		);
+		foreach ( $cases as $source => $code ) {
+			$this->act_as_admin();
+			$id     = $this->avada_post();
+			$before = (string) get_post( $id )->post_content;
+			$tree   = aafm_builder_tree( $source, aafm_fusion_shortcode_tags() );
+			$addr   = $this->addr( $id, 'fusion_builder_container' );
+			$anchor = array(
+				'index'     => $addr['index'],
+				'expect'    => $addr['expect'],
+				'placement' => 'after',
+			);
+			$this->act_as_restricted_editor();
+			$out = aafm_avada_insert_tree( get_post( $id ), (array) $tree, $anchor, true );
+			$this->assertInstanceOf( WP_Error::class, $out, $code );
+			$this->assertSame( $code, $out->get_error_code() );
+			$this->assertSame( $before, get_post( $id )->post_content );
+			$this->act_as_admin();
+			$ok = aafm_avada_insert_tree( get_post( $id ), (array) $tree, $anchor, true );
+			$this->assertIsArray( $ok, is_wp_error( $ok ) ? $ok->get_error_message() : $code );
+			$this->assertStringContainsString( $source, get_post( $id )->post_content, 'Spliced byte for byte.' );
+			$this->assertInstanceOf( \WP_Post::class, $ok['post'], 'The path returns the post; every executor redacts it.' );
+		}
+	}
 }

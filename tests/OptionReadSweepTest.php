@@ -27,6 +27,7 @@ final class OptionReadSweepTest extends TestCase {
 	 */
 	private const GET_OPTION = array(
 		'includes/abilities/avada-elements.php|aafm_avada_encode_raw|1' => 'N',
+		'includes/abilities/avada-elements.php|aafm_avada_insert_tree|1' => 'N',
 		'includes/abilities/avada.php|aafm_exec_avada_list_layouts|1' => 'N',
 		'includes/abilities/avada.php|aafm_exec_avada_list_layouts|2' => 'N',
 		'includes/abilities/avada.php|aafm_exec_avada_get_global_options|1' => 'N',
@@ -363,7 +364,7 @@ final class OptionReadSweepTest extends TestCase {
 			array(
 				'G' => 21,
 				'L' => 3,
-				'N' => 39,
+				'N' => 40,
 			),
 			array(
 				'G' => count( array_keys( self::GET_OPTION, 'G', true ) ),

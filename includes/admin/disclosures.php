@@ -247,7 +247,7 @@ function aafm_ability_disclosures(): array {
 		'aafm/avada-list-library'          => __( 'Lists the Avada Library (saved elements, columns, sections, post cards and templates) and marks the global items shared across pages, with their raw markup on request. Shows only items the user can edit.', 'agent-abilities-for-mcp' ),
 
 		// WPBakery Page Builder.
-		'aafm/wpbakery-get-page-content'   => __( 'Reads the raw content of a WPBakery page, unchanged, and says whether WPBakery owns it. With include_structure it also lists the shortcode elements and their attributes as WPBakery stores them. Requires edit access to the post; WPBakery\'s Role Manager is not applied.', 'agent-abilities-for-mcp' ),
+		'aafm/wpbakery-get-page-content'   => __( 'Reads the raw content of a WPBakery page or Grid Builder template, unchanged, and says whether WPBakery owns it. With include_structure it also lists the shortcode elements with their attributes as stored and decoded, their inner text and fingerprints. With include_page_settings it adds the page custom CSS and, only for users who may post unfiltered HTML, the page custom JS. Requires edit access to the post; WPBakery\'s Role Manager is not applied.', 'agent-abilities-for-mcp' ),
 		'aafm/wpbakery-replace-text'       => __( 'Replaces literal text between the elements of a WPBakery page. Heading text, button labels and other text kept in element settings are refused, as is any change to an element or attribute, or a save that would change other content on the page for this user. Not undoable here; WordPress keeps a revision when revisions are on. Requires edit access to the post; WPBakery\'s Role Manager is not applied.', 'agent-abilities-for-mcp' ),
 
 		// GeoDirectory (default-off).

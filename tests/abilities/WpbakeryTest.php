@@ -1042,4 +1042,18 @@ WPB;
 			$this->assertArrayHasKey( $key, $args['output_schema']['properties']['structure']['items']['properties'] );
 		}
 	}
+
+	public function test_read_description_names_only_wpbakery_and_has_no_spaced_hyphen(): void {
+		$row = aafm_get_abilities_registry_full()['aafm/wpbakery-get-page-content'];
+		foreach ( array( $row['description'], aafm_ability_disclosures()['aafm/wpbakery-get-page-content'] ) as $text ) {
+			$this->assertStringContainsString( 'WPBakery', $text );
+			$this->assertStringContainsString( 'include_page_settings', $text );
+			$this->assertStringContainsString( 'unfiltered HTML', $text );
+			$this->assertStringContainsString( 'Role Manager', $text );
+			$this->assertStringNotContainsString( ' - ', $text );
+			foreach ( array( 'Visual Composer', 'Avada', 'Elementor', 'Fusion' ) as $other ) {
+				$this->assertStringNotContainsString( $other, $text );
+			}
+		}
+	}
 }

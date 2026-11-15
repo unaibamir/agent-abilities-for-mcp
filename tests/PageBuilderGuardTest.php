@@ -422,6 +422,116 @@ final class PageBuilderGuardTest extends TestCase {
 		);
 	}
 
+	/**
+	 * Each builder's page as the vendor itself marks it, from the vendor's own code or docs.
+	 *
+	 * Divi 4.27.8 writes `_et_pb_use_builder` = 'on' (includes/builder/core.php:5049). Elementor 4.4
+	 * writes `_elementor_data` and `_elementor_edit_mode` = 'builder' (core/base/document.php:44-46).
+	 * Beaver Builder 2.11 writes `_fl_builder_data` and `_fl_builder_enabled` (classes/
+	 * class-fl-builder-model.php:867, :5963). Avada Builder 3.16.1 writes `fusion_builder_status` =
+	 * 'active' (inc/class-fusion-builder.php:1736). Visual Composer 45.16 writes `vcv-pageContent`
+	 * (Modules/Editors/DataAjax/Controller.php:418). Brizy 2.8 writes `brizy_enabled` as an int
+	 * (editor/entity.php:149). Bricks writes `_bricks_page_content_2` and `_bricks_editor_mode`.
+	 * WPBakery 9.1 keeps its layout as shortcodes in post_content. Oxygen (`ct_builder_shortcodes`,
+	 * `_oxygen_data` in Oxygen 6) and Breakdance (`_breakdance_data`) are proprietary and not on
+	 * hand; their keys come from third-party integrations, not vendor source.
+	 *
+	 * @return array<string,array{0:string,1:string,2:array<string,mixed>}>
+	 */
+	public static function vendor_marked_pages(): array {
+		return array(
+			'divi'            => array( 'divi', '[et_pb_section][et_pb_row][et_pb_column type="4_4"][et_pb_text]Divi[/et_pb_text][/et_pb_column][/et_pb_row][/et_pb_section]', array( '_et_pb_use_builder' => 'on' ) ),
+			'elementor'       => array(
+				'elementor',
+				'<p>Elementor fallback</p>',
+				array(
+					'_elementor_data'      => '[{"id":"e1","elType":"container"}]',
+					'_elementor_edit_mode' => 'builder',
+				),
+			),
+			'beaver-builder'  => array(
+				'beaver-builder',
+				'<p>Beaver fallback</p>',
+				array(
+					'_fl_builder_data'    => array( 'n1' => array( 'type' => 'row' ) ),
+					'_fl_builder_enabled' => '1',
+				),
+			),
+			'avada'           => array( 'avada', '[fusion_builder_container][fusion_builder_row][/fusion_builder_row][/fusion_builder_container]', array( 'fusion_builder_status' => 'active' ) ),
+			'visual-composer' => array( 'visual-composer', '<p>VC output</p>', array( 'vcv-pageContent' => '{"elements":{"a1":{"tag":"textBlock"}}}' ) ),
+			'brizy'           => array( 'brizy', '<p>Brizy output</p>', array( 'brizy_enabled' => 1 ) ),
+			'oxygen'          => array( 'oxygen', '<p>Oxygen fallback</p>', array( 'ct_builder_shortcodes' => '[ct_section ct_options=\'{"ct_id":2}\'][/ct_section]' ) ),
+			'oxygen-6'        => array( 'oxygen', '<p>Oxygen fallback</p>', array( '_oxygen_data' => '{"tree_json_string":"{\"root\":{}}"}' ) ),
+			'breakdance'      => array( 'breakdance', '<p>Breakdance fallback</p>', array( '_breakdance_data' => '{"tree_json_string":"{\"root\":{}}"}' ) ),
+			'bricks'          => array(
+				'bricks',
+				'<p>Bricks fallback</p>',
+				array(
+					'_bricks_page_content_2' => array(
+						array(
+							'id'   => 'abcdef',
+							'name' => 'section',
+						),
+					),
+					'_bricks_editor_mode'    => 'bricks',
+				),
+			),
+			'wpbakery'        => array( 'wpbakery', '[vc_row][vc_column][vc_column_text]WPBakery[/vc_column_text][/vc_column][/vc_row]', array() ),
+		);
+	}
+
+	/**
+	 * A page marked the way its vendor marks it is refused by update-page and replace-in-post.
+	 *
+	 * @dataProvider vendor_marked_pages
+	 *
+	 * @param string              $builder Expected owner.
+	 * @param string              $body    Stored body.
+	 * @param array<string,mixed> $markers Meta key => value, as the vendor writes them.
+	 */
+	public function test_a_page_marked_the_vendors_own_way_is_refused( string $builder, string $body, array $markers ): void {
+		$this->acting_as( 'administrator' );
+		$id = self::factory()->post->create(
+			array(
+				'post_type'    => 'page',
+				'post_status'  => 'publish',
+				'post_content' => $body,
+			)
+		);
+		foreach ( $markers as $key => $value ) {
+			update_post_meta( $id, $key, $value );
+		}
+		$stored = get_post( $id )->post_content;
+
+		$this->assertSame( $builder, aafm_post_has_foreign_builder_ownership( $id ) );
+		$update = aafm_exec_update_page(
+			array(
+				'page_id' => $id,
+				'content' => '<p>Overwritten.</p>',
+			)
+		);
+		$this->assertWPError( $update, $builder );
+		$this->assertSame( 'aafm_page_builder_owned', $update->get_error_code(), $builder );
+		$this->assertSame( aafm_page_builder_owned_error( $builder )->get_error_message(), $update->get_error_message(), $builder );
+
+		$replace = aafm_exec_replace_in_post(
+			array(
+				'post_id' => $id,
+				'search'  => substr( $stored, 0, 3 ),
+				'replace' => 'XYZ',
+			)
+		);
+		$this->assertWPError( $replace, $builder );
+		$this->assertSame( 'aafm_page_builder_owned', $replace->get_error_code(), $builder );
+
+		clean_post_cache( $id );
+		$this->assertSame( $stored, get_post( $id )->post_content, 'Nothing was written on the ' . $builder . ' page.' );
+	}
+
+	public function test_the_divi_marker_is_hard_blocked_from_the_meta_tools(): void {
+		$this->assertTrue( aafm_hard_blocked_meta_key( '_et_pb_use_builder' ) );
+	}
+
 	public function test_the_new_builders_are_named_in_descriptions(): void {
 		$names = aafm_page_builder_names();
 		foreach ( array( 'WPBakery', 'Bricks', 'Oxygen', 'Breakdance', 'Brizy' ) as $label ) {

@@ -345,7 +345,7 @@ function aafm_exec_restore_revision( array $input ) {
 	}
 	// Restoring a revision rewrites title/content/excerpt exactly like aafm/update-post, so it
 	// is a page-builder write too: a builder-owned post's rendered output is driven by the
-	// builder's own meta (_elementor_data, et_pb_use_builder, _fl_builder_data), not post_content,
+	// builder's own meta (_elementor_data, _et_pb_use_builder, _fl_builder_data), not post_content,
 	// so a "successful" restore here would silently do nothing visible while still reporting
 	// success.
 	//

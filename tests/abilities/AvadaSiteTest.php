@@ -777,6 +777,12 @@ final class AvadaSiteTest extends TestCase {
 		);
 		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
 		$this->assertSame( array( 'primary_color' => '#111111' ), get_option( 'fusion_options' ) );
+		// Codex demo pass: that previous ([]) cannot be written back, so the response says so rather than promising it.
+		$this->assertSame( array( 'body_typography' ), $out['not_restorable'] );
+		$this->assertArrayHasKey( 'not_restorable', aafm_args_avada_update_global_options()['output_schema']['properties'] );
+		$this->assertStringContainsString( 'not_restorable', aafm_ability_description( 'aafm/avada-update-global-options' ) );
+		$ordinary = $this->global_write( array( 'primary_color' => '#222222' ), null );
+		$this->assertArrayNotHasKey( 'not_restorable', $ordinary );
 	}
 
 	/**

@@ -76,7 +76,7 @@ function aafm_avada_site_registry_definitions(): array {
 		),
 		'aafm/avada-update-global-options'  => array(
 			'label'        => __( 'Update Avada Global Options', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Overwrites site-wide Avada Global Options from the fixed list avada-get-global-options returns, apart from maintenance_mode, which stays read only. set maps option keys to values: a color as a hex, rgba, hsla or Avada color variable; site_width as a number with px or %; layout, header_position, header_layout, page_title_bar, footer_widgets, footer_copyright and responsive as one of their stored choices; logo as an image attachment id, whose URL and size are written with it; footer_text as HTML, refused for a user who may not post unfiltered HTML when WordPress would filter it; a typography option as an object of the sub-values to change (font-family, font-size, line-height, letter-spacing, font-weight, font-style, text-transform, color); color_palette as an object of the color slots to change, each with a color and a label. A value that fits no rule is refused and nothing is written. Every other stored option is kept. The old value of every option that changed comes back in previous (for a typography or palette option, of each sub-value that changed), null where none was stored; send it back as set to undo the change. The change applies to the whole site at once, and Avada\'s compiled CSS is rebuilt; a page cache plugin keeps serving its cached pages until the owner purges it. Not undoable from this plugin\'s change history. Needs the Avada theme active and a user who can manage site options (manage_options). Only while Avada is active.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Overwrites site-wide Avada Global Options from the fixed list avada-get-global-options returns, apart from maintenance_mode, which stays read only. set maps option keys to values: a color as a hex, rgba, hsla or Avada color variable; site_width as a number with px or %; layout, header_position, header_layout, page_title_bar, footer_widgets, footer_copyright and responsive as one of their stored choices; logo as an image attachment id, whose URL and size are written with it; footer_text as HTML, refused for a user who may not post unfiltered HTML when WordPress would filter it; a typography option as an object of the sub-values to change (font-family, font-size, line-height, letter-spacing, font-weight, font-style, text-transform, color); color_palette as an object of the color slots to change, each with a color and a label. A value that fits no rule is refused and nothing is written. Every other stored option is kept. The old value of every option that changed comes back in previous (for a typography or palette option, of each sub-value that changed), null where none was stored; send it back as set to undo the change. A typography option stored as an empty array, which Avada\'s own save never writes, can be removed, and that previous cannot be written back, so the response lists such options in not_restorable. The change applies to the whole site at once, and Avada\'s compiled CSS is rebuilt; a page cache plugin keeps serving its cached pages until the owner purges it. Not undoable from this plugin\'s change history. Needs the Avada theme active and a user who can manage site options (manage_options). Only while Avada is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'destructive',
 			'subject'      => 'avada',
@@ -932,14 +932,19 @@ function aafm_args_avada_update_global_options(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'option_name' => array( 'type' => 'string' ),
-				'changed'     => array(
+				'option_name'    => array( 'type' => 'string' ),
+				'changed'        => array(
 					'type'  => 'array',
 					'items' => array( 'type' => 'string' ),
 				),
-				'previous'    => array(
+				'previous'       => array(
 					'type'        => 'object',
 					'description' => __( 'The old value of each changed option, null where none was stored.', 'agent-abilities-for-mcp' ),
+				),
+				'not_restorable' => array(
+					'type'        => 'array',
+					'description' => __( 'Present only when needed: options whose previous value this tool cannot write back, such as a typography option that was stored as an empty array.', 'agent-abilities-for-mcp' ),
+					'items'       => array( 'type' => 'string' ),
 				),
 			),
 		),
@@ -1090,6 +1095,11 @@ function aafm_exec_avada_update_global_options( array $input ) {
 		// An empty previous goes out as {} so the wire shape matches the object the schema declares.
 		'previous'    => array() === $previous ? new stdClass() : $previous,
 	);
+	// Codex demo pass: an empty typography array removed here comes back in previous as [], which the validator refuses.
+	$not_restorable = array_keys( array_filter( $previous, static fn( $old ): bool => array() === $old ) );
+	if ( array() !== $not_restorable ) {
+		$out['not_restorable'] = $not_restorable;
+	}
 	if ( array() === $changed ) {
 		return $out;
 	}

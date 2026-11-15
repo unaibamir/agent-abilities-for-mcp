@@ -2057,6 +2057,15 @@ function aafm_wpbakery_structural_post( array $input, bool $empty_insert ) {
 }
 
 /**
+ * The post_id and page_fingerprint parts alone, for an insert, which names its place with the anchor_ trio (BR-4).
+ *
+ * @return array<string,array<string,mixed>>
+ */
+function aafm_wpbakery_insert_post_schema(): array {
+	return array_intersect_key( aafm_wpbakery_structural_schema( '' ), array_flip( array( 'post_id', 'page_fingerprint' ) ) );
+}
+
+/**
  * The input schema parts every structural write shares.
  *
  * @param string $prefix '' for the element itself, 'anchor_' for the anchor.
@@ -2118,7 +2127,7 @@ function aafm_args_wpbakery_insert_element(): array {
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
-			'properties'           => aafm_wpbakery_structural_schema( '' ) + aafm_wpbakery_structural_schema( 'anchor_' ) + array(
+			'properties'           => aafm_wpbakery_insert_post_schema() + aafm_wpbakery_structural_schema( 'anchor_' ) + array(
 				'element' => array(
 					'type'                 => 'object',
 					'properties'           => array(

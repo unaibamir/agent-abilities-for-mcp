@@ -581,6 +581,12 @@ final class WpbakerySiteTest extends TestCase {
 		$this->assertSame( array( 'saved', 'templatera' ), $schema['properties']['source']['enum'] );
 		$this->assertSame( array( 'post_id', 'page_fingerprint', 'template_id' ), $schema['required'] );
 		$this->assertSame( array( 'before', 'after', 'inside_start', 'inside_end' ), $schema['properties']['placement']['enum'] );
+		// BR-4: the schema lists only what the tool reads; the place is the anchor_ trio.
+		foreach ( array( $schema, aafm_args_wpbakery_insert_element()['input_schema'] ) as $insert ) {
+			$this->assertArrayNotHasKey( 'index', $insert['properties'] );
+			$this->assertArrayNotHasKey( 'expect', $insert['properties'] );
+			$this->assertArrayHasKey( 'anchor_index', $insert['properties'] );
+		}
 		$this->assertSame( 'aafm-writes', $args['category'] );
 		$this->assertSame(
 			array(

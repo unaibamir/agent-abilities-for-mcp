@@ -330,7 +330,7 @@ function aafm_args_wpbakery_insert_template(): array {
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
-			'properties'           => aafm_wpbakery_structural_schema( '' ) + array(
+			'properties'           => aafm_wpbakery_insert_post_schema() + array(
 				'template_id' => array(
 					'type'        => 'string',
 					'minLength'   => 1,

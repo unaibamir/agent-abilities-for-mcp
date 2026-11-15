@@ -680,6 +680,45 @@ final class AvadaSiteTest extends TestCase {
 	}
 
 	/**
+	 * R3-4 note 3: null on a typography option whose stored array holds sub-values this tool cannot write (variant,
+	 * font-backup) is refused, since its previous could never be sent back; nothing is written.
+	 */
+	public function test_null_on_a_typography_option_with_unruled_sub_values_is_refused(): void {
+		$stored = array(
+			'primary_color'   => '#111111',
+			'body_typography' => array(
+				'font-family' => 'Inter',
+				'variant'     => '400',
+				'font-backup' => '',
+			),
+		);
+		$out    = $this->global_write( array( 'body_typography' => null ), $stored );
+		$this->assert_error( $out, 'aafm_avada_typography_not_removable', 400 );
+		$this->assertStringContainsString( 'cannot be removed here', $out->get_error_message() );
+		$this->assertSame( $stored, get_option( 'fusion_options' ) );
+	}
+
+	/**
+	 * R3-4 note 3: a typography option holding only sub-values the tool writes is still removed by null, and its
+	 * previous goes back byte for byte.
+	 */
+	public function test_null_on_a_typography_option_with_only_ruled_sub_values_still_removes_it(): void {
+		$stored = array(
+			'primary_color'   => '#111111',
+			'body_typography' => array(
+				'font-family' => 'Inter',
+				'font-size'   => '16px',
+			),
+		);
+		$out    = $this->global_write( array( 'body_typography' => null ), $stored );
+		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+		$this->assertArrayNotHasKey( 'body_typography', (array) get_option( 'fusion_options' ) );
+		$back = $this->global_write( self::wire( $out['previous'] ), null );
+		$this->assertIsArray( $back, is_wp_error( $back ) ? $back->get_error_message() : '' );
+		$this->assertSame( $stored, get_option( 'fusion_options' ) );
+	}
+
+	/**
 	 * BR-7: Avada's Layouts screen stores a section id as a string; previous returns it so, and it goes back so.
 	 */
 	public function test_layout_previous_goes_back_byte_for_byte_with_string_section_ids(): void {

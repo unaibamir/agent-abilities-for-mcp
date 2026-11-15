@@ -1003,7 +1003,21 @@ function aafm_exec_avada_update_global_options( array $input ) {
 			array( 'status' => 500 )
 		);
 	}
-	$rules    = aafm_avada_global_option_rules();
+	$rules = aafm_avada_global_option_rules();
+	$ruled = array( 'font-family', 'font-size', 'line-height', 'letter-spacing', 'font-weight', 'font-style', 'text-transform', 'color' );
+	foreach ( $apply as $key => $value ) {
+		// R3-4: removing a typography option whose previous holds sub-values this tool cannot write would leave no way back.
+		if ( null === $value && 'typography' === $rules[ $key ] && is_array( $stored[ $key ] ?? null ) && array() !== array_diff( array_keys( $stored[ $key ] ), $ruled ) ) {
+			return new WP_Error(
+				'aafm_avada_typography_not_removable',
+				__( 'This typography option holds values this tool cannot write back, so it cannot be removed here. Change its sub-values instead. Nothing was changed.', 'agent-abilities-for-mcp' ),
+				array(
+					'status'  => 400,
+					'setting' => $key,
+				)
+			);
+		}
+	}
 	$new      = $stored;
 	$changed  = array();
 	$previous = array();

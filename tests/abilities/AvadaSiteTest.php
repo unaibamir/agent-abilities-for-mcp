@@ -719,6 +719,22 @@ final class AvadaSiteTest extends TestCase {
 	}
 
 	/**
+	 * Fix round 1 (A3): a stored sub-value the write validator would refuse, such as font-weight 450, makes the option
+	 * unrestorable too, so null on it is refused and nothing is written.
+	 */
+	public function test_null_on_a_typography_option_with_an_unwritable_value_is_refused(): void {
+		$stored = array(
+			'primary_color'   => '#111111',
+			'body_typography' => array(
+				'font-family' => 'Inter',
+				'font-weight' => '450',
+			),
+		);
+		$this->assert_error( $this->global_write( array( 'body_typography' => null ), $stored ), 'aafm_avada_typography_not_removable', 400 );
+		$this->assertSame( $stored, get_option( 'fusion_options' ) );
+	}
+
+	/**
 	 * R3-4 note 3: a typography option holding only sub-values the tool writes is still removed by null, and its
 	 * previous goes back byte for byte.
 	 */

@@ -1028,7 +1028,13 @@ function aafm_exec_wpbakery_update_settings( array $input ) {
 		if ( 'custom_css' === $key ) {
 			require_once ABSPATH . 'wp-admin/includes/template.php';
 		}
-		$saved = null === $value ? aafm_delete_option_cache_safe( 'wpb_js_' . $key ) : aafm_update_option_verified( 'wpb_js_' . $key, $value );
+		if ( null === $value ) {
+			// WPBakery rebuilds custom.css only when the option is added or updated, never on a delete, so the CSS is
+			// emptied first and the row removed after.
+			$saved = ( 'custom_css' !== $key || aafm_update_option_verified( 'wpb_js_' . $key, '' ) ) && aafm_delete_option_cache_safe( 'wpb_js_' . $key );
+		} else {
+			$saved = aafm_update_option_verified( 'wpb_js_' . $key, $value );
+		}
 		if ( ! $saved ) {
 			return new WP_Error(
 				'aafm_wpbakery_setting_not_saved',

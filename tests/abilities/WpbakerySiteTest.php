@@ -848,7 +848,15 @@ final class WpbakerySiteTest extends TestCase {
 	 */
 	public function test_settings_previous_goes_back_byte_for_byte(): void {
 		$this->clear_settings();
-		$filter = $this->vendor_settings();
+		$dir = get_temp_dir() . 'aafm-wpb-css-' . wp_generate_password( 8, false );
+		wp_mkdir_p( $dir );
+		$filter = $this->vendor_settings( $dir );
+		// WPBakery rebuilds custom.css when the option is added or updated, and never when it is deleted.
+		$build = static function () use ( $dir ): void {
+			file_put_contents( $dir . '/custom.css', wp_strip_all_tags( (string) get_option( 'wpb_js_custom_css' ) ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- test stand-in for the vendor rebuild.
+		};
+		add_action( 'add_option_wpb_js_custom_css', $build );
+		add_action( 'update_option_wpb_js_custom_css', $build );
 		update_option( 'wpb_js_shortcuts', '' );
 		update_option( 'wpb_js_css_loading', 'legacy' );
 		$this->acting_as( 'administrator' );
@@ -858,16 +866,26 @@ final class WpbakerySiteTest extends TestCase {
 					'shortcuts'          => true,
 					'css_loading'        => 'hybrid',
 					'not_responsive_css' => true,
+					'custom_css'         => '.vc_btn3{letter-spacing:2px}',
 				),
 			)
 		);
 		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+		$this->assertNull( $out['previous']['custom_css'], 'No global CSS was stored before.' );
+		$this->assertSame( '.vc_btn3{letter-spacing:2px}', file_get_contents( $dir . '/custom.css' ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local test file.
 		$back = aafm_exec_wpbakery_update_settings( array( 'set' => json_decode( (string) wp_json_encode( $out['previous'] ), true ) ) );
+		remove_action( 'add_option_wpb_js_custom_css', $build );
+		remove_action( 'update_option_wpb_js_custom_css', $build );
 		remove_filter( 'aafm_builder_vendor', $filter, 20 );
+		$file = (string) file_get_contents( $dir . '/custom.css' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local test file.
+		wp_delete_file( $dir . '/custom.css' );
+		rmdir( $dir ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- test cleanup.
 		$this->assertIsArray( $back, is_wp_error( $back ) ? $back->get_error_message() : '' );
 		$this->assertSame( '', get_option( 'wpb_js_shortcuts' ) );
 		$this->assertSame( 'legacy', get_option( 'wpb_js_css_loading' ) );
 		$this->assertFalse( get_option( 'wpb_js_not_responsive_css' ) );
+		$this->assertFalse( get_option( 'wpb_js_custom_css' ), 'The option row is gone again.' );
+		$this->assertSame( '', $file, 'custom.css no longer carries the CSS.' );
 		$this->clear_settings();
 	}
 

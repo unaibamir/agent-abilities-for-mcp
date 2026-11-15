@@ -1494,6 +1494,13 @@ final class AvadaSiteTest extends TestCase {
 		);
 		$this->assertInstanceOf( WP_Error::class, $refused );
 		$this->assertSame( 'aafm_post_type_not_exposed', $refused->get_error_code() );
+		// Final Codex pass: an editor refused on a private builder type keeps the tool's own denial, since the Content
+		// sub-tab cannot expose a private type.
+		$this->acting_as( 'editor' );
+		$this->register_enabled( array( 'aafm/avada-update-page-options' ) );
+		$own = wp_get_ability( 'aafm/avada-update-page-options' )->check_permissions( array( 'post_id' => $section ) );
+		$this->assertFalse( is_wp_error( $own ) && 'aafm_post_type_not_exposed' === $own->get_error_code() );
+		$this->assertNotTrue( $own );
 		unregister_post_type( 'fusion_tb_section' );
 		unregister_post_type( 'aafm_unexposed' );
 	}

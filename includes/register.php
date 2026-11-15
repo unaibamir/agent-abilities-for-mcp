@@ -1042,7 +1042,10 @@ function aafm_post_type_refusal_post_id( array $input ): int {
 function aafm_post_type_not_exposed_for_editor( array $input ): bool {
 	$id   = aafm_post_type_refusal_post_id( $input );
 	$post = $id ? aafm_exact_object_chain( 'post', $id ) : null;
+	// Only a type the Content sub-tab can expose (public, not built in) gets that advice; a private builder type such as
+	// fusion_tb_section keeps the tool's own denial (final Codex pass).
 	return $post instanceof WP_Post
+		&& aafm_post_type_is_eligible( $post->post_type )
 		&& is_wp_error( aafm_validate_post_type( $post->post_type ) )
 		&& aafm_user_can_checked( 'edit_post', $id );
 }

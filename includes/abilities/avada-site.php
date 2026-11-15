@@ -1514,8 +1514,7 @@ function aafm_ability_needs_own_switch( string $name ): bool {
  * @return WP_Error
  */
 function aafm_avada_studio_not_approved_error(): WP_Error {
-	$selected = get_option( 'aafm_enabled_abilities', array() );
-	if ( aafm_read_only_mode() && is_array( $selected ) && in_array( 'aafm/avada-import-studio-item', $selected, true ) ) {
+	if ( aafm_read_only_mode() && in_array( 'aafm/avada-import-studio-item', aafm_get_stored_enabled_abilities_raw(), true ) ) {
 		// The import is ticked but read-only mode holds it (a write), so read-only mode is what to turn off (review F5).
 		// With the import not ticked, the switch is what is missing and the message below names it.
 		return new WP_Error(

@@ -783,6 +783,13 @@ final class AvadaSiteTest extends TestCase {
 		$this->assertStringContainsString( 'not_restorable', aafm_ability_description( 'aafm/avada-update-global-options' ) );
 		$ordinary = $this->global_write( array( 'primary_color' => '#222222' ), null );
 		$this->assertArrayNotHasKey( 'not_restorable', $ordinary );
+		// Final Codex pass: any previous the tool's own validation refuses is listed, such as a stored font-weight 450.
+		$odd = $this->global_write(
+			array( 'body_typography' => array( 'font-weight' => '400' ) ),
+			array( 'body_typography' => array( 'font-weight' => '450' ) )
+		);
+		$this->assertIsArray( $odd, is_wp_error( $odd ) ? $odd->get_error_message() : '' );
+		$this->assertSame( array( 'body_typography' ), $odd['not_restorable'] );
 	}
 
 	/**

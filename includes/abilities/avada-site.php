@@ -1095,8 +1095,14 @@ function aafm_exec_avada_update_global_options( array $input ) {
 		// An empty previous goes out as {} so the wire shape matches the object the schema declares.
 		'previous'    => array() === $previous ? new stdClass() : $previous,
 	);
-	// Codex demo pass: an empty typography array removed here comes back in previous as [], which the validator refuses.
-	$not_restorable = array_keys( array_filter( $previous, static fn( $old ): bool => array() === $old ) );
+	// Codex demo pass: a previous the tool's own validation refuses cannot be sent back (an empty typography array, a
+	// stored font-weight 450), so it is listed. null (none was stored) always goes back as a removal.
+	$not_restorable = array();
+	foreach ( $previous as $key => $old ) {
+		if ( null !== $old && is_wp_error( aafm_avada_validate_global_option( (string) $key, $old ) ) ) {
+			$not_restorable[] = (string) $key;
+		}
+	}
 	if ( array() !== $not_restorable ) {
 		$out['not_restorable'] = $not_restorable;
 	}

@@ -991,13 +991,23 @@ function aafm_meta_key_refusal_error( string $name, array $input ): ?array {
  * @return array{error:\WP_Error,code:string}|null The refusal and its reason code, or null to leave the call alone.
  */
 function aafm_post_type_refusal_error( string $name, array $input ): ?array {
-	// The writers whose permission gate is aafm_can_edit_post_object(), which is where an unexposed type refuses.
-	$gated = array( 'aafm/add-post-terms', 'aafm/set-featured-image', 'aafm/update-post-meta', 'aafm/yoast-update-post', 'aafm/rankmath-update-post', 'aafm/rankmath-update-schema', 'aafm/aioseo-update-post', 'aafm/slim-seo-update-post' );
-	if ( ! in_array( $name, $gated, true ) || ! aafm_post_type_not_exposed_for_editor( $input ) ) {
+	// Demo #9: driven by the tool's permission gate, not a list of tool names. These gates end in
+	// aafm_can_edit_post_object(), which is where an unexposed type refuses, so a new tool on one of them is covered.
+	$gates = array( 'aafm_perm_add_post_terms', 'aafm_perm_set_featured_image', 'aafm_perm_update_post_meta', 'aafm_perm_seo_post_object', 'aafm_perm_avada_post_object', 'aafm_perm_avada_page_css', 'aafm_perm_wpbakery_page_code', 'aafm_perm_list_revisions', 'aafm_perm_get_revision', 'aafm_perm_restore_revision', 'aafm_perm_delete_revision' );
+	if ( 0 === aafm_post_type_refusal_post_id( $input ) ) {
 		return null;
 	}
-	$post    = aafm_exact_object( 'post', absint( $input['post_id'] ) );
-	$message = __( 'This content type is not exposed to agents, so this tool cannot change it. A site administrator can expose it in the Content sub-tab of the Abilities tab.', 'agent-abilities-for-mcp' );
+	static $gate_of = array();
+	if ( ! array_key_exists( $name, $gate_of ) ) {
+		$builder          = aafm_get_abilities_registry_full()[ $name ]['args_builder'] ?? null;
+		$args             = is_string( $builder ) && function_exists( $builder ) ? $builder() : array();
+		$gate_of[ $name ] = is_array( $args ) && is_string( $args['permission_callback'] ?? null ) ? $args['permission_callback'] : '';
+	}
+	if ( ! in_array( $gate_of[ $name ], $gates, true ) || ! aafm_post_type_not_exposed_for_editor( $input ) ) {
+		return null;
+	}
+	$post    = aafm_exact_object( 'post', aafm_post_type_refusal_post_id( $input ) );
+	$message = __( 'This content type is not exposed to agents, so this tool cannot work on it. A site administrator can expose it in the Content sub-tab of the Abilities tab.', 'agent-abilities-for-mcp' );
 	$own     = $post instanceof WP_Post ? aafm_type_own_tool( $post->post_type, 'update' ) : '';
 	if ( '' !== $own ) {
 		/* translators: %s: the tool that manages this content type. */
@@ -1010,13 +1020,27 @@ function aafm_post_type_refusal_error( string $name, array $input ): ?array {
 }
 
 /**
+ * The post a refused call names: its post_id, or the parent of its revision_id.
+ *
+ * @param array<string,mixed> $input Call arguments.
+ * @return int 0 when the call names none.
+ */
+function aafm_post_type_refusal_post_id( array $input ): int {
+	if ( isset( $input['post_id'] ) && is_numeric( $input['post_id'] ) ) {
+		return absint( $input['post_id'] );
+	}
+	$revision = isset( $input['revision_id'] ) && is_numeric( $input['revision_id'] ) ? aafm_exact_object( 'post', absint( $input['revision_id'] ) ) : null;
+	return $revision instanceof WP_Post && 'revision' === $revision->post_type ? (int) $revision->post_parent : 0;
+}
+
+/**
  * Whether a post_id names a post the caller may edit whose content type is not exposed to agents.
  *
  * @param array<string,mixed> $input Call arguments.
  * @return bool
  */
 function aafm_post_type_not_exposed_for_editor( array $input ): bool {
-	$id   = isset( $input['post_id'] ) && is_numeric( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
+	$id   = aafm_post_type_refusal_post_id( $input );
 	$post = $id ? aafm_exact_object_chain( 'post', $id ) : null;
 	return $post instanceof WP_Post
 		&& is_wp_error( aafm_validate_post_type( $post->post_type ) )

@@ -1514,8 +1514,10 @@ function aafm_ability_needs_own_switch( string $name ): bool {
  * @return WP_Error
  */
 function aafm_avada_studio_not_approved_error(): WP_Error {
-	if ( aafm_read_only_mode() ) {
-		// Read-only mode holds the import (a write), which the Abilities tab still shows ticked (review F5).
+	$selected = get_option( 'aafm_enabled_abilities', array() );
+	if ( aafm_read_only_mode() && is_array( $selected ) && in_array( 'aafm/avada-import-studio-item', $selected, true ) ) {
+		// The import is ticked but read-only mode holds it (a write), so read-only mode is what to turn off (review F5).
+		// With the import not ticked, the switch is what is missing and the message below names it.
 		return new WP_Error(
 			'aafm_avada_studio_not_approved',
 			__( 'Read-only mode is on, so the Avada Studio tools are held until the site owner turns it off. Nothing was changed.', 'agent-abilities-for-mcp' ),

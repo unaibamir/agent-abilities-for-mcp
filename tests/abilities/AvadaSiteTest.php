@@ -2705,6 +2705,13 @@ final class AvadaSiteTest extends TestCase {
 		$this->assertSame( 'aafm_avada_studio_not_approved', $out->get_error_code() );
 		$this->assertStringContainsString( 'Read-only mode is on', $out->get_error_message() );
 		$this->assertStringNotContainsString( 'switch on the Avada Studio import', $out->get_error_message() );
+		// Codex round 2: with the import switch off as well, the switch is what is missing, so the refusal names it.
+		$this->studio_approval( false, false );
+		update_option( 'aafm_read_only_mode', true );
+		$out = $this->studio_call( 'list', array() );
+		delete_option( 'aafm_read_only_mode' );
+		$this->assertStringContainsString( 'switch on the Avada Studio import', $out->get_error_message() );
+		$this->assertStringNotContainsString( 'Read-only mode is on', $out->get_error_message() );
 	}
 
 	/**

@@ -53,6 +53,29 @@ function aafm_builder_error( string $code, array $extra = array() ): WP_Error {
 }
 
 /**
+ * WordPress core's rule for custom CSS (WP_Customize_Custom_CSS_Setting::validate()): CSS holding markup, a < followed
+ * by a tag name, is refused; any other CSS is stored exactly as sent, never stripped (CR-3).
+ *
+ * @param string $field Field named in the refusal.
+ * @param string $css   CSS.
+ * @return WP_Error|null Null when the CSS may be stored.
+ */
+function aafm_builder_css_markup( string $field, string $css ): ?WP_Error {
+	if ( 1 !== preg_match( '#</?\w+#', $css ) ) {
+		return null;
+	}
+	return new WP_Error(
+		'aafm_builder_css_markup',
+		/* translators: %s: the CSS field. */
+		sprintf( __( '%s holds markup, which WordPress does not allow in custom CSS. Remove the tags. Nothing was changed.', 'agent-abilities-for-mcp' ), $field ),
+		array(
+			'status'  => 400,
+			'setting' => $field,
+		)
+	);
+}
+
+/**
  * How many references deep aafm_builder_references_allowed() follows before it refuses.
  */
 const AAFM_BUILDER_REFERENCE_DEPTH = 5;

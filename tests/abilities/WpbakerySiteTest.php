@@ -752,11 +752,17 @@ final class WpbakerySiteTest extends TestCase {
 		);
 	}
 
-	public function test_css_is_stored_without_tags(): void {
+	/**
+	 * CR-3: page CSS holding markup is refused; any other CSS is stored byte for byte.
+	 */
+	public function test_css_holding_markup_is_refused_and_other_css_is_stored_as_sent(): void {
 		$id = $this->page( self::SIMPLE );
 		$this->acting_as( 'administrator' );
-		$this->assertIsArray( $this->page_code( $id, array( 'custom_css' => '.a{color:red}</style><script>alert(1)</script>' ) ) );
-		$this->assertSame( '.a{color:red}', get_post_meta( $id, '_wpb_post_custom_css', true ) );
+		$this->assert_error( $this->page_code( $id, array( 'custom_css' => '.a{color:red}</style><script>alert(1)</script>' ) ), 'aafm_builder_css_markup', 400 );
+		$this->assertFalse( metadata_exists( 'post', $id, '_wpb_post_custom_css' ) );
+		$css = '@media (width <= 600px) { .a > .b { background: url("data:image/svg+xml,%3Csvg%3E") } }  ';
+		$this->assertIsArray( $this->page_code( $id, array( 'custom_css' => $css ) ) );
+		$this->assertSame( $css, get_post_meta( $id, '_wpb_post_custom_css', true ) );
 	}
 
 	public function test_js_containing_a_closing_script_tag_is_refused(): void {
@@ -1470,11 +1476,18 @@ final class WpbakerySiteTest extends TestCase {
 		add_action( 'add_option_wpb_js_custom_css', $build );
 		add_action( 'update_option_wpb_js_custom_css', $build );
 		$this->acting_as( 'administrator' );
-		$out = aafm_exec_wpbakery_update_settings( array( 'set' => array( 'custom_css' => '<b>.a{background:url(../img/x.png)}</b>' ) ) );
+		// CR-3: markup is refused, as WordPress refuses it in custom CSS; anything else is stored as sent.
+		$this->assert_error( aafm_exec_wpbakery_update_settings( array( 'set' => array( 'custom_css' => '<b>.a{}</b>' ) ) ), 'aafm_builder_css_markup', 400 );
+		$this->assertFalse( get_option( 'wpb_js_custom_css' ) );
+		$out = aafm_exec_wpbakery_update_settings( array( 'set' => array( 'custom_css' => '.a{background:url(../img/x.png)}' ) ) );
 		$this->assertSame( array( 'custom_css' ), $out['changed'] );
 		$this->assertSame( '.a{background:url(../img/x.png)}', get_option( 'wpb_js_custom_css' ) );
 		$this->assertCount( 1, self::$calls['sanitize_custom_css_callback'] );
 		$this->assertTrue( function_exists( 'add_settings_error' ), 'wp-admin template functions are loaded for the vendor failure path.' );
+		$range = '@media (width <= 600px) { .a > .b { color: red } }';
+		$this->assertSame( array( 'custom_css' ), aafm_exec_wpbakery_update_settings( array( 'set' => array( 'custom_css' => $range ) ) )['changed'] );
+		$this->assertSame( $range, get_option( 'wpb_js_custom_css' ) );
+		update_option( 'wpb_js_custom_css', '.a{background:url(../img/x.png)}' );
 
 		remove_action( 'add_option_wpb_js_custom_css', $build );
 		remove_action( 'update_option_wpb_js_custom_css', $build );

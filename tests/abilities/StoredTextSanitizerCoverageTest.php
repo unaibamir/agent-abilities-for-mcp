@@ -65,12 +65,6 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 			),
 			'reason' => 'The list-blocks search term. It becomes WP_Query\'s `s` argument and is never written back, so nothing about it reaches storage.',
 		),
-		'includes/abilities/avada-site.php::aafm_exec_avada_update_page_css::sanitize_textarea_field' => array(
-			'calls'  => array(
-				'sanitize_textarea_field( $input[\'custom_css\'] )',
-			),
-			'reason' => 'Plan 326 S12-2: Avada page CSS (_fusion_builder_custom_css) is a stylesheet, not post text, and only a user with unfiltered_html can write it. Tags are stripped and line breaks kept, the form Avada prints inside its own style tag.',
-		),
 		'includes/abilities/avada-site.php::aafm_avada_validate_global_option::sanitize_text_field' => array(
 			'calls'  => array(
 				'sanitize_text_field( $entry[\'label\'] )',

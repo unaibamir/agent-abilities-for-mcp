@@ -60,7 +60,7 @@ function aafm_avada_site_registry_definitions(): array {
 		),
 		'aafm/avada-update-page-css'        => array(
 			'label'        => __( 'Update Avada page CSS', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Sets the custom CSS of one Avada page, layout section or library item, the CSS field of Avada\'s builder settings for that page. The value given replaces the page\'s existing CSS, and an empty string removes it; previous returns the old CSS, which is the way back. CSS is stored without HTML tags. A value equal to what is stored is left alone and changed is false. No revision is kept, and the change is not undoable from this plugin\'s change history. Requires edit access to the post and a user who may post unfiltered HTML; Avada\'s Role Manager is not applied. Only while Avada is active.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Sets the custom CSS of one Avada page, layout section or library item, the CSS field of Avada\'s builder settings for that page. The value given replaces the page\'s existing CSS, and an empty string removes it; previous returns the old CSS, which is the way back. CSS that holds markup is refused, as WordPress refuses it in custom CSS; any other CSS is stored exactly as sent. A value equal to what is stored is left alone and changed is false. No revision is kept, and the change is not undoable from this plugin\'s change history. Requires edit access to the post and a user who may post unfiltered HTML; Avada\'s Role Manager is not applied. Only while Avada is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'avada',
@@ -324,7 +324,11 @@ function aafm_exec_avada_update_page_css( array $input ) {
 	if ( ! aafm_builder_ownership_allows( 'avada', aafm_post_has_foreign_builder_ownership( $id ), $post ) ) {
 		return aafm_avada_not_owned_error();
 	}
-	$css = sanitize_textarea_field( $input['custom_css'] );
+	$css    = $input['custom_css'];
+	$markup = aafm_builder_css_markup( 'custom_css', $css );
+	if ( null !== $markup ) {
+		return $markup;
+	}
 	$old = aafm_with_checked_reads(
 		static function () use ( $id ): array {
 			$value = aafm_meta_get( 'post', $id, '_fusion_builder_custom_css', true );

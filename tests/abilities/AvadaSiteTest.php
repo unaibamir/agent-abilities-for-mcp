@@ -589,11 +589,18 @@ final class AvadaSiteTest extends TestCase {
 		$this->assertSame( self::PAGE, $read['content'] );
 	}
 
-	public function test_css_is_stored_without_tags(): void {
+	/**
+	 * CR-3: CSS holding markup is refused, as WordPress refuses it in custom CSS; any other CSS, a range query and a
+	 * percent-encoded data URI included, is stored byte for byte.
+	 */
+	public function test_css_holding_markup_is_refused_and_other_css_is_stored_as_sent(): void {
 		$this->act_as_admin();
 		$id = $this->avada_post();
-		$this->assertTrue( $this->page_css( $id, '.a{}</style><script>x()</script>' )['changed'] );
-		$this->assertStringNotContainsString( '<', (string) get_post_meta( $id, '_fusion_builder_custom_css', true ) );
+		$this->assert_error( $this->page_css( $id, '.a{}</style><script>x()</script>' ), 'aafm_builder_css_markup', 400 );
+		$this->assertFalse( metadata_exists( 'post', $id, '_fusion_builder_custom_css' ) );
+		$css = '@media (width <= 600px) { .a > .b { background: url("data:image/svg+xml,%3Csvg%3E") } }  ';
+		$this->assertTrue( $this->page_css( $id, $css )['changed'] );
+		$this->assertSame( $css, get_post_meta( $id, '_fusion_builder_custom_css', true ) );
 	}
 
 	public function test_an_empty_value_deletes_the_meta(): void {

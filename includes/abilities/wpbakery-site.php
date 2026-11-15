@@ -67,7 +67,7 @@ function aafm_wpbakery_site_registry_definitions(): array {
 		),
 		'aafm/wpbakery-update-page-code' => array(
 			'label'        => __( 'Update WPBakery page code', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Sets the custom CSS, header JS and footer JS of one WPBakery page, the fields of the page settings in WPBakery\'s editor; give at least one of custom_css, custom_js_header and custom_js_footer. Each field given replaces the page\'s existing code for that field, and an empty string removes it; previous returns the old value of every field that changed, which is the way back. CSS is stored without HTML tags, as WPBakery prints it. JS containing a closing script tag is refused, and the JS fields are refused when WPBakery\'s own Role Manager would not save custom JS for this user. A field equal to what is stored is left alone and not listed in changed. No revision is kept, and the change is not undoable from this plugin\'s change history. Requires edit access to the post and a user who may post unfiltered HTML. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Sets the custom CSS, header JS and footer JS of one WPBakery page, the fields of the page settings in WPBakery\'s editor; give at least one of custom_css, custom_js_header and custom_js_footer. Each field given replaces the page\'s existing code for that field, and an empty string removes it; previous returns the old value of every field that changed, which is the way back. CSS that holds markup is refused, as WordPress refuses it in custom CSS; any other CSS is stored exactly as sent. JS containing a closing script tag is refused, and the JS fields are refused when WPBakery\'s own Role Manager would not save custom JS for this user. A field equal to what is stored is left alone and not listed in changed. No revision is kept, and the change is not undoable from this plugin\'s change history. Requires edit access to the post and a user who may post unfiltered HTML. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'wpbakery',
@@ -83,7 +83,7 @@ function aafm_wpbakery_site_registry_definitions(): array {
 		),
 		'aafm/wpbakery-update-settings'  => array(
 			'label'        => __( 'Update WPBakery settings', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Overwrites site-wide WPBakery Page Builder settings from wpbakery-get-settings: not_responsive_css, local_google_fonts and shortcuts (true or false), google_fonts_subsets (a list), css_loading and js_loading (hybrid, optimized or legacy), and the global custom_css, custom_js_header and custom_js_footer, which also need a user who may post unfiltered HTML. Each value goes through WPBakery\'s own sanitize callback for that field, and a value it would change is refused; a setting whose callback cannot be found, and the Gutenberg switch, auto save and Design Options use, are not writable. The change applies to the whole site at once; previous returns the old value of every setting that changed, null where none was stored, which is the way back. A value equal to what is stored is left alone. Writing custom_css rebuilds WPBakery\'s custom.css file, and the call reports an error when the file does not match afterwards. Not undoable from this plugin\'s change history. Requires a user who can manage site options (manage_options). Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Overwrites site-wide WPBakery Page Builder settings from wpbakery-get-settings: not_responsive_css, local_google_fonts and shortcuts (true or false), google_fonts_subsets (a list), css_loading and js_loading (hybrid, optimized or legacy), and the global custom_css, custom_js_header and custom_js_footer, which also need a user who may post unfiltered HTML. Each value goes through WPBakery\'s own sanitize callback for that field, and a value it would change is refused. The global custom_css is the exception: it is refused when it holds markup and otherwise stored exactly as sent. A setting whose callback cannot be found, and the Gutenberg switch, auto save and Design Options use, are not writable. The change applies to the whole site at once; previous returns the old value of every setting that changed, null where none was stored, which is the way back. A value equal to what is stored is left alone. Writing custom_css rebuilds WPBakery\'s custom.css file, and the call reports an error when the file does not match afterwards. Not undoable from this plugin\'s change history. Requires a user who can manage site options (manage_options). Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'destructive',
 			'subject'      => 'wpbakery',
@@ -604,8 +604,12 @@ function aafm_exec_wpbakery_update_page_code( array $input ) {
 	$given = array();
 	foreach ( $keys as $field => $key ) {
 		if ( isset( $input[ $field ] ) && is_string( $input[ $field ] ) ) {
-			$given[ $field ] = 'custom_css' === $field ? wp_strip_all_tags( $input[ $field ] ) : $input[ $field ];
+			$given[ $field ] = $input[ $field ];
 		}
+	}
+	$markup = isset( $given['custom_css'] ) ? aafm_builder_css_markup( 'custom_css', $given['custom_css'] ) : null;
+	if ( null !== $markup ) {
+		return $markup;
 	}
 	if ( array() === $given ) {
 		return new WP_Error(
@@ -863,6 +867,10 @@ function aafm_wpbakery_sanitize_setting( string $key, $value ) {
 	if ( ! $ok ) {
 		return aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $key );
 	}
+	$markup = 'custom_css' === $key && is_string( $value ) ? aafm_builder_css_markup( $key, $value ) : null;
+	if ( null !== $markup ) {
+		return $markup;
+	}
 	if ( in_array( $key, aafm_wpbakery_settings_js_keys(), true ) && is_string( $value ) && 1 === preg_match( '#</script#i', $value ) ) {
 		// WPBakery prints the value inside a script tag, so a closing tag would end it early.
 		return aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $key );
@@ -879,6 +887,10 @@ function aafm_wpbakery_sanitize_setting( string $key, $value ) {
 	}
 	if ( in_array( $key, $bools, true ) ) {
 		return $clean ? '1' : '';
+	}
+	if ( 'custom_css' === $key ) {
+		// WordPress core's custom CSS rule above, not WPBakery's strip: the CSS is stored as sent (CR-3).
+		return $value;
 	}
 	if ( in_array( $key, array( 'google_fonts_subsets', 'css_loading', 'js_loading' ), true ) && $clean !== $value ) {
 		return aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $key );

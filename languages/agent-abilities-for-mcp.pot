@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-15T20:43:59+05:00\n"
+"POT-Creation-Date: 2026-11-15T21:09:20+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -781,53 +781,53 @@ msgstr ""
 msgid "Avada Studio is not available on this site: it needs the Avada theme active, Studio switched on in Avada and the product registered. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1521
+#: includes/abilities/avada-site.php:1522
 msgid "Read-only mode is on, so the Avada Studio tools are held until the site owner turns it off. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1527
+#: includes/abilities/avada-site.php:1528
 msgid "The Avada Studio tools are switched off. The site owner can switch on the Avada Studio import on this plugin's Abilities tab. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1551
+#: includes/abilities/avada-site.php:1552
 msgid "Avada could not load the Studio catalog from Avada's servers. Try again later. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1739
+#: includes/abilities/avada-site.php:1740
 msgid "The item's id from avada-list-studio-items."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1762
+#: includes/abilities/avada-site.php:1763
 msgid "True when Avada found an earlier import of this item and created nothing."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1827
+#: includes/abilities/avada-site.php:1828
 msgid "Avada could not import this Studio item. Nothing was confirmed as imported."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1868
+#: includes/abilities/avada-site.php:1869
 msgid "Only the item's own post was confirmed; the attachments, forms, menus and icons Avada imports with it are not checked one by one. Place the item on a page with avada-insert-library-item."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1954
+#: includes/abilities/avada-site.php:1955
 msgid "The slider: a term ID of Avada's slide-page taxonomy."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1958
+#: includes/abilities/avada-site.php:1959
 msgid "Setting key to its new value, keys from the fixed slider settings list in the description."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1974
+#: includes/abilities/avada-site.php:1975
 #: includes/abilities/wpbakery-site.php:935
 msgid "The old value of each changed setting, null where none was stored."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1999
+#: includes/abilities/avada-site.php:2000
 msgid "Avada Slider is not available on this site: it needs the Avada theme and the Avada Core plugin active. Nothing was changed."
 msgstr ""
 
 #. translators: %s: the slider setting key.
-#: includes/abilities/avada-site.php:2091
+#: includes/abilities/avada-site.php:2092
 #, php-format
 msgid "The slider settings were written, but reading them back does not show the new value of %s. Check the slider in Avada's Sliders screen; previous in this error holds the old values."
 msgstr ""

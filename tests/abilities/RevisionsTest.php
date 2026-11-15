@@ -1038,6 +1038,7 @@ final class RevisionsTest extends TestCase {
 
 		$this->assertStringContainsString( aafm_page_builder_names(), $text );
 		$this->assertStringContainsString( 'except an Avada or WPBakery page while that builder is active', $text );
+		$this->assertStringContainsString( 'So is a revision made with the other builder', $text );
 		$this->assertStringNotContainsString( ' - ', $text );
 	}
 

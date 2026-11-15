@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-16T01:56:55+05:00\n"
+"POT-Creation-Date: 2026-11-16T02:42:57+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -217,7 +217,7 @@ msgstr ""
 
 #: includes/abilities/activity-log.php:66
 #: includes/abilities/avada-elements.php:716
-#: includes/abilities/avada.php:1652
+#: includes/abilities/avada.php:1660
 #: includes/abilities/blocks.php:153
 #: includes/abilities/blocks.php:258
 #: includes/abilities/comments.php:104
@@ -443,7 +443,7 @@ msgstr ""
 #: includes/abilities/wpbakery-elements.php:2192
 #: includes/abilities/wpbakery-elements.php:2279
 #: includes/abilities/wpbakery-elements.php:2421
-msgid "Present only when there is no restore point: the site keeps no revisions, or its revision limit removed the one saved before the change. Says why there is no way back."
+msgid "Present only when there is no restore point: the site or the content type keeps no revisions, WordPress saved none before the change, or the one saved was deleted during the save by the revision limit or another plugin. Says why there is no way back."
 msgstr ""
 
 #: includes/abilities/avada-elements.php:901
@@ -736,139 +736,139 @@ msgstr ""
 msgid "This typography option holds values this tool cannot write back, so it cannot be removed here. Change its sub-values instead. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1109
+#: includes/abilities/avada-site.php:1115
 msgid "The Avada Global Options could not be saved. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1150
+#: includes/abilities/avada-site.php:1156
 msgid "The layout post id from avada-list-layouts, or \"global\" for the Global Layout."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1156
+#: includes/abilities/avada-site.php:1162
 msgid "Slot to a published layout section id of that type, or 0 to clear the slot."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1162
+#: includes/abilities/avada-site.php:1168
 msgid "The full new list of conditions, each with mode, type and the condition id under the key named by type."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1175
+#: includes/abilities/avada-site.php:1181
 msgid "The sections and conditions stored before this call."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1253
+#: includes/abilities/avada-site.php:1259
 msgid "it needs type and, under the key type names, a condition id"
 msgstr ""
 
-#: includes/abilities/avada-site.php:1255
+#: includes/abilities/avada-site.php:1261
 msgid "mode must be include or exclude"
 msgstr ""
 
-#: includes/abilities/avada-site.php:1257
+#: includes/abilities/avada-site.php:1263
 msgid "only mode, type, the key type names, label and parent are accepted, and label must be text"
 msgstr ""
 
 #. translators: %s: the part of the condition id before the |.
-#: includes/abilities/avada-site.php:1260
+#: includes/abilities/avada-site.php:1266
 #, php-format
 msgid "parent must be %s, the part of the id before |"
 msgstr ""
 
-#: includes/abilities/avada-site.php:1263
+#: includes/abilities/avada-site.php:1269
 msgid "the condition id is not one Avada's Layouts screen offers for that type"
 msgstr ""
 
-#: includes/abilities/avada-site.php:1264
+#: includes/abilities/avada-site.php:1270
 msgid "the id does not name an item of that kind on this site"
 msgstr ""
 
-#: includes/abilities/avada-site.php:1266
+#: includes/abilities/avada-site.php:1272
 msgid "it repeats a condition id already in the list"
 msgstr ""
 
 #. translators: 1: the condition's position, starting at 1, 2: what failed.
-#: includes/abilities/avada-site.php:1273
+#: includes/abilities/avada-site.php:1279
 #, php-format
 msgid "Condition %1$d: %2$s. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1349
+#: includes/abilities/avada-site.php:1355
 msgid "No Avada layout has that id. Use an id from avada-list-layouts, or \"global\". Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1361
+#: includes/abilities/avada-site.php:1367
 msgid "Give at least one of sections and conditions. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1399
+#: includes/abilities/avada-site.php:1405
 msgid "Avada cannot read this layout's stored data, so it was not changed."
 msgstr ""
 
 #. translators: %s: the layout slot, such as footer.
-#: includes/abilities/avada-site.php:1422
+#: includes/abilities/avada-site.php:1428
 #, php-format
 msgid "The %s slot takes a published layout section of that type. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1471
+#: includes/abilities/avada-site.php:1477
 msgid "The Global Layout could not be saved. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1489
+#: includes/abilities/avada-site.php:1495
 msgid "The layout could not be confirmed as saved."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1521
+#: includes/abilities/avada-site.php:1527
 msgid "Avada Studio is not available on this site: it needs the Avada theme active, Studio switched on in Avada and the product registered. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1560
+#: includes/abilities/avada-site.php:1566
 msgid "Read-only mode is on, so the Avada Studio tools are held until the site owner turns it off. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1566
+#: includes/abilities/avada-site.php:1572
 msgid "The Avada Studio tools are switched off. The site owner can switch on the Avada Studio import on this plugin's Abilities tab. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1590
+#: includes/abilities/avada-site.php:1596
 msgid "Avada could not load the Studio catalog from Avada's servers. Try again later. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1778
+#: includes/abilities/avada-site.php:1784
 msgid "The item's id from avada-list-studio-items."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1801
+#: includes/abilities/avada-site.php:1807
 msgid "True when Avada found an earlier import of this item and created nothing."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1866
+#: includes/abilities/avada-site.php:1872
 msgid "Avada could not import this Studio item. Nothing was confirmed as imported."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1907
+#: includes/abilities/avada-site.php:1913
 msgid "Only the item's own post was confirmed; the attachments, forms, menus and icons Avada imports with it are not checked one by one. Place the item on a page with avada-insert-library-item."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1993
+#: includes/abilities/avada-site.php:1999
 msgid "The slider: a term ID of Avada's slide-page taxonomy."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1997
+#: includes/abilities/avada-site.php:2003
 msgid "Setting key to its new value, keys from the fixed slider settings list in the description."
 msgstr ""
 
-#: includes/abilities/avada-site.php:2013
+#: includes/abilities/avada-site.php:2019
 #: includes/abilities/wpbakery-site.php:935
 msgid "The old value of each changed setting, null where none was stored."
 msgstr ""
 
-#: includes/abilities/avada-site.php:2038
+#: includes/abilities/avada-site.php:2044
 msgid "Avada Slider is not available on this site: it needs the Avada theme and the Avada Core plugin active. Nothing was changed."
 msgstr ""
 
 #. translators: %s: the slider setting key.
-#: includes/abilities/avada-site.php:2130
+#: includes/abilities/avada-site.php:2136
 #, php-format
 msgid "The slider settings were written, but reading them back does not show the new value of %s. Check the slider in Avada's Sliders screen; previous in this error holds the old values."
 msgstr ""
@@ -1006,77 +1006,77 @@ msgstr ""
 msgid "That replacement would change the Fusion Builder shortcode structure rather than its text. Choose a search term that appears in plain text between or inside elements, not one that would alter a shortcode tag, its self-closing form, or an attribute. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada.php:1288
+#: includes/abilities/avada.php:1296
 #: includes/abilities/posts.php:1852
 #: includes/abilities/wpbakery.php:706
 msgid "The replacement could not be confirmed as saved."
 msgstr ""
 
-#: includes/abilities/avada.php:1336
+#: includes/abilities/avada.php:1344
 msgid "When false, each layout is returned without its conditions."
 msgstr ""
 
-#: includes/abilities/avada.php:1351
+#: includes/abilities/avada.php:1359
 msgid "The layout post id, or \"global\" for the Global Layout."
 msgstr ""
 
-#: includes/abilities/avada.php:1357
+#: includes/abilities/avada.php:1365
 msgid "Position in the order Avada checks layouts, from 0. Avada checks them all and uses the last layout whose conditions match; the Global Layout applies only when none match."
 msgstr ""
 
-#: includes/abilities/avada.php:1362
+#: includes/abilities/avada.php:1370
 msgid "unparseable: Avada cannot read this layout's stored data, so no sections or conditions are returned for it."
 msgstr ""
 
-#: includes/abilities/avada.php:1366
+#: includes/abilities/avada.php:1374
 msgid "Keyed by section type (header, page_title_bar, content, footer). Only when parse_status is ok."
 msgstr ""
 
-#: includes/abilities/avada.php:1371
+#: includes/abilities/avada.php:1379
 msgid "The stored conditions, unchanged: mode (include or exclude), type, the value under the key named by type, and parent for a child condition. Only when parse_status is ok and include_conditions is true."
 msgstr ""
 
-#: includes/abilities/avada.php:1461
+#: includes/abilities/avada.php:1469
 msgid "Global Layout"
 msgstr ""
 
-#: includes/abilities/avada.php:1550
+#: includes/abilities/avada.php:1558
 msgid "Only these options. Omit for the whole list."
 msgstr ""
 
-#: includes/abilities/avada.php:1561
+#: includes/abilities/avada.php:1569
 msgid "Option key to its stored value, unchanged."
 msgstr ""
 
-#: includes/abilities/avada.php:1566
+#: includes/abilities/avada.php:1574
 msgid "Requested keys with no stored value. Avada's built-in default applies to them."
 msgstr ""
 
-#: includes/abilities/avada.php:1596
+#: includes/abilities/avada.php:1604
 msgid "The Avada theme is not active, so there are no Avada Global Options to read."
 msgstr ""
 
-#: includes/abilities/avada.php:1606
+#: includes/abilities/avada.php:1614
 msgid "Avada has not stored its Global Options yet. Open Avada > Options in wp-admin once, then try again."
 msgstr ""
 
-#: includes/abilities/avada.php:1613
+#: includes/abilities/avada.php:1621
 msgid "The Avada Global Options could not be read."
 msgstr ""
 
-#: includes/abilities/avada.php:1651
+#: includes/abilities/avada.php:1659
 msgid "Number of items per page, clamped to the 1-100 range regardless of the value requested. Defaults to 20 when omitted."
 msgstr ""
 
-#: includes/abilities/avada.php:1659
+#: includes/abilities/avada.php:1667
 msgid "Only one library category, or templates for full-page templates. Defaults to all."
 msgstr ""
 
-#: includes/abilities/avada.php:1663
+#: includes/abilities/avada.php:1671
 msgid "Free-text search using WordPress's normal post search, matched against the item's title and content."
 msgstr ""
 
-#: includes/abilities/avada.php:1668
+#: includes/abilities/avada.php:1676
 msgid "When true, each item also carries content, its raw Fusion Builder markup, unrendered. A global item is listed without its content unless the user can edit private posts."
 msgstr ""
 
@@ -12493,32 +12493,40 @@ msgstr ""
 msgid "This site keeps no revisions, so there is no restore point for this change. A plugin or wp-config.php can turn revisions off site-wide; a WP_POST_REVISIONS line in wp-config.php sets how many are kept."
 msgstr ""
 
-#: includes/builder-shortcodes.php:873
+#: includes/builder-shortcodes.php:870
+msgid "This content type keeps no revisions, so there is no restore point for this change."
+msgstr ""
+
+#: includes/builder-shortcodes.php:879
+msgid "WordPress did not save a revision of the page before this change, so there is no restore point for it."
+msgstr ""
+
+#: includes/builder-shortcodes.php:891
 msgid "The revision that held the page before this change was no longer there after the save, so there is no way back from this plugin. This site keeps every revision, so something other than the revision limit deleted it."
 msgstr ""
 
 #. translators: %d: the number of revisions the site keeps per post.
-#: includes/builder-shortcodes.php:877
+#: includes/builder-shortcodes.php:895
 #, php-format
 msgid "The revision that held the page before this change was no longer there after the save, so there is no way back from this plugin. The usual cause is the site's revision limit (WP_POST_REVISIONS or the wp_revisions_to_keep filter); this site keeps %d revision per post."
 msgid_plural "The revision that held the page before this change was no longer there after the save, so there is no way back from this plugin. The usual cause is the site's revision limit (WP_POST_REVISIONS or the wp_revisions_to_keep filter); this site keeps %d revisions per post."
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/builder-shortcodes.php:997
+#: includes/builder-shortcodes.php:1015
 msgid "The page builder cannot rebuild this page's generated CSS right now, so the change was not saved. Nothing was changed."
 msgstr ""
 
-#: includes/builder-shortcodes.php:1036
+#: includes/builder-shortcodes.php:1057
 msgid "The change could not be confirmed as saved. Read the page to check its current state."
 msgstr ""
 
-#: includes/builder-shortcodes.php:1046
+#: includes/builder-shortcodes.php:1067
 msgid "The content was saved, but the page builder could not rebuild the page's generated CSS, so the page may look out of date until it is saved again in the builder."
 msgstr ""
 
 #. translators: %d: revision id.
-#: includes/builder-shortcodes.php:1048
+#: includes/builder-shortcodes.php:1069
 #, php-format
 msgid "The content was saved, but the page builder could not rebuild the page's generated CSS, so the page may look out of date until it is saved again in the builder. Revision %d restores the content as it was before."
 msgstr ""
@@ -13488,22 +13496,22 @@ msgid "This type has its own tool, %s, which can change it."
 msgstr ""
 
 #. translators: %s: ability name
-#: includes/register.php:1064
+#: includes/register.php:1067
 #, php-format
 msgid "Ability \"%s\" was not registered: a permission_callback is required."
 msgstr ""
 
 #. translators: %s: ability name
-#: includes/register.php:1079
+#: includes/register.php:1082
 #, php-format
 msgid "Ability \"%s\" was not registered: an execute_callback is required."
 msgstr ""
 
-#: includes/register.php:1509
+#: includes/register.php:1512
 msgid "This ability returned an unexpected result. Please try again or contact the site administrator."
 msgstr ""
 
-#: includes/register.php:1598
+#: includes/register.php:1601
 msgid "This ability could not complete because of an unexpected error. The site administrator can find the details in the activity log."
 msgstr ""
 

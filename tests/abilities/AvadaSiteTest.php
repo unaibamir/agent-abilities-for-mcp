@@ -1426,6 +1426,65 @@ final class AvadaSiteTest extends TestCase {
 		$this->assertSame( 'x', get_post_meta( $id, '_fusion', true )['caption'] );
 	}
 
+	/**
+	 * Codex demo pass HIGH: through the registered (wrapped) permission check, an administrator still edits a private
+	 * builder-owned type such as fusion_tb_section, and only a type the tool's own gate refuses gets the
+	 * "not exposed" explanation.
+	 */
+	public function test_a_private_avada_type_works_and_only_a_refused_type_is_explained(): void {
+		register_post_type(
+			'fusion_tb_section',
+			array(
+				'public'          => false,
+				'capability_type' => 'post',
+				'map_meta_cap'    => true,
+			)
+		);
+		register_post_type(
+			'aafm_unexposed',
+			array(
+				'public' => true,
+				'label'  => 'Unexposed',
+			)
+		);
+		$this->act_as_admin();
+		$this->register_enabled( array( 'aafm/avada-update-page-css' ) );
+		$ability = wp_get_ability( 'aafm/avada-update-page-css' );
+		$this->assertInstanceOf( \WP_Ability::class, $ability );
+		$section = self::factory()->post->create(
+			array(
+				'post_type'    => 'fusion_tb_section',
+				'post_content' => self::PAGE,
+			)
+		);
+		$input   = array(
+			'post_id'    => $section,
+			'custom_css' => '.section{}',
+		);
+		$this->assertTrue( $ability->check_permissions( $input ) );
+		$out = $ability->execute( $input );
+		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+		$this->assertSame( '.section{}', get_post_meta( $section, '_fusion_builder_custom_css', true ) );
+
+		$other = self::factory()->post->create(
+			array(
+				'post_type'    => 'aafm_unexposed',
+				'post_content' => self::PAGE,
+			)
+		);
+		update_post_meta( $other, 'fusion_builder_status', 'active' );
+		$refused = $ability->check_permissions(
+			array(
+				'post_id'    => $other,
+				'custom_css' => '.x{}',
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $refused );
+		$this->assertSame( 'aafm_post_type_not_exposed', $refused->get_error_code() );
+		unregister_post_type( 'fusion_tb_section' );
+		unregister_post_type( 'aafm_unexposed' );
+	}
+
 	public function test_a_section_needs_manage_options(): void {
 		register_post_type(
 			'fusion_tb_section',

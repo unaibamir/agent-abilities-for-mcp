@@ -1243,7 +1243,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		// A meta call whose KEY the site's policy refuses is answered with that reason on the wire as
 		// well (see aafm_meta_key_refusal_error()). Only for a well-formed call that the reserved-key
 		// routes above did not already answer.
-		$key_refusal = array() === $missing && null === $unreachable ? ( aafm_meta_key_refusal_error( $name, $call_args ) ?? aafm_post_type_refusal_error( $name, $call_args ) ) : null;
+		$key_refusal = array() === $missing && null === $unreachable ? aafm_meta_key_refusal_error( $name, $call_args ) : null;
 
 		if ( $paused ) {
 			// A paused connection lists tools but may not call one. The refusal is a tool error, not a
@@ -1298,6 +1298,17 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 				// ours - the leak is closed by construction, not by careful wording.
 				$crash_detail = aafm_build_activity_detail_from_exception( $e );
 				$allowed      = false;
+			}
+		}
+
+		// Codex demo pass HIGH: the "not exposed" explanation is given only after the tool's own permission callback has
+		// refused, so a builder-owned private type its gate admits (fusion_tb_section for an administrator) keeps working.
+		// Core's re-check inside execute() keeps the bare false, because a WP_Error there trips _doing_it_wrong().
+		if ( false === $allowed && null === $reason && null === $crash_detail ) {
+			$type_refusal = aafm_post_type_refusal_error( $name, $call_args );
+			if ( null !== $type_refusal ) {
+				$allowed = null === aafm_executing_ability() ? $type_refusal['error'] : false;
+				$reason  = $type_refusal['code'];
 			}
 		}
 

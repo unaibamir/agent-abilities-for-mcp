@@ -564,6 +564,8 @@ final class AvadaSiteTest extends TestCase {
 				$this->assertStringContainsString( $phrase, $text, $name );
 			}
 		}
+		// BR-9: previous restores the values, not always the stored bytes, and the description says so.
+		$this->assertStringContainsString( 'an option stored as default comes back as no stored option', $registry['aafm/avada-update-page-options']['description'] );
 		foreach ( array( 'aafm/avada-update-page-options', 'aafm/avada-update-slider-settings', 'aafm/avada-update-global-options', 'aafm/avada-insert-library-item' ) as $name ) {
 			foreach ( $texts( $name ) as $text ) {
 				$this->assertStringNotContainsString( 'colour', $text, $name );

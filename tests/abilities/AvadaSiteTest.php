@@ -2575,6 +2575,27 @@ final class AvadaSiteTest extends TestCase {
 		$this->assertFalse( aafm_perm_manage_options() );
 	}
 
+	/**
+	 * The Studio search matches case-insensitively across Unicode letters with no mbstring, as mb_stripos() did.
+	 */
+	public function test_the_studio_search_match_needs_no_mbstring(): void {
+		$cases = array(
+			array( 'Élan landing', 'élan', true ),
+			array( 'Élan landing', 'LANDING', true ),
+			array( 'Straße', 'STRASSE', false ),
+			array( 'Café menu', 'CAFÉ', true ),
+			array( 'Price 5$ (a+b)', '5$ (A+B', true ),
+			array( 'axb', 'a.b', false ),
+			array( 'Hero', 'hero/', false ),
+		);
+		foreach ( $cases as list( $title, $search, $expected ) ) {
+			$this->assertSame( $expected, aafm_text_contains_ci( $title, $search ), $title . ' / ' . $search );
+			if ( function_exists( 'mb_stripos' ) && 'Straße' !== $title ) {
+				$this->assertSame( false !== mb_stripos( $title, $search ), aafm_text_contains_ci( $title, $search ), 'mb_stripos agrees: ' . $search );
+			}
+		}
+	}
+
 	public function test_studio_list_returns_trimmed_rows_by_type_search_and_page(): void {
 		$this->studio_approval( true, true );
 		$out = $this->studio_call( 'list', array( 'type' => 'fusion_element' ) );
@@ -2592,6 +2613,8 @@ final class AvadaSiteTest extends TestCase {
 		);
 		$this->assertSame( 200, mb_strlen( $out['items'][1]['title'] ) );
 		$this->assertSame( array( 601 ), array_column( $this->studio_call( 'list', array( 'search' => 'land' ) )['items'], 'id' ) );
+		$this->assertSame( array( 601 ), array_column( $this->studio_call( 'list', array( 'search' => 'LAND' ) )['items'], 'id' ) );
+		$this->assertSame( array(), $this->studio_call( 'list', array( 'search' => 'L.nd' ) )['items'], 'The search is text, not a pattern.' );
 		$this->assertSame(
 			array( 502 ),
 			array_column(

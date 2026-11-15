@@ -1621,6 +1621,19 @@ function aafm_args_avada_list_studio_items(): array {
 }
 
 /**
+ * Whether text holds a search string, ignoring case across Unicode letters. PCRE only, so no mbstring is needed
+ * (WordPress never polyfills mb_stripos()); the search is quoted, so it is matched as text, never as a pattern. Text that
+ * is not valid UTF-8 never matches.
+ *
+ * @param string $text   Text to search.
+ * @param string $search Search string.
+ * @return bool
+ */
+function aafm_text_contains_ci( string $text, string $search ): bool {
+	return 1 === preg_match( '/' . preg_quote( $search, '/' ) . '/iu', $text );
+}
+
+/**
  * Execute aafm/avada-list-studio-items (design AV-15 Studio). Approval first, then availability, then Avada's own
  * catalogue call; this plugin makes no request of its own.
  *
@@ -1644,7 +1657,7 @@ function aafm_exec_avada_list_studio_items( array $input ) {
 	$search = isset( $input['search'] ) && is_string( $input['search'] ) ? trim( $input['search'] ) : '';
 	$rows   = array();
 	foreach ( aafm_avada_studio_items( $data ) as $row ) {
-		if ( ( '' === $type || $type === $row['type'] ) && ( '' === $search || false !== mb_stripos( $row['title'], $search ) ) ) {
+		if ( ( '' === $type || $type === $row['type'] ) && ( '' === $search || aafm_text_contains_ci( $row['title'], $search ) ) ) {
 			$rows[] = $row;
 		}
 	}

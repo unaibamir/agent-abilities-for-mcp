@@ -76,6 +76,40 @@ function aafm_builder_css_markup( string $field, string $css ): ?WP_Error {
 }
 
 /**
+ * CSS the builder's own output would cut or rewrite, established on the smoke site in fix pass 2 (BR-6): Avada prints
+ * page CSS through sanitize_textarea_field(), which removes every percent-encoded octet and escapes every <, and
+ * WPBakery prints page CSS and builds custom.css through wp_strip_all_tags(), which cuts at a < that is not followed
+ * by whitespace. Only the surrounding whitespace both trim is let through, since it changes nothing a browser reads.
+ *
+ * @param string $builder 'avada' or 'wpbakery'.
+ * @param string $field   Field named in the refusal.
+ * @param string $css     CSS.
+ * @return WP_Error|null Null when the builder prints the CSS as stored.
+ */
+function aafm_builder_css_vendor_alters( string $builder, string $field, string $css ): ?WP_Error {
+	if ( 'avada' === $builder && 1 === preg_match( '/%[0-9A-Fa-f]{2}/', $css ) ) {
+		/* translators: %s: the CSS field. */
+		$message = __( '%s holds a percent-encoded sequence such as %%20, which Avada removes when it prints page CSS. Write the character itself. Nothing was changed.', 'agent-abilities-for-mcp' );
+	} elseif ( 'avada' === $builder && false !== strpos( $css, '<' ) ) {
+		/* translators: %s: the CSS field. */
+		$message = __( '%s holds a "<" character, which Avada rewrites when it prints page CSS. Use min-width or max-width instead of a <= range query. Nothing was changed.', 'agent-abilities-for-mcp' );
+	} elseif ( 'wpbakery' === $builder && 1 === preg_match( '/<(?!\s)/', $css ) ) {
+		/* translators: %s: the CSS field. */
+		$message = __( '%s holds a "<" followed by another character, such as a <= range query, and WPBakery cuts the CSS off there when it prints it. Use min-width or max-width instead. Nothing was changed.', 'agent-abilities-for-mcp' );
+	} else {
+		return null;
+	}
+	return new WP_Error(
+		'aafm_builder_css_vendor_alters',
+		sprintf( $message, $field ),
+		array(
+			'status'  => 400,
+			'setting' => $field,
+		)
+	);
+}
+
+/**
  * How many references deep aafm_builder_references_allowed() follows before it refuses.
  */
 const AAFM_BUILDER_REFERENCE_DEPTH = 5;

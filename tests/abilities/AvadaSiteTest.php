@@ -614,7 +614,12 @@ final class AvadaSiteTest extends TestCase {
 		$id = $this->avada_post();
 		$this->assert_error( $this->page_css( $id, '.a{}</style><script>x()</script>' ), 'aafm_builder_css_markup', 400 );
 		$this->assertFalse( metadata_exists( 'post', $id, '_fusion_builder_custom_css' ) );
-		$css = '@media (width <= 600px) { .a > .b { background: url("data:image/svg+xml,%3Csvg%3E") } }  ';
+		// BR-6: what Avada's print removes or rewrites is refused by name (smoke site, fix pass 2).
+		foreach ( array( '@media (width <= 600px) { .a{} }', '.a{content:"a < b"}', '.k{background:url("a%20b.png")}' ) as $altered ) {
+			$this->assert_error( $this->page_css( $id, $altered ), 'aafm_builder_css_vendor_alters', 400 );
+		}
+		$this->assertFalse( metadata_exists( 'post', $id, '_fusion_builder_custom_css' ) );
+		$css = '@media (max-width: 600px) { .a > .b { content: "100% > 50%"; background: url("a b.png") } }  ';
 		$this->assertTrue( $this->page_css( $id, $css )['changed'] );
 		$this->assertSame( $css, get_post_meta( $id, '_fusion_builder_custom_css', true ) );
 	}

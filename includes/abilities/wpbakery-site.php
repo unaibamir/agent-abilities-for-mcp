@@ -607,7 +607,7 @@ function aafm_exec_wpbakery_update_page_code( array $input ) {
 			$given[ $field ] = $input[ $field ];
 		}
 	}
-	$markup = isset( $given['custom_css'] ) ? aafm_builder_css_markup( 'custom_css', $given['custom_css'] ) : null;
+	$markup = isset( $given['custom_css'] ) ? aafm_builder_css_markup( 'custom_css', $given['custom_css'] ) ?? aafm_builder_css_vendor_alters( 'wpbakery', 'custom_css', $given['custom_css'] ) : null;
 	if ( null !== $markup ) {
 		return $markup;
 	}
@@ -867,7 +867,7 @@ function aafm_wpbakery_sanitize_setting( string $key, $value ) {
 	if ( ! $ok ) {
 		return aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $key );
 	}
-	$markup = 'custom_css' === $key && is_string( $value ) ? aafm_builder_css_markup( $key, $value ) : null;
+	$markup = 'custom_css' === $key && is_string( $value ) ? aafm_builder_css_markup( $key, $value ) ?? aafm_builder_css_vendor_alters( 'wpbakery', $key, $value ) : null;
 	if ( null !== $markup ) {
 		return $markup;
 	}

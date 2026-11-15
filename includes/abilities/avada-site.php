@@ -325,7 +325,7 @@ function aafm_exec_avada_update_page_css( array $input ) {
 		return aafm_avada_not_owned_error();
 	}
 	$css    = $input['custom_css'];
-	$markup = aafm_builder_css_markup( 'custom_css', $css );
+	$markup = aafm_builder_css_markup( 'custom_css', $css ) ?? aafm_builder_css_vendor_alters( 'avada', 'custom_css', $css );
 	if ( null !== $markup ) {
 		return $markup;
 	}

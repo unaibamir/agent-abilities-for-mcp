@@ -766,7 +766,10 @@ final class WpbakerySiteTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$this->assert_error( $this->page_code( $id, array( 'custom_css' => '.a{color:red}</style><script>alert(1)</script>' ) ), 'aafm_builder_css_markup', 400 );
 		$this->assertFalse( metadata_exists( 'post', $id, '_wpb_post_custom_css' ) );
-		$css = '@media (width <= 600px) { .a > .b { background: url("data:image/svg+xml,%3Csvg%3E") } }  ';
+		// BR-6: a < that WPBakery's print cuts at is refused by name; a < before whitespace and %XX print as stored.
+		$this->assert_error( $this->page_code( $id, array( 'custom_css' => '@media (width <= 600px) { .a{} }' ) ), 'aafm_builder_css_vendor_alters', 400 );
+		$this->assertFalse( metadata_exists( 'post', $id, '_wpb_post_custom_css' ) );
+		$css = '@media (max-width: 600px) { .a > .b { content: "a < b"; background: url("data:image/svg+xml,%3Csvg%3E") } }  ';
 		$this->assertIsArray( $this->page_code( $id, array( 'custom_css' => $css ) ) );
 		$this->assertSame( $css, get_post_meta( $id, '_wpb_post_custom_css', true ) );
 	}
@@ -1490,7 +1493,8 @@ final class WpbakerySiteTest extends TestCase {
 		$this->assertSame( '.a{background:url(../img/x.png)}', get_option( 'wpb_js_custom_css' ) );
 		$this->assertCount( 1, self::$calls['sanitize_custom_css_callback'] );
 		$this->assertTrue( function_exists( 'add_settings_error' ), 'wp-admin template functions are loaded for the vendor failure path.' );
-		$range = '@media (width <= 600px) { .a > .b { color: red } }';
+		$this->assert_error( aafm_exec_wpbakery_update_settings( array( 'set' => array( 'custom_css' => '@media (width <= 600px) { .a{} }' ) ) ), 'aafm_builder_css_vendor_alters', 400 );
+		$range = '@media (max-width: 600px) { .a > .b { content: "a < b" } }';
 		$this->assertSame( array( 'custom_css' ), aafm_exec_wpbakery_update_settings( array( 'set' => array( 'custom_css' => $range ) ) )['changed'] );
 		$this->assertSame( $range, get_option( 'wpb_js_custom_css' ) );
 		update_option( 'wpb_js_custom_css', '.a{background:url(../img/x.png)}' );

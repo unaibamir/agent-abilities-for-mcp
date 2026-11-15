@@ -850,8 +850,8 @@ function aafm_exec_avada_list_elements( array $input ) {
 }
 
 /**
- * The reversibility note of an engine result: reversible_reason only when the engine set it (the restore point was gone
- * after the save).
+ * The reversibility note of an engine result: reversible_reason only when the engine set it (there is no restore point:
+ * revisions are off, or the save pruned it).
  *
  * @param array<string,mixed> $result aafm_builder_commit() result.
  * @return array<string,string>
@@ -881,7 +881,7 @@ function aafm_avada_write_output_schema( array $extra ): array {
 				'reversible'          => array( 'type' => 'boolean' ),
 				'reversible_reason'   => array(
 					'type'        => 'string',
-					'description' => __( 'Present only when the restore point was gone after the save; says why there is no way back.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'Present only when there is no restore point: the site keeps no revisions, or its revision limit removed the one saved before the change. Says why there is no way back.', 'agent-abilities-for-mcp' ),
 				),
 			)
 		),
@@ -2078,7 +2078,7 @@ function aafm_avada_empties_a_layout_parent( array $elements, int $index ): bool
 function aafm_avada_layout_needs_child_error(): WP_Error {
 	return new WP_Error(
 		'aafm_avada_layout_needs_child',
-		__( 'A container must keep at least one row, and a row at least one column, so this change would break the layout. Move or remove the whole container or row instead. Nothing was changed.', 'agent-abilities-for-mcp' ),
+		__( 'A container must keep at least one row (a flex container that holds its columns directly, at least one column), and a row at least one column, so this change would break the layout. Move or remove the whole container or row instead. Nothing was changed.', 'agent-abilities-for-mcp' ),
 		array( 'status' => 400 )
 	);
 }

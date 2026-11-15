@@ -853,6 +853,33 @@ function aafm_builder_replay_check( string $builder, int $id, string $old, strin
 }
 
 /**
+ * The reason a builder write has no restore point because the site keeps no revisions (demo #8).
+ *
+ * @return string
+ */
+function aafm_builder_revisions_off_reason(): string {
+	return __( 'This site keeps no revisions, so there is no restore point for this change. A plugin or wp-config.php can turn revisions off site-wide; a WP_POST_REVISIONS line in wp-config.php sets how many are kept.', 'agent-abilities-for-mcp' );
+}
+
+/**
+ * The reason a builder write has no restore point because the revision saved before it was gone after the save.
+ *
+ * @param WP_Post $post The post written.
+ * @return string
+ */
+function aafm_builder_pruned_reason( WP_Post $post ): string {
+	$keep = wp_revisions_to_keep( $post );
+	if ( $keep < 0 ) {
+		return __( 'The revision that held the page before this change was no longer there after the save, so there is no way back from this plugin. This site keeps every revision, so something other than the revision limit deleted it.', 'agent-abilities-for-mcp' );
+	}
+	return sprintf(
+		/* translators: %d: the number of revisions the site keeps per post. */
+		_n( 'The revision that held the page before this change was no longer there after the save, so there is no way back from this plugin. The usual cause is the site\'s revision limit (WP_POST_REVISIONS or the wp_revisions_to_keep filter); this site keeps %d revision per post.', 'The revision that held the page before this change was no longer there after the save, so there is no way back from this plugin. The usual cause is the site\'s revision limit (WP_POST_REVISIONS or the wp_revisions_to_keep filter); this site keeps %d revisions per post.', $keep, 'agent-abilities-for-mcp' ),
+		$keep
+	);
+}
+
+/**
  * Keep the post's content before a write as a revision and return its id, or null when none holds those bytes: the
  * revision wp_save_post_revision() saves, or the newest real revision when core saved none because that one already
  * equals the stored content, or one forced for this call when core skipped content that differs only in whitespace.
@@ -913,16 +940,14 @@ function aafm_builder_restore_point( int $id, string $old ): ?int {
  * @param callable|null             $after    callable( int $post_id, bool $probe ): bool, or null.
  * @param string                    $builder  avada or wpbakery.
  * @return array{post:WP_Post,restore_revision_id:?int,reversible:bool,unchanged:bool,page_fingerprint:string,reversible_reason?:string}|WP_Error
- *         reversible_reason is present only when the site's revision limit deleted the restore point.
+ *         reversible_reason is present when there is no restore point: revisions are off, or the save pruned it.
  */
 function aafm_builder_commit( WP_Post $post, string $old, string $new, array $tags, array $expected, ?callable $after, string $builder ) { // phpcs:ignore Universal.NamingConventions.NoReservedKeywordParameterNames.newFound -- $new is the contracted parameter name (plan 326 S7-2).
 	$id         = (int) $post->ID;
 	$prefix     = 'wpbakery' === $builder ? 'wpbakery' : 'avada';
 	$reversible = post_type_supports( $post->post_type, 'revisions' ) && wp_revisions_enabled( $post );
 	// Demo #8: revisions off site-wide (a plugin such as GeoDirectory can define WP_POST_REVISIONS 0) is a reason too.
-	$reversible_reason = post_type_supports( $post->post_type, 'revisions' ) && ! $reversible
-		? __( 'This site keeps no revisions, so there is no restore point for this change. A plugin or wp-config.php can turn revisions off site-wide; a WP_POST_REVISIONS line in wp-config.php sets how many are kept.', 'agent-abilities-for-mcp' )
-		: null;
+	$reversible_reason = post_type_supports( $post->post_type, 'revisions' ) && ! $reversible ? aafm_builder_revisions_off_reason() : null;
 
 	// Step 0 (Ruling R3-PR2-8): nothing to save.
 	if ( $new === $old ) {
@@ -1001,14 +1026,7 @@ function aafm_builder_commit( WP_Post $post, string $old, string $new, array $ta
 		$restore_revision_id = null;
 		$reversible          = false;
 		$keep                = wp_revisions_to_keep( $post );
-		$reversible_reason   = sprintf(
-			/* translators: %d: the number of revisions the site keeps per post. */
-			_n( 'The revision that held the page before this change was no longer there after the save, so there is no way back from this plugin. The usual cause is the site\'s revision limit (WP_POST_REVISIONS or the wp_revisions_to_keep filter); this site keeps %d revision per post.', 'The revision that held the page before this change was no longer there after the save, so there is no way back from this plugin. The usual cause is the site\'s revision limit (WP_POST_REVISIONS or the wp_revisions_to_keep filter); this site keeps %d revisions per post.', $keep, 'agent-abilities-for-mcp' ),
-			$keep
-		);
-		if ( $keep < 0 ) {
-			$reversible_reason = __( 'The revision that held the page before this change was no longer there after the save, so there is no way back from this plugin. This site keeps every revision, so something other than the revision limit deleted it.', 'agent-abilities-for-mcp' );
-		}
+		$reversible_reason   = aafm_builder_pruned_reason( $post );
 	}
 
 	// Step 8.

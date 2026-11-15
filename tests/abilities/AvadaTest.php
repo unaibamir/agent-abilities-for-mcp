@@ -191,6 +191,28 @@ final class AvadaTest extends TestCase {
 		$this->assertStringContainsString( 'Hello world', $revision->post_content );
 		$this->assertArrayHasKey( 'restore_revision_id', aafm_args_avada_replace_text()['output_schema']['properties'] );
 		$this->assertStringContainsString( 'restore-revision', aafm_ability_description( 'aafm/avada-replace-text' ) );
+		$this->assertStringContainsString( 'reversible_reason', aafm_ability_description( 'aafm/avada-replace-text' ) );
+	}
+
+	/**
+	 * Codex demo pass: with no restore point (revisions off), the response says why instead of leaving it out silently.
+	 */
+	public function test_replace_text_without_a_restore_point_says_why(): void {
+		$id = $this->make_avada_post( '[fusion_builder_container]Hello world[/fusion_builder_container]' );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		$keep = static fn(): int => 0;
+		add_filter( 'wp_revisions_to_keep', $keep );
+		$out  = aafm_exec_avada_replace_text(
+			array(
+				'post_id' => $id,
+				'search'  => 'Hello world',
+				'replace' => 'Greetings world',
+			)
+		);
+		remove_filter( 'wp_revisions_to_keep', $keep );
+		$this->assertIsArray( $out );
+		$this->assertArrayNotHasKey( 'restore_revision_id', $out );
+		$this->assertStringContainsString( 'keeps no revisions', $out['reversible_reason'] );
 	}
 
 	/**

@@ -848,6 +848,13 @@ final class AvadaElementsTest extends TestCase {
 		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
 		$this->assertFalse( $out['reversible'] );
 		$this->assertStringContainsString( 'keeps no revisions', $out['reversible_reason'] );
+		// Codex demo pass: every schema that declares reversible_reason covers the revisions-off case too.
+		foreach ( array( aafm_args_avada_update_element(), aafm_args_wpbakery_update_element() ) as $args ) {
+			$this->assertStringContainsString( 'keeps no revisions', $args['output_schema']['properties']['reversible_reason']['description'] );
+		}
+		// The flex exception is in the library description and the empty-layout refusal.
+		$this->assertStringContainsString( 'flex container', aafm_ability_description( 'aafm/avada-insert-library-item' ) );
+		$this->assertStringContainsString( 'flex container', aafm_avada_layout_needs_child_error()->get_error_message() );
 	}
 
 	public function test_output_schemas_declare_reversible_reason(): void {

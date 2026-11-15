@@ -389,6 +389,24 @@ function aafm_avada_body_text( string $text ) {
 }
 
 /**
+ * Text with every entity decoded until it stops changing, at most five passes (so a double-encoded &nbsp; is seen),
+ * the same bound the attribute rule uses.
+ *
+ * @param string $value Text.
+ * @return string
+ */
+function aafm_avada_decoded_text( string $value ): string {
+	for ( $i = 0; $i < 5; $i++ ) {
+		$next = html_entity_decode( $value, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+		if ( $next === $value ) {
+			break;
+		}
+		$value = $next;
+	}
+	return $value;
+}
+
+/**
  * Attribute text in the form Avada's editor keeps: every entity decoded first (repeatedly, so a double-encoded quote is
  * seen), then refused when it holds a double quote (the editor drops the whole attribute on its next save), a square
  * bracket, a control character or, for one line, a line break; then &, < and > are written as entities and the
@@ -401,13 +419,7 @@ function aafm_avada_body_text( string $text ) {
  * @return string|null Null when refused.
  */
 function aafm_avada_attribute_text( string $text, bool $one_line = true ): ?string {
-	for ( $i = 0; $i < 5; $i++ ) {
-		$next = html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
-		if ( $next === $text ) {
-			break;
-		}
-		$text = $next;
-	}
+	$text     = aafm_avada_decoded_text( $text );
 	$controls = $one_line ? '/[\x00-\x1f\x7f]/' : '/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/';
 	if ( false !== strpbrk( $text, '"[]' ) || 1 === preg_match( $controls, $text ) ) {
 		return null;
@@ -460,7 +472,9 @@ function aafm_avada_encode_value( string $kind, $value, array $param ) {
 		$text = aafm_wpbakery_scalar_text( $value );
 		return null === $text ? aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $name ) : aafm_avada_body_text( $text );
 	}
-	if ( 'text' === $kind && is_string( $value ) && 1 === preg_match( '/\x{00A0}|\x{200B}/u', html_entity_decode( $value, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) ) ) {
+	// Body text returned above, so a content kind here is a textarea stored as an attribute: the same rule applies.
+	$attribute = ( 'text' === $kind || 'content' === $kind ) && is_string( $value );
+	if ( $attribute && 1 === preg_match( '/\x{00A0}|\x{200B}/u', aafm_avada_decoded_text( $value ) ) ) {
 		// BR-5: WordPress reads either one as a plain space in an attribute, and Avada's editor stores a plain space on
 		// a later save, whether it was sent as the character or as &nbsp; (smoke site, fix pass 2).
 		return new WP_Error(
@@ -473,7 +487,7 @@ function aafm_avada_encode_value( string $kind, $value, array $param ) {
 			)
 		);
 	}
-	if ( 'text' === $kind && is_string( $value ) && false !== strpos( html_entity_decode( $value, ENT_QUOTES | ENT_HTML5, 'UTF-8' ), '  ' ) ) {
+	if ( $attribute && false !== strpos( aafm_avada_decoded_text( $value ), '  ' ) ) {
 		// Avada's editor collapses a run of spaces in an attribute on its next save, so the value would not stay as sent.
 		return new WP_Error(
 			'aafm_avada_repeated_spaces',

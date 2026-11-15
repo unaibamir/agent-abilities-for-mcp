@@ -349,6 +349,33 @@ final class AvadaElementsTest extends TestCase {
 		}
 	}
 
+	/**
+	 * A1: a double-encoded non-breaking space or space run is decoded as far as the attribute rule decodes it, so it is
+	 * refused rather than stored and collapsed by Avada's editor on its next save.
+	 */
+	public function test_double_encoded_nbsp_and_spaces_are_refused(): void {
+		$this->assert_error( $this->encode( 'fusion_button', 'title', 'a&amp;nbsp;b' ), 'aafm_avada_nonbreaking_space', 400 );
+		$this->assert_error( $this->encode( 'fusion_button', 'title', 'two&amp;#32;&amp;#32;spaces' ), 'aafm_avada_repeated_spaces', 400 );
+	}
+
+	/**
+	 * A1: a textarea stored as an attribute (not the element's body) goes through the same attribute rule, so it gets
+	 * the same two refusals.
+	 */
+	public function test_textarea_attribute_gets_the_same_two_refusals(): void {
+		$param = array(
+			'type'       => 'textarea',
+			'param_name' => 'description',
+		);
+		foreach ( array( "a\u{00A0}b", 'a&nbsp;b', 'a&amp;nbsp;b' ) as $text ) {
+			$this->assert_error( aafm_avada_encode_value( 'content', $text, $param ), 'aafm_avada_nonbreaking_space', 400 );
+		}
+		foreach ( array( 'two  spaces', 'two&amp;#32;&amp;#32;spaces' ) as $text ) {
+			$this->assert_error( aafm_avada_encode_value( 'content', $text, $param ), 'aafm_avada_repeated_spaces', 400 );
+		}
+		$this->assertIsString( aafm_avada_encode_value( 'content', 'one space', $param ) );
+	}
+
 	public function test_link_refuses_javascript_and_data_urls(): void {
 		$this->assertSame( 'https://example.com/docs', $this->encode( 'fusion_button', 'link', 'https://example.com/docs' ) );
 		$this->assertSame( $this->element( 'fusion_button' )['atts']['link'], $this->encode( 'fusion_button', 'link', 'https://example.com/docs' ) );

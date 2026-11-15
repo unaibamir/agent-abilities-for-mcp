@@ -1583,7 +1583,11 @@ final class WpbakerySiteTest extends TestCase {
 	 * R3-4 note 5: the description says WPBakery rewrites url(../ in the global CSS when it builds its file.
 	 */
 	public function test_update_settings_description_names_the_url_rewrite(): void {
-		$this->assertStringContainsString( 'url(../', aafm_get_abilities_registry_full()['aafm/wpbakery-update-settings']['description'] );
+		$text = aafm_get_abilities_registry_full()['aafm/wpbakery-update-settings']['description'];
+		$this->assertStringContainsString( 'url(../', $text );
+		// Fix round 1: WPBakery rewrites the url in the custom.css file only; the setting keeps the CSS as sent.
+		$this->assertStringNotContainsString( 'stored rewritten', $text );
+		$this->assertStringContainsString( 'the setting itself keeps the CSS as sent', $text );
 	}
 
 	public function test_update_settings_schema_permission_audit_and_description(): void {

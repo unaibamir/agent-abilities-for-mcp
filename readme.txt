@@ -249,7 +249,17 @@ For layout, the AI can list block types and read one block's attributes, plus fi
 
 = Will an agent break my Elementor or Divi page? =
 
-Before any content write the plugin checks whether a page builder owns the post, and if one does it refuses with an error that names the builder. Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks and WPBakery are covered, so edit those pages in the builder itself. The one write it lets through is an edit that only sets the excerpt, which leaves the stored content as it was. Avada's own write tool, avada-replace-text, can replace text in a page and refuses changes to its shortcodes. The other Avada tools only read. On a WPBakery page, wpbakery-get-page-content reads the page and wpbakery-replace-text changes text between its elements, refusing heading and button text and any change to an element.
+Before any content write through the general tools, the plugin checks whether a page builder owns the post, and if one does it refuses with an error that names the builder. Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks and WPBakery are covered, so edit those pages in the builder itself. The one write it lets through is an edit that only sets the excerpt, which leaves the stored content as it was. Avada and WPBakery Page Builder pages have tools of their own: they read a page as an outline of elements, change an element's settings or text, add, move and remove elements, and place a saved template or Library item. Each write is refused, with nothing saved, if saving the page as your user would change anything else on it, and when WordPress keeps a revision the tool returns it so restore-revision can bring the page back. All of these tools start off, and the writes are in no preset except Custom.
+
+= What can an agent change on a WPBakery or Avada page? =
+
+Text, links, images, colours and spacing work for anyone who can edit the page. Code blocks, raw HTML and JS, Design Options, page CSS and JS, and settings that can carry script need a user who may post unfiltered HTML, and so do square brackets, percent-encoded brackets and data-* attributes in body text. The site-wide tools (WPBakery settings, Avada Global Options, Avada layouts and their sections, Avada Slider settings and both Avada Studio tools) need a user who can manage options. Neither builder's Role Manager is applied, so the agent gets what its WordPress user can do and no more.
+
+With Templatera active, its templates are listed beside WPBakery's saved templates and can be copied into a page or placed by reference, and a Templatera template can be edited like a WPBakery page. With Avada Core active, an agent can change an Avada Slider's settings, and Avada page options also work on Avada Slider and Elastic Slider slides. The settings tools return the previous values, which is the way back.
+
+The Avada Studio import is locked with the other high-risk tools until you unlock that category in Settings and switch the tool on. Avada then downloads the item from Avada's servers under your site's Avada registration; this plugin sends nothing in that exchange and never reads the registration.
+
+Refused on both builders: an element type the builder's own element map doesn't list, and a stale element index or page fingerprint. A global Avada Library element is edited in the Library, not on the page that shows it. Adding an element to a WPBakery flexbox or grid container item, or moving one into it, isn't supported yet, though elements already inside one can be reordered, updated and removed.
 
 = Can an AI agent manage my WooCommerce store? =
 
@@ -275,7 +285,7 @@ Because this plugin's tools are all off until you switch them on, it's a poor fi
 
 = Does it send my content to OpenAI, Anthropic or Google? =
 
-The plugin never contacts an AI provider and has no telemetry, but your AI client does receive whatever a tool returns, because that is how it reads your site, and what it does with that is covered by the vendor's terms and your plan. The only request the plugin makes to an outside address is the upload-media-from-url tool, which stays off until you enable it, and External Services above has the details.
+The plugin never contacts an AI provider and has no telemetry, but your AI client does receive whatever a tool returns, because that is how it reads your site, and what it does with that is covered by the vendor's terms and your plan. The only request the plugin makes to an outside address is the upload-media-from-url tool, which stays off until you enable it, and External Services above has the details. If you switch on the Avada Studio tools, Avada itself fetches the Studio catalogue and items from Avada's servers under your Avada registration, and this plugin adds nothing to those requests.
 
 = Is it free? Which WordPress and PHP versions? Do I need to know how to code? =
 
@@ -305,7 +315,7 @@ Under Settings, Notifications, pick Admin notice only, Email alerts as they happ
 
 Yes, for edits made with 25 of this plugin's tools: posts, pages and custom post types, creates, trashes, block edits, terms, custom fields (post and term meta), featured images and SEO fields. The Changes tab keeps up to 30 days and reverts a change if the item hasn't been edited since, and it refuses a revert that would overwrite a newer edit. It lists field names, never contents, though the earlier values are stored in a table in your site's database, and when the history is full the oldest values go first.
 
-No other tool of this plugin's can be undone, including permanent deletes, orders, refunds, user accounts, file uploads, WooCommerce products, ACF field values, menus, comments and events, and each of them says so in its response. Tools from other plugins aren't recorded either. Notifications, webhooks and anything already read are not recalled.
+No other tool of this plugin's can be undone, including permanent deletes, orders, refunds, user accounts, file uploads, WooCommerce products, ACF field values, menus, comments and events, and each of them says so in its response. Tools from other plugins aren't recorded either. Notifications, webhooks and anything already read are not recalled. That includes the WPBakery and Avada tools, but a page edit keeps a WordPress revision when revisions are on, and the tool returns it for restore-revision; their settings tools return the previous values instead.
 
 Two optional tools, list-changes and undo-change, let an agent undo its own changes from the last 24 hours, and both start off. History records only while the plugin is active, can be switched off in Settings and is removed on uninstall. WordPress's export and erase personal data tools cover it.
 

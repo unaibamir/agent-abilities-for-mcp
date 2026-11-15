@@ -586,6 +586,26 @@ final class AvadaSiteTest extends TestCase {
 		}
 	}
 
+	/**
+	 * R3-4 note 4: page CSS stored in a form this tool refuses (a Studio import can store %41) comes back as previous
+	 * as stored, flagged previous_restorable false, so no caller is promised an undo it cannot send.
+	 */
+	public function test_page_css_previous_the_tool_cannot_accept_is_flagged(): void {
+		$this->act_as_admin();
+		$id = $this->avada_post();
+		update_post_meta( $id, '_fusion_builder_custom_css', '.a{content:"%41"}' );
+		$out = $this->page_css( $id, '.b{}' );
+		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+		$this->assertSame( '.a{content:"%41"}', $out['previous'] );
+		$this->assertFalse( $out['previous_restorable'] );
+		$out = $this->page_css( $id, '.c{}' );
+		$this->assertSame( '.b{}', $out['previous'] );
+		$this->assertTrue( $out['previous_restorable'] );
+		$schema = aafm_args_avada_update_page_css()['output_schema']['properties'];
+		$this->assertSame( 'boolean', $schema['previous_restorable']['type'] );
+		$this->assertStringContainsString( 'previous_restorable is false', aafm_get_abilities_registry_full()['aafm/avada-update-page-css']['description'] );
+	}
+
 	public function test_page_options_previous_goes_back_byte_for_byte(): void {
 		$this->force_avada_theme( true );
 		$this->act_as_admin();
@@ -856,9 +876,10 @@ final class AvadaSiteTest extends TestCase {
 		$out = $this->page_css( $id, ".a > .b { color: red; }\n.c{}" );
 		$this->assertSame(
 			array(
-				'post_id'  => $id,
-				'changed'  => true,
-				'previous' => '',
+				'post_id'             => $id,
+				'changed'             => true,
+				'previous'            => '',
+				'previous_restorable' => true,
 			),
 			$out
 		);
@@ -986,7 +1007,7 @@ final class AvadaSiteTest extends TestCase {
 		$this->assertFalse( $args['input_schema']['additionalProperties'] );
 		$this->assertSame( array( 'post_id', 'custom_css' ), $args['input_schema']['required'] );
 		$this->assertSame( array( 'post_id', 'custom_css' ), array_keys( $args['input_schema']['properties'] ) );
-		$this->assertSame( array( 'post_id', 'changed', 'previous' ), array_keys( $args['output_schema']['properties'] ) );
+		$this->assertSame( array( 'post_id', 'changed', 'previous', 'previous_restorable' ), array_keys( $args['output_schema']['properties'] ) );
 		$this->assertSame(
 			array(
 				'readonly'    => false,

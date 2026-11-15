@@ -60,7 +60,7 @@ function aafm_avada_site_registry_definitions(): array {
 		),
 		'aafm/avada-update-page-css'        => array(
 			'label'        => __( 'Update Avada page CSS', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Sets the custom CSS of one Avada page, layout section or library item, the CSS field of Avada\'s builder settings for that page. The value given replaces the page\'s existing CSS, and an empty string removes it; previous returns the old CSS, which is the way back. CSS that holds markup is refused, as WordPress refuses it in custom CSS, and so is a "<" or a percent-encoded sequence such as %20, which Avada rewrites or removes when it prints page CSS; any other CSS is stored exactly as sent. A value equal to what is stored is left alone and changed is false. No revision is kept, and the change is not undoable from this plugin\'s change history. Requires edit access to the post and a user who may post unfiltered HTML; Avada\'s Role Manager is not applied. Only while Avada is active.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Sets the custom CSS of one Avada page, layout section or library item, the CSS field of Avada\'s builder settings for that page. The value given replaces the page\'s existing CSS, and an empty string removes it; previous returns the old CSS, which is the way back; previous_restorable is false when the earlier CSS holds a form this tool refuses, so it cannot be sent back. CSS that holds markup is refused, as WordPress refuses it in custom CSS, and so is a "<" or a percent-encoded sequence such as %20, which Avada rewrites or removes when it prints page CSS; any other CSS is stored exactly as sent. A value equal to what is stored is left alone and changed is false. No revision is kept, and the change is not undoable from this plugin\'s change history. Requires edit access to the post and a user who may post unfiltered HTML; Avada\'s Role Manager is not applied. Only while Avada is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'avada',
@@ -289,10 +289,20 @@ function aafm_args_avada_update_page_css(): array {
 			'required'             => array( 'post_id', 'custom_css' ),
 			'additionalProperties' => false,
 		),
-		'output_schema'       => aafm_avada_meta_write_output_schema(
+		'output_schema'       => array_merge_recursive(
+			aafm_avada_meta_write_output_schema(
+				array(
+					'type'        => 'string',
+					'description' => __( 'The CSS stored before this call, an empty string where there was none.', 'agent-abilities-for-mcp' ),
+				)
+			),
 			array(
-				'type'        => 'string',
-				'description' => __( 'The CSS stored before this call, an empty string where there was none.', 'agent-abilities-for-mcp' ),
+				'properties' => array(
+					'previous_restorable' => array(
+						'type'        => 'boolean',
+						'description' => __( 'False when previous holds a form this tool refuses, so it cannot be sent back.', 'agent-abilities-for-mcp' ),
+					),
+				),
 			)
 		),
 		'execute_callback'    => 'aafm_exec_avada_update_page_css',
@@ -340,9 +350,11 @@ function aafm_exec_avada_update_page_css( array $input ) {
 		return $old;
 	}
 	$out = array(
-		'post_id'  => $id,
-		'changed'  => false,
-		'previous' => $old['css'],
+		'post_id'             => $id,
+		'changed'             => false,
+		'previous'            => $old['css'],
+		// R3-4: CSS stored by another route (a Studio import keeps %41) may be a form this tool refuses.
+		'previous_restorable' => null === aafm_builder_css_markup( 'custom_css', $old['css'] ) && null === aafm_builder_css_vendor_alters( 'avada', 'custom_css', $old['css'] ),
 	);
 	if ( $css === $old['css'] ) {
 		return $out;

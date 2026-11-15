@@ -259,10 +259,11 @@ final class AvadaSiteWireTest extends TestCase {
 		);
 		$this->assertSame(
 			array(
-				'post_id'  => $id,
-				'changed'  => true,
-				'previous' => '.old{}',
-				'undo'     => array(
+				'post_id'             => $id,
+				'changed'             => true,
+				'previous'            => '.old{}',
+				'previous_restorable' => true,
+				'undo'                => array(
 					'undoable'   => false,
 					'change_ids' => array(),
 					'reason'     => 'not_covered',

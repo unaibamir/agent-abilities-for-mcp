@@ -566,6 +566,10 @@ final class NavigationTest extends TestCase {
 			$this->assertStringNotContainsString( 'earlier version is kept as a revision', $text );
 			$this->assertStringNotContainsString( 'keeps the earlier version as a revision', $text );
 			$this->assertStringContainsString( 'only if', $text );
+			// Codex demo pass: the revision claim holds only while revisions are on, and a restored revision brings
+			// back what it holds.
+			$this->assertMatchesRegularExpression( '/When (the site keeps revisions|revisions are on)/', $text );
+			$this->assertStringNotContainsString( 'either way', $text );
 		}
 	}
 

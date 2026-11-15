@@ -1531,7 +1531,7 @@ function aafm_wpbakery_nesting_allows( string $parent_tag, string $child_tag, ar
 		return new WP_Error(
 			'aafm_builder_invalid_nesting',
 			/* translators: 1: the parent tag, 2: the child tag. */
-			sprintf( __( 'WPBakery\'s element map on this site does not list %1$s outside its editor, so its nesting rule cannot be read and nothing can be placed inside it with this tool. Use WPBakery\'s editor for this container. Nothing was changed. Child: %2$s.', 'agent-abilities-for-mcp' ), $parent_tag, $child_tag ),
+			sprintf( __( 'WPBakery\'s element map on this site does not list %1$s, so its nesting rule cannot be read and nothing can be placed inside it with this tool. Use WPBakery\'s editor for this container. Nothing was changed. Child: %2$s.', 'agent-abilities-for-mcp' ), $parent_tag, $child_tag ),
 			array(
 				'status' => 400,
 				'parent' => $parent_tag,

@@ -1811,11 +1811,13 @@ final class WpbakeryElementsTest extends TestCase {
 		foreach ( array( array( 'vc_flexbox_container_item', 'vc_flexbox_container' ), array( 'vc_flexbox_container_item', 'vc_row_inner' ), array( 'vc_flexbox_container_item', 'vc_column' ), array( 'vc_tta_section', 'vc_tta_section' ), array( 'vc_column', 'vc_tta_section' ), array( 'vc_flexbox_container', 'vc_column_text' ) ) as list( $parent, $child ) ) {
 			$this->assert_error( aafm_wpbakery_nesting_allows( $parent, $child, $map ), 'aafm_builder_invalid_nesting', 400 );
 		}
-		// A container the site's map does not list (WPBakery 9.1 resolves the flexbox and grid items only in its editor):
-		// refused, and the message says why.
+		// A container the site's map does not list: refused, and the message says why. WPBakery 9.1 ships the flexbox
+		// and grid tags without mapping them anywhere, its editor included (smoke site, round 2), so the message does
+		// not point at the editor.
 		$out = aafm_wpbakery_nesting_allows( 'vc_flexbox_container_item', 'vc_column_text', WpbakeryMapStub::map() );
 		$this->assert_error( $out, 'aafm_builder_invalid_nesting', 400 );
 		$this->assertStringContainsString( 'does not list vc_flexbox_container_item', $out->get_error_message() );
+		$this->assertStringNotContainsString( 'outside its editor', $out->get_error_message() );
 	}
 
 	public function test_insert_move_and_reorder_inside_tab_sections(): void {

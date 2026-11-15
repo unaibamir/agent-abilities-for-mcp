@@ -429,7 +429,11 @@ function aafm_avada_page_option_value( string $id, string $kind, $value ) {
 		$clean = aafm_avada_body_text( $text );
 		return is_wp_error( $clean ) ? $clean : aafm_avada_filtered_text( $id, $text );
 	}
-	$out = aafm_avada_encode_value( $kind, $value, $param );
+	// Text skips the element-only refusals in aafm_avada_encode_value() (R2-1): no editor collapses a page option.
+	$out = 'text' === $kind ? aafm_avada_encode_clean( 'text', $value, $param ) : aafm_avada_encode_value( $kind, $value, $param );
+	if ( null === $out ) {
+		return aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $id );
+	}
 	if ( is_wp_error( $out ) ) {
 		return $out;
 	}

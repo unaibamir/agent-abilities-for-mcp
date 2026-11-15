@@ -474,6 +474,22 @@ final class AvadaSiteTest extends TestCase {
 		$this->assert_refused( $out, 'aafm_avada_global_element', 409, $id, $content );
 	}
 
+	/**
+	 * R2-1: the runs-of-spaces refusal is for element attributes, which Avada's editor collapses; a page option is post
+	 * meta no editor collapses, so its text keeps a double space (and a non-breaking space).
+	 */
+	public function test_page_option_text_keeps_a_double_space_and_element_text_refuses_it(): void {
+		$this->force_avada_theme( true );
+		$this->act_as_admin();
+		$id     = $this->avada_post();
+		$option = $this->option_of( 'text' );
+		$this->assertIsArray( $this->page_options( $id, array( 'set' => array( $option => "Two  spaces and\u{00A0}nbsp" ) ) ) );
+		$this->assertSame( array( $option => "Two  spaces and\u{00A0}nbsp" ), get_post_meta( $id, '_fusion', true ) );
+		$refused = aafm_avada_encode_value( 'text', 'Two  spaces', array( 'param_name' => 'title' ) );
+		$this->assertInstanceOf( WP_Error::class, $refused );
+		$this->assertSame( 'aafm_avada_repeated_spaces', $refused->get_error_code() );
+	}
+
 	public function test_insert_library_item_returns_a_redacted_post(): void {
 		$this->act_as_admin();
 		$id   = $this->avada_post();

@@ -252,6 +252,16 @@ final class HighRiskUiTest extends TestCase {
 	 * its absence so it cannot quietly come back alongside the row and give the operator two
 	 * switches for one option.
 	 */
+	/**
+	 * EV-L1 and BR-2: the switch names every tool family it releases, the Avada Studio import included, and says plainly
+	 * that one unlock opens every held tool already switched on.
+	 */
+	public function test_the_switch_names_the_studio_import_and_says_one_unlock_opens_them_all(): void {
+		$html = (string) preg_replace( '/\s+/', ' ', wp_strip_all_tags( $this->render_settings_tab() ) );
+		$this->assertStringContainsString( 'Avada Studio', $html );
+		$this->assertStringContainsString( 'One switch covers every tool listed here', $html );
+	}
+
 	public function test_the_standalone_high_risk_card_is_gone(): void {
 		$this->assertStringNotContainsString(
 			'aafm-card-head-title">High-risk abilities',

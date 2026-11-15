@@ -1037,7 +1037,7 @@ final class WpbakerySiteTest extends TestCase {
 		$this->assertSame( 'read', $row['risk'] );
 		foreach ( array( $row['description'], aafm_ability_disclosures()[ $name ] ) as $text ) {
 			$this->assertStringNotContainsString( ' - ', $text );
-			foreach ( array( 'licence code', 'unfiltered HTML', 'manage site options' ) as $phrase ) {
+			foreach ( array( 'license code', 'unfiltered HTML', 'manage site options' ) as $phrase ) {
 				$this->assertStringContainsString( $phrase, $text, $phrase );
 			}
 		}

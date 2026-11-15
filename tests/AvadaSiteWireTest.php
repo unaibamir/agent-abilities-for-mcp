@@ -444,7 +444,8 @@ final class AvadaSiteWireTest extends TestCase {
 				'layout_id' => 'global',
 				'changed'   => true,
 				'previous'  => array(
-					'sections'   => array(),
+					// The slot was empty before, so previous gives 0, which clears it again.
+					'sections'   => array( 'footer' => 0 ),
 					'conditions' => array(),
 				),
 				'undo'      => array(
@@ -457,6 +458,37 @@ final class AvadaSiteWireTest extends TestCase {
 		);
 		$this->assertSame( 1, $resets );
 		$this->assertSame( '{"conditions":[],"template_terms":{"footer":' . $footer . '}}', wp_unslash( get_option( 'fusion_tb_layout_default' ) ) );
+
+		// previous sent straight back over a real tools/call puts the layout back as it started.
+		add_filter( 'aafm_builder_vendor', $filter, 20, 2 );
+		$back = $this->wire(
+			$handler->call_tool(
+				array(
+					'name'      => aafm_mcp_tool_name( 'aafm/avada-update-layout' ),
+					'arguments' => array( 'layout_id' => 'global' ) + $done['previous'],
+				),
+				'req-avada-layout-2'
+			)
+		);
+		remove_filter( 'aafm_builder_vendor', $filter, 20 );
+		$this->assertSame(
+			array(
+				'layout_id' => 'global',
+				'changed'   => true,
+				'previous'  => array(
+					'sections'   => array( 'footer' => $footer ),
+					'conditions' => array(),
+				),
+				'undo'      => array(
+					'undoable'   => false,
+					'change_ids' => array(),
+					'reason'     => 'not_covered',
+				),
+			),
+			$back
+		);
+		$this->assertSame( 2, $resets );
+		$this->assertSame( '{"conditions":[],"template_terms":[]}', wp_unslash( get_option( 'fusion_tb_layout_default' ) ) );
 		delete_option( 'fusion_tb_layout_default' );
 		unregister_taxonomy( 'fusion_tb_category' );
 		unregister_post_type( 'fusion_tb_section' );

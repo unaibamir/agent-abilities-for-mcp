@@ -500,6 +500,32 @@ final class AvadaSiteTest extends TestCase {
 		$this->assertSame( 'aafm_avada_repeated_spaces', $refused->get_error_code() );
 	}
 
+	/**
+	 * R2-3: the descriptions name the refusals an agent can meet, use one spelling, and start no sentence with a field.
+	 */
+	public function test_descriptions_name_the_builder_print_and_spacing_rules(): void {
+		$registry = aafm_get_abilities_registry_full();
+		$texts    = static fn( string $name ): array => array( $registry[ $name ]['description'], aafm_ability_disclosures()[ $name ] );
+		$phrases  = array(
+			'aafm/avada-update-page-css'     => '%20',
+			'aafm/wpbakery-update-page-code' => '"<"',
+			'aafm/wpbakery-update-settings'  => '"<"',
+			'aafm/avada-update-element'      => 'non-breaking space',
+			'aafm/avada-insert-element'      => 'non-breaking space',
+		);
+		foreach ( $phrases as $name => $phrase ) {
+			foreach ( $texts( $name ) as $text ) {
+				$this->assertStringContainsString( $phrase, $text, $name );
+			}
+		}
+		foreach ( array( 'aafm/avada-update-page-options', 'aafm/avada-update-slider-settings', 'aafm/avada-update-global-options', 'aafm/avada-insert-library-item' ) as $name ) {
+			foreach ( $texts( $name ) as $text ) {
+				$this->assertStringNotContainsString( 'colour', $text, $name );
+				$this->assertSame( 0, preg_match( '/\. (previous|restore_revision_id) /', $text ), $name );
+			}
+		}
+	}
+
 	public function test_page_css_previous_goes_back_byte_for_byte(): void {
 		$this->act_as_admin();
 		$id = $this->avada_post();

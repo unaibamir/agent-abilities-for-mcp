@@ -338,6 +338,10 @@ final class AvadaElementsTest extends TestCase {
 		$this->assert_error( $this->encode( 'fusion_button', 'title', "tab\there" ), 'aafm_builder_invalid_value', 400 );
 		// Avada's editor collapses a run of spaces in an attribute on its next save (smoke site, fix round 1), so it is
 		// refused with a message that names it rather than stored to be changed later.
+		// BR-5: a non-breaking or zero-width space, as the character or an entity, does not survive Avada's editor.
+		foreach ( array( "a\u{00A0}b", 'a&nbsp;b', 'a&#160;b', "a\u{200B}b" ) as $text ) {
+			$this->assert_error( $this->encode( 'fusion_button', 'title', $text ), 'aafm_avada_nonbreaking_space', 400 );
+		}
 		foreach ( array( 'two  spaces', 'two&#32;&#32;spaces' ) as $text ) {
 			$out = $this->encode( 'fusion_button', 'title', $text );
 			$this->assert_error( $out, 'aafm_avada_repeated_spaces', 400 );

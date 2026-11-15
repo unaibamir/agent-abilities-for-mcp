@@ -460,6 +460,19 @@ function aafm_avada_encode_value( string $kind, $value, array $param ) {
 		$text = aafm_wpbakery_scalar_text( $value );
 		return null === $text ? aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $name ) : aafm_avada_body_text( $text );
 	}
+	if ( 'text' === $kind && is_string( $value ) && 1 === preg_match( '/\x{00A0}|\x{200B}/u', html_entity_decode( $value, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) ) ) {
+		// BR-5: WordPress reads either one as a plain space in an attribute, and Avada's editor stores a plain space on
+		// a later save, whether it was sent as the character or as &nbsp; (smoke site, fix pass 2).
+		return new WP_Error(
+			'aafm_avada_nonbreaking_space',
+			/* translators: %s: the setting name. */
+			sprintf( __( 'The value of %s has a non-breaking or zero-width space, which Avada\'s editor turns into an ordinary space when the page is saved. Use an ordinary space. Nothing was changed.', 'agent-abilities-for-mcp' ), $name ),
+			array(
+				'status'  => 400,
+				'setting' => $name,
+			)
+		);
+	}
 	if ( 'text' === $kind && is_string( $value ) && false !== strpos( html_entity_decode( $value, ENT_QUOTES | ENT_HTML5, 'UTF-8' ), '  ' ) ) {
 		// Avada's editor collapses a run of spaces in an attribute on its next save, so the value would not stay as sent.
 		return new WP_Error(

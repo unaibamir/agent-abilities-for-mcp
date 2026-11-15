@@ -84,7 +84,7 @@ function aafm_avada_site_registry_definitions(): array {
 		),
 		'aafm/avada-update-layout'          => array(
 			'label'        => __( 'Update an Avada layout', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Overwrites the sections and conditions of one Avada layout, named by its id from avada-list-layouts or "global" for the Global Layout. sections assigns a published layout section of the matching type to header, page_title_bar, content or footer, or 0 to clear that slot; the other slots are kept. conditions replaces the whole stored list: each condition takes mode (include or exclude), type, and under the key named by type a condition id that Avada\'s Layouts screen offers, or, for one specific page, post, term or author, the id Avada stores for it, such as specific_page|42, with parent naming the condition it belongs to. Give at least one of sections and conditions. Pages pick their layout from these conditions, so the change applies site-wide at once. The old sections and conditions come back in previous; send them back to undo the change. A layout is never created or deleted. A change equal to what is stored is left alone and changed is false. Not undoable from this plugin\'s change history. Requires a user who can manage site options (manage_options). Only while Avada is active.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Overwrites the sections and conditions of one Avada layout, named by its id from avada-list-layouts or "global" for the Global Layout. sections assigns a published layout section of the matching type to header, page_title_bar, content or footer, or 0 to clear that slot; the other slots are kept. conditions replaces the whole stored list: each condition takes mode (include or exclude), type, and under the key named by type a condition id that Avada\'s Layouts screen offers, or, for one specific page, post, term or author, the id Avada stores for it, such as specific_page|42, with parent set to the part of that id before the |: {"mode": "include", "type": "singular", "singular": "specific_page|42", "parent": "specific_page"}. Give at least one of sections and conditions. Pages pick their layout from these conditions, so the change applies site-wide at once. The old sections and conditions come back in previous; send them back to undo the change. A layout is never created or deleted. A change equal to what is stored is left alone and changed is false. Not undoable from this plugin\'s change history. Requires a user who can manage site options (manage_options). Only while Avada is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'destructive',
 			'subject'      => 'avada',
@@ -1230,17 +1230,43 @@ function aafm_avada_layout_conditions( $conditions, array $stored = array() ) {
 		return $bad;
 	}
 	$out = array();
-	foreach ( $conditions as $condition ) {
+	foreach ( $conditions as $n => $condition ) {
 		$condition = $condition instanceof stdClass ? (array) $condition : $condition;
 		$type      = is_array( $condition ) && is_string( $condition['type'] ?? null ) ? $condition['type'] : '';
 		$id        = '' !== $type && is_string( $condition[ $type ] ?? null ) ? $condition[ $type ] : '';
 		$mode      = $condition['mode'] ?? null;
 		$parent    = is_array( $condition ) && array_key_exists( 'parent', $condition ) ? $condition['parent'] : null;
 		$label     = null === $parent ? ( $offered[ $type ][ $id ] ?? null ) : aafm_avada_layout_child_label( $type, $id, $parent, $offered );
-		if ( '' === $id || ! in_array( $mode, array( 'include', 'exclude' ), true ) || null === $label || isset( $out[ $id ] )
-			|| array() !== array_diff( array_keys( $condition ), array( 'mode', 'type', $type, 'label', 'parent' ) )
-			|| ( isset( $condition['label'] ) && ! is_string( $condition['label'] ) ) ) {
-			return $bad;
+		$prefix    = (string) strtok( $id, '|' );
+		$reason    = null;
+		if ( ! is_array( $condition ) || '' === $id ) {
+			$reason = __( 'it needs type and, under the key type names, a condition id', 'agent-abilities-for-mcp' );
+		} elseif ( ! in_array( $mode, array( 'include', 'exclude' ), true ) ) {
+			$reason = __( 'mode must be include or exclude', 'agent-abilities-for-mcp' );
+		} elseif ( array() !== array_diff( array_keys( $condition ), array( 'mode', 'type', $type, 'label', 'parent' ) ) || ( isset( $condition['label'] ) && ! is_string( $condition['label'] ) ) ) {
+			$reason = __( 'only mode, type, the key type names, label and parent are accepted, and label must be text', 'agent-abilities-for-mcp' );
+		} elseif ( null === $label && null !== $parent && false !== strpos( $id, '|' ) && $parent !== $prefix ) {
+			/* translators: %s: the part of the condition id before the |. */
+			$reason = sprintf( __( 'parent must be %s, the part of the id before |', 'agent-abilities-for-mcp' ), $prefix );
+		} elseif ( null === $label ) {
+			$reason = null === $parent
+				? __( 'the condition id is not one Avada\'s Layouts screen offers for that type', 'agent-abilities-for-mcp' )
+				: __( 'the id does not name an item of that kind on this site', 'agent-abilities-for-mcp' );
+		} elseif ( isset( $out[ $id ] ) ) {
+			$reason = __( 'it repeats a condition id already in the list', 'agent-abilities-for-mcp' );
+		}
+		if ( null !== $reason ) {
+			// Demo #12: name the row and what failed, not only the field.
+			return new WP_Error(
+				'aafm_builder_invalid_value',
+				/* translators: 1: the condition's position, starting at 1, 2: what failed. */
+				sprintf( __( 'Condition %1$d: %2$s. Nothing was changed.', 'agent-abilities-for-mcp' ), (int) $n + 1, $reason ),
+				array(
+					'status'  => 400,
+					'setting' => 'conditions',
+					'index'   => (int) $n,
+				)
+			);
 		}
 		if ( null !== $parent && is_string( $stored[ $id ]['label'] ?? null ) ) {
 			$label = $stored[ $id ]['label'];

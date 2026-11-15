@@ -2220,7 +2220,19 @@ final class AvadaSiteTest extends TestCase {
 				)
 			);
 			$this->assertSame( 'aafm_builder_invalid_value', $err->get_error_code(), (string) wp_json_encode( $bad ) );
+			$this->assertStringContainsString( 'Condition 1', $err->get_error_message(), (string) wp_json_encode( $bad ) );
 		}
+		// Demo #12 (CB-10): the dialog's parent ("All pages") is the common mistake; the refusal names the row and the
+		// parent the id needs, and the description shows a full row.
+		$err = $this->layout_write(
+			array(
+				'layout_id'  => $ids['layout'],
+				'conditions' => array( $child, array_merge( $child, array( 'parent' => 'singular_page' ) ) ),
+			)
+		);
+		$this->assertStringContainsString( 'Condition 2', $err->get_error_message() );
+		$this->assertStringContainsString( 'parent must be specific_page', $err->get_error_message() );
+		$this->assertStringContainsString( '"parent": "specific_page"', aafm_ability_description( 'aafm/avada-update-layout' ) );
 	}
 
 	public function test_a_condition_with_an_unknown_mode_type_or_value_key_is_refused(): void {

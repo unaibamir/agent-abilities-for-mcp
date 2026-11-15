@@ -455,6 +455,11 @@ function aafm_avada_page_option_value( string $id, string $kind, $value ) {
 		return aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $id );
 	}
 	$out = htmlspecialchars_decode( $out, ENT_NOQUOTES );
+	if ( 'text' === $kind && is_string( $value ) && $value !== $out && str_replace( '&amp;', '&', $value ) === $out && current_user_can( 'unfiltered_html' ) ) {
+		// R3-4: a text Avada stored with & as &amp; (its save for a restricted user) comes back in previous that way, so
+		// it is stored as sent; it prints the same.
+		return $value;
+	}
 	return 'text' === $kind ? aafm_avada_filtered_text( $id, $out ) : $out;
 }
 

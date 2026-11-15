@@ -622,6 +622,23 @@ final class AvadaSiteTest extends TestCase {
 		$this->assertSame( $stored, get_post_meta( $id, '_fusion', true ) );
 	}
 
+	/**
+	 * R3-4 note 2: text Avada stored for a restricted user (Fish &amp; chips) comes back in previous, and an
+	 * administrator sending it straight back stores those bytes again, not the decoded Fish & chips.
+	 */
+	public function test_page_option_text_previous_restores_the_stored_bytes_for_an_admin(): void {
+		$this->force_avada_theme( true );
+		$this->act_as_admin();
+		$id     = $this->avada_post();
+		$option = $this->option_of( 'text' );
+		update_post_meta( $id, '_fusion', array( $option => 'Fish &amp; chips' ) );
+		$out = $this->page_options( $id, array( 'set' => array( $option => 'Fish and chips' ) ) );
+		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+		$back = $this->page_options( $id, array( 'set' => self::wire( $out['previous'] ) ) );
+		$this->assertIsArray( $back, is_wp_error( $back ) ? $back->get_error_message() : '' );
+		$this->assertSame( array( $option => 'Fish &amp; chips' ), get_post_meta( $id, '_fusion', true ) );
+	}
+
 	public function test_global_options_previous_goes_back_byte_for_byte(): void {
 		$stored = array(
 			'primary_color'   => '#111111',

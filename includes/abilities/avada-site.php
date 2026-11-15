@@ -1503,6 +1503,14 @@ function aafm_avada_studio_approved(): bool {
  * @return WP_Error
  */
 function aafm_avada_studio_not_approved_error(): WP_Error {
+	if ( aafm_read_only_mode() ) {
+		// Read-only mode holds the import (a write), which the Abilities tab still shows ticked (review F5).
+		return new WP_Error(
+			'aafm_avada_studio_not_approved',
+			__( 'Read-only mode is on, so the Avada Studio tools are held until the site owner turns it off. Nothing was changed.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 403 )
+		);
+	}
 	return new WP_Error(
 		'aafm_avada_studio_not_approved',
 		__( 'The Avada Studio tools are switched off. The site owner can switch on the Avada Studio import on this plugin\'s Abilities tab. Nothing was changed.', 'agent-abilities-for-mcp' ),

@@ -496,6 +496,11 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// passes. The floor is therefore the post family OR the page floor update-page already
 		// derives from the page post type object (reused, not copied), so a role holding
 		// edit_pages without edit_posts still sees the tools it can call.
+		// The Studio list gates on manage_options, and runs only while the Studio import is switched on (operator
+		// decision B), so discovery checks both: an administrator never sees a list that only answers 403 (review F4).
+		case 'aafm/avada-list-studio-items':
+			return static fn(): bool => current_user_can( 'manage_options' ) && aafm_avada_studio_approved();
+
 		case 'aafm/avada-get-page-content':
 		case 'aafm/avada-replace-text':
 		case 'aafm/avada-update-element':

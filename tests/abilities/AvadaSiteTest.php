@@ -2667,10 +2667,44 @@ final class AvadaSiteTest extends TestCase {
 		foreach ( array( 'aafm_args_avada_list_studio_items', 'aafm_args_avada_import_studio_item' ) as $args ) {
 			$this->assertSame( 'aafm_perm_manage_options', $args()['permission_callback'] );
 		}
-		$this->assertNull( aafm_ability_list_permission( 'aafm/avada-list-studio-items' ) );
 		$this->assertNull( aafm_ability_list_permission( 'aafm/avada-import-studio-item' ) );
+		$this->studio_approval( true, false );
 		$this->acting_as( 'editor' );
 		$this->assertFalse( aafm_perm_manage_options() );
+		$this->assertFalse( ( aafm_ability_list_permission( 'aafm/avada-list-studio-items' ) )() );
+	}
+
+	/**
+	 * Review F4: the list switched on with the import off is not discovered, and a direct call is refused with the
+	 * switch-off message, so no client sees a tool that only ever answers 403.
+	 */
+	public function test_the_list_on_with_the_import_off_is_hidden_and_refused(): void {
+		aafm_flush_registry_cache();
+		update_option( 'aafm_enabled_abilities', array( 'aafm/avada-list-studio-items' ) );
+		$this->acting_as( 'administrator' );
+		$check = aafm_ability_list_permission( 'aafm/avada-list-studio-items' );
+		$this->assertIsCallable( $check );
+		$this->assertFalse( $check() );
+		$out = $this->studio_call( 'list', array() );
+		$this->assertSame( 'aafm_avada_studio_not_approved', $out->get_error_code() );
+		$this->assertStringContainsString( 'switched off', $out->get_error_message() );
+		$this->studio_approval( true, false );
+		$this->acting_as( 'administrator' );
+		$this->assertTrue( $check() );
+	}
+
+	/**
+	 * Review F5: in read-only mode the import is held, so the list is refused with a message that names read-only mode
+	 * rather than asking for a switch the Abilities tab already shows ticked.
+	 */
+	public function test_read_only_mode_refuses_the_list_by_name(): void {
+		$this->studio_approval( true, false );
+		update_option( 'aafm_read_only_mode', true );
+		$out = $this->studio_call( 'list', array() );
+		delete_option( 'aafm_read_only_mode' );
+		$this->assertSame( 'aafm_avada_studio_not_approved', $out->get_error_code() );
+		$this->assertStringContainsString( 'Read-only mode is on', $out->get_error_message() );
+		$this->assertStringNotContainsString( 'switch on the Avada Studio import', $out->get_error_message() );
 	}
 
 	/**

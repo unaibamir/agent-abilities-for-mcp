@@ -1559,6 +1559,12 @@ final class AvadaSiteTest extends TestCase {
 								'label' => 'Front Page',
 								'type'  => 'singular',
 							),
+							array(
+								'id'       => 'specific_page',
+								'label'    => 'Specific Page',
+								'type'     => 'singular',
+								'multiple' => true,
+							),
 						),
 					),
 					'archive' => array(
@@ -1718,7 +1724,6 @@ final class AvadaSiteTest extends TestCase {
 						'mode'     => 'exclude',
 						'type'     => 'archives',
 						'archives' => 'all_archives',
-						'parent'   => 'front_page',
 					),
 				),
 			)
@@ -1737,7 +1742,6 @@ final class AvadaSiteTest extends TestCase {
 					'type'     => 'archives',
 					'mode'     => 'exclude',
 					'archives' => 'all_archives',
-					'parent'   => 'front_page',
 				),
 			),
 			self::layout_data( $ids['layout'] )['conditions']
@@ -1751,6 +1755,95 @@ final class AvadaSiteTest extends TestCase {
 			)['changed']
 		);
 		$this->assertSame( array(), self::layout_data( $ids['layout'] )['conditions'] );
+	}
+
+	/**
+	 * CX-BR1-3: a specific page condition is stored the way Avada's dialog stores it, and the previous a conditions write
+	 * returns goes back byte for byte, child rows and their stored labels included.
+	 */
+	public function test_child_conditions_are_accepted_and_previous_round_trips(): void {
+		$ids   = $this->layout_fixture();
+		$page  = self::factory()->post->create(
+			array(
+				'post_type'  => 'page',
+				'post_title' => 'Landing',
+			)
+		);
+		$child = array(
+			'mode'     => 'include',
+			'type'     => 'singular',
+			'singular' => 'specific_page|' . $page,
+			'parent'   => 'specific_page',
+		);
+		$this->assertTrue(
+			$this->layout_write(
+				array(
+					'layout_id'  => $ids['layout'],
+					'conditions' => array( $child ),
+				)
+			)['changed']
+		);
+		$stored = self::layout_data( $ids['layout'] )['conditions'];
+		$this->assertSame(
+			array(
+				'specific_page|' . $page => array(
+					'label'    => 'Landing',
+					'type'     => 'singular',
+					'mode'     => 'include',
+					'singular' => 'specific_page|' . $page,
+					'parent'   => 'specific_page',
+				),
+			),
+			$stored
+		);
+		// The page is renamed after the dialog stored it; the stored label stays, as Avada keeps it.
+		wp_update_post(
+			array(
+				'ID'         => $page,
+				'post_title' => 'Renamed',
+			)
+		);
+		$raw  = get_post_field( 'post_content', $ids['layout'], 'raw' );
+		$next = $this->layout_write(
+			array(
+				'layout_id'  => $ids['layout'],
+				'conditions' => array(
+					$child,
+					array(
+						'mode'     => 'include',
+						'type'     => 'singular',
+						'singular' => 'front_page',
+					),
+				),
+			)
+		);
+		$this->assertTrue( $next['changed'] );
+		$this->assertSame( 'Landing', self::layout_data( $ids['layout'] )['conditions'][ 'specific_page|' . $page ]['label'] );
+		$back = $this->layout_write(
+			array(
+				'layout_id'  => $ids['layout'],
+				'conditions' => json_decode( (string) wp_json_encode( $next['previous']['conditions'] ), true ),
+			)
+		);
+		$this->assertTrue( $back['changed'] );
+		$this->assertSame( $raw, get_post_field( 'post_content', $ids['layout'], 'raw' ) );
+
+		$post = self::factory()->post->create();
+		foreach ( array(
+			array( 'singular' => 'specific_page|999999' ),
+			array( 'singular' => 'specific_page|' . $post ),
+			array( 'singular' => 'specific_post|' . $page ),
+			array( 'parent' => 'front_page' ),
+			array( 'singular' => 'specific_page|0' ),
+		) as $bad ) {
+			$err = $this->layout_write(
+				array(
+					'layout_id'  => $ids['layout'],
+					'conditions' => array( array_merge( $child, $bad ) ),
+				)
+			);
+			$this->assertSame( 'aafm_builder_invalid_value', $err->get_error_code(), (string) wp_json_encode( $bad ) );
+		}
 	}
 
 	public function test_a_condition_with_an_unknown_mode_type_or_value_key_is_refused(): void {

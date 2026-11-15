@@ -84,7 +84,7 @@ function aafm_avada_site_registry_definitions(): array {
 		),
 		'aafm/avada-update-layout'          => array(
 			'label'        => __( 'Update an Avada layout', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Overwrites the sections and conditions of one Avada layout, named by its id from avada-list-layouts or "global" for the Global Layout. sections assigns a published layout section of the matching type to header, page_title_bar, content or footer, or 0 to clear that slot; the other slots are kept. conditions replaces the whole stored list: each condition takes mode (include or exclude), type, and under the key named by type a condition id that Avada\'s Layouts screen offers, plus an optional parent naming another condition in the list. Give at least one of sections and conditions. Pages pick their layout from these conditions, so the change applies site-wide at once. previous returns the old sections and conditions, which is the way back. A layout is never created or deleted. A change equal to what is stored is left alone and changed is false. Not undoable from this plugin\'s change history. Requires a user who can manage site options (manage_options). Only while Avada is active.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Overwrites the sections and conditions of one Avada layout, named by its id from avada-list-layouts or "global" for the Global Layout. sections assigns a published layout section of the matching type to header, page_title_bar, content or footer, or 0 to clear that slot; the other slots are kept. conditions replaces the whole stored list: each condition takes mode (include or exclude), type, and under the key named by type a condition id that Avada\'s Layouts screen offers, or, for one specific page, post, term or author, the id Avada stores for it, such as specific_page|42, with parent naming the condition it belongs to. Give at least one of sections and conditions. Pages pick their layout from these conditions, so the change applies site-wide at once. previous returns the old sections and conditions, which is the way back. A layout is never created or deleted. A change equal to what is stored is left alone and changed is false. Not undoable from this plugin\'s change history. Requires a user who can manage site options (manage_options). Only while Avada is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'destructive',
 			'subject'      => 'avada',
@@ -1099,12 +1099,17 @@ function aafm_avada_layout_condition_list(): ?array {
 /**
  * The stored conditions for an input list, keyed by condition id in the shape Avada's Layouts screen saves (label,
  * type, mode, the id under the key named by type, parent), or WP_Error aafm_builder_invalid_value. Avada validates
- * none of this (A15), so every condition must name a mode, a type and an id its own list offers.
+ * none of this (A15), so every condition must name a mode, a type and an id its own list offers. A row with a parent is
+ * one specific item under that condition, stored as Avada's dialog stores it (get_layout_child_conditions(),
+ * layout-conditions-option.js): id "<parent>|<object id>", where the object is a post of the parent's type, a user or a
+ * term that exists now (CX-BR1-3). Its label is the one already stored for that id on this layout, so previous goes back
+ * byte for byte, or else the object's own name, as the dialog shows it.
  *
- * @param mixed $conditions Input.
+ * @param mixed                             $conditions Input.
+ * @param array<string,array<string,mixed>> $stored     The layout's stored conditions.
  * @return array<string,array<string,string>>|WP_Error
  */
-function aafm_avada_layout_conditions( $conditions ) {
+function aafm_avada_layout_conditions( $conditions, array $stored = array() ) {
 	$bad = aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', 'conditions' );
 	if ( ! is_array( $conditions ) || array_values( $conditions ) !== $conditions ) {
 		return $bad;
@@ -1113,38 +1118,66 @@ function aafm_avada_layout_conditions( $conditions ) {
 	if ( null === $offered ) {
 		return $bad;
 	}
-	$out     = array();
-	$parents = array();
+	$out = array();
 	foreach ( $conditions as $condition ) {
 		$condition = $condition instanceof stdClass ? (array) $condition : $condition;
 		$type      = is_array( $condition ) && is_string( $condition['type'] ?? null ) ? $condition['type'] : '';
 		$id        = '' !== $type && is_string( $condition[ $type ] ?? null ) ? $condition[ $type ] : '';
 		$mode      = $condition['mode'] ?? null;
-		if ( '' === $id || ! in_array( $mode, array( 'include', 'exclude' ), true ) || ! isset( $offered[ $type ][ $id ] ) || isset( $out[ $id ] )
+		$parent    = is_array( $condition ) && array_key_exists( 'parent', $condition ) ? $condition['parent'] : null;
+		$label     = null === $parent ? ( $offered[ $type ][ $id ] ?? null ) : aafm_avada_layout_child_label( $type, $id, $parent, $offered );
+		if ( '' === $id || ! in_array( $mode, array( 'include', 'exclude' ), true ) || null === $label || isset( $out[ $id ] )
 			|| array() !== array_diff( array_keys( $condition ), array( 'mode', 'type', $type, 'label', 'parent' ) )
 			|| ( isset( $condition['label'] ) && ! is_string( $condition['label'] ) ) ) {
 			return $bad;
 		}
 		$out[ $id ] = array(
-			'label' => $offered[ $type ][ $id ],
+			'label' => $label,
 			'type'  => $type,
 			'mode'  => $mode,
 			$type   => $id,
 		);
-		if ( array_key_exists( 'parent', $condition ) ) {
-			if ( ! is_string( $condition['parent'] ) ) {
-				return $bad;
-			}
-			$parents[ $id ]       = $condition['parent'];
-			$out[ $id ]['parent'] = $condition['parent'];
-		}
-	}
-	foreach ( $parents as $id => $parent ) {
-		if ( $parent === $id || ! isset( $out[ $parent ] ) ) {
-			return $bad;
+		if ( null !== $parent ) {
+			$out[ $id ]['parent'] = $parent;
 		}
 	}
 	return $out;
+}
+
+/**
+ * The name of the one item a child layout condition names, or null when the row is not one Avada's dialog stores:
+ * the id must be "<parent>|<positive integer>", the parent an id Avada offers, the type singular or archives, and the
+ * integer a post of the parent's post type (specific_ and children_of_), a user (author_archive_) or a term of the
+ * parent's taxonomy (taxonomy_of_ and archive_of_), the split get_layout_child_conditions() makes.
+ *
+ * @param string                             $type    Condition type.
+ * @param string                             $id      Condition id.
+ * @param mixed                              $under   Parent from the input.
+ * @param array<string,array<string,string>> $offered Offered ids by type.
+ * @return string|null
+ */
+function aafm_avada_layout_child_label( string $type, string $id, $under, array $offered ): ?string {
+	if ( ! is_string( $under ) || ! in_array( $type, array( 'singular', 'archives' ), true ) || 1 !== preg_match( '/^(.+)\|([1-9][0-9]*)$/', $id, $m ) || $m[1] !== $under ) {
+		return null;
+	}
+	$known = false;
+	foreach ( $offered as $ids ) {
+		$known = $known || isset( $ids[ $under ] );
+	}
+	if ( ! $known ) {
+		return null;
+	}
+	$object = (int) $m[2];
+	if ( false !== strpos( $under, 'specific_' ) || false !== strpos( $under, 'children_of_' ) ) {
+		$post = aafm_exact_object( 'post', $object );
+		return $post instanceof WP_Post && preg_replace( '/specific_|children_of_/', '', $under ) === $post->post_type ? (string) $post->post_title : null;
+	}
+	if ( false !== strpos( $under, 'author_archive_' ) ) {
+		$user = aafm_exact_object( 'user', $object );
+		return $user instanceof WP_User ? (string) $user->display_name : null;
+	}
+	$term = aafm_exact_object( 'term', $object, (string) preg_replace( '/taxonomy_of_|archive_of_/', '', $under ) );
+	return $term instanceof WP_Term ? (string) $term->name : null;
 }
 
 /**
@@ -1217,14 +1250,6 @@ function aafm_exec_avada_update_layout( array $input ) {
 			$slots[ $slot ] = $section_id;
 		}
 	}
-	$new_conditions = null;
-	if ( null !== $conditions ) {
-		$new_conditions = aafm_avada_layout_conditions( $conditions );
-		if ( is_wp_error( $new_conditions ) ) {
-			return $new_conditions;
-		}
-	}
-
 	// Decoded as Fusion_Template_Builder::get_default_layout() and set_overrides() decode it.
 	$stored  = $global ? get_option( 'fusion_tb_layout_default' ) : (string) $post->post_content;
 	$current = $global
@@ -1242,6 +1267,13 @@ function aafm_exec_avada_update_layout( array $input ) {
 		'sections'   => $terms,
 		'conditions' => is_array( $current['conditions'] ?? null ) ? $current['conditions'] : array(),
 	);
+	$new_conditions = null;
+	if ( null !== $conditions ) {
+		$new_conditions = aafm_avada_layout_conditions( $conditions, $old['conditions'] );
+		if ( is_wp_error( $new_conditions ) ) {
+			return $new_conditions;
+		}
+	}
 	foreach ( $slots as $slot => $section_id ) {
 		if ( 0 === $section_id ) {
 			unset( $terms[ $slot ] );

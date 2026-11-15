@@ -560,6 +560,13 @@ final class NavigationTest extends TestCase {
 		$this->assertSame( 'not_covered', aafm_undo_refusals()['aafm/update-navigation'] );
 		$this->assertStringContainsString( 'cannot be undone', aafm_ability_description( 'aafm/update-navigation' ) );
 		$this->assertStringContainsString( 'cannot be undone', aafm_ability_disclosures()['aafm/update-navigation'] );
+		// Demo #3b: WordPress saves the NEW state as a revision, so the earlier one survives only if it was already a
+		// revision, and page bindings are lost either way.
+		foreach ( array( aafm_ability_description( 'aafm/update-navigation' ), aafm_ability_disclosures()['aafm/update-navigation'] ) as $text ) {
+			$this->assertStringNotContainsString( 'earlier version is kept as a revision', $text );
+			$this->assertStringNotContainsString( 'keeps the earlier version as a revision', $text );
+			$this->assertStringContainsString( 'only if', $text );
+		}
 	}
 
 	public function test_tools_absent_from_every_preset(): void {

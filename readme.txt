@@ -350,11 +350,11 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 
 = 1.11.3 =
 
-* **Feature:** list-navigations and update-navigation read and replace block-theme navigation menus, three Avada reads cover its layouts, Global Options and Library, and two WPBakery Page Builder tools read a page and replace text between its elements, refusing heading and button text and any change to an element; both new writes start off and are in no preset. Pages also take a parent and a template (with undo), update-site-settings sets the static homepage, and smaller additions land in menu items, WooCommerce attributes and Avada page outlines.
-* **Feature:** The admin tabs stay on one row with the four links moved into the page header, the Other plugins tab is now Plugins' own tools, the Search sub-tab is Site search, and the plugin's accent colour follows the Admin Color Scheme you pick (Modern keeps the plugin blue). Connection says how each OAuth client connects, adds Add to Cursor and Add to VS Code links and offers to end tokens issued for an old site address, and Active grants loads 50 at a time and drops the people of a revoked app.
-* **Fix:** An expired or revoked OAuth token now gets error="invalid_token" in the 401, server/discover advertises the same capabilities as initialize, and the Doctor warns when OAuth is allowed over plain HTTP on a public site. The new-tools notice clears once you've reviewed every tool, and "Allow only read tools" and Mark reviewed act only on the tools you were shown.
-* **Fix:** On hosts that can't finish the page before sending, alert emails go through WP-Cron, except the warning to the old address after an alert address change, which now goes out during the request. The daily email counts every new tool, the modes are now "Email alerts as they happen" and "One email a day", and the Doctor names BuddyBoss's Private REST APIs setting when it blocks OAuth.
-* **Fix:** A batch of smaller fixes to the Dashboard, Quick Connect, Integrations, Help and Activity Log screens: Clear log is now red, log times show the site's time on hover, roles that edit only pages now see the Avada page tools, and a text replace that matched nothing is no longer logged as a replacement. wc-update-product refuses to remove an attribute from a product with more than 1,000 unpublished variations, count-media no longer loads every attachment, the agent is told to send you to Check my connection when a call fails, and a new FAQ explains the "Another version of MCP Adapter is already loaded" notice.
+* **Feature:** On WPBakery Page Builder and Avada pages an agent can now change an element's settings or text, add, move or remove elements, and place a saved WPBakery or Templatera template or an Avada Library item. When WordPress keeps a revision the tool returns it, and restore-revision now works on these pages.
+* **Feature:** Users who can manage options can now change WPBakery settings, Avada Global Options, layouts and Avada Slider settings, and import Avada Studio items once the high-risk tools are unlocked; page CSS and JS and Avada page options are writable too, and every new tool starts off. list-navigations and update-navigation read and replace block-theme menus, pages take a parent and a template, and update-site-settings sets the static homepage.
+* **Feature:** The admin tabs stay on one row with the links moved into the page header, Other plugins is now Plugins' own tools, and the accent colour follows your Admin Color Scheme. Connection adds Add to Cursor and Add to VS Code links and offers to end tokens issued for an old site address.
+* **Fix:** An expired or revoked OAuth token now gets error="invalid_token" in the 401, server/discover advertises the same capabilities as initialize, and "Allow only read tools" and Mark reviewed act only on the tools you were shown. Alert emails go through WP-Cron on hosts that can't finish the page before sending, and the modes are now "Email alerts as they happen" and "One email a day".
+* **Fix:** avada-replace-text now refuses a save that would strip other content from the page, and it works on Avada layout sections, Library items and forms. Smaller fixes: Clear log is red, roles that edit only pages see the Avada page tools, wc-update-product refuses to remove an attribute from a product with more than 1,000 unpublished variations, and count-media no longer loads every attachment.
 
 = 1.11.2 =
 
@@ -472,7 +472,7 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 
 = 1.11.3 =
 
-Adds list-navigations and update-navigation for block-theme menus, three Avada reads and two WPBakery Page Builder tools; both new writes start off. Pages can set a parent and template, and update-site-settings can set the static homepage. Nothing you have switched on is locked or narrowed.
+Adds element editing for WPBakery Page Builder and Avada pages, their templates and Library, admin-only builder settings and block-theme navigation tools. Every new tool starts off, and the Avada Studio import also waits for the high-risk unlock in Settings.
 
 = 1.11.2 =
 

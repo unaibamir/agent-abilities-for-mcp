@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-15T14:02:04+05:00\n"
+"POT-Creation-Date: 2026-11-15T15:01:02+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -439,9 +439,9 @@ msgstr ""
 
 #: includes/abilities/avada-elements.php:870
 #: includes/abilities/wpbakery-elements.php:1231
-#: includes/abilities/wpbakery-elements.php:2169
-#: includes/abilities/wpbakery-elements.php:2256
-#: includes/abilities/wpbakery-elements.php:2395
+#: includes/abilities/wpbakery-elements.php:2181
+#: includes/abilities/wpbakery-elements.php:2268
+#: includes/abilities/wpbakery-elements.php:2407
 msgid "Present only when the restore point was gone after the save; says why there is no way back."
 msgstr ""
 
@@ -455,7 +455,7 @@ msgid "The tag and fingerprint the outline returned for that index. A page that 
 msgstr ""
 
 #: includes/abilities/avada-elements.php:922
-#: includes/abilities/avada-elements.php:1865
+#: includes/abilities/avada-elements.php:1883
 msgid "ID of the page, post, layout section, library item, form or off canvas panel."
 msgstr ""
 
@@ -520,8 +520,8 @@ msgid "A column needs type set to its width, a fraction such as 1_2 or a percent
 msgstr ""
 
 #: includes/abilities/avada-elements.php:1559
-#: includes/abilities/wpbakery-elements.php:1906
-#: includes/abilities/wpbakery-elements.php:1933
+#: includes/abilities/wpbakery-elements.php:1918
+#: includes/abilities/wpbakery-elements.php:1945
 msgid "Give anchor_index, anchor_expect and placement together. Only an empty post takes an insert without them. Nothing was changed."
 msgstr ""
 
@@ -531,67 +531,67 @@ msgstr ""
 msgid "That place is inside the global library item %1$d, which every page that shows it shares. Change item %1$d itself instead. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada-elements.php:1637
+#: includes/abilities/avada-elements.php:1654
 msgid "This stored content holds HTML that would be filtered out for this user, so it needs a user who may post unfiltered HTML. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada-elements.php:1870
+#: includes/abilities/avada-elements.php:1888
 msgid "The page fingerprint from the last avada-get-page-content read or the last write's response. A page that changed since is refused."
 msgstr ""
 
-#: includes/abilities/avada-elements.php:1878
-#: includes/abilities/wpbakery-elements.php:2093
+#: includes/abilities/avada-elements.php:1896
+#: includes/abilities/wpbakery-elements.php:2105
 msgid "Index of the element the new place is named against, from the same outline."
 msgstr ""
 
-#: includes/abilities/avada-elements.php:1879
+#: includes/abilities/avada-elements.php:1897
 msgid "The tag and fingerprint the outline returned for anchor_index."
 msgstr ""
 
-#: includes/abilities/avada-elements.php:1883
-#: includes/abilities/wpbakery-elements.php:2112
+#: includes/abilities/avada-elements.php:1901
+#: includes/abilities/wpbakery-elements.php:2124
 msgid "Where, relative to the anchor element: before or after it, or as its first or last child."
 msgstr ""
 
-#: includes/abilities/avada-elements.php:1908
+#: includes/abilities/avada-elements.php:1926
 msgid "Setting name to value, each in the input form of its kind from avada-list-elements. A column needs type, its width: a fraction such as 1_2 or a percentage."
 msgstr ""
 
-#: includes/abilities/avada-elements.php:1912
+#: includes/abilities/avada-elements.php:1930
 msgid "Inner content for an element with no children, such as a text block, a title or a button's text."
 msgstr ""
 
-#: includes/abilities/avada-elements.php:1917
-#: includes/abilities/wpbakery-elements.php:2146
+#: includes/abilities/avada-elements.php:1935
+#: includes/abilities/wpbakery-elements.php:2158
 msgid "Child elements, each with the same keys: tag, atts, text, children."
 msgstr ""
 
-#: includes/abilities/avada-elements.php:1922
-#: includes/abilities/wpbakery-elements.php:2151
+#: includes/abilities/avada-elements.php:1940
+#: includes/abilities/wpbakery-elements.php:2163
 msgid "The element to add, with its children. At most 50 elements, nested at most 6 deep."
 msgstr ""
 
-#: includes/abilities/avada-elements.php:1934
+#: includes/abilities/avada-elements.php:1952
 msgid "Number of elements added, children included."
 msgstr ""
 
-#: includes/abilities/avada-elements.php:1993
+#: includes/abilities/avada-elements.php:2011
 msgid "The element was saved, but the marker that makes Avada open this page in its builder could not be confirmed, so the page may open in the default editor. Set the page to use Avada's builder there, or restore the page with restore_revision_id."
 msgstr ""
 
-#: includes/abilities/avada-elements.php:2032
+#: includes/abilities/avada-elements.php:2050
 msgid "A container must keep at least one row, and a row at least one column, so this change would break the layout. Move or remove the whole container or row instead. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada-elements.php:2059
+#: includes/abilities/avada-elements.php:2077
 msgid "False when the element was already in that place and nothing was saved."
 msgstr ""
 
-#: includes/abilities/avada-elements.php:2204
+#: includes/abilities/avada-elements.php:2222
 msgid "Number of elements removed, children included."
 msgstr ""
 
-#: includes/abilities/avada-elements.php:2250
+#: includes/abilities/avada-elements.php:2268
 msgid "This site keeps only 1 revision per post (WP_POST_REVISIONS or the wp_revisions_to_keep filter), so WordPress would delete the revision that brings the removed element back during the same save. Raise the limit to 2 or more, or remove the element in Avada's builder. Nothing was changed."
 msgstr ""
 
@@ -616,7 +616,7 @@ msgid "Update Avada page options"
 msgstr ""
 
 #: includes/abilities/avada-site.php:71
-msgid "Sets or removes Avada page options on one post, the settings of Avada's page options panel: layout, title bar, sidebars, slider, header, footer, off canvas, form appearance, steps and confirmation, SEO and template settings from the fixed list avada-get-page-content returns with include_page_options. set maps option ids to values and remove lists ids to drop, so Avada's default applies; give at least one. Every other stored option is kept. A choice is its stored value, a color a hex, rgba, hsla or Avada color variable, an image an attachment id, and a multi choice a list. Text may hold no straight double quote or square bracket; for a user who may not post unfiltered HTML, a text or text area value WordPress would filter is refused, never stored altered. Option groups stored as several sub-values (dimensions, typography, sortable lists, media and display conditions) are not writable, and form notification, submission and privacy settings and code fields are never reachable. An empty value or default removes the option, as Avada's own save does. The old value of every option that changed comes back in previous, null where none was stored; send it back as set to undo the change. A value equal to what is stored is left alone and not listed in changed. No revision is kept, and the change is not undoable from this plugin's change history. Needs the Avada theme active and a post Avada owns, one of Avada's own types, or a page, post, portfolio item, Avada Slider slide or Elastic Slider slide that no other builder owns. Requires edit access to the post; layout sections need a user who can manage site options. Avada's Role Manager is not applied. Only while Avada is active."
+msgid "Sets or removes Avada page options on one post, the settings of Avada's page options panel: layout, title bar, sidebars, slider, header, footer, off canvas, form appearance, steps and confirmation, SEO and template settings from the fixed list avada-get-page-content returns with include_page_options. set maps option ids to values and remove lists ids to drop, so Avada's default applies; give at least one. Every other stored option is kept. A choice is its stored value, a color a hex, rgba, hsla or Avada color variable, an image an attachment id, and a multi choice a list. Text may hold no straight double quote or square bracket; for a user who may not post unfiltered HTML, a text or text area value WordPress would filter is refused, never stored altered. Option groups stored as several sub-values (dimensions, typography, sortable lists, media and display conditions) are not writable, and form notification, submission and privacy settings and code fields are never reachable. An empty value or default removes the option, as Avada's own save does. The old value of every option that changed comes back in previous, null where none was stored; send it back as set to undo the change. That brings back every value as Avada reads it, but not always the same stored data: an option stored as default comes back as no stored option, which Avada treats the same, and options restored after a remove may be stored in another order. A value equal to what is stored is left alone and not listed in changed. No revision is kept, and the change is not undoable from this plugin's change history. Needs the Avada theme active and a post Avada owns, one of Avada's own types, or a page, post, portfolio item, Avada Slider slide or Elastic Slider slide that no other builder owns. Requires edit access to the post; layout sections need a user who can manage site options. Avada's Role Manager is not applied. Only while Avada is active."
 msgstr ""
 
 #: includes/abilities/avada-site.php:78
@@ -761,61 +761,61 @@ msgstr ""
 msgid "The %s slot takes a published layout section of that type. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1400
+#: includes/abilities/avada-site.php:1402
 msgid "The Global Layout could not be saved. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1418
+#: includes/abilities/avada-site.php:1420
 msgid "The layout could not be confirmed as saved."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1450
+#: includes/abilities/avada-site.php:1452
 msgid "Avada Studio is not available on this site: it needs the Avada theme active, Studio switched on in Avada and the product registered. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1475
+#: includes/abilities/avada-site.php:1477
 msgid "The Avada Studio tools need the site owner's approval first: unlock the high-risk category in this plugin's settings and switch on the Avada Studio import. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1499
+#: includes/abilities/avada-site.php:1501
 msgid "Avada could not load the Studio catalog from Avada's servers. Try again later. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1674
+#: includes/abilities/avada-site.php:1676
 msgid "The item's id from avada-list-studio-items."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1697
+#: includes/abilities/avada-site.php:1699
 msgid "True when Avada found an earlier import of this item and created nothing."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1762
+#: includes/abilities/avada-site.php:1764
 msgid "Avada could not import this Studio item. Nothing was confirmed as imported."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1803
+#: includes/abilities/avada-site.php:1805
 msgid "Only the item's own post was confirmed; the attachments, forms, menus and icons Avada imports with it are not checked one by one. Place the item on a page with avada-insert-library-item."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1889
+#: includes/abilities/avada-site.php:1891
 msgid "The slider: a term ID of Avada's slide-page taxonomy."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1893
+#: includes/abilities/avada-site.php:1895
 msgid "Setting key to its new value, keys from the fixed slider settings list in the description."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1909
+#: includes/abilities/avada-site.php:1911
 #: includes/abilities/wpbakery-site.php:935
 msgid "The old value of each changed setting, null where none was stored."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1934
+#: includes/abilities/avada-site.php:1936
 msgid "Avada Slider is not available on this site: it needs the Avada theme and the Avada Core plugin active. Nothing was changed."
 msgstr ""
 
 #. translators: %s: the slider setting key.
-#: includes/abilities/avada-site.php:2026
+#: includes/abilities/avada-site.php:2028
 #, php-format
 msgid "The slider settings were written, but reading them back does not show the new value of %s. Check the slider in Avada's Sliders screen; previous in this error holds the old values."
 msgstr ""
@@ -4946,12 +4946,12 @@ msgid "Map entries and settings left out because the map could not resolve them 
 msgstr ""
 
 #: includes/abilities/wpbakery-elements.php:1175
-#: includes/abilities/wpbakery-elements.php:2080
+#: includes/abilities/wpbakery-elements.php:2092
 msgid "ID of the page, post or Grid Builder template."
 msgstr ""
 
 #: includes/abilities/wpbakery-elements.php:1180
-#: includes/abilities/wpbakery-elements.php:2092
+#: includes/abilities/wpbakery-elements.php:2104
 msgid "The element's index in the outline from wpbakery-get-page-content with include_structure."
 msgstr ""
 
@@ -4968,7 +4968,7 @@ msgid "New inner content for an element with a content setting and no child elem
 msgstr ""
 
 #: includes/abilities/wpbakery-elements.php:1300
-#: includes/abilities/wpbakery-elements.php:2051
+#: includes/abilities/wpbakery-elements.php:2063
 #: includes/abilities/wpbakery-site.php:599
 msgid "This post is not a WPBakery page. Edit a page built with another builder in that builder. Nothing was changed."
 msgstr ""
@@ -4983,31 +4983,31 @@ msgstr ""
 msgid "A row must keep at least one column, so this change would break the layout. Remove or move the whole row instead. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:1812
+#: includes/abilities/wpbakery-elements.php:1824
 msgid "Text in this template holds HTML that WordPress removes for a user who may not post unfiltered HTML, such as a script, an event attribute or a link protocol it does not allow. Remove it from the template, or ask such a user to insert it. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:1919
+#: includes/abilities/wpbakery-elements.php:1931
 msgid "WPBakery's editor is not switched on for this post type for this user, so a WPBakery page cannot be started here. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:2085
+#: includes/abilities/wpbakery-elements.php:2097
 msgid "The page fingerprint from the last wpbakery-get-page-content read or the last write's response. A page that changed since is refused."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:2106
+#: includes/abilities/wpbakery-elements.php:2118
 msgid "The tag and fingerprint the outline returned for that index."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:2137
+#: includes/abilities/wpbakery-elements.php:2149
 msgid "Setting name to value, each in the input form of its kind from wpbakery-list-elements."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:2141
+#: includes/abilities/wpbakery-elements.php:2153
 msgid "Inner content for an element with a content setting and no children, such as a text block."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:2430
+#: includes/abilities/wpbakery-elements.php:2442
 msgid "This site keeps only 1 revision per post (WP_POST_REVISIONS or the wp_revisions_to_keep filter), so WordPress would delete the revision that brings the removed element back during the same save. Raise the limit to 2 or more, or remove the element in WPBakery's editor. Nothing was changed."
 msgstr ""
 
@@ -5128,12 +5128,12 @@ msgid "Setting key to its new value, keys from wpbakery-get-settings."
 msgstr ""
 
 #. translators: %s: the setting key.
-#: includes/abilities/wpbakery-site.php:1036
+#: includes/abilities/wpbakery-site.php:1042
 #, php-format
 msgid "The WPBakery setting %s could not be saved. Settings listed in changed were saved before it."
 msgstr ""
 
-#: includes/abilities/wpbakery-site.php:1051
+#: includes/abilities/wpbakery-site.php:1057
 msgid "The global CSS was saved, but WPBakery's custom.css file does not match it, so the site may still show the old CSS. Check that the uploads folder is writable, then save the CSS again."
 msgstr ""
 
@@ -12989,25 +12989,25 @@ msgstr ""
 msgid "This site does not accept MCP requests from that web page."
 msgstr ""
 
-#: includes/page-builder-guard.php:311
+#: includes/page-builder-guard.php:312
 msgid "This content may belong to a page builder, and the plugin could not tell which one, so it refused the write. Edit the content in the page builder directly, or try again."
 msgstr ""
 
 #. translators: 1: detected page builder name, e.g. Elementor. 2: same name, repeated for readability. 3: same name, repeated for readability.
-#: includes/page-builder-guard.php:321
+#: includes/page-builder-guard.php:322
 #, php-format
 msgid "This content belongs to %1$s. Writing to it through this ability could have no visible effect or damage %2$s's layout, because the builder controls how this content is stored and shown. Edit it in %3$s directly."
 msgstr ""
 
-#: includes/page-builder-guard.php:394
+#: includes/page-builder-guard.php:395
 msgid "The plugin could not confirm this post's stored content before saving the excerpt, so it saved nothing. Try again."
 msgstr ""
 
-#: includes/page-builder-guard.php:476
+#: includes/page-builder-guard.php:477
 msgid "Saving the excerpt changed this page builder's stored content, and the plugin could not put it back. Check the post in the page builder."
 msgstr ""
 
-#: includes/page-builder-guard.php:482
+#: includes/page-builder-guard.php:483
 msgid "Saving the excerpt would have changed this page builder's stored content, so the plugin put the post back the way it was. Nothing was changed."
 msgstr ""
 

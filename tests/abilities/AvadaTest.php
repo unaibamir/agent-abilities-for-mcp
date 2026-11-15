@@ -170,6 +170,30 @@ final class AvadaTest extends TestCase {
 	}
 
 	/**
+	 * Demo #4 (CA-36): WordPress keeps a revision of the replace, and the response points at it so the change can be
+	 * undone through restore-revision; the description says so.
+	 */
+	public function test_replace_text_returns_the_revision_wordpress_kept(): void {
+		$id = $this->make_avada_post( '[fusion_builder_container]Hello world[/fusion_builder_container]' );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		$out = aafm_exec_avada_replace_text(
+			array(
+				'post_id' => $id,
+				'search'  => 'Hello world',
+				'replace' => 'Greetings world',
+			)
+		);
+		$this->assertIsArray( $out );
+		$this->assertIsInt( $out['restore_revision_id'] );
+		$revision = get_post( $out['restore_revision_id'] );
+		$this->assertSame( 'revision', $revision->post_type );
+		$this->assertSame( $id, (int) $revision->post_parent );
+		$this->assertStringContainsString( 'Hello world', $revision->post_content );
+		$this->assertArrayHasKey( 'restore_revision_id', aafm_args_avada_replace_text()['output_schema']['properties'] );
+		$this->assertStringContainsString( 'restore-revision', aafm_ability_description( 'aafm/avada-replace-text' ) );
+	}
+
+	/**
 	 * The replacement count was reported straight from the pre-save string
 	 * count, never re-validated against what actually landed - a wp_insert_post_data filter
 	 * that reverts the content back to the original must surface as a structured error, not a

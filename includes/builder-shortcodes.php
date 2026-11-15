@@ -853,6 +853,55 @@ function aafm_builder_replay_check( string $builder, int $id, string $old, strin
 }
 
 /**
+ * Keep the post's content before a write as a revision and return its id, or null when none holds those bytes: the
+ * revision wp_save_post_revision() saves, or the newest real revision when core saved none because that one already
+ * equals the stored content, or one forced for this call when core skipped content that differs only in whitespace.
+ * The caller checks that revisions are on.
+ *
+ * @param int    $id  Post id.
+ * @param string $old The stored content before the write.
+ * @return int|null
+ */
+function aafm_builder_restore_point( int $id, string $old ): ?int {
+	$restore_revision_id = null;
+	$saved               = wp_save_post_revision( $id );
+	if ( is_int( $saved ) && $saved > 0 ) {
+		$restore_revision_id = $saved;
+	} else {
+		// Core saved nothing because its newest real revision already equals the stored content.
+		// Find that revision the way wp_save_post_revision() does: newest first, autosaves skipped.
+		foreach ( wp_get_post_revisions( $id ) as $revision ) {
+			if ( ! $revision instanceof WP_Post || wp_is_post_autosave( $revision ) ) {
+				continue;
+			}
+			if ( $revision->post_content === $old ) {
+				$restore_revision_id = (int) $revision->ID;
+			}
+			break;
+		}
+		if ( null === $restore_revision_id ) {
+			// Core compares after normalize_whitespace(), so content that differs from its newest revision only in
+			// line endings gets none and no revision holds these bytes. Force one for this call only.
+			// A closure the plugin owns, last in line, so only this hook is added and removed.
+			$force = static function (): bool {
+				return false;
+			};
+			add_filter( 'wp_save_post_revision_check_for_changes', $force, PHP_INT_MAX );
+			try {
+				$saved = wp_save_post_revision( $id );
+			} finally {
+				remove_filter( 'wp_save_post_revision_check_for_changes', $force, PHP_INT_MAX );
+			}
+			$forced = is_int( $saved ) && $saved > 0 ? aafm_exact_object( 'post', $saved ) : null;
+			if ( $forced instanceof WP_Post && $forced->post_content === $old ) {
+				$restore_revision_id = $saved;
+			}
+		}
+	}
+	return $restore_revision_id;
+}
+
+/**
  * The guarded save every element write goes through (design 4.4, plan 326 steps 0 to 9).
  *
  * @param WP_Post                   $post     Post, as the executor loaded it.
@@ -924,41 +973,8 @@ function aafm_builder_commit( WP_Post $post, string $old, string $new, array $ta
 	// Step 5: the state before the write as a revision.
 	$restore_revision_id = null;
 	if ( $reversible ) {
-		$saved = wp_save_post_revision( $id );
-		if ( is_int( $saved ) && $saved > 0 ) {
-			$restore_revision_id = $saved;
-		} else {
-			// Core saved nothing because its newest real revision already equals the stored content.
-			// Find that revision the way wp_save_post_revision() does: newest first, autosaves skipped.
-			foreach ( wp_get_post_revisions( $id ) as $revision ) {
-				if ( ! $revision instanceof WP_Post || wp_is_post_autosave( $revision ) ) {
-					continue;
-				}
-				if ( $revision->post_content === $old ) {
-					$restore_revision_id = (int) $revision->ID;
-				}
-				break;
-			}
-			if ( null === $restore_revision_id ) {
-				// Core compares after normalize_whitespace(), so content that differs from its newest revision only in
-				// line endings gets none and no revision holds these bytes. Force one for this call only.
-				// A closure the plugin owns, last in line, so only this hook is added and removed.
-				$force = static function (): bool {
-					return false;
-				};
-				add_filter( 'wp_save_post_revision_check_for_changes', $force, PHP_INT_MAX );
-				try {
-					$saved = wp_save_post_revision( $id );
-				} finally {
-					remove_filter( 'wp_save_post_revision_check_for_changes', $force, PHP_INT_MAX );
-				}
-				$forced = is_int( $saved ) && $saved > 0 ? aafm_exact_object( 'post', $saved ) : null;
-				if ( $forced instanceof WP_Post && $forced->post_content === $old ) {
-					$restore_revision_id = $saved;
-				}
-			}
-		}
-		$reversible = null !== $restore_revision_id;
+		$restore_revision_id = aafm_builder_restore_point( $id, $old );
+		$reversible          = null !== $restore_revision_id;
 	}
 
 	// Step 7.

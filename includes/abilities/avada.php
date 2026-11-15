@@ -66,7 +66,7 @@ function aafm_avada_registry_definitions(): array {
 		),
 		'aafm/avada-replace-text'       => array(
 			'label'        => __( 'Replace text in an Avada page', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Replaces literal text within an Avada/Fusion Builder page while requiring the Fusion shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee). A replacement that would touch a shortcode tag, its self-closing form, or an attribute is refused rather than risk breaking the layout. If saving the page as this user would remove or change an element, or change other content on it (an embed the user may not keep, for example), the call is refused and nothing is saved. Also works on Avada\'s own library items, forms, off canvas content and layout sections; layout sections are open only to users who can manage site options. A successful call returns affects when the edit reaches other pages, for a layout section or a global library element. Requires edit access to the post; Avada\'s Role Manager is not applied. Only while Avada is active.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Replaces literal text within an Avada/Fusion Builder page while requiring the Fusion shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee). A replacement that would touch a shortcode tag, its self-closing form, or an attribute is refused rather than risk breaking the layout. If saving the page as this user would remove or change an element, or change other content on it (an embed the user may not keep, for example), the call is refused and nothing is saved. Also works on Avada\'s own library items, forms, off canvas content and layout sections; layout sections are open only to users who can manage site options. A successful call returns affects when the edit reaches other pages, for a layout section or a global library element. Not undoable from this plugin\'s change history; when the site keeps revisions, restore_revision_id names the revision holding the page before the change, which restore-revision brings back. Requires edit access to the post; Avada\'s Role Manager is not applied. Only while Avada is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'avada',
@@ -973,9 +973,13 @@ function aafm_args_avada_replace_text(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'post'         => array( 'type' => 'object' ),
-				'replacements' => array( 'type' => 'integer' ),
-				'affects'      => array( 'type' => 'string' ),
+				'post'                => array( 'type' => 'object' ),
+				'replacements'        => array( 'type' => 'integer' ),
+				'restore_revision_id' => array(
+					'type'        => 'integer',
+					'description' => __( 'The revision holding the page before this change; restore-revision brings it back. Absent when the site keeps no revisions.', 'agent-abilities-for-mcp' ),
+				),
+				'affects'             => array( 'type' => 'string' ),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_avada_replace_text',
@@ -1243,6 +1247,9 @@ function aafm_exec_avada_replace_text( array $input ) {
 		return $replay;
 	}
 
+	// Demo #4: keep the page before the change as a revision, the way the element tools do, so it can be undone.
+	$restore = post_type_supports( $post->post_type, 'revisions' ) && wp_revisions_enabled( $post ) ? aafm_builder_restore_point( $id, $content ) : null;
+
 	$updated = wp_update_post(
 		wp_slash(
 			array(
@@ -1254,6 +1261,10 @@ function aafm_exec_avada_replace_text( array $input ) {
 	);
 	if ( is_wp_error( $updated ) ) {
 		return aafm_generic_error();
+	}
+	// The site's revision limit can prune it during the save; never report a restore point that is gone.
+	if ( null !== $restore && ! aafm_exact_object( 'post', $restore ) instanceof WP_Post ) {
+		$restore = null;
 	}
 
 	$fresh = aafm_exact_object( 'post', $id );
@@ -1280,9 +1291,10 @@ function aafm_exec_avada_replace_text( array $input ) {
 	}
 	return array_filter(
 		array(
-			'post'         => aafm_redact_post( $fresh ),
-			'replacements' => $replacements,
-			'affects'      => $affects['affects'],
+			'post'                => aafm_redact_post( $fresh ),
+			'replacements'        => $replacements,
+			'restore_revision_id' => $restore,
+			'affects'             => $affects['affects'],
 		),
 		static fn( $value ): bool => null !== $value
 	);

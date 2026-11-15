@@ -1019,7 +1019,7 @@ function aafm_exec_avada_update_global_options( array $input ) {
 	foreach ( $apply as $key => $value ) {
 		// R3-4: removing a typography option whose previous the write validator would refuse (a sub-value it cannot
 		// write, or a value such as font-weight 450) would leave no way back.
-		if ( null === $value && 'typography' === $rules[ $key ] && isset( $stored[ $key ] ) && is_wp_error( aafm_avada_validate_global_option( $key, $stored[ $key ] ) ) ) {
+		if ( null === $value && 'typography' === $rules[ $key ] && isset( $stored[ $key ] ) && array() !== $stored[ $key ] && is_wp_error( aafm_avada_validate_global_option( $key, $stored[ $key ] ) ) ) {
 			return new WP_Error(
 				'aafm_avada_typography_not_removable',
 				__( 'This typography option holds values this tool cannot write back, so it cannot be removed here. Change its sub-values instead. Nothing was changed.', 'agent-abilities-for-mcp' ),
@@ -1069,7 +1069,9 @@ function aafm_exec_avada_update_global_options( array $input ) {
 					$merged[ $sub ] = $one;
 				}
 			}
-			$value = $merged;
+			// Demo #10: a merge that leaves nothing is no stored option, as Avada's own save treats it; an empty
+			// array reads differently from an absent key in Avada.
+			$value = array() === $merged ? null : $merged;
 		}
 		if ( $before === $value ) {
 			continue;

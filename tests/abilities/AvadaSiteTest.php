@@ -735,6 +735,35 @@ final class AvadaSiteTest extends TestCase {
 	}
 
 	/**
+	 * Demo #10 (CB-03): one sub-value set on a never-stored typography key, then previous sent back, leaves the key
+	 * absent, not an empty array (which Avada reads differently from absent).
+	 */
+	public function test_undoing_a_change_to_a_never_stored_typography_key_leaves_it_absent(): void {
+		$stored = array( 'primary_color' => '#111111' );
+		$out    = $this->global_write( array( 'body_typography' => array( 'font-size' => '17px' ) ), $stored );
+		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+		$this->assertSame( array( 'font-size' => '17px' ), get_option( 'fusion_options' )['body_typography'] );
+		$back = $this->global_write( self::wire( $out['previous'] ), null );
+		$this->assertIsArray( $back, is_wp_error( $back ) ? $back->get_error_message() : '' );
+		$this->assertSame( $stored, get_option( 'fusion_options' ) );
+	}
+
+	/**
+	 * Demo #10: a typography key already stored as an empty array holds nothing unwritable, so null removes it.
+	 */
+	public function test_removing_a_stored_empty_typography_array_succeeds(): void {
+		$out = $this->global_write(
+			array( 'body_typography' => null ),
+			array(
+				'primary_color'   => '#111111',
+				'body_typography' => array(),
+			)
+		);
+		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+		$this->assertSame( array( 'primary_color' => '#111111' ), get_option( 'fusion_options' ) );
+	}
+
+	/**
 	 * R3-4 note 3: a typography option holding only sub-values the tool writes is still removed by null, and its
 	 * previous goes back byte for byte.
 	 */

@@ -379,6 +379,29 @@ function aafm_wpbakery_decode_raw( string $inner ): ?string {
 }
 
 /**
+ * The UTF-8 bytes of one Unicode code point, in plain PHP so no mbstring is needed (mb_chr() is polyfilled only by
+ * WordPress 7.1). Null for 0, a negative value, a surrogate (U+D800 to U+DFFF) or anything above U+10FFFF.
+ *
+ * @param int $code Code point.
+ * @return string|null
+ */
+function aafm_utf8_chr( int $code ): ?string {
+	if ( $code <= 0 || $code > 0x10FFFF || ( $code >= 0xD800 && $code <= 0xDFFF ) ) {
+		return null;
+	}
+	if ( $code < 0x80 ) {
+		return chr( $code );
+	}
+	if ( $code < 0x800 ) {
+		return chr( 0xC0 | ( $code >> 6 ) ) . chr( 0x80 | ( $code & 0x3F ) );
+	}
+	if ( $code < 0x10000 ) {
+		return chr( 0xE0 | ( $code >> 12 ) ) . chr( 0x80 | ( ( $code >> 6 ) & 0x3F ) ) . chr( 0x80 | ( $code & 0x3F ) );
+	}
+	return chr( 0xF0 | ( $code >> 18 ) ) . chr( 0x80 | ( ( $code >> 12 ) & 0x3F ) ) . chr( 0x80 | ( ( $code >> 6 ) & 0x3F ) ) . chr( 0x80 | ( $code & 0x3F ) );
+}
+
+/**
  * Text in the form WPBakery's backend editor saves it: every entity decoded except &amp;, &lt; and &gt;. The editor
  * reads the page through TinyMCE, which decodes every entity in text and encodes only & < and > again (smoke probes,
  * S9a fix rounds 1 and 2), so an entity that spells a bracket, a slash or a letter of a shortcode name becomes the
@@ -402,7 +425,7 @@ function aafm_wpbakery_decode_entities( string $text, bool $keep_quotes = false 
 				// A numeric reference HTML5 leaves alone (a control such as &#13;) is still decoded by code point, as
 				// the editor does.
 				$code = 'x' === strtolower( $m[1][1] ?? '' ) ? (int) hexdec( substr( $m[1], 2 ) ) : (int) substr( $m[1], 1 );
-				$char = $code > 0 && $code <= 0x10FFFF && ( $code < 0xD800 || $code > 0xDFFF ) ? (string) mb_chr( $code, 'UTF-8' ) : $m[0];
+				$char = aafm_utf8_chr( $code ) ?? $m[0];
 			}
 			$keep = array(
 				'&' => '&amp;',

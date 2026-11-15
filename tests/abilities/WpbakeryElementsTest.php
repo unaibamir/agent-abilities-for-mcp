@@ -129,6 +129,39 @@ final class WpbakeryElementsTest extends TestCase {
 		return $editor;
 	}
 
+	/**
+	 * The code point encoder the entity decoder uses gives the bytes mb_chr() gives, in plain PHP, across the four UTF-8
+	 * lengths and their boundaries, and refuses what mb_chr() refuses.
+	 */
+	public function test_the_code_point_encoder_matches_mb_chr(): void {
+		$valid = array( 1, 9, 10, 13, 0x41, 0x7F, 0x80, 0xA0, 0x7FF, 0x800, 0x200B, 0x202E, 0xD7FF, 0xE000, 0xFFFD, 0xFFFF, 0x10000, 0x1F600, 0x10FFFF );
+		$bytes = array(
+			9        => "\t",
+			13       => "\r",
+			0xA0     => "\xC2\xA0",
+			0x200B   => "\xE2\x80\x8B",
+			0x10000  => "\xF0\x90\x80\x80",
+			0x10FFFF => "\xF4\x8F\xBF\xBF",
+		);
+		foreach ( $valid as $code ) {
+			$char = aafm_utf8_chr( $code );
+			$this->assertIsString( $char, (string) $code );
+			if ( isset( $bytes[ $code ] ) ) {
+				$this->assertSame( $bytes[ $code ], $char, (string) $code );
+			}
+			if ( function_exists( 'mb_chr' ) ) {
+				$this->assertSame( mb_chr( $code, 'UTF-8' ), $char, (string) $code );
+			}
+		}
+		foreach ( array( 0, -1, 0xD800, 0xDBFF, 0xDC00, 0xDFFF, 0x110000, PHP_INT_MAX ) as $code ) {
+			$this->assertNull( aafm_utf8_chr( $code ), (string) $code );
+		}
+		$this->assertSame( "a\rb", aafm_wpbakery_decode_entities( 'a&#13;b' ) );
+		$this->assertSame( "a\xE2\x80\xAEb", aafm_wpbakery_decode_entities( 'a&#x202E;b' ) );
+		$this->assertSame( 'a&#xD800;b', aafm_wpbakery_decode_entities( 'a&#xD800;b' ), 'A surrogate stays as written.' );
+		$this->assertSame( 'a&#1114112;b', aafm_wpbakery_decode_entities( 'a&#1114112;b' ), 'Above U+10FFFF stays as written.' );
+	}
+
 	public function test_list_rows_have_the_seven_keys(): void {
 		$this->acting_as( 'editor' );
 		$out = aafm_exec_wpbakery_list_elements( array( 'per_page' => 50 ) );

@@ -253,12 +253,12 @@ final class HighRiskUiTest extends TestCase {
 	 * switches for one option.
 	 */
 	/**
-	 * EV-L1 and BR-2: the switch names every tool family it releases, the Avada Studio import included, and says plainly
-	 * that one unlock opens every held tool already switched on.
+	 * Operator decision B (2026-11-15): the Studio import left the high-risk set, so the switch no longer names it and
+	 * still says plainly that one unlock opens every held tool already switched on.
 	 */
-	public function test_the_switch_names_the_studio_import_and_says_one_unlock_opens_them_all(): void {
+	public function test_the_switch_does_not_name_the_studio_import(): void {
 		$html = (string) preg_replace( '/\s+/', ' ', wp_strip_all_tags( $this->render_settings_tab() ) );
-		$this->assertStringContainsString( 'Avada Studio', $html );
+		$this->assertStringNotContainsString( 'Avada Studio', $html );
 		$this->assertStringContainsString( 'One switch covers every tool listed here', $html );
 	}
 
@@ -375,14 +375,11 @@ final class HighRiskUiTest extends TestCase {
 		$this->assertStringContainsString( 'Your host or a site setting keeps this locked, whatever this switch says.', $forced );
 	}
 
-	public function test_the_studio_import_shows_as_locked_like_the_other_locked_tools(): void {
-		$html = $this->render_integration_row( 'aafm/avada-import-studio-item' );
-		$this->assertStringNotContainsString( 'type="checkbox"', $html );
-		$this->assertStringContainsString( 'aafm-ability-locked', $html );
-		$this->assertStringContainsString( 'aafm-badge-high-risk', $html );
-		update_option( 'aafm_high_risk_abilities_unlocked', true );
+	public function test_the_studio_import_shows_as_an_ordinary_switch(): void {
+		delete_option( 'aafm_high_risk_abilities_unlocked' );
 		$html = $this->render_integration_row( 'aafm/avada-import-studio-item' );
 		$this->assertStringContainsString( 'name="aafm_abilities[]" value="aafm/avada-import-studio-item"', $html );
-		$this->assertStringContainsString( 'aafm-badge-high-risk', $html );
+		$this->assertStringNotContainsString( 'aafm-ability-locked', $html );
+		$this->assertStringNotContainsString( 'aafm-badge-high-risk', $html );
 	}
 }

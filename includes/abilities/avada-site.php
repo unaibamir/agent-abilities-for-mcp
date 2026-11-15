@@ -92,7 +92,7 @@ function aafm_avada_site_registry_definitions(): array {
 		),
 		'aafm/avada-list-studio-items'      => array(
 			'label'        => __( 'List Avada Studio items', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists the ready-made items in Avada Studio, Avada\'s own library of templates, sections, elements, icons, forms and off canvas panels, from the catalog Avada itself loads: id, type, title and, where Avada has them, a category and a preview URL, plus total and from_cache. Filter by type and by a word in the title; at most 50 per page. When Avada has no cached catalog, this call makes Avada download it from Avada\'s servers under the site\'s own Avada registration and cache it for a day; this plugin sends nothing itself and never reads the registration. Refused until the site owner has unlocked the high-risk category and switched on the Avada Studio import, and while Studio is unavailable (the Avada theme off, Studio switched off in Avada, or the product not registered). Requires a user who can manage site options (manage_options). Only while Avada is active.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Lists the ready-made items in Avada Studio, Avada\'s own library of templates, sections, elements, icons, forms and off canvas panels, from the catalog Avada itself loads: id, type, title and, where Avada has them, a category and a preview URL, plus total and from_cache. Filter by type and by a word in the title; at most 50 per page. When Avada has no cached catalog, this call makes Avada download it from Avada\'s servers under the site\'s own Avada registration and cache it for a day; this plugin sends nothing itself and never reads the registration. Refused until the site owner has switched on the Avada Studio import, and while Studio is unavailable (the Avada theme off, Studio switched off in Avada, or the product not registered). Requires a user who can manage site options (manage_options). Only while Avada is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'avada',
@@ -100,7 +100,7 @@ function aafm_avada_site_registry_definitions(): array {
 		),
 		'aafm/avada-import-studio-item'     => array(
 			'label'        => __( 'Import an Avada Studio item', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Imports one Avada Studio item, named by its id and type from avada-list-studio-items, into Avada\'s library on this site, through Avada\'s own importer: Avada downloads the item from Avada\'s servers under the site\'s own Avada registration and creates a published post of that type, and with media import (the default) also its images and whatever the item depends on, such as forms, menus and icons; with media placeholders, images become placeholders. Avada makes these requests and this plugin sends nothing itself; it never reads the registration. An item imported before is not imported again; was_imported is then true. Only the item\'s own post is confirmed, by its type and Avada\'s Studio marker; the media and other posts Avada adds are not checked one by one. Nothing is placed on a page: place the item with avada-insert-library-item. There is no undo from this plugin; the owner can delete the item in Avada\'s Library. Locked with the other high-risk tools until the site owner unlocks the category, then off until switched on. Requires a user who can manage site options (manage_options). Only while Avada is active.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Imports one Avada Studio item, named by its id and type from avada-list-studio-items, into Avada\'s library on this site, through Avada\'s own importer: Avada downloads the item from Avada\'s servers under the site\'s own Avada registration and creates a published post of that type, and with media import (the default) also its images and whatever the item depends on, such as forms, menus and icons; with media placeholders, images become placeholders. Avada makes these requests and this plugin sends nothing itself; it never reads the registration. An item imported before is not imported again; was_imported is then true. Only the item\'s own post is confirmed, by its type and Avada\'s Studio marker; the media and other posts Avada adds are not checked one by one. Nothing is placed on a page: place the item with avada-insert-library-item. There is no undo from this plugin; the owner can delete the item in Avada\'s Library. Off until the site owner switches it on. Requires a user who can manage site options (manage_options). Only while Avada is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'avada',
@@ -1488,13 +1488,13 @@ function aafm_avada_studio_ready() {
 }
 
 /**
- * Whether the site owner has approved the Studio tools: the import tool is switched on and the high-risk category is
- * unlocked (Rulings Q17, Q19). One approval covers the list too.
+ * Whether the site owner has approved the Studio tools: the import tool is switched on (operator decision B,
+ * 2026-11-15; the high-risk lock no longer applies). One approval covers the list too.
  *
  * @return bool
  */
 function aafm_avada_studio_approved(): bool {
-	return aafm_is_ability_enabled( 'aafm/avada-import-studio-item' ) && ! aafm_ability_is_locked( 'aafm/avada-import-studio-item' );
+	return aafm_is_ability_enabled( 'aafm/avada-import-studio-item' );
 }
 
 /**
@@ -1505,7 +1505,7 @@ function aafm_avada_studio_approved(): bool {
 function aafm_avada_studio_not_approved_error(): WP_Error {
 	return new WP_Error(
 		'aafm_avada_studio_not_approved',
-		__( 'The Avada Studio tools need the site owner\'s approval first: unlock the high-risk category in this plugin\'s settings and switch on the Avada Studio import. Nothing was changed.', 'agent-abilities-for-mcp' ),
+		__( 'The Avada Studio tools are switched off. The site owner can switch on the Avada Studio import on this plugin\'s Abilities tab. Nothing was changed.', 'agent-abilities-for-mcp' ),
 		array( 'status' => 403 )
 	);
 }
@@ -1761,7 +1761,7 @@ function aafm_args_avada_import_studio_item(): array {
 }
 
 /**
- * Execute aafm/avada-import-studio-item (design AV-15 Studio, Rulings Q17, Q19, X2). The approval and availability
+ * Execute aafm/avada-import-studio-item (design AV-15 Studio, Ruling X2, operator decision B). The approval and availability
  * checks run first; the item must be in Avada's own catalogue with that type, so Avada is never asked for a path the
  * caller chose. Avada's importer then fetches and writes everything under the site's own registration, the call its
  * setup wizard makes, with update_post never set so an existing post is never overwritten. The new post is read back

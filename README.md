@@ -141,7 +141,7 @@ Patches are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first and keep each
 
 ## Outbound requests
 
-The plugin calls no AI provider and sends no telemetry. It makes two kinds of request itself: the Connection tab's checks against your own site's address and, only if you enable the off-by-default upload-media-from-url ability, a fetch of the HTTPS URL an agent supplies, which refuses private and reserved addresses, follows no redirects and carries none of your content or credentials. When an agent calls Avada Studio tools (import unlocked and on), Avada itself downloads content from Avada's servers under your Avada registration; this plugin sends nothing. The bridges above run on your own machine and are not bundled.
+The plugin calls no AI provider and sends no telemetry. It makes two kinds of request itself: the Connection tab's checks against your own site's address and, only if you enable the off-by-default upload-media-from-url ability, a fetch of the HTTPS URL an agent supplies, which refuses private and reserved addresses, follows no redirects and carries none of your content or credentials. When an agent calls Avada Studio tools, Avada downloads content from avada.studio under your Avada registration; this plugin sends nothing. Avada's [terms](https://avada.com/terms-and-conditions/) and [privacy policy](https://avada.com/privacy-policy/) apply. The bridges above run on your own machine and are not bundled.
 
 ## FAQ
 

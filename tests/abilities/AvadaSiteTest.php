@@ -2584,7 +2584,7 @@ final class AvadaSiteTest extends TestCase {
 	}
 
 	/**
-	 * The owner's approval: the import switched on and the high-risk category unlocked, or either undone.
+	 * The owner's approval (the import switched on) and the high-risk unlock, set independently.
 	 *
 	 * @param bool $enabled  Import switched on.
 	 * @param bool $unlocked Category unlocked.
@@ -2624,8 +2624,13 @@ final class AvadaSiteTest extends TestCase {
 		$this->assertFalse( aafm_avada_studio_approved() );
 	}
 
-	public function test_the_list_and_import_are_refused_while_the_import_is_locked_or_off(): void {
-		foreach ( array( array( true, false ), array( false, true ), array( false, false ) ) as $case ) {
+	/**
+	 * Operator decision B: the import's own switch is the only approval; the high-risk unlock plays no part.
+	 */
+	public function test_the_list_and_import_are_refused_while_the_import_is_off(): void {
+		$this->studio_approval( true, false );
+		$this->assertTrue( aafm_avada_studio_approved(), 'Switched on with the high-risk tools locked is approved.' );
+		foreach ( array( array( false, true ), array( false, false ) ) as $case ) {
 			$this->studio_approval( $case[0], $case[1] );
 			foreach ( array( 'list', 'import' ) as $tool ) {
 				$out = $this->studio_call(
@@ -2674,7 +2679,7 @@ final class AvadaSiteTest extends TestCase {
 	}
 
 	public function test_studio_list_returns_trimmed_rows_by_type_search_and_page(): void {
-		$this->studio_approval( true, true );
+		$this->studio_approval( true, false );
 		$out = $this->studio_call( 'list', array( 'type' => 'fusion_element' ) );
 		$this->assertSame( 2, $out['total'] );
 		$this->assertFalse( $out['from_cache'] );
@@ -2714,7 +2719,7 @@ final class AvadaSiteTest extends TestCase {
 	}
 
 	public function test_an_item_not_in_the_catalogue_or_of_another_type_is_refused_before_avada_is_called(): void {
-		$this->studio_approval( true, true );
+		$this->studio_approval( true, false );
 		foreach ( array( array( 999, 'fusion_element' ), array( 601, 'fusion_element' ), array( 501, 'fusion_template' ) ) as $case ) {
 			$out = $this->studio_call(
 				'import',
@@ -2729,7 +2734,7 @@ final class AvadaSiteTest extends TestCase {
 	}
 
 	public function test_import_calls_avada_with_the_item_and_never_sets_update_post(): void {
-		$this->studio_approval( true, true );
+		$this->studio_approval( true, false );
 		register_post_type( 'fusion_element', array( 'public' => false ) );
 		$out = $this->studio_call(
 			'import',
@@ -2768,7 +2773,7 @@ final class AvadaSiteTest extends TestCase {
 	}
 
 	public function test_media_placeholders_sets_the_images_option(): void {
-		$this->studio_approval( true, true );
+		$this->studio_approval( true, false );
 		$out = $this->studio_call(
 			'import',
 			array(
@@ -2782,7 +2787,7 @@ final class AvadaSiteTest extends TestCase {
 	}
 
 	public function test_a_false_post_id_and_a_bad_read_back_are_import_failed_and_was_imported_passes_through(): void {
-		$this->studio_approval( true, true );
+		$this->studio_approval( true, false );
 		$args  = array(
 			'item_id' => 501,
 			'type'    => 'fusion_element',
@@ -2811,7 +2816,7 @@ final class AvadaSiteTest extends TestCase {
 	}
 
 	public function test_this_plugins_code_makes_no_http_request_and_no_output_holds_a_token(): void {
-		$this->studio_approval( true, true );
+		$this->studio_approval( true, false );
 		update_option( 'fusion_registration_data', array( 'avada' => array( 'purchase_code' => 'MARKER-TOKEN-55' ) ) );
 		$fired = 0;
 		$block = static function ( $pre ) use ( &$fired ) {
@@ -2872,9 +2877,11 @@ final class AvadaSiteTest extends TestCase {
 		foreach ( array( 'aafm/avada-list-studio-items', 'aafm/avada-import-studio-item' ) as $name ) {
 			foreach ( array( $registry[ $name ]['description'], aafm_ability_disclosures()[ $name ] ) as $text ) {
 				$this->assertStringNotContainsString( ' - ', $text );
-				foreach ( array( 'Avada\'s servers', 'this plugin sends nothing', 'manage site options', 'high-risk' ) as $phrase ) {
+				foreach ( array( 'Avada\'s servers', 'this plugin sends nothing', 'manage site options', 'switch' ) as $phrase ) {
 					$this->assertStringContainsString( $phrase, $text, $name . ': ' . $phrase );
 				}
+				// Operator decision B: the Studio tools are no longer held by the high-risk lock, and no text says they are.
+				$this->assertStringNotContainsString( 'high-risk', $text, $name );
 			}
 		}
 	}

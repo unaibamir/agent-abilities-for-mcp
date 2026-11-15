@@ -36,6 +36,28 @@ final class MetadataTest extends TestCase {
 		$this->assertSame( '1.11.3', AAFM_VERSION );
 	}
 
+	/**
+	 * The website session's approved Avada Studio lines (2026-11-15) are in place word for word. The Changelog and
+	 * Upgrade Notice wording about the unlock belongs to the release-prep batch.
+	 */
+	public function test_readme_carries_the_approved_studio_lines(): void {
+		$lines = array(
+			array( 'readme.txt', 136, 'e389b5b81c7a5a6b0eb3fc6ea2e2f5c86d39d18cfe98689c51e89d991633dffc' ),
+			array( 'README.md', 144, 'e3d24f907d2ffd6252f9bdf4dd43d9fbac7bf75ec7f994c140902f8e736c00a3' ),
+			array( 'readme.txt', 262, 'c7ef0cab5a13b935c5a8aa820e524eb3a99c2967dbcd37ef5ff68f61e30828f7' ),
+		);
+		foreach ( $lines as list( $file, $line, $sha ) ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading the plugin's own readme.
+			$text = explode( "\n", (string) file_get_contents( AAFM_PLUGIN_DIR . $file ) );
+			$this->assertSame( $sha, hash( 'sha256', $text[ $line - 1 ] ), "$file:$line" );
+		}
+		foreach ( array( 'readme.txt', 'README.md' ) as $file ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading the plugin's own readme.
+			$text = (string) file_get_contents( AAFM_PLUGIN_DIR . $file );
+			$this->assertStringNotContainsString( 'import unlocked and on', $text, $file );
+		}
+	}
+
 	public function test_the_faq_explains_the_adapter_conflict_notice(): void {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading the plugin's own readme.
 		$readme = (string) file_get_contents( AAFM_PLUGIN_DIR . 'readme.txt' );

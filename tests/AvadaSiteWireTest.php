@@ -495,8 +495,13 @@ final class AvadaSiteWireTest extends TestCase {
 		unregister_post_type( 'fusion_tb_section' );
 	}
 
-	public function test_the_studio_pair_round_trips_over_a_real_tools_call_once_approved(): void {
-		update_option( 'aafm_high_risk_abilities_unlocked', true );
+	/**
+	 * Operator decision B (Review Focus 1): with the high-risk tools locked and the import switched on, list and import
+	 * run, and a high-risk tool such as the refund stays locked.
+	 */
+	public function test_the_studio_pair_runs_with_high_risk_locked_once_switched_on(): void {
+		delete_option( 'aafm_high_risk_abilities_unlocked' );
+		$this->assertTrue( aafm_ability_is_locked( 'aafm/wc-create-order-refund' ) );
 		register_post_type( 'fusion_template', array( 'public' => false ) );
 		$catalogue = array(
 			'fusion_template' => array(
@@ -624,12 +629,17 @@ final class AvadaSiteWireTest extends TestCase {
 		$this->assertSame( 'Landing', $done['title'] );
 		$this->assertFalse( $done['was_imported'] );
 		$this->assertSame( 'import', $done['media'] );
-		delete_option( 'aafm_high_risk_abilities_unlocked' );
+		$this->assertTrue( aafm_ability_is_locked( 'aafm/wc-create-order-refund' ) );
 	}
 
-	public function test_the_studio_import_is_refused_on_the_wire_while_locked(): void {
+	/**
+	 * Review Focus 2: with the high-risk tools unlocked but the import never switched on, Studio stays refused.
+	 */
+	public function test_the_studio_import_is_refused_on_the_wire_while_switched_off(): void {
 		list( $handler ) = $this->wired();
-		$this->assertNotContains( 'aafm/avada-import-studio-item', aafm_get_enabled_abilities(), 'The registered set drops a locked tool, so the real server never lists it.' );
+		update_option( 'aafm_high_risk_abilities_unlocked', true );
+		update_option( 'aafm_enabled_abilities', array_values( array_diff( self::TOOLS, array( 'aafm/avada-import-studio-item' ) ) ) );
+		$this->assertNotContains( 'aafm/avada-import-studio-item', aafm_get_enabled_abilities() );
 		$refused = $handler->call_tool(
 			array(
 				'name'      => aafm_mcp_tool_name( 'aafm/avada-import-studio-item' ),
@@ -642,5 +652,7 @@ final class AvadaSiteWireTest extends TestCase {
 		);
 		$this->assertTrue( $refused->getIsError() );
 		$this->assertSame( aafm_avada_studio_not_approved_error()->get_error_message(), $refused->getContent()[0]->getText() );
+		$this->assertSame( 'The Avada Studio tools are switched off. The site owner can switch on the Avada Studio import on this plugin\'s Abilities tab. Nothing was changed.', $refused->getContent()[0]->getText() );
+		delete_option( 'aafm_high_risk_abilities_unlocked' );
 	}
 }

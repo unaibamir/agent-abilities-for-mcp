@@ -68,7 +68,7 @@ function aafm_avada_site_registry_definitions(): array {
 		),
 		'aafm/avada-update-page-options'    => array(
 			'label'        => __( 'Update Avada page options', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Sets or removes Avada page options on one post, the settings of Avada\'s page options panel: layout, title bar, sidebars, slider, header, footer, off canvas, form appearance, steps and confirmation, SEO and template settings from the fixed list avada-get-page-content returns with include_page_options. set maps option ids to values and remove lists ids to drop, so Avada\'s default applies; give at least one. Every other stored option is kept. A choice is its stored value, a colour a hex, rgba, hsla or Avada colour variable, an image an attachment id, and a multi choice a list. Text may hold no straight double quote or square bracket; for a user who may not post unfiltered HTML, a text area value WordPress would filter is refused, never stored altered. Option groups stored as several sub-values (dimensions, typography, sortable lists, media and display conditions) are not writable, and form notification, submission and privacy settings and code fields are never reachable. An empty value or default removes the option, as Avada\'s own save does. previous returns the old value of every option that changed, null where none was stored, which is the way back. A value equal to what is stored is left alone and not listed in changed. No revision is kept, and the change is not undoable from this plugin\'s change history. Needs the Avada theme active and a post Avada owns, one of Avada\'s own types, or a page, post, portfolio item, Avada Slider slide or Elastic Slider slide that no other builder owns. Requires edit access to the post; layout sections need a user who can manage site options. Avada\'s Role Manager is not applied. Only while Avada is active.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Sets or removes Avada page options on one post, the settings of Avada\'s page options panel: layout, title bar, sidebars, slider, header, footer, off canvas, form appearance, steps and confirmation, SEO and template settings from the fixed list avada-get-page-content returns with include_page_options. set maps option ids to values and remove lists ids to drop, so Avada\'s default applies; give at least one. Every other stored option is kept. A choice is its stored value, a colour a hex, rgba, hsla or Avada colour variable, an image an attachment id, and a multi choice a list. Text may hold no straight double quote or square bracket; for a user who may not post unfiltered HTML, a text or text area value WordPress would filter is refused, never stored altered. Option groups stored as several sub-values (dimensions, typography, sortable lists, media and display conditions) are not writable, and form notification, submission and privacy settings and code fields are never reachable. An empty value or default removes the option, as Avada\'s own save does. previous returns the old value of every option that changed, null where none was stored, which is the way back. A value equal to what is stored is left alone and not listed in changed. No revision is kept, and the change is not undoable from this plugin\'s change history. Needs the Avada theme active and a post Avada owns, one of Avada\'s own types, or a page, post, portfolio item, Avada Slider slide or Elastic Slider slide that no other builder owns. Requires edit access to the post; layout sections need a user who can manage site options. Avada\'s Role Manager is not applied. Only while Avada is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'avada',
@@ -76,7 +76,7 @@ function aafm_avada_site_registry_definitions(): array {
 		),
 		'aafm/avada-update-global-options'  => array(
 			'label'        => __( 'Update Avada Global Options', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Overwrites site-wide Avada Global Options from the fixed list avada-get-global-options returns, apart from maintenance_mode, which stays read only. set maps option keys to values: a colour as a hex, rgba, hsla or Avada colour variable; site_width as a number with px or %; layout, header_position, header_layout, page_title_bar, footer_widgets, footer_copyright and responsive as one of their stored choices; logo as an image attachment id, whose URL and size are written with it; footer_text as HTML with unsafe tags removed; a typography option as an object of the sub-values to change (font-family, font-size, line-height, letter-spacing, font-weight, font-style, text-transform, color); color_palette as an object of the colour slots to change, each with a color and a label. A value that fits no rule is refused and nothing is written. Every other stored option is kept. previous returns the old value of every option that changed, null where none was stored, which is the way back. The change applies to the whole site at once, and Avada\'s compiled CSS is rebuilt; a page cache plugin keeps serving its cached pages until the owner purges it. Not undoable from this plugin\'s change history. Needs the Avada theme active and a user who can manage site options (manage_options). Only while Avada is active.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Overwrites site-wide Avada Global Options from the fixed list avada-get-global-options returns, apart from maintenance_mode, which stays read only. set maps option keys to values: a color as a hex, rgba, hsla or Avada color variable; site_width as a number with px or %; layout, header_position, header_layout, page_title_bar, footer_widgets, footer_copyright and responsive as one of their stored choices; logo as an image attachment id, whose URL and size are written with it; footer_text as HTML, refused for a user who may not post unfiltered HTML when WordPress would filter it; a typography option as an object of the sub-values to change (font-family, font-size, line-height, letter-spacing, font-weight, font-style, text-transform, color); color_palette as an object of the color slots to change, each with a color and a label. A value that fits no rule is refused and nothing is written. Every other stored option is kept. previous returns the old value of every option that changed, null where none was stored, which is the way back. The change applies to the whole site at once, and Avada\'s compiled CSS is rebuilt; a page cache plugin keeps serving its cached pages until the owner purges it. Not undoable from this plugin\'s change history. Needs the Avada theme active and a user who can manage site options (manage_options). Only while Avada is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'destructive',
 			'subject'      => 'avada',
@@ -391,9 +391,10 @@ function aafm_avada_page_option_kind( string $type ): ?string {
 /**
  * The stored form of one page option value, or a refusal naming the option. Every scalar kind goes through the one
  * Avada encoder (aafm_avada_encode_value()); text keeps its attribute rule (Ruling R-S10b-1) and is stored with the
- * entities that rule adds for an attribute read back, since the panel stores plain text in the meta. A text area goes
- * through the body-text choke point and is refused when kses would change it for a user who may not post unfiltered
- * HTML (Ruling R-S12-4).
+ * entities that rule adds for an attribute read back, since the panel stores plain text in the meta. Avada Core prints
+ * text options without escaping (fusion-core templates/single-avada_portfolio.php), and Avada's own save runs
+ * wp_kses_post() on every page option string for a user who may not post unfiltered HTML, so text and a text area both
+ * end in aafm_avada_filtered_text() (CR-1); a text area goes through the body-text choke point first (Ruling R-S12-4).
  *
  * @param string $id    Option id.
  * @param string $kind  Kind from aafm_avada_page_option_kind().
@@ -422,24 +423,7 @@ function aafm_avada_page_option_value( string $id, string $kind, $value ) {
 	if ( 'content' === $kind ) {
 		$text  = (string) $value;
 		$clean = aafm_avada_body_text( $text );
-		if ( is_wp_error( $clean ) ) {
-			return $clean;
-		}
-		if ( current_user_can( 'unfiltered_html' ) ) {
-			return $text;
-		}
-		if ( $clean !== $text ) {
-			return new WP_Error(
-				'aafm_avada_stored_text_needs_unfiltered_html',
-				/* translators: %s: the page option id. */
-				sprintf( __( 'The value of %s holds HTML that would be filtered out for this user, so it needs a user who may post unfiltered HTML. Nothing was changed.', 'agent-abilities-for-mcp' ), $id ),
-				array(
-					'status'  => 400,
-					'setting' => $id,
-				)
-			);
-		}
-		return $text;
+		return is_wp_error( $clean ) ? $clean : aafm_avada_filtered_text( $id, $text );
 	}
 	$out = aafm_avada_encode_value( $kind, $value, $param );
 	if ( is_wp_error( $out ) ) {
@@ -451,7 +435,39 @@ function aafm_avada_page_option_value( string $id, string $kind, $value ) {
 			'id'  => (string) strtok( (string) $out[ $id . '_id' ], '|' ),
 		) : aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $id );
 	}
-	return is_string( $out ) ? htmlspecialchars_decode( $out, ENT_NOQUOTES ) : aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $id );
+	if ( ! is_string( $out ) ) {
+		return aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $id );
+	}
+	$out = htmlspecialchars_decode( $out, ENT_NOQUOTES );
+	return 'text' === $kind ? aafm_avada_filtered_text( $id, $out ) : $out;
+}
+
+/**
+ * A text value Avada prints without escaping, in the form Avada's own save stores it (CR-1): as sent for a user who may
+ * post unfiltered HTML; for any other user wp_kses_post()'s form when kses changes nothing but how entities are spelled
+ * (so "Fish & chips" is stored "Fish &amp; chips"), otherwise refused naming the setting, never stored filtered.
+ *
+ * @param string $id   Option id, named in the refusal.
+ * @param string $text Value.
+ * @return string|WP_Error
+ */
+function aafm_avada_filtered_text( string $id, string $text ) {
+	if ( current_user_can( 'unfiltered_html' ) ) {
+		return $text;
+	}
+	$clean = wp_kses_post( $text );
+	if ( html_entity_decode( $clean, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) !== html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) ) {
+		return new WP_Error(
+			'aafm_avada_stored_text_needs_unfiltered_html',
+			/* translators: %s: the option id. */
+			sprintf( __( 'The value of %s holds HTML that would be filtered out for this user, so it needs a user who may post unfiltered HTML. Nothing was changed.', 'agent-abilities-for-mcp' ), $id ),
+			array(
+				'status'  => 400,
+				'setting' => $id,
+			)
+		);
+	}
+	return $clean;
 }
 
 /**
@@ -710,7 +726,7 @@ function aafm_avada_validate_global_option( string $key, $value ) {
 		case 'colour':
 			return aafm_avada_global_colour( $value, $key ) ?? $bad;
 		case 'html':
-			return is_string( $value ) ? wp_kses_post( $value ) : $bad;
+			return is_string( $value ) ? aafm_avada_filtered_text( $key, $value ) : $bad;
 		case 'image':
 			$id         = is_int( $value ) && $value > 0 ? $value : 0;
 			$attachment = $id ? aafm_exact_object( 'post', $id ) : null;

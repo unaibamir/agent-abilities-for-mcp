@@ -324,6 +324,20 @@ final class AvadaElementsTest extends TestCase {
 		$this->assertSame( 'Docs &amp; guides', $this->encode( 'fusion_button', 'title', 'Docs &amp; guides' ) );
 	}
 
+	/**
+	 * CX-BR1-2: a text value is stored as sent or refused, never stripped of a tag-like run, a percent-encoded octet or
+	 * repeated spaces while the tool reports success.
+	 */
+	public function test_text_keeps_every_character_it_does_not_refuse(): void {
+		foreach ( array( 'Press <Ctrl> + S', 'Save 100%25 now  with   spaces', ' padded ', 'Use <strong> here' ) as $text ) {
+			$encoded = $this->encode( 'fusion_button', 'title', $text );
+			$this->assertIsString( $encoded, $text );
+			$this->assertSame( $text, aafm_avada_decode_atts( 'fusion_button', array( 'title' => $encoded ) )['title'], $text );
+		}
+		$this->assertSame( 'Press &lt;Ctrl&gt; + S', $this->encode( 'fusion_button', 'title', 'Press <Ctrl> + S' ) );
+		$this->assert_error( $this->encode( 'fusion_button', 'title', "tab\there" ), 'aafm_builder_invalid_value', 400 );
+	}
+
 	public function test_link_refuses_javascript_and_data_urls(): void {
 		$this->assertSame( 'https://example.com/docs', $this->encode( 'fusion_button', 'link', 'https://example.com/docs' ) );
 		$this->assertSame( $this->element( 'fusion_button' )['atts']['link'], $this->encode( 'fusion_button', 'link', 'https://example.com/docs' ) );

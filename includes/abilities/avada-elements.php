@@ -392,25 +392,21 @@ function aafm_avada_body_text( string $text ) {
  * Attribute text in the form Avada's editor keeps: every entity decoded first (repeatedly, so a double-encoded quote is
  * seen), then refused when it holds a double quote (the editor drops the whole attribute on its next save), a square
  * bracket, a control character or, for one line, a line break; then &, < and > are written as entities and the
- * apostrophe and the backtick as characters, which is what the editor stores after its own save.
+ * apostrophe and the backtick as characters, which is what the editor stores after its own save. Nothing else is
+ * removed or collapsed: a value is stored as sent or refused, never stored altered (CX-BR1-2), so text such as
+ * "Press <Ctrl> + S" or "100%25" keeps every character.
  *
- * @param string $text      Text.
- * @param bool   $one_line  Whether line breaks are refused.
- * @param bool   $sanitize  Whether sanitize_text_field() (or, multi-line, sanitize_textarea_field()) runs first.
+ * @param string $text     Text.
+ * @param bool   $one_line Whether line breaks are refused.
  * @return string|null Null when refused.
  */
-function aafm_avada_attribute_text( string $text, bool $one_line = true, bool $sanitize = true ): ?string {
+function aafm_avada_attribute_text( string $text, bool $one_line = true ): ?string {
 	for ( $i = 0; $i < 5; $i++ ) {
 		$next = html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 		if ( $next === $text ) {
 			break;
 		}
 		$text = $next;
-	}
-	if ( $sanitize ) {
-		// The sanitizer writes a lone < as &lt;; read it back as the character, escaped once below.
-		$clean = $one_line ? sanitize_text_field( $text ) : sanitize_textarea_field( $text );
-		$text  = html_entity_decode( $clean, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 	}
 	$controls = $one_line ? '/[\x00-\x1f\x7f]/' : '/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/';
 	if ( false !== strpbrk( $text, '"[]' ) || 1 === preg_match( $controls, $text ) ) {
@@ -509,7 +505,7 @@ function aafm_avada_encode_clean( string $kind, $value, array $param ) {
 		if ( '' === $url ) {
 			return null;
 		}
-		$url = aafm_avada_attribute_text( $url, true, false );
+		$url = aafm_avada_attribute_text( $url );
 		if ( null === $url ) {
 			return null;
 		}
@@ -532,10 +528,10 @@ function aafm_avada_encode_clean( string $kind, $value, array $param ) {
 			return aafm_avada_attribute_text( $text );
 		case 'content':
 			// A textarea or editor setting stored as an attribute: kses first, then the attribute rule.
-			return aafm_avada_attribute_text( wp_kses_post( $text ), false, false );
+			return aafm_avada_attribute_text( wp_kses_post( $text ), false );
 		case 'link':
 			$url = aafm_wpbakery_link_url( html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) );
-			return null === $url ? null : aafm_avada_attribute_text( $url, true, false );
+			return null === $url ? null : aafm_avada_attribute_text( $url );
 		case 'colour':
 			return '' === $text || aafm_wpbakery_is_colour( $text )
 				|| 1 === preg_match( '/^hsla?\(\s*\d{1,3}\s*,\s*\d{1,3}%\s*,\s*\d{1,3}%\s*(,\s*(0|1|0?\.\d+)\s*)?\)$/', $text )
@@ -612,7 +608,7 @@ function aafm_avada_encode_raw( string $type, string $name, $value, array $param
 		return is_string( $out ) ? $out : null;
 	}
 	// link_attributes and other text settings raw by name: plain attribute text, no stripping of what was written.
-	return 'text' === $base || 'content' === $base ? aafm_avada_attribute_text( $text, true, false ) : null;
+	return 'text' === $base || 'content' === $base ? aafm_avada_attribute_text( $text ) : null;
 }
 
 /**

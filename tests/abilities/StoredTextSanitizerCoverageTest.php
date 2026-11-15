@@ -65,18 +65,6 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 			),
 			'reason' => 'The list-blocks search term. It becomes WP_Query\'s `s` argument and is never written back, so nothing about it reaches storage.',
 		),
-		'includes/abilities/avada-elements.php::aafm_avada_attribute_text::sanitize_text_field' => array(
-			'calls'  => array(
-				'sanitize_text_field( $text )',
-			),
-			'reason' => 'Design 325 section 4.7 Avada text kind: a one-line setting stored inside a shortcode attribute, not post text. Entities are decoded before and after, and the attribute rule then refuses quotes, brackets and control characters.',
-		),
-		'includes/abilities/avada-elements.php::aafm_avada_attribute_text::sanitize_textarea_field' => array(
-			'calls'  => array(
-				'sanitize_textarea_field( $text )',
-			),
-			'reason' => 'The multi-line form of the same Avada attribute rule (a textarea setting stored inside a shortcode attribute).',
-		),
 		'includes/abilities/avada-site.php::aafm_exec_avada_update_page_css::sanitize_textarea_field' => array(
 			'calls'  => array(
 				'sanitize_textarea_field( $input[\'custom_css\'] )',
@@ -558,6 +546,28 @@ PHP;
 		$this->assertSame( 'aafm_probe_two', $records[1]['function'] );
 		$this->assertSame( 'sanitize_textarea_field', $records[1]['sanitizer'] );
 		$this->assertSame( 'call', $records[1]['form'] );
+	}
+
+	/**
+	 * Carried item 23 (CR-8): a call on either side of a ternary, inside an argument or after ?: and ??, is seen and
+	 * attributed to its function, the shape an S10 draft once wrote.
+	 */
+	public function test_the_scanner_finds_a_call_inside_a_ternary(): void {
+		$source = <<<'PHP'
+<?php
+function aafm_probe_ternary( $o, $t ) {
+	$a = $o ? sanitize_text_field( $t ) : sanitize_textarea_field( $t );
+	$b = g( $o ? sanitize_text_field( $o ) : '' );
+	$c = $o ?: sanitize_text_field( $t . 'x' );
+	return $o ?? sanitize_text_field( $t . 'y' );
+}
+PHP;
+
+		$records = StoredTextSanitizerScanner::scan_source( $source, 'probe.php' );
+
+		$this->assertCount( 5, $records );
+		$this->assertSame( array( 'aafm_probe_ternary' ), array_values( array_unique( array_column( $records, 'function' ) ) ) );
+		$this->assertSame( 'sanitize_textarea_field', $records[1]['sanitizer'] );
 	}
 
 	/**

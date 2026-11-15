@@ -800,7 +800,7 @@ final class AvadaSiteTest extends TestCase {
 			'checkbox-buttonset' => array( 'checkbox-buttonset', array( 'small-visibility', 'large-visibility' ), 'small-visibility,large-visibility', array() ),
 			'color-alpha'        => array( 'color-alpha', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.5)', 'red;}' ),
 			'color'              => array( 'color', '#fff', '#fff', 'nope' ),
-			'text'               => array( 'text', 'Fish & chips <ok>', 'Fish & chips', 'a "quoted" word' ),
+			'text'               => array( 'text', 'Fish & chips', 'Fish &amp; chips', 'a "quoted" word' ),
 			'link'               => array( 'link', 'https://example.com/?a=1&b=2', 'https://example.com/?a=1&b=2', 'javascript:alert(1)' ),
 			'slider'             => array( 'slider', 12, '12', 'abc' ),
 			'date_time_picker'   => array( 'date_time_picker', '2026-01-02 10:00', '2026-01-02 10:00:00', 'not a date' ),
@@ -873,6 +873,48 @@ final class AvadaSiteTest extends TestCase {
 		$embed = '<iframe src="https://example.com/v"></iframe>';
 		$this->assertIsArray( $this->page_options( $id, array( 'set' => array( $option => $embed ) ) ) );
 		$this->assertSame( array( $option => $embed ), get_post_meta( $id, '_fusion', true ) );
+	}
+
+	/**
+	 * CR-1: Avada Core prints a text option such as project_url_text without escaping, so for a user who may not post
+	 * unfiltered HTML a text value kses would change is refused, never stored raw and never stored filtered; an
+	 * administrator's value is stored as sent, as Avada's own save keeps it.
+	 */
+	public function test_a_text_value_kses_would_change_is_refused_for_a_restricted_user_and_kept_for_an_admin(): void {
+		$this->force_avada_theme( true );
+		$option = $this->option_of( 'text' );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		( new \WP_User( $author ) )->add_cap( 'unfiltered_html', false );
+		$id = $this->avada_post( self::PAGE, $author );
+		wp_set_current_user( $author );
+		$this->assertFalse( current_user_can( 'unfiltered_html' ) );
+		update_post_meta( $id, '_fusion', array( $option => 'old' ) );
+		// The unfinished tag of the reproduction is kept as text: kses escapes its < and changes nothing else, so it is
+		// stored as the escaped text Avada's own save stores, and Avada prints it as text.
+		$this->assertIsArray( $this->page_options( $id, array( 'set' => array( $option => '<img src=x onerror=alert(1)//' ) ) ) );
+		$this->assertSame( array( $option => '&lt;img src=x onerror=alert(1)//' ), get_post_meta( $id, '_fusion', true ) );
+		update_post_meta( $id, '_fusion', array( $option => 'old' ) );
+		foreach ( array( 'Fish & chips <ok>', '<b onclick=x()>a</b>', 'Press <Ctrl> + S', '<img src=x onerror=alert(1)>' ) as $value ) {
+			$this->assert_error( $this->page_options( $id, array( 'set' => array( $option => $value ) ) ), 'aafm_avada_stored_text_needs_unfiltered_html', 400 );
+			$this->assertSame( array( $option => 'old' ), get_post_meta( $id, '_fusion', true ), $value );
+		}
+		$this->assertIsArray( $this->page_options( $id, array( 'set' => array( $option => '<strong>Fish</strong> & chips' ) ) ) );
+		$this->assertSame( array( $option => '<strong>Fish</strong> &amp; chips' ), get_post_meta( $id, '_fusion', true ) );
+		$this->act_as_admin();
+		$this->assertIsArray( $this->page_options( $id, array( 'set' => array( $option => 'Press <Ctrl> + S' ) ) ) );
+		$this->assertSame( array( $option => 'Press <Ctrl> + S' ), get_post_meta( $id, '_fusion', true ) );
+	}
+
+	/**
+	 * CR-11: a named entity kses keeps, such as &copy;, is accepted in a text area for a restricted editor.
+	 */
+	public function test_a_textarea_entity_kses_keeps_is_accepted_for_a_restricted_editor(): void {
+		$this->force_avada_theme( true );
+		$option = $this->option_of( 'textarea' );
+		$this->act_as_restricted_editor();
+		$id = $this->avada_post();
+		$this->assertIsArray( $this->page_options( $id, array( 'set' => array( $option => '&copy; 2026 Fish & chips' ) ) ) );
+		$this->assertSame( array( $option => '&copy; 2026 Fish &amp; chips' ), get_post_meta( $id, '_fusion', true ) );
 	}
 
 	public function test_wrong_json_types_are_refused_cleanly_or_coerced(): void {
@@ -1136,10 +1178,27 @@ final class AvadaSiteTest extends TestCase {
 		$this->assertSame( array( 'primary_color' => '#111111' ), get_option( 'fusion_options' ) );
 	}
 
-	public function test_footer_text_loses_a_script_tag(): void {
-		$out = $this->global_write( array( 'footer_text' => 'Copyright <a href="https://example.org">Us</a><script>alert(1)</script>' ) );
+	/**
+	 * CR-1 sweep: footer_text is kept as sent for an administrator who may post unfiltered HTML, and for one who may not
+	 * (multisite) a value kses would change is refused, never stored filtered.
+	 */
+	public function test_footer_text_is_kept_for_unfiltered_html_and_refused_when_kses_would_change_it(): void {
+		$value = 'Copyright <a href="https://example.org">Us</a><script>alert(1)</script>';
+		$out   = $this->global_write( array( 'footer_text' => $value ) );
 		$this->assertSame( array( 'footer_text' ), $out['changed'] );
-		$this->assertSame( 'Copyright <a href="https://example.org">Us</a>alert(1)', get_option( 'fusion_options' )['footer_text'] );
+		$this->assertSame( $value, get_option( 'fusion_options' )['footer_text'] );
+
+		$deny = static function ( array $caps, string $cap ): array {
+			return 'unfiltered_html' === $cap ? array( 'do_not_allow' ) : $caps;
+		};
+		add_filter( 'map_meta_cap', $deny, 10, 2 );
+		$out  = $this->global_write( array( 'footer_text' => $value ) );
+		$kept = $this->global_write( array( 'footer_text' => 'Fish & <a href="https://example.org">chips</a>' ) );
+		remove_filter( 'map_meta_cap', $deny, 10 );
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_avada_stored_text_needs_unfiltered_html', $out->get_error_code() );
+		$this->assertSame( array( 'footer_text' ), $kept['changed'] );
+		$this->assertSame( 'Fish &amp; <a href="https://example.org">chips</a>', get_option( 'fusion_options' )['footer_text'] );
 	}
 
 	public function test_logo_writes_url_and_id_together_and_refuses_a_non_image(): void {

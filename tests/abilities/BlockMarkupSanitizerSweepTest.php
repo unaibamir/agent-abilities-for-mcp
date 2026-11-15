@@ -42,7 +42,7 @@ final class BlockMarkupSanitizerSweepTest extends TestCase {
 			'$decoded' => 'Avada body text (an element\'s inner content) at its one choke point, aafm_avada_body_text(): entities decoded to the editor\'s form, brackets, encoded brackets and data-* refused without unfiltered_html, and the structure check after it.',
 			'$text'    => 'A textarea setting stored as a shortcode attribute, not post content; the attribute rule refuses quotes and brackets after it.',
 		),
-		'avada-site.php'             => array( '$value' => 'The Avada footer_text Global Option, HTML printed in the footer bar, not post content.' ),
+		'avada-site.php'             => array( '$text' => 'aafm_avada_filtered_text(): a check, not a filter, for the Avada footer_text Global Option and the text and text area page options Avada prints without escaping; not post content, and a value kses would change is refused.' ),
 		'comments.php'               => array( "(string) \$input['content']" => 'Comment content (create and update).' ),
 		'media.php'                  => array(
 			'$sideloaded_content'             => 'Attachment description.',

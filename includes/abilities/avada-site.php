@@ -1139,6 +1139,9 @@ function aafm_avada_layout_conditions( $conditions, array $stored = array() ) {
 			|| ( isset( $condition['label'] ) && ! is_string( $condition['label'] ) ) ) {
 			return $bad;
 		}
+		if ( null !== $parent && is_string( $stored[ $id ]['label'] ?? null ) ) {
+			$label = $stored[ $id ]['label'];
+		}
 		$out[ $id ] = array(
 			'label' => $label,
 			'type'  => $type,
@@ -1270,8 +1273,8 @@ function aafm_exec_avada_update_layout( array $input ) {
 			array( 'status' => 409 )
 		);
 	}
-	$terms = is_array( $current['template_terms'] ?? null ) ? $current['template_terms'] : array();
-	$old   = array(
+	$terms          = is_array( $current['template_terms'] ?? null ) ? $current['template_terms'] : array();
+	$old            = array(
 		'sections'   => $terms,
 		'conditions' => is_array( $current['conditions'] ?? null ) ? $current['conditions'] : array(),
 	);

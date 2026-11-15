@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-15T15:01:02+05:00\n"
+"POT-Creation-Date: 2026-11-15T15:59:52+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -390,7 +390,7 @@ msgid "A data-* attribute in this text needs a user who may post unfiltered HTML
 msgstr ""
 
 #: includes/abilities/avada-elements.php:383
-#: includes/abilities/wpbakery.php:471
+#: includes/abilities/wpbakery.php:494
 msgid "This text ends inside an unfinished HTML tag, which needs a user who may post unfiltered HTML because the tag cannot be checked. Finish or remove the tag, or ask such a user to make the edit. Nothing was changed."
 msgstr ""
 
@@ -781,41 +781,41 @@ msgstr ""
 msgid "Avada could not load the Studio catalog from Avada's servers. Try again later. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1676
+#: includes/abilities/avada-site.php:1689
 msgid "The item's id from avada-list-studio-items."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1699
+#: includes/abilities/avada-site.php:1712
 msgid "True when Avada found an earlier import of this item and created nothing."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1764
+#: includes/abilities/avada-site.php:1777
 msgid "Avada could not import this Studio item. Nothing was confirmed as imported."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1805
+#: includes/abilities/avada-site.php:1818
 msgid "Only the item's own post was confirmed; the attachments, forms, menus and icons Avada imports with it are not checked one by one. Place the item on a page with avada-insert-library-item."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1891
+#: includes/abilities/avada-site.php:1904
 msgid "The slider: a term ID of Avada's slide-page taxonomy."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1895
+#: includes/abilities/avada-site.php:1908
 msgid "Setting key to its new value, keys from the fixed slider settings list in the description."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1911
+#: includes/abilities/avada-site.php:1924
 #: includes/abilities/wpbakery-site.php:935
 msgid "The old value of each changed setting, null where none was stored."
 msgstr ""
 
-#: includes/abilities/avada-site.php:1936
+#: includes/abilities/avada-site.php:1949
 msgid "Avada Slider is not available on this site: it needs the Avada theme and the Avada Core plugin active. Nothing was changed."
 msgstr ""
 
 #. translators: %s: the slider setting key.
-#: includes/abilities/avada-site.php:2028
+#: includes/abilities/avada-site.php:2041
 #, php-format
 msgid "The slider settings were written, but reading them back does not show the new value of %s. Check the slider in Avada's Sliders screen; previous in this error holds the old values."
 msgstr ""
@@ -929,19 +929,19 @@ msgstr ""
 
 #: includes/abilities/avada.php:958
 #: includes/abilities/posts.php:1472
-#: includes/abilities/wpbakery.php:548
+#: includes/abilities/wpbakery.php:571
 msgid "ID of the post to edit."
 msgstr ""
 
 #: includes/abilities/avada.php:963
 #: includes/abilities/posts.php:1477
-#: includes/abilities/wpbakery.php:553
+#: includes/abilities/wpbakery.php:576
 msgid "Literal text to find in the post content. Matched as-is, not as a regular expression."
 msgstr ""
 
 #: includes/abilities/avada.php:967
 #: includes/abilities/posts.php:1481
-#: includes/abilities/wpbakery.php:557
+#: includes/abilities/wpbakery.php:580
 msgid "Literal text to substitute for every match of search. Sanitized the same way as a full content update."
 msgstr ""
 
@@ -951,7 +951,7 @@ msgstr ""
 
 #: includes/abilities/avada.php:1270
 #: includes/abilities/posts.php:1852
-#: includes/abilities/wpbakery.php:683
+#: includes/abilities/wpbakery.php:706
 msgid "The replacement could not be confirmed as saved."
 msgstr ""
 
@@ -5185,35 +5185,35 @@ msgstr ""
 msgid "Only with include_page_settings. custom_js_header and custom_js_footer are present only for a user who may post unfiltered HTML."
 msgstr ""
 
-#: includes/abilities/wpbakery.php:443
+#: includes/abilities/wpbakery.php:466
 msgid "Square brackets in this text need a user who may post unfiltered HTML, because WPBakery can turn them into an element the next time the page is saved in its editor. Remove the brackets, or ask such a user to make the edit. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/wpbakery.php:451
+#: includes/abilities/wpbakery.php:474
 msgid "A percent-encoded square bracket in this text needs a user who may post unfiltered HTML, because WordPress's editor can decode it into an element the next time the page is saved in WPBakery. Remove it, or ask such a user to make the edit. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/wpbakery.php:462
+#: includes/abilities/wpbakery.php:485
 msgid "A data-* attribute in this text needs a user who may post unfiltered HTML, because WordPress's editor can turn one into page text the next time the page is saved in WPBakery. Remove the attribute, or ask such a user to make the edit. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/wpbakery.php:606
+#: includes/abilities/wpbakery.php:629
 msgid "This post is not a WPBakery page. Use replace-in-post for an ordinary post, and edit a page built with another builder in that builder."
 msgstr ""
 
-#: includes/abilities/wpbakery.php:635
+#: includes/abilities/wpbakery.php:658
 msgid "This page uses more distinct shortcode names than can be checked safely, so its text cannot be replaced here. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/wpbakery.php:643
+#: includes/abilities/wpbakery.php:666
 msgid "That replacement would change a WPBakery element rather than the text between elements. WPBakery keeps heading text, button labels and other element settings inside the element itself, so change that text in WPBakery. Choose a search term that appears only in plain text, such as a text block. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/wpbakery.php:651
+#: includes/abilities/wpbakery.php:674
 msgid "Saving this page as the current user would change content outside the requested text, for example by removing embedded HTML or WPBakery elements this user is not allowed to keep. Ask a user with fuller rights to make the edit, or make it in WPBakery. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/wpbakery.php:661
+#: includes/abilities/wpbakery.php:684
 msgid "Saving the new text would remove or change WPBakery elements on this page, so the replacement was not saved. Nothing was changed."
 msgstr ""
 

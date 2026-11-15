@@ -142,7 +142,18 @@ function aafm_wpbakery_map( string $context = 'page', ?string $tag = null, int &
 		} catch ( Throwable $e ) {
 			return aafm_wpbakery_map_unavailable();
 		}
-		return is_array( $settings ) ? $settings : aafm_builder_error( 'aafm_builder_unknown_element' );
+		if ( is_array( $settings ) ) {
+			return $settings;
+		}
+		if ( in_array( $tag, array( 'vc_flexbox_container', 'vc_flexbox_container_item', 'vc_grid_container', 'vc_grid_container_item' ), true ) ) {
+			// Demo #6a: WPBakery 9.1 ships these four tags without registering them, so say so rather than "not known".
+			return new WP_Error(
+				'aafm_builder_unknown_element',
+				__( 'WPBakery does not register its flexbox and grid containers on this site, so elements cannot be added to them or moved into them. Elements already inside can be edited, reordered or removed. Nothing was changed.', 'agent-abilities-for-mcp' ),
+				array( 'status' => 400 )
+			);
+		}
+		return aafm_builder_error( 'aafm_builder_unknown_element' );
 	}
 	$all = aafm_builder_vendor( 'wpbakery_map_all' );
 	if ( null === $all ) {
@@ -2322,7 +2333,10 @@ function aafm_exec_wpbakery_move_element( array $input ) {
 	$parent_tag = null === $point['parent'] ? '' : (string) $elements[ $point['parent'] ]['tag'];
 	$context    = 'vc_grid_item' === $post->post_type ? 'grid' : 'page';
 	$map        = array();
-	foreach ( array_unique( array_filter( array( $tag, $parent_tag ) ) ) as $name ) {
+	// Demo #6b: a reorder under the same parent reads no placement rule, so it needs no map entry (the unregistered
+	// flexbox and grid items reorder as the readme says).
+	$names = $point['parent'] === $element['parent'] ? array() : array_unique( array_filter( array( $tag, $parent_tag ) ) );
+	foreach ( $names as $name ) {
 		$entry = aafm_wpbakery_map( $context, $name );
 		if ( is_array( $entry ) ) {
 			$map[ $name ] = $entry;

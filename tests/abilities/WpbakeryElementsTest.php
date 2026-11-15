@@ -2324,6 +2324,26 @@ final class WpbakeryElementsTest extends TestCase {
 	}
 
 	/**
+	 * Demo #6b (CA-14): two grid items in an unmapped grid container reorder, since a same-parent move needs no map
+	 * entry; demo #6a: adding a flexbox item is refused with a message that names the flexbox and grid limitation.
+	 */
+	public function test_grid_items_reorder_and_the_flexbox_refusal_names_the_limitation(): void {
+		$one  = '[vc_grid_container_item][vc_column_text]<p>One</p>[/vc_column_text][/vc_grid_container_item]';
+		$two  = '[vc_grid_container_item][vc_column_text]<p>Two</p>[/vc_column_text][/vc_grid_container_item]';
+		$page = '[vc_grid_container]' . $one . $two . '[/vc_grid_container]';
+		$id   = $this->page( $page );
+		$this->acting_as( 'editor' );
+		$out = $this->move( $id, 3, 1, 'before' );
+		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+		$this->assertSame( '[vc_grid_container]' . $two . $one . '[/vc_grid_container]', get_post_field( 'post_content', $id, 'raw' ) );
+		$refused = aafm_wpbakery_map( 'page', 'vc_flexbox_container_item' );
+		$this->assertInstanceOf( WP_Error::class, $refused );
+		$this->assertSame( 'aafm_builder_unknown_element', $refused->get_error_code() );
+		$this->assertStringContainsString( 'flexbox and grid', $refused->get_error_message() );
+		$this->assertStringNotContainsString( 'flexbox', aafm_wpbakery_map( 'page', 'acme_unknown' )->get_error_message() );
+	}
+
+	/**
 	 * R3-1: a deprecated leaf WPBakery maps with content_element false (vc_gmaps, vc_facebook, vc_cta_button) is still
 	 * content, so it moves between columns and reorders in its own column.
 	 */

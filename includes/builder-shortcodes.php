@@ -53,6 +53,83 @@ function aafm_builder_error( string $code, array $extra = array() ): WP_Error {
 }
 
 /**
+ * How many references deep aafm_builder_references_allowed() follows before it refuses.
+ */
+const AAFM_BUILDER_REFERENCE_DEPTH = 5;
+
+/**
+ * Whether the current user may write $text, judged by what it shows by reference (ruling on CX-BR1-1): every
+ * [templatera id] and [fusion_global id] in it, at any depth, is resolved, and the item it names gets the same access
+ * check and the same stored text gate as an item chosen directly (aafm_templatera_template_allowed() and
+ * aafm_templatera_reference_gate(); aafm_perm_avada_post_object() and aafm_avada_trusted_text_allowed()). The item's
+ * own text is then read the same way, at most AAFM_BUILDER_REFERENCE_DEPTH levels down, and a reference to an item
+ * already on the path is a loop. Any failure refuses the whole write. Both vendors render the item their id names with
+ * no access check of their own (Templatera outputShortcode(), Avada FusionSC_Global::render()), which is why the
+ * gate follows them. A [templatera] reference is not followed while Templatera is off, since nothing renders it.
+ *
+ * @param string             $text     Shortcode text about to be written.
+ * @param WP_Post|null       $for_post Post the text goes on, for Templatera's post type list.
+ * @param array<string,bool> $path     Items already followed, keyed "tag:id".
+ * @return true|WP_Error
+ */
+function aafm_builder_references_allowed( string $text, ?WP_Post $for_post, array $path = array() ) {
+	$tags = aafm_templatera_active() ? array( 'templatera', 'fusion_global' ) : array( 'fusion_global' );
+	if ( false === strpos( $text, '[' ) || ! preg_match_all( '/' . get_shortcode_regex( $tags ) . '/', $text, $found, PREG_SET_ORDER ) ) {
+		return true;
+	}
+	foreach ( $found as $match ) {
+		if ( '[' === $match[1] && ']' === $match[6] ) {
+			continue; // An escaped [[tag]] prints as text.
+		}
+		if ( '' !== $match[5] ) {
+			$inner = aafm_builder_references_allowed( $match[5], $for_post, $path );
+			if ( is_wp_error( $inner ) ) {
+				return $inner;
+			}
+		}
+		$atts = shortcode_parse_atts( $match[3] );
+		// Both renderers read the id as an integer post id; anything else renders nothing.
+		$id = is_array( $atts ) && isset( $atts['id'] ) && is_scalar( $atts['id'] ) ? (int) $atts['id'] : 0;
+		if ( $id < 1 ) {
+			continue;
+		}
+		$key = $match[2] . ':' . $id;
+		if ( isset( $path[ $key ] ) || count( $path ) >= AAFM_BUILDER_REFERENCE_DEPTH ) {
+			return new WP_Error(
+				'aafm_builder_reference_loop',
+				/* translators: %d: the maximum depth. */
+				sprintf( __( 'This content shows a template or library item that shows itself again, or nests references more than %d deep. Nothing was changed.', 'agent-abilities-for-mcp' ), AAFM_BUILDER_REFERENCE_DEPTH ),
+				array( 'status' => 400 )
+			);
+		}
+		$item = aafm_exact_object_chain( 'post', $id );
+		if ( 'templatera' === $match[2] ) {
+			$ok   = $item instanceof WP_Post && 'templatera' === $item->post_type && 'publish' === $item->post_status && aafm_templatera_template_allowed( $item, $for_post );
+			$gate = $ok ? aafm_templatera_reference_gate( (string) $item->post_content ) : true;
+		} else {
+			$ok   = $item instanceof WP_Post && in_array( $item->post_type, array( 'fusion_element', 'fusion_template' ), true ) && aafm_perm_avada_post_object( array( 'post_id' => $id ) );
+			$gate = $ok ? aafm_avada_trusted_text_allowed( (string) $item->post_content, aafm_fusion_shortcode_tags() ) : true;
+		}
+		if ( ! $ok ) {
+			return new WP_Error(
+				'aafm_builder_reference_refused',
+				/* translators: %d: the template or library item id. */
+				sprintf( __( 'This content shows template or library item %d by reference, which the current user may not use. Nothing was changed.', 'agent-abilities-for-mcp' ), $id ),
+				array( 'status' => 403 )
+			);
+		}
+		if ( is_wp_error( $gate ) ) {
+			return $gate;
+		}
+		$deeper = aafm_builder_references_allowed( (string) $item->post_content, $for_post, $path + array( $key => true ) );
+		if ( is_wp_error( $deeper ) ) {
+			return $deeper;
+		}
+	}
+	return true;
+}
+
+/**
  * The element outline with byte offsets, in outline order (each element before its children).
  *
  * Each element: index, depth, parent (index or null), tag, atts (shortcode_parse_atts()), self_closing,

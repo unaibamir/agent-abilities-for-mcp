@@ -257,6 +257,7 @@ final class AvadaSiteTest extends TestCase {
 	public function test_the_trusted_path_takes_a_fusion_global_root_and_the_untrusted_path_does_not(): void {
 		$this->act_as_admin();
 		$id     = $this->avada_post();
+		$ref    = (string) $this->item( self::SECTION, 'sections', true );
 		$anchor = $this->input( $id, 1 );
 		$anchor = array(
 			'index'     => $anchor['anchor_index'],
@@ -265,16 +266,16 @@ final class AvadaSiteTest extends TestCase {
 		);
 		$node   = array(
 			'tag'      => 'fusion_global',
-			'atts'     => array( 'id' => '77' ),
+			'atts'     => array( 'id' => $ref ),
 			'children' => array(),
-			'source'   => '[fusion_global id="77"]',
+			'source'   => '[fusion_global id="' . $ref . '"]',
 			'place_as' => 'fusion_builder_container',
 		);
 		$this->assert_refused( aafm_avada_insert_tree( get_post( $id ), array( $node ), $anchor, false ), 'aafm_builder_unknown_element', 400, $id, self::PAGE );
 		foreach ( array(
 			array(
 				'atts' => array(
-					'id'    => '77',
+					'id'    => $ref,
 					'class' => 'x',
 				),
 			),
@@ -287,7 +288,7 @@ final class AvadaSiteTest extends TestCase {
 		}
 		$out = aafm_avada_insert_tree( get_post( $id ), array( $node ), $anchor, true );
 		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
-		$this->assertSame( self::PAGE . '[fusion_global id="77"]', get_post( $id )->post_content );
+		$this->assertSame( self::PAGE . '[fusion_global id="' . $ref . '"]', get_post( $id )->post_content );
 	}
 
 	public function test_a_retried_library_insert_is_refused_and_stores_the_item_once(): void {
@@ -401,6 +402,76 @@ final class AvadaSiteTest extends TestCase {
 			$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
 			$this->assertStringEndsWith( $global ? '[fusion_global id="' . $item . '"]' : $source, (string) get_post( $id )->post_content );
 		}
+	}
+
+	/**
+	 * Ruling on CX-BR1-1: a global item that shows another global item passes on that item's checks. A restricted
+	 * editor's wrapper around an administrator's code block is refused with the page unchanged; an administrator places
+	 * it; a wrapper that shows itself is refused for everyone.
+	 */
+	public function test_a_nested_global_reference_gets_the_checks_of_the_item_it_shows(): void {
+		$wrap   = static fn( string $inner ): string => '[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1"]' . $inner . '[/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]';
+		$editor = $this->act_as_restricted_editor();
+		$this->act_as_admin();
+		$code    = $this->item( $wrap( '[fusion_code]eA==[/fusion_code]' ), 'sections', true );
+		$wrapper = $this->item( $wrap( '[fusion_global id="' . $code . '"]' ), 'sections', true, $editor );
+		$id      = $this->avada_post( self::PAGE, $editor );
+		wp_set_current_user( $editor );
+		$this->assert_refused( aafm_exec_avada_insert_library_item( $this->input( $id, $code ) ), 'aafm_builder_needs_unfiltered_html', 403, $id, self::PAGE );
+		$this->assert_refused( aafm_exec_avada_insert_library_item( $this->input( $id, $wrapper ) ), 'aafm_builder_needs_unfiltered_html', 403, $id, self::PAGE );
+
+		$this->act_as_admin();
+		$out = aafm_exec_avada_insert_library_item( $this->input( $id, $wrapper ) );
+		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+
+		$loop = $this->item( 'x', 'sections', true );
+		wp_update_post(
+			array(
+				'ID'           => $loop,
+				'post_content' => $wrap( '[fusion_global id="' . $loop . '"]' ),
+			)
+		);
+		$page = $this->avada_post();
+		$this->assert_refused( aafm_exec_avada_insert_library_item( $this->input( $page, $loop ) ), 'aafm_builder_reference_loop', 400, $page, self::PAGE );
+	}
+
+	/**
+	 * A fusion_global typed through the element tools is never written: insert-element does not know the tag, and
+	 * update-element refuses an element that shows a global item.
+	 */
+	public function test_a_typed_fusion_global_is_refused_by_the_element_tools(): void {
+		$this->act_as_admin();
+		$item = $this->item( self::SECTION, 'sections', true );
+		$id   = $this->avada_post( self::PAGE . '[fusion_global id="' . $item . '"]' );
+		$this->assert_refused(
+			aafm_exec_avada_insert_element(
+				$this->input( $id, 0 ) + array(
+					'element' => array(
+						'tag'  => 'fusion_global',
+						'atts' => array( 'id' => (string) $item ),
+					),
+				)
+			),
+			'aafm_builder_unknown_element',
+			400,
+			$id,
+			self::PAGE . '[fusion_global id="' . $item . '"]'
+		);
+		$content = (string) get_post( $id )->post_content;
+		$el      = aafm_builder_elements( $content, aafm_fusion_shortcode_tags() );
+		$last    = end( $el );
+		$out     = aafm_exec_avada_update_element(
+			array(
+				'post_id'  => $id,
+				'index'    => $last['index'],
+				'expect'   => array(
+					'tag'         => 'fusion_global',
+					'fingerprint' => aafm_builder_fingerprint( $content, $last ),
+				),
+				'set_atts' => array( 'id' => '1' ),
+			)
+		);
+		$this->assert_refused( $out, 'aafm_avada_global_element', 409, $id, $content );
 	}
 
 	public function test_insert_library_item_returns_a_redacted_post(): void {

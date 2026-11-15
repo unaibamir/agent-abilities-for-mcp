@@ -1431,6 +1431,13 @@ function aafm_exec_wpbakery_update_element( array $input ) {
 		}
 	}
 
+	if ( array() !== $changed ) {
+		// A changed Templatera id shows another template: it gets the checks of a template chosen directly.
+		$references = aafm_builder_references_allowed( '[' . $tag . $new_attr_text . ']', $post );
+		if ( is_wp_error( $references ) ) {
+			return $references;
+		}
+	}
 	$source = '[' . $tag . $new_attr_text . $tail . $inner . substr( $content, (int) $element['inner_end'], (int) $element['end'] - (int) $element['inner_end'] );
 	$new    = substr( $content, 0, (int) $element['start'] ) . $source . substr( $content, (int) $element['end'] );
 	$walk   = aafm_builder_walk( $content, $tags );
@@ -1985,6 +1992,11 @@ function aafm_wpbakery_insert_tree( WP_Post $post, array $tree, array $anchor, b
 		if ( is_wp_error( $text ) ) {
 			return $text;
 		}
+	}
+	// A Templatera element, copied, typed or nested, shows its template: that template gets the chosen item's checks.
+	$references = aafm_builder_references_allowed( $text, $post );
+	if ( is_wp_error( $references ) ) {
+		return $references;
 	}
 
 	$new  = substr( $content, 0, $point['offset'] ) . $text . substr( $content, $point['offset'] );

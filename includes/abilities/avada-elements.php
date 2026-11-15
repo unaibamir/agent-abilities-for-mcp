@@ -1778,6 +1778,11 @@ function aafm_avada_insert_tree( WP_Post $post, array $tree, array $anchor, bool
 			return $text;
 		}
 	}
+	// A global reference, placed or nested in copied text, shows its item: that item gets the chosen item's checks.
+	$references = aafm_builder_references_allowed( $text, $post );
+	if ( is_wp_error( $references ) ) {
+		return $references;
+	}
 	$tuples = aafm_builder_walk( $text, $tags );
 	if ( null === $tuples || count( $tuples ) !== $stats['count'] ) {
 		return aafm_builder_error( 'aafm_builder_unparseable' );

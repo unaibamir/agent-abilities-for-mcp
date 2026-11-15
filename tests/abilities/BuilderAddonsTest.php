@@ -491,6 +491,141 @@ final class BuilderAddonsTest extends TestCase {
 		}
 	}
 
+	/**
+	 * Ruling on CX-BR1-1: a template that shows another template by reference passes on that template's checks. A
+	 * restricted user's wrapper around an administrator's raw HTML template is refused as a copy and as a reference, page
+	 * unchanged; an administrator places it.
+	 */
+	public function test_a_nested_templatera_reference_gets_the_checks_of_the_template_it_shows(): void {
+		add_filter( 'aafm_templatera_active', '__return_true' );
+		$raw   = $this->template( '[vc_row][vc_column][vc_raw_html]JTNDcCUzRXglM0MlMkZwJTNF[/vc_raw_html][/vc_column][/vc_row]' );
+		$inner = $this->template( '[vc_row][vc_column][templatera id="' . $raw . '"][/vc_column][/vc_row]' );
+		$wrap  = (string) $this->template( '[vc_row][vc_column][templatera id="' . $inner . '"][/vc_column][/vc_row]' );
+		foreach ( array(
+			'copy'      => 0,
+			'reference' => 2,
+		) as $mode => $anchor ) {
+			$id = $this->page();
+			$this->act_as_restricted_editor();
+			$this->assert_error( $this->insert( $id, $wrap, array( 'mode' => $mode ), $anchor ), 'aafm_builder_needs_unfiltered_html', 403 );
+			$this->assertSame( self::SIMPLE, get_post_field( 'post_content', $id, 'raw' ), $mode );
+			$this->acting_as( 'administrator' );
+			$this->assertIsArray( $this->insert( $id, $wrap, array( 'mode' => $mode ), $anchor ), $mode );
+		}
+	}
+
+	/**
+	 * A nested template gets the chosen template's access check too, Templatera's role list included.
+	 */
+	public function test_a_nested_template_outside_the_users_role_list_refuses_the_insert(): void {
+		add_filter( 'aafm_templatera_active', '__return_true' );
+		$admins = $this->template( self::TEMPLATE, null, array( 'administrator' ) );
+		$wrap   = (string) $this->template( '[vc_row][vc_column][templatera id="' . $admins . '"][/vc_column][/vc_row]' );
+		$id     = $this->page();
+		$this->acting_as( 'editor' );
+		$this->assert_error( $this->insert( $id, (string) $admins, array( 'mode' => 'reference' ), 2 ), 'aafm_builder_unknown_template', 404 );
+		$this->assert_error( $this->insert( $id, $wrap ), 'aafm_builder_reference_refused', 403 );
+		$this->assertSame( self::SIMPLE, get_post_field( 'post_content', $id, 'raw' ) );
+		$this->acting_as( 'administrator' );
+		$this->assertIsArray( $this->insert( $id, $wrap ) );
+	}
+
+	/**
+	 * A template that shows itself, directly or through another, is refused cleanly for everyone.
+	 */
+	public function test_a_reference_loop_is_refused(): void {
+		add_filter( 'aafm_templatera_active', '__return_true' );
+		$a = $this->template( self::TEMPLATE );
+		$b = $this->template( '[vc_row][vc_column][templatera id="' . $a . '"][/vc_column][/vc_row]' );
+		$this->acting_as( 'administrator' );
+		wp_update_post(
+			array(
+				'ID'           => $a,
+				'post_content' => '[vc_row][vc_column][templatera id="' . $b . '"][/vc_column][/vc_row]',
+			)
+		);
+		$self = $this->template( 'x' );
+		wp_update_post(
+			array(
+				'ID'           => $self,
+				'post_content' => '[vc_row][vc_column][templatera id="' . $self . '"][/vc_column][/vc_row]',
+			)
+		);
+		foreach ( array( $a, $self ) as $tid ) {
+			foreach ( array(
+				'copy'      => 0,
+				'reference' => 2,
+			) as $mode => $anchor ) {
+				$id = $this->page();
+				$this->assert_error( $this->insert( $id, (string) $tid, array( 'mode' => $mode ), $anchor ), 'aafm_builder_reference_loop', 400 );
+				$this->assertSame( self::SIMPLE, get_post_field( 'post_content', $id, 'raw' ) );
+			}
+		}
+	}
+
+	/**
+	 * A Templatera element typed through insert-element or given a new id through update-element is a reference too.
+	 */
+	public function test_a_typed_templatera_element_gets_the_checks_of_the_template_it_names(): void {
+		add_filter( 'aafm_templatera_active', '__return_true' );
+		$raw   = $this->template( '[vc_row][vc_column][vc_raw_html]JTNDcCUzRXglM0MlMkZwJTNF[/vc_raw_html][/vc_column][/vc_row]' );
+		$clean = $this->template( self::TEMPLATE );
+		// Templatera fills the id dropdown with the templates the user may choose (getTemplateList()).
+		$entry                        = self::templatera_map_entry();
+		$entry['params'][0]['value'] += array(
+			'Raw'   => (string) $raw,
+			'Clean' => (string) $clean,
+		);
+		WpbakeryMapStub::install( WpbakeryMapStub::map() + array( 'templatera' => $entry ) );
+		$typed = function ( int $id, int $tid ) {
+			$content  = (string) get_post_field( 'post_content', $id, 'raw' );
+			$elements = aafm_builder_elements( $content, aafm_wpbakery_shortcode_tags( $content ) );
+			return aafm_exec_wpbakery_insert_element(
+				array(
+					'post_id'          => $id,
+					'page_fingerprint' => aafm_builder_page_fingerprint( $content ),
+					'anchor_index'     => 2,
+					'anchor_expect'    => array(
+						'tag'         => 'vc_column_text',
+						'fingerprint' => aafm_builder_fingerprint( $content, $elements[2] ),
+					),
+					'placement'        => 'after',
+					'element'          => array(
+						'tag'  => 'templatera',
+						'atts' => array( 'id' => (string) $tid ),
+					),
+				)
+			);
+		};
+		$id    = $this->page();
+		$this->act_as_restricted_editor();
+		$this->assert_error( $typed( $id, $raw ), 'aafm_builder_needs_unfiltered_html', 403 );
+		$this->assertSame( self::SIMPLE, get_post_field( 'post_content', $id, 'raw' ) );
+		$this->assertIsArray( $typed( $id, $clean ) );
+
+		$content = (string) get_post_field( 'post_content', $id, 'raw' );
+		$el      = aafm_builder_elements( $content, aafm_wpbakery_shortcode_tags( $content ) );
+		$update  = static function ( int $tid ) use ( $id, $content, $el ) {
+			return aafm_exec_wpbakery_update_element(
+				array(
+					'post_id'          => $id,
+					'page_fingerprint' => aafm_builder_page_fingerprint( $content ),
+					'index'            => 3,
+					'expect'           => array(
+						'tag'         => 'templatera',
+						'fingerprint' => aafm_builder_fingerprint( $content, $el[3] ),
+					),
+					'set_atts'         => array( 'id' => (string) $tid ),
+				)
+			);
+		};
+		$this->assert_error( $update( $raw ), 'aafm_builder_needs_unfiltered_html', 403 );
+		$this->assertSame( $content, get_post_field( 'post_content', $id, 'raw' ) );
+		$this->acting_as( 'administrator' );
+		$this->assertIsArray( $update( $raw ) );
+		$this->assertStringContainsString( '[templatera id="' . $raw . '"]', (string) get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
 	public function test_a_retried_reference_is_refused_and_placed_once(): void {
 		add_filter( 'aafm_templatera_active', '__return_true' );
 		$tid   = (string) $this->template( self::TEMPLATE );

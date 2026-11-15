@@ -146,6 +146,32 @@ final class IntegrationsTabTest extends TestCase {
 		);
 	}
 
+	/**
+	 * EV-L2: an active Avada or WPBakery card says whether the add-on its add-on tools need is active.
+	 */
+	public function test_builder_cards_name_their_add_on_state(): void {
+		$this->acting_as( 'administrator' );
+		add_filter( 'aafm_integration_active_avada', '__return_true' );
+		add_filter( 'aafm_integration_active_wpbakery', '__return_true' );
+		$render = static function (): string {
+			ob_start();
+			aafm_render_integrations_tab();
+			return (string) ob_get_clean();
+		};
+		$off    = $render();
+		add_filter( 'aafm_templatera_active', '__return_true' );
+		add_filter( 'aafm_avada_core_active', '__return_true' );
+		$on = $render();
+		remove_all_filters( 'aafm_templatera_active' );
+		remove_all_filters( 'aafm_avada_core_active' );
+		remove_filter( 'aafm_integration_active_avada', '__return_true' );
+		remove_filter( 'aafm_integration_active_wpbakery', '__return_true' );
+		$this->assertStringContainsString( 'Avada Core: not active. The Avada Slider settings tool needs it.', $off );
+		$this->assertStringContainsString( 'Templatera: not active. Templatera templates and references need it.', $off );
+		$this->assertStringContainsString( 'Avada Core: active.', $on );
+		$this->assertStringContainsString( 'Templatera: active.', $on );
+	}
+
 	public function test_active_card_shows_the_real_enabled_count(): void {
 		// Regression guard for the count header bug: the enabled tally was hardcoded to the literal
 		// 0, so an ACTIVE integration with abilities switched on still read "0 / N". Force WooCommerce

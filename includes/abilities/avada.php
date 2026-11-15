@@ -516,6 +516,21 @@ function aafm_avada_affects( WP_Post $post ): ?string {
 }
 
 /**
+ * Whether Avada Core is active: it defines FUSION_CORE_VERSION as it loads (fusion-core.php). The same pattern as
+ * aafm_templatera_active(), for the Integrations card's add-on note.
+ *
+ * @return bool
+ */
+function aafm_avada_core_active(): bool {
+	/**
+	 * Filters whether Avada Core is reported active.
+	 *
+	 * @param bool $active Detected active state.
+	 */
+	return (bool) apply_filters( 'aafm_avada_core_active', defined( 'FUSION_CORE_VERSION' ) );
+}
+
+/**
  * Whether the Avada theme is active: its option name accessor is reachable through the seam.
  *
  * @return bool

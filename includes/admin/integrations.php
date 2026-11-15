@@ -427,6 +427,10 @@ function aafm_render_integrations_tab(): void {
 		echo '<p class="aafm-card-desc">' . esc_html__( 'Maintained by Agent Abilities.', 'agent-abilities-for-mcp' ) . '</p>';
 
 		echo '<p class="aafm-integration-note">' . esc_html( aafm_integration_status_note( $slug, $status ) ) . '</p>';
+		$addon = 'active' === $status ? aafm_integration_addon_note( $slug ) : '';
+		if ( '' !== $addon ) {
+			echo '<p class="aafm-integration-note">' . esc_html( $addon ) . '</p>';
+		}
 
 		aafm_render_integration_filter( $slug );
 
@@ -464,6 +468,27 @@ function aafm_integration_status_pill( string $status ): string {
 		esc_attr( $class ),
 		esc_html( $label )
 	);
+}
+
+/**
+ * The second note of an active builder card (EV-L2): whether the add-on some of its tools need is active, Avada Core
+ * for the Avada Slider tool and Templatera for Templatera templates. Empty for every other card.
+ *
+ * @param string $slug Integration slug.
+ * @return string Plain text (escaped by the caller).
+ */
+function aafm_integration_addon_note( string $slug ): string {
+	switch ( $slug ) {
+		case 'avada':
+			return aafm_avada_core_active()
+				? __( 'Avada Core: active.', 'agent-abilities-for-mcp' )
+				: __( 'Avada Core: not active. The Avada Slider settings tool needs it.', 'agent-abilities-for-mcp' );
+		case 'wpbakery':
+			return aafm_templatera_active()
+				? __( 'Templatera: active.', 'agent-abilities-for-mcp' )
+				: __( 'Templatera: not active. Templatera templates and references need it.', 'agent-abilities-for-mcp' );
+	}
+	return '';
 }
 
 /**

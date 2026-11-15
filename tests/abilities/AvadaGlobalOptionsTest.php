@@ -127,9 +127,21 @@ final class AvadaGlobalOptionsTest extends TestCase {
 		$this->load_avada();
 		delete_option( 'fusion_options' );
 
+		// BR-1: a site that never saved Avada's options gets the step to take, for the read and the write alike.
 		$out = aafm_exec_avada_get_global_options( array() );
 		$this->assertInstanceOf( WP_Error::class, $out );
-		$this->assertSame( 'aafm_avada_options_unreadable', $out->get_error_code() );
+		$this->assertSame( 'aafm_avada_options_not_stored', $out->get_error_code() );
+		$this->assertSame( 409, $out->get_error_data()['status'] );
+		$this->assertStringContainsString( 'Open Avada > Options in wp-admin once', $out->get_error_message() );
+		$name  = static fn(): string => 'fusion_options';
+		$seam  = static fn( $resolved, string $entry ) => 'avada_option_name' === $entry ? $name : $resolved;
+		add_filter( 'aafm_builder_vendor', $seam, 20, 2 );
+		$write = aafm_exec_avada_update_global_options( array( 'set' => array( 'primary_color' => '#a1b2c3' ) ) );
+		remove_filter( 'aafm_builder_vendor', $seam, 20 );
+		$this->assertInstanceOf( WP_Error::class, $write );
+		$this->assertSame( 'aafm_avada_options_not_stored', $write->get_error_code() );
+		$this->assertStringContainsString( 'Open Avada > Options in wp-admin once', $write->get_error_message() );
+		$this->assertFalse( get_option( 'fusion_options' ) );
 
 		update_option( 'fusion_options', 'not an array' );
 		$out = aafm_exec_avada_get_global_options( array() );

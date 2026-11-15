@@ -948,6 +948,14 @@ function aafm_exec_avada_update_global_options( array $input ) {
 	}
 
 	$stored = get_option( $name );
+	if ( false === $stored ) {
+		// BR-1: Avada writes the row the first time its options panel is opened.
+		return new WP_Error(
+			'aafm_avada_options_not_stored',
+			__( 'Avada has not stored its Global Options yet. Open Avada > Options in wp-admin once, then try again. Nothing was changed.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 409 )
+		);
+	}
 	if ( ! is_array( $stored ) ) {
 		return new WP_Error(
 			'aafm_avada_options_unreadable',

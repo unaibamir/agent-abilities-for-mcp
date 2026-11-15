@@ -291,6 +291,22 @@ final class AvadaSiteTest extends TestCase {
 		$this->assertSame( self::PAGE . '[fusion_global id="' . $ref . '"]', get_post( $id )->post_content );
 	}
 
+	/**
+	 * Demo #11 (CB-18): Avada Studio ships flex sections with columns directly under the container and no row; Avada's
+	 * builder accepts them, so placing one is a byte-for-byte copy. A non-flex container still needs its row.
+	 */
+	public function test_a_row_less_flex_section_is_placed_and_a_row_less_classic_one_is_refused(): void {
+		$this->act_as_admin();
+		$flex = '[fusion_builder_container type="flex"][fusion_builder_column type="1_1"][fusion_builder_row_inner][fusion_builder_column_inner type="1_1"][fusion_text]<p>Studio</p>[/fusion_text][/fusion_builder_column_inner][/fusion_builder_row_inner][/fusion_builder_column][/fusion_builder_container]';
+		$id   = $this->avada_post();
+		$out  = aafm_exec_avada_insert_library_item( $this->input( $id, $this->item( $flex ) ) );
+		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+		$this->assertSame( self::PAGE . $flex, get_post( $id )->post_content );
+		$classic = str_replace( ' type="flex"', '', $flex );
+		$other   = $this->avada_post();
+		$this->assert_refused( aafm_exec_avada_insert_library_item( $this->input( $other, $this->item( $classic ) ) ), 'aafm_builder_invalid_nesting', 400, $other, self::PAGE );
+	}
+
 	public function test_a_retried_library_insert_is_refused_and_stores_the_item_once(): void {
 		$this->act_as_admin();
 		$id    = $this->avada_post();

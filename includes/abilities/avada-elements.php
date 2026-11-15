@@ -1267,12 +1267,16 @@ function aafm_avada_is_child_element( string $tag, array $map ): bool {
  * The child's own rule counts too: a child element such as a tab goes only inside its parent element. Anything else,
  * including a parent the map does not know, is refused.
  *
- * @param string                            $parent_tag Parent tag, '' for the top level.
- * @param string                            $child_tag  Child tag.
- * @param array<string,array<string,mixed>> $map        Map entries keyed by tag.
+ * Demo #11: a flex container (type="flex") also takes a column directly, as Avada Studio ships its sections and Avada's
+ * builder accepts them. Only existing content (a library copy or a move) passes $flex_parent; a new element still gets a row.
+ *
+ * @param string                            $parent_tag  Parent tag, '' for the top level.
+ * @param string                            $child_tag   Child tag.
+ * @param array<string,array<string,mixed>> $map         Map entries keyed by tag.
+ * @param bool                              $flex_parent Whether the parent is a flex container holding existing content.
  * @return true|WP_Error aafm_builder_invalid_nesting (400) naming parent and child.
  */
-function aafm_avada_nesting_allows( string $parent_tag, string $child_tag, array $map ) {
+function aafm_avada_nesting_allows( string $parent_tag, string $child_tag, array $map, bool $flex_parent = false ) {
 	$layout = aafm_avada_layout_tags();
 	$fixed  = array(
 		''                         => 'fusion_builder_container',
@@ -1282,7 +1286,7 @@ function aafm_avada_nesting_allows( string $parent_tag, string $child_tag, array
 	);
 	$child  = aafm_avada_is_child_element( $child_tag, $map );
 	if ( isset( $fixed[ $parent_tag ] ) ) {
-		$ok = $fixed[ $parent_tag ] === $child_tag;
+		$ok = $fixed[ $parent_tag ] === $child_tag || ( $flex_parent && 'fusion_builder_container' === $parent_tag && 'fusion_builder_column' === $child_tag );
 	} elseif ( 'fusion_builder_column' === $parent_tag || 'fusion_builder_column_inner' === $parent_tag ) {
 		$ok = ( ! in_array( $child_tag, $layout, true ) && ! $child && isset( $map[ $child_tag ] ) )
 			|| ( 'fusion_builder_column' === $parent_tag && 'fusion_builder_row_inner' === $child_tag );
@@ -1309,18 +1313,31 @@ function aafm_avada_nesting_allows( string $parent_tag, string $child_tag, array
 }
 
 /**
+ * Whether an element is a flex container: a fusion_builder_container whose stored type is flex.
+ *
+ * @param array<string,mixed> $element Outline element or tree node (tag and atts).
+ * @return bool
+ */
+function aafm_avada_is_flex_container( array $element ): bool {
+	return 'fusion_builder_container' === ( $element['tag'] ?? null ) && 'flex' === ( ( (array) ( $element['atts'] ?? array() ) )['type'] ?? null );
+}
+
+/**
  * Checks nesting through a tree: each node inside its parent, then its own children inside it.
  *
- * @param array<int,array<string,mixed>>    $nodes      Nodes.
- * @param string                            $parent_tag Parent tag, '' for the top level.
- * @param array<string,array<string,mixed>> $map        Map entries keyed by tag.
+ * @param array<int,array<string,mixed>>    $nodes        Nodes.
+ * @param string                            $parent_tag   Parent tag, '' for the top level.
+ * @param array<string,array<string,mixed>> $map          Map entries keyed by tag.
+ * @param bool                              $existing     Whether the nodes are existing content (a library copy), for
+ *                                                         which a flex container may hold a column directly.
+ * @param bool                              $flex_parent  Whether the parent is a flex container (with $existing).
  * @return true|WP_Error
  */
-function aafm_avada_tree_nesting( array $nodes, string $parent_tag, array $map ) {
+function aafm_avada_tree_nesting( array $nodes, string $parent_tag, array $map, bool $existing = false, bool $flex_parent = false ) {
 	foreach ( $nodes as $node ) {
-		$ok = aafm_avada_nesting_allows( $parent_tag, (string) $node['tag'], $map );
+		$ok = aafm_avada_nesting_allows( $parent_tag, (string) $node['tag'], $map, $existing && $flex_parent );
 		if ( true === $ok ) {
-			$ok = aafm_avada_tree_nesting( array_values( (array) ( $node['children'] ?? array() ) ), (string) $node['tag'], $map );
+			$ok = aafm_avada_tree_nesting( array_values( (array) ( $node['children'] ?? array() ) ), (string) $node['tag'], $map, $existing, aafm_avada_is_flex_container( $node ) );
 		}
 		if ( is_wp_error( $ok ) ) {
 			return $ok;
@@ -1779,7 +1796,7 @@ function aafm_avada_insert_tree( WP_Post $post, array $tree, array $anchor, bool
 		}
 	}
 	$parent_tag = null === $point['parent'] ? '' : (string) $elements[ $point['parent'] ]['tag'];
-	$nesting    = aafm_avada_tree_nesting( $tree, $parent_tag, $map );
+	$nesting    = aafm_avada_tree_nesting( $tree, $parent_tag, $map, $trusted_vendor_text, null !== $point['parent'] && aafm_avada_is_flex_container( $elements[ $point['parent'] ] ) );
 	if ( is_wp_error( $nesting ) ) {
 		return $nesting;
 	}
@@ -2166,7 +2183,7 @@ function aafm_exec_avada_move_element( array $input ) {
 	}
 	if ( $point['parent'] !== $element['parent'] ) {
 		$parent_tag = null === $point['parent'] ? '' : (string) $elements[ $point['parent'] ]['tag'];
-		$nesting    = aafm_avada_nesting_allows( $parent_tag, $tag, $map );
+		$nesting    = aafm_avada_nesting_allows( $parent_tag, $tag, $map, null !== $point['parent'] && aafm_avada_is_flex_container( $elements[ $point['parent'] ] ) );
 		if ( is_wp_error( $nesting ) ) {
 			return $nesting;
 		}

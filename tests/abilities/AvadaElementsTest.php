@@ -1551,6 +1551,27 @@ final class AvadaElementsTest extends TestCase {
 		return $one( 'A' ) . $one( 'B' );
 	}
 
+	/**
+	 * Demo #11: a column moves directly into a flex container (existing content, byte for byte), as Avada Studio
+	 * sections hold it; a classic container still refuses it, and insert-element still writes a row for new content.
+	 */
+	public function test_a_column_moves_into_a_flex_container_but_not_a_classic_one(): void {
+		$this->act_as_admin();
+		$flex    = '[fusion_builder_container type="flex"][fusion_builder_column type="1_1"][fusion_title size="2"]F[/fusion_title][/fusion_builder_column][/fusion_builder_container]';
+		$col_a   = '[fusion_builder_column type="1_2"][fusion_title size="2"]A[/fusion_title][/fusion_builder_column]';
+		$col_b   = '[fusion_builder_column type="1_2"][fusion_title size="2"]B[/fusion_title][/fusion_builder_column]';
+		$content = $flex . '[fusion_builder_container type="flex"][fusion_builder_row]' . $col_a . $col_b . '[/fusion_builder_row][/fusion_builder_container]';
+		$id      = $this->avada_post( $content );
+		$out     = aafm_exec_avada_move_element( $this->move_input( $id, 'fusion_builder_column', 1, 'fusion_builder_container', 0, 'inside_end' ) );
+		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+		$this->assertSame( str_replace( '[/fusion_builder_column][/fusion_builder_container]', '[/fusion_builder_column]' . $col_a . '[/fusion_builder_container]', $flex ) . '[fusion_builder_container type="flex"][fusion_builder_row]' . $col_b . '[/fusion_builder_row][/fusion_builder_container]', (string) get_post( $id )->post_content );
+		$this->assertTrue( aafm_avada_nesting_allows( 'fusion_builder_container', 'fusion_builder_column', array(), true ) );
+		$this->assertInstanceOf( WP_Error::class, aafm_avada_nesting_allows( 'fusion_builder_container', 'fusion_builder_column', array() ) );
+		$classic = '[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1"][fusion_title size="2"]C[/fusion_title][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container][fusion_builder_container][fusion_builder_row]' . $col_a . $col_b . '[/fusion_builder_row][/fusion_builder_container]';
+		$cid     = $this->avada_post( $classic );
+		$this->assert_refused( aafm_exec_avada_move_element( $this->move_input( $cid, 'fusion_builder_column', 1, 'fusion_builder_container', 0, 'inside_end' ) ), 'aafm_builder_invalid_nesting', 400, $cid, $classic );
+	}
+
 	public function test_move_reorders_containers_byte_for_byte(): void {
 		$this->act_as_admin();
 		$content = $this->two_containers();

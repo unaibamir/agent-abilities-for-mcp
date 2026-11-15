@@ -315,13 +315,14 @@ function aafm_exec_update_site_settings( array $input ) {
 		}
 	}
 
-	$updated = array();
-	$report  = array(
+	$updated       = array();
+	$report        = array(
 		'landed'       => array(),
 		'unchanged'    => array(),
 		'failed'       => array(),
 		'side_effects' => array(),
 	);
+	$intended_rows = array();
 	foreach ( $settings as $key => $value ) {
 		$key = (string) $key;
 		if ( array() !== array_intersect( $report['failed'], $homepage ) && in_array( $key, $homepage, true ) ) {
@@ -339,7 +340,10 @@ function aafm_exec_update_site_settings( array $input ) {
 			$stored    = in_array( $outcome['status'], array( AAFM_WRITE_WRITTEN, AAFM_WRITE_UNCHANGED ), true ) && $row['ok'] && $row['found'] && aafm_option_value_matches( $row['value'], $canonical );
 			if ( ! $stored ) {
 				$report['failed'][] = $key;
-			} elseif ( null !== ( $before[ $key ] ?? null ) && aafm_option_value_matches( $before[ $key ], $canonical ) ) {
+			} elseif ( in_array( $key, $homepage, true ) ) {
+				// Judged after the whole write loop (demo #1), since a later write's hook can still change it.
+				$intended_rows[ $key ] = $canonical;
+			} elseif ( AAFM_WRITE_UNCHANGED === $outcome['status'] ) {
 				$report['unchanged'][] = $key;
 			} else {
 				$report['landed'][] = $key;
@@ -373,6 +377,18 @@ function aafm_exec_update_site_settings( array $input ) {
 
 	if ( array() === $homepage ) {
 		return array( 'settings' => $updated );
+	}
+	// Each requested homepage key that was written, judged now against the rows before the call (demo #1): another
+	// plugin's sanitize hook can change one during the dry run or during a later key's write.
+	foreach ( $intended_rows as $key => $canonical ) {
+		$row = aafm_option_row( $key );
+		if ( ! $row['ok'] || ! $row['found'] || ! aafm_option_value_matches( $row['value'], $canonical ) ) {
+			$report['failed'][] = $key;
+		} elseif ( null !== $before[ $key ] && aafm_option_value_matches( $before[ $key ], $canonical ) ) {
+			$report['unchanged'][] = $key;
+		} else {
+			$report['landed'][] = $key;
+		}
 	}
 	// A homepage key the request did not name that another plugin's hook moved during the call.
 	foreach ( array_diff( aafm_static_homepage_keys(), $homepage ) as $key ) {

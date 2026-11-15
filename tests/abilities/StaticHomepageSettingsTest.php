@@ -84,6 +84,52 @@ final class StaticHomepageSettingsTest extends TestCase {
 		$this->assertSame( array( 'page_for_posts' ), $res['side_effects'] );
 	}
 
+	/**
+	 * Codex demo pass: a non-homepage key that already held the value is unchanged, not landed, beside a homepage key.
+	 */
+	public function test_an_unchanged_site_name_beside_a_homepage_key_is_unchanged(): void {
+		update_option( 'blogname', 'Same name' );
+		update_option( 'show_on_front', 'page' );
+		update_option( 'page_on_front', $this->page() );
+		$res = $this->update(
+			array(
+				'blogname'      => 'Same name',
+				'show_on_front' => 'posts',
+			)
+		);
+		$this->assertIsArray( $res, is_wp_error( $res ) ? $res->get_error_message() : '' );
+		$this->assertContains( 'blogname', $res['unchanged'] );
+		$this->assertNotContains( 'blogname', $res['landed'] );
+	}
+
+	/**
+	 * Codex demo pass: a requested homepage key that a later write's hook changes is judged after the whole write, so
+	 * page_on_front cleared by The Events Calendar's show_on_front hook is not reported as unchanged.
+	 */
+	public function test_a_requested_key_a_later_hook_changes_is_not_reported_unchanged(): void {
+		$front = $this->page();
+		update_option( 'show_on_front', 'page' );
+		update_option( 'page_on_front', $front );
+		$tec = static function ( $value ) {
+			if ( 'posts' === $value ) {
+				update_option( 'page_on_front', 0 );
+			}
+			return $value;
+		};
+		add_filter( 'sanitize_option_show_on_front', $tec );
+		$res = $this->update(
+			array(
+				'page_on_front' => $front,
+				'show_on_front' => 'posts',
+			)
+		);
+		remove_filter( 'sanitize_option_show_on_front', $tec );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_settings_partial', $res->get_error_code() );
+		$this->assertContains( 'page_on_front', $res->get_error_data()['failed'] );
+		$this->assertNotContains( 'page_on_front', $res->get_error_data()['unchanged'] );
+	}
+
 	public function test_show_on_front_page_with_published_front_page(): void {
 		$front = $this->page();
 		$blog  = $this->page();

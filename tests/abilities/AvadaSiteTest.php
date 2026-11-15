@@ -2527,6 +2527,9 @@ final class AvadaSiteTest extends TestCase {
 		$registry = aafm_get_abilities_registry_full();
 		$this->assertSame( 'read', $registry['aafm/avada-list-studio-items']['risk'] );
 		$this->assertSame( 'write', $registry['aafm/avada-import-studio-item']['risk'] );
+		// BR-3: both make Avada call avada.studio, so neither may claim a closed world.
+		$this->assertTrue( aafm_args_avada_list_studio_items()['meta']['annotations']['openWorldHint'] );
+		$this->assertTrue( aafm_args_avada_import_studio_item()['meta']['annotations']['openWorldHint'] );
 		foreach ( array( 'aafm/avada-list-studio-items', 'aafm/avada-import-studio-item' ) as $name ) {
 			foreach ( array( $registry[ $name ]['description'], aafm_ability_disclosures()[ $name ] ) as $text ) {
 				$this->assertStringNotContainsString( ' - ', $text );

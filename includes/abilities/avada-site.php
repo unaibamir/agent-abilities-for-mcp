@@ -1522,9 +1522,11 @@ function aafm_args_avada_list_studio_items(): array {
 		'permission_callback' => 'aafm_perm_manage_options',
 		'meta'                => array(
 			'annotations' => array(
-				'readonly'    => true,
-				'destructive' => false,
-				'idempotent'  => true,
+				'readonly'      => true,
+				'destructive'   => false,
+				'idempotent'    => true,
+				// Avada fetches from avada.studio for this call (BR-3).
+				'openWorldHint' => true,
 			),
 		),
 	);
@@ -1616,9 +1618,11 @@ function aafm_args_avada_import_studio_item(): array {
 		'permission_callback' => 'aafm_perm_manage_options',
 		'meta'                => array(
 			'annotations' => array(
-				'readonly'    => false,
-				'destructive' => false,
-				'idempotent'  => true,
+				'readonly'      => false,
+				'destructive'   => false,
+				'idempotent'    => true,
+				// Avada fetches from avada.studio for this call (BR-3).
+				'openWorldHint' => true,
 			),
 		),
 	);

@@ -1,6 +1,6 @@
 <?php
 /**
- * Counting media without loading every attachment row (H-2, 1.11.3). The query-based counter, used on
+ * Counting media without loading every attachment row (H-2, 1.12.0). The query-based counter, used on
  * WPML sites and for a caller limited to their own uploads, counts each mime type through a
  * WP_Query that loads at most one id, so the language and ownership filters still apply.
  *

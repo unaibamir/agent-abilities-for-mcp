@@ -1,6 +1,6 @@
 <?php
 /**
- * The static homepage through update-site-settings (F-11b, 1.11.3): show_on_front, page_on_front and
+ * The static homepage through update-site-settings (F-11b, 1.12.0): show_on_front, page_on_front and
  * page_for_posts are validated as one state, written in a fixed order, read back from the database,
  * and a key that did not land turns the call into an error naming what landed.
  *

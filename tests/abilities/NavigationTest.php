@@ -1,6 +1,6 @@
 <?php
 /**
- * Block-theme navigation tools: aafm/list-navigations and aafm/update-navigation (U-4, 1.11.3).
+ * Block-theme navigation tools: aafm/list-navigations and aafm/update-navigation (U-4, 1.12.0).
  *
  * The classic menu tools reach nav_menu terms only; these two reach the wp_navigation posts a block
  * theme's core/navigation block reads. The write takes a plain item list, builds canonical

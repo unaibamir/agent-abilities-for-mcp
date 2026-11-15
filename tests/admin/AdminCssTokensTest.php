@@ -1,6 +1,6 @@
 <?php
 /**
- * Source scan of admin.css for the admin colour scheme rule (1.11.3 SB-20b): the plugin accent
+ * Source scan of admin.css for the admin colour scheme rule (1.12.0 SB-20b): the plugin accent
  * follows seven chosen schemes, fresh and modern keep the plugin blue, accent text uses its own
  * token, and the token blocks gain no new colour value.
  *

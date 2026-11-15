@@ -227,7 +227,7 @@ function aafm_admin_allowed_html(): array {
 		'data-undo-revert'          => true,
 		'data-undo-revert-group'    => true,
 		'data-undo-fields'          => true,
-		// 1.11.3 Active grants table, paged on the server (admin.js leaves it to the links).
+		// 1.12.0 Active grants table, paged on the server (admin.js leaves it to the links).
 		'data-aafm-server-paged'    => true,
 	);
 

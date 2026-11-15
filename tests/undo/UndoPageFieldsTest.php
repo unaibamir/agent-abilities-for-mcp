@@ -1,6 +1,6 @@
 <?php
 /**
- * Change history for a page's parent and template (F-11a, 1.11.3): update-page records post_parent
+ * Change history for a page's parent and template (F-11a, 1.12.0): update-page records post_parent
  * and the page template meta, a revert puts them back, and a revert that would point at a deleted
  * parent, build a loop or name a template the theme no longer offers is refused before any write.
  *

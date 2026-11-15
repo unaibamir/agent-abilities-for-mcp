@@ -4,7 +4,7 @@ Tags: mcp-server, ai-agent, claude, mcp, abilities-api
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.11.3
+Stable tag: 1.12.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -350,7 +350,7 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 
 == Changelog ==
 
-= 1.11.3 =
+= 1.12.0 =
 
 * **Feature:** On WPBakery Page Builder and Avada pages an agent can now change an element's settings or text, add, move or remove elements, and place a saved WPBakery or Templatera template or an Avada Library item. When WordPress keeps a revision the tool returns it, and restore-revision now works on these pages.
 * **Feature:** Users who can manage options can now change WPBakery settings, Avada Global Options, layouts and Avada Slider settings, and import Avada Studio items; page CSS and JS and Avada page options are writable too, and every new tool starts off. list-navigations and update-navigation read and replace block-theme menus, pages take a parent and a template, and update-site-settings sets the static homepage.
@@ -472,7 +472,7 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 
 == Upgrade Notice ==
 
-= 1.11.3 =
+= 1.12.0 =
 
 Adds element editing for WPBakery Page Builder and Avada pages, their templates and Library, admin-only builder settings and block-theme navigation tools. Every new tool starts off.
 

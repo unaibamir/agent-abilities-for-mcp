@@ -9,7 +9,7 @@ WordPress MCP server for Claude and ChatGPT with limited access, a pause switch,
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.1 |
 | **Requires PHP** | 7.4 |
-| **Stable tag** | 1.11.3 |
+| **Stable tag** | 1.12.0 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
 Agent Abilities for MCP is a free WordPress MCP server plugin. It adds an MCP endpoint to a site and exposes WordPress abilities to AI agents, so Claude, ChatGPT, Cursor and other MCP clients can work on it as a WordPress user you choose, with that user's role and no more. It ships 216 abilities (94 core, 122 for plugins such as WooCommerce, ACF and Yoast SEO) and every one starts switched off.
@@ -165,7 +165,7 @@ If the notice still shows, another plugin ships its own copy of the adapter. The
 The Model Context Protocol is an open specification that Anthropic originally developed. Claude, ChatGPT, Cursor, VS Code, Gemini and other product names belong to their owners, and Agent Abilities for MCP is a third-party plugin that isn't affiliated with, endorsed by or sponsored by any of them.
 
 ## Changelog
-### 1.11.3
+### 1.12.0
 
 * **Feature:** On WPBakery Page Builder and Avada pages an agent can now change an element's settings or text, add, move or remove elements, and place a saved WPBakery or Templatera template or an Avada Library item. When WordPress keeps a revision the tool returns it, and restore-revision now works on these pages.
 * **Feature:** Users who can manage options can now change WPBakery settings, Avada Global Options, layouts and Avada Slider settings, and import Avada Studio items; page CSS and JS and Avada page options are writable too, and every new tool starts off. list-navigations and update-navigation read and replace block-theme menus, pages take a parent and a template, and update-site-settings sets the static homepage.

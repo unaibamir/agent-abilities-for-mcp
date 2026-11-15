@@ -425,7 +425,7 @@ final class IntegrationsTabTest extends TestCase {
 
 		// Each card carries a per-card filter: a search input plus the All / Read Only / Write group.
 		// There are eleven integration cards (1.7.4 adds Slim SEO, The Events Calendar, Event
-		// Tickets, Avada, and GeoDirectory; 1.11.3 adds WPBakery), so each control appears eleven times.
+		// Tickets, Avada, and GeoDirectory; 1.12.0 adds WPBakery), so each control appears eleven times.
 		$this->assertSame( 11, substr_count( $html, 'aafm-integration-filter' ) );
 		$this->assertStringContainsString( 'type="search"', $html );
 		$this->assertStringContainsString( 'data-filter-risk="all"', $html );

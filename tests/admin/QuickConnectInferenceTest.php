@@ -140,7 +140,7 @@ final class QuickConnectInferenceTest extends TestCase {
 
 	/**
 	 * Revoking an OAuth client deactivates the client row and its tokens but deliberately leaves
-	 * the consent row. Since 1.11.3 aafm_oauth_list_grants() lists only grants on active clients,
+	 * the consent row. Since 1.12.0 aafm_oauth_list_grants() lists only grants on active clients,
 	 * so that leftover consent is no longer listed either. It must not count as first-run evidence:
 	 * 1.6.3 had no inference at all and always reopened the wizard, so an administrator who revoked
 	 * their only client must still get the first-run screen back.

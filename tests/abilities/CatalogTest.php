@@ -57,21 +57,21 @@ final class CatalogTest extends TestCase {
 		// (2 abilities), and the native GeoDirectory integration (4 abilities, default-off),
 		// making 179, plus the three 1.10.0 block abilities (aafm/list-block-types,
 		// aafm/get-block-type, aafm/replace-block), making 182, plus the two 1.10.1 playbook reads (aafm/list-playbooks,
-		// aafm/get-playbook), making 186, plus the two 1.11.3 navigation tools (aafm/list-navigations,
-		// aafm/update-navigation), making 188, plus the three 1.11.3 Avada reads (aafm/avada-list-layouts,
-		// aafm/avada-get-global-options, aafm/avada-list-library), making 191, plus the two 1.11.3
+		// aafm/get-playbook), making 186, plus the two 1.12.0 navigation tools (aafm/list-navigations,
+		// aafm/update-navigation), making 188, plus the three 1.12.0 Avada reads (aafm/avada-list-layouts,
+		// aafm/avada-get-global-options, aafm/avada-list-library), making 191, plus the two 1.12.0
 		// WPBakery tools (aafm/wpbakery-get-page-content, aafm/wpbakery-replace-text), making 193, plus the
-		// two 1.11.3 WPBakery element tools (aafm/wpbakery-list-elements, aafm/wpbakery-update-element),
-		// making 195, plus the three 1.11.3 WPBakery structural writes (aafm/wpbakery-insert-element,
-		// aafm/wpbakery-move-element, aafm/wpbakery-remove-element), making 198, plus the two 1.11.3 Avada element
-		// tools (aafm/avada-list-elements, aafm/avada-update-element), making 200, plus the three 1.11.3 Avada
+		// two 1.12.0 WPBakery element tools (aafm/wpbakery-list-elements, aafm/wpbakery-update-element),
+		// making 195, plus the three 1.12.0 WPBakery structural writes (aafm/wpbakery-insert-element,
+		// aafm/wpbakery-move-element, aafm/wpbakery-remove-element), making 198, plus the two 1.12.0 Avada element
+		// tools (aafm/avada-list-elements, aafm/avada-update-element), making 200, plus the three 1.12.0 Avada
 		// structural writes (aafm/avada-insert-element, aafm/avada-move-element, aafm/avada-remove-element), making 203,
-		// plus the three 1.11.3 WPBakery site tools (aafm/wpbakery-list-templates, aafm/wpbakery-insert-template,
-		// aafm/wpbakery-update-page-code), making 206, plus the three 1.11.3 Avada site writes
+		// plus the three 1.12.0 WPBakery site tools (aafm/wpbakery-list-templates, aafm/wpbakery-insert-template,
+		// aafm/wpbakery-update-page-code), making 206, plus the three 1.12.0 Avada site writes
 		// (aafm/avada-insert-library-item, aafm/avada-update-page-css, aafm/avada-update-page-options), making 209,
-		// plus the six 1.11.3 site-wide and Studio tools (aafm/wpbakery-get-settings, aafm/wpbakery-update-settings,
+		// plus the six 1.12.0 site-wide and Studio tools (aafm/wpbakery-get-settings, aafm/wpbakery-update-settings,
 		// aafm/avada-update-global-options, aafm/avada-update-layout, aafm/avada-list-studio-items,
-		// aafm/avada-import-studio-item), making 215, plus the 1.11.3 Avada Slider settings write
+		// aafm/avada-import-studio-item), making 215, plus the 1.12.0 Avada Slider settings write
 		// (aafm/avada-update-slider-settings), making 216.
 		add_filter( 'aafm_integration_active_yoast', '__return_true' );
 		add_filter( 'aafm_integration_active_rankmath', '__return_true' );

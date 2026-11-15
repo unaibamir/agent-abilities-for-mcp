@@ -1,6 +1,6 @@
 <?php
 /**
- * Page parent and template on create-page and update-page (F-11a, 1.11.3).
+ * Page parent and template on create-page and update-page (F-11a, 1.12.0).
  *
  * Both writers delegate to the shared aafm_insert_post() / aafm_exec_update_post(), so the fields
  * are page-only there: a post never accepts them.

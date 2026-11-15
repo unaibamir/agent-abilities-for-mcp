@@ -490,7 +490,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/tec-get-organizer':
 			return static fn(): bool => current_user_can( 'read' );
 
-		// Avada (added 1.7.4) and WPBakery (1.11.3): these gate per-object on
+		// Avada (added 1.7.4) and WPBakery (1.12.0): these gate per-object on
 		// aafm_can_edit_post_object() via aafm_perm_avada_post_object() (includes/abilities/avada.php),
 		// which resolves the post type's own edit cap, so a post OR a page the caller can edit
 		// passes. The floor is therefore the post family OR the page floor update-page already

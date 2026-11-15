@@ -52,6 +52,38 @@ final class StaticHomepageSettingsTest extends TestCase {
 		return $out;
 	}
 
+	/**
+	 * Demo #1 (CA-46): The Events Calendar zeroes page_on_front and page_for_posts from its sanitize_option_show_on_front
+	 * hook, which the dry run triggers before the writes. A real change must still report as landed, judged against the
+	 * rows before the call, and a homepage key the request did not name that moved is reported as a side effect.
+	 */
+	public function test_a_sanitize_hook_side_effect_is_judged_against_the_rows_before_the_call(): void {
+		$front = $this->page();
+		$blog  = $this->page();
+		update_option( 'show_on_front', 'page' );
+		update_option( 'page_on_front', $front );
+		update_option( 'page_for_posts', $blog );
+		$tec = static function ( $value ) {
+			if ( 'posts' === $value ) {
+				update_option( 'page_on_front', 0 );
+				update_option( 'page_for_posts', 0 );
+			}
+			return $value;
+		};
+		add_filter( 'sanitize_option_show_on_front', $tec );
+		$res = $this->update(
+			array(
+				'show_on_front' => 'posts',
+				'page_on_front' => 0,
+			)
+		);
+		remove_filter( 'sanitize_option_show_on_front', $tec );
+		$this->assertIsArray( $res, is_wp_error( $res ) ? $res->get_error_message() : '' );
+		$this->assertSame( array( 'page_on_front', 'show_on_front' ), $res['landed'] );
+		$this->assertSame( array(), $res['unchanged'] );
+		$this->assertSame( array( 'page_for_posts' ), $res['side_effects'] );
+	}
+
 	public function test_show_on_front_page_with_published_front_page(): void {
 		$front = $this->page();
 		$blog  = $this->page();

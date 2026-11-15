@@ -146,20 +146,25 @@ function aafm_args_update_site_settings(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'settings'  => array( 'type' => 'object' ),
-				'landed'    => array(
+				'settings'     => array( 'type' => 'object' ),
+				'landed'       => array(
 					'type'        => 'array',
 					'description' => __( 'Present only when a homepage key was sent: the keys that were saved.', 'agent-abilities-for-mcp' ),
 					'items'       => array( 'type' => 'string' ),
 				),
-				'unchanged' => array(
+				'unchanged'    => array(
 					'type'        => 'array',
 					'description' => __( 'Present only when a homepage key was sent: the keys that already held the value.', 'agent-abilities-for-mcp' ),
 					'items'       => array( 'type' => 'string' ),
 				),
-				'failed'    => array(
+				'failed'       => array(
 					'type'        => 'array',
 					'description' => __( 'Present only when a homepage key was sent: the keys that were not saved. Always empty on success.', 'agent-abilities-for-mcp' ),
+					'items'       => array( 'type' => 'string' ),
+				),
+				'side_effects' => array(
+					'type'        => 'array',
+					'description' => __( 'Present only when a homepage key was sent: homepage keys the request did not name that another plugin changed during the call, such as The Events Calendar clearing page_on_front.', 'agent-abilities-for-mcp' ),
 					'items'       => array( 'type' => 'string' ),
 				),
 			),
@@ -224,6 +229,19 @@ function aafm_exec_update_site_settings( array $input ) {
 			return $checked;
 		}
 		$settings = array_merge( array_diff_key( $settings, $checked ), $checked );
+	}
+	// Demo #1: the homepage rows before anything runs. A plugin's sanitize_option hook can write another homepage key
+	// during the dry run below (The Events Calendar zeroes page_on_front when show_on_front becomes posts), so the
+	// outcome is judged against these rows, not against update_option()'s return.
+	$before = array();
+	if ( array() !== $homepage ) {
+		foreach ( aafm_static_homepage_keys() as $key ) {
+			$row = aafm_option_row( $key );
+			if ( ! $row['ok'] ) {
+				return aafm_generic_error();
+			}
+			$before[ $key ] = $row['found'] ? $row['value'] : null;
+		}
 	}
 
 	// Scalar-only with a string-type guard: a non-scalar value (array/object) is refused outright,
@@ -299,9 +317,10 @@ function aafm_exec_update_site_settings( array $input ) {
 
 	$updated = array();
 	$report  = array(
-		'landed'    => array(),
-		'unchanged' => array(),
-		'failed'    => array(),
+		'landed'       => array(),
+		'unchanged'    => array(),
+		'failed'       => array(),
+		'side_effects' => array(),
 	);
 	foreach ( $settings as $key => $value ) {
 		$key = (string) $key;
@@ -316,13 +335,14 @@ function aafm_exec_update_site_settings( array $input ) {
 			// Read back from the row, never the cache or the option filters, so the report is what is stored.
 			$row = aafm_option_row( $key );
 			// Compared with core's canonical form, the one the row holds (blogname is stored escaped).
-			$stored = $row['ok'] && $row['found'] && aafm_option_value_matches( $row['value'], sanitize_option( $key, $intended ) );
-			if ( $stored && AAFM_WRITE_WRITTEN === $outcome['status'] ) {
-				$report['landed'][] = $key;
-			} elseif ( $stored && AAFM_WRITE_UNCHANGED === $outcome['status'] ) {
+			$canonical = sanitize_option( $key, $intended );
+			$stored    = in_array( $outcome['status'], array( AAFM_WRITE_WRITTEN, AAFM_WRITE_UNCHANGED ), true ) && $row['ok'] && $row['found'] && aafm_option_value_matches( $row['value'], $canonical );
+			if ( ! $stored ) {
+				$report['failed'][] = $key;
+			} elseif ( null !== ( $before[ $key ] ?? null ) && aafm_option_value_matches( $before[ $key ], $canonical ) ) {
 				$report['unchanged'][] = $key;
 			} else {
-				$report['failed'][] = $key;
+				$report['landed'][] = $key;
 			}
 		}
 		// Report the value the option layer gives back right after the write, rather than echoing
@@ -353,6 +373,13 @@ function aafm_exec_update_site_settings( array $input ) {
 
 	if ( array() === $homepage ) {
 		return array( 'settings' => $updated );
+	}
+	// A homepage key the request did not name that another plugin's hook moved during the call.
+	foreach ( array_diff( aafm_static_homepage_keys(), $homepage ) as $key ) {
+		$row = aafm_option_row( $key );
+		if ( $row['ok'] && ( $row['found'] ? $row['value'] : null ) !== $before[ $key ] ) {
+			$report['side_effects'][] = $key;
+		}
 	}
 	if ( array() !== $report['failed'] ) {
 		return new WP_Error(

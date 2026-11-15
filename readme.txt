@@ -75,7 +75,7 @@ These controls cover this plugin's own tools, plus any other plugin's tool you s
 
 When you approve an app, or run Quick Connect, you pick an access preset (Read only, Content editor, Shop manager or Custom) that only ever narrows what is already switched on. Per-role and per-connection allowlists narrow it further, since a tool has to be in the global list, the role's list and the connection's list before the AI can call it. The **rate limit**, the **IP allowlist**, Force draft on create and a maximum title length sit on the Settings tab and do nothing until you set them.
 
-Ten WooCommerce tools that move money or grant authority (refunds, creating and changing orders, customer updates, payment gateways, coupons and tax rates) stay locked until you unlock them in Settings, even if you've ticked them. Deletes work differently: the tools named Trash post and Trash page move content to the Trash, but most tools named Delete, such as Delete post, Delete page and Delete media, remove it permanently.
+Ten WooCommerce tools that move money or grant authority (refunds, creating and changing orders, customer updates, payment gateways, coupons and tax rates) stay locked until you unlock them in Settings, even if you've ticked them. Deletes work differently: the tools named Trash post and Trash page move content to the Trash, but most Delete tools, such as Delete post, Delete page and Delete media, remove it permanently.
 
 = What these controls do not cover =
 
@@ -97,7 +97,7 @@ Two read tools, List playbooks and Get playbook, stay off until you enable them 
 
 When one of these plugins is active, its abilities appear on the Integrations tab. WooCommerce has the most, 52, covering products, variations, orders, customers, coupons, shipping, tax, payment gateways and reports, and because they reach names, emails and addresses an admin notice flags them. ACF adds 7 for field groups and the field values on posts, terms and users, and Rank Math (5), Yoast SEO (3), All in One SEO (3) and Slim SEO (2) let the AI read and edit a post's SEO data.
 
-The Events Calendar has 13 abilities, Event Tickets 3, Avada 5 and WPBakery Page Builder 2 (for both builders, one replaces page text and the rest read). GeoDirectory's 4 business listing tools stay off until you enable that integration, even when GeoDirectory is active.
+The Events Calendar has 13 abilities, Event Tickets 3, Avada 18 and WPBakery Page Builder 12, both mostly for editing pages element by element. GeoDirectory's 4 business listing tools stay off until you enable that integration, even with GeoDirectory active.
 
 Minimum versions: WooCommerce 9.1, All in One SEO 4.9.8, The Events Calendar 6.17.3.1 and Event Tickets 5.29.3.1. Below these, their tools stay hidden and the Integrations tab says why.
 
@@ -111,9 +111,9 @@ A plugin that doesn't declare its reads as read-only has them treated as writes,
 
 WordPress 6.9 added the Abilities API, and the official MCP Adapter turns those abilities into MCP tools. The Adapter comes bundled, so there is nothing else to install, and if you also run the standalone Adapter plugin, this plugin uses whichever copy loads first.
 
-= Elementor, Divi and other page builder pages: AI edits are refused =
+= Page builders: Avada and WPBakery editable, the rest refused =
 
-A page builder owns its page's layout, so an edit to the post text can report success and change nothing on the page. For Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks and WPBakery the plugin checks first and refuses the write with an error naming the builder. There are three exceptions: an edit that only sets the excerpt goes through and leaves the stored content as it was, unless the plugin can't tell which builder owns the post, and the Avada and WPBakery replace-text tools change text but refuse shortcode changes.
+A page builder owns its page's layout, so an edit to the post text can report success and change nothing. For Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks and WPBakery the plugin's general content tools refuse the write, though an excerpt-only edit goes through unless the plugin can't tell which builder owns the post. Avada and WPBakery pages get their own editing tools, which refuse any save that changes anything else; Restore revision also works there.
 
 = Is this the right WordPress MCP plugin for you? =
 
@@ -133,7 +133,7 @@ The Model Context Protocol is an open specification that Anthropic originally de
 
 This plugin calls no AI provider and sends no telemetry.
 
-It makes two kinds of outbound request on its own. The first is the Connection tab's checks, which are requests your site makes to its own address to test the MCP endpoint, the headers and body it receives and, with OAuth on, the discovery documents. The second only happens if you enable the upload-media-from-url ability, which is off by default: it fetches the exact HTTPS URL your AI client supplies so the file can be added to your media library, refuses private and reserved addresses and follows no redirects. The server at that URL sees the URL, your site's IP address and the time of the request, and the request carries none of your content, credentials or site data.
+It makes two kinds of outbound request on its own. The first is the Connection tab's checks: requests from your site to its own address that test the MCP endpoint, header and body delivery and, with OAuth on, the discovery documents. The second only happens if you enable the upload-media-from-url ability, which is off by default: it fetches the exact HTTPS URL your AI client supplies so the file can be added to your media library, refuses private and reserved addresses and follows no redirects. The server at that URL sees the URL, your site's IP address and the time of the request, and the request carries none of your content, credentials or site data. When an agent calls Avada Studio tools (import unlocked and on), Avada itself downloads content from Avada's servers under your Avada registration; this plugin sends nothing.
 
 Connecting a client happens in the client. Some clients reach your endpoint directly, and others use a bridge that runs on your own machine and is not bundled with the plugin:
 

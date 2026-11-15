@@ -237,7 +237,7 @@ final class MetadataTest extends TestCase {
 		$readme = (string) file_get_contents( AAFM_PLUGIN_DIR . 'readme.txt' );
 		$this->assertSame( 1, preg_match( '/== External Services ==(.+?)== Screenshots ==/s', $readme, $m ) );
 		$this->assertStringNotContainsString( 'a same-origin call', $m[1] );
-		$this->assertStringContainsString( 'requests your site makes to its own address', $m[1] );
+		$this->assertStringContainsString( 'requests from your site to its own address', $m[1] );
 	}
 
 	/**

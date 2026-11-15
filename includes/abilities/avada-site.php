@@ -407,6 +407,14 @@ function aafm_avada_page_option_kind( string $type ): ?string {
  */
 function aafm_avada_page_option_value( string $id, string $kind, $value ) {
 	$param = array( 'param_name' => $id );
+	if ( 'csv' === $kind && is_string( $value ) && '' !== $value ) {
+		// The stored form, as previous returns it (fix pass 2, ruling 1).
+		$value = explode( ',', $value );
+	}
+	if ( 'image' === $kind && is_array( $value ) && isset( $value['id'] ) && is_scalar( $value['id'] ) && 1 === preg_match( '/^[1-9][0-9]*$/', (string) $value['id'] ) ) {
+		// The stored url and id pair, as previous returns it: the attachment id names it again.
+		$value = (int) $value['id'];
+	}
 	if ( 'tokens' === $kind || 'csv' === $kind ) {
 		if ( ! is_array( $value ) || array_values( $value ) !== $value || array() === $value ) {
 			return aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $id );
@@ -582,8 +590,9 @@ function aafm_exec_avada_update_page_options( array $input ) {
 		if ( null === $kind ) {
 			return aafm_wpbakery_setting_error( 'aafm_builder_attribute_not_writable', $key );
 		}
-		// An empty value or default is no stored option at all, as Avada's own save treats it.
-		if ( '' === $value || 'default' === $value ) {
+		// An empty value or default is no stored option at all, as Avada's own save treats it; null is how previous
+		// names an option that was not stored.
+		if ( null === $value || '' === $value || 'default' === $value ) {
 			$apply[ $key ] = null;
 			continue;
 		}
@@ -736,6 +745,8 @@ function aafm_avada_validate_global_option( string $key, $value ) {
 		case 'html':
 			return is_string( $value ) ? aafm_avada_filtered_text( $key, $value ) : $bad;
 		case 'image':
+			// The stored url and id array, as previous returns it, names the attachment by its id.
+			$value      = is_array( $value ) && isset( $value['id'] ) && is_scalar( $value['id'] ) && 1 === preg_match( '/^[1-9][0-9]*$/', (string) $value['id'] ) ? (int) $value['id'] : $value;
 			$id         = is_int( $value ) && $value > 0 ? $value : 0;
 			$attachment = $id ? aafm_exact_object( 'post', $id ) : null;
 			$src        = $attachment instanceof WP_Post && 'attachment' === $attachment->post_type && wp_attachment_is_image( $id ) ? wp_get_attachment_image_src( $id, 'full' ) : false;
@@ -758,10 +769,20 @@ function aafm_avada_validate_global_option( string $key, $value ) {
 			$out = array();
 			foreach ( $value as $slot => $entry ) {
 				$entry = $entry instanceof stdClass ? (array) $entry : $entry;
+				if ( null === $entry && is_string( $slot ) && 1 === preg_match( '/^color\d{1,2}$/', $slot ) ) {
+					$out[ $slot ] = null;
+					continue;
+				}
 				if ( ! is_string( $slot ) || 1 !== preg_match( '/^color\d{1,2}$/', $slot ) || ! is_array( $entry ) || array() === $entry || array() !== array_diff( array_keys( $entry ), array( 'color', 'label' ) ) ) {
 					return $bad;
 				}
 				$clean = array();
+				foreach ( array( 'color', 'label' ) as $field ) {
+					if ( array_key_exists( $field, $entry ) && null === $entry[ $field ] ) {
+						$clean[ $field ] = null;
+						unset( $entry[ $field ] );
+					}
+				}
 				if ( array_key_exists( 'color', $entry ) ) {
 					$colour = aafm_avada_global_colour( $entry['color'], $key );
 					if ( null === $colour ) {
@@ -791,7 +812,7 @@ function aafm_avada_validate_global_option( string $key, $value ) {
  *
  * @param string $key   Option key.
  * @param mixed  $value Input.
- * @return array<string,string>|null
+ * @return array<string,string|null>|null Null sub-values remove what previous names as not stored.
  */
 function aafm_avada_global_typography( string $key, $value ): ?array {
 	if ( $value instanceof stdClass ) {
@@ -811,6 +832,11 @@ function aafm_avada_global_typography( string $key, $value ): ?array {
 	);
 	$out      = array();
 	foreach ( $value as $sub => $one ) {
+		if ( is_string( $sub ) && null === $one && ( 'color' === $sub || isset( $patterns[ $sub ] ) ) ) {
+			// null removes a sub-value that was not stored, the form previous names it in.
+			$out[ $sub ] = null;
+			continue;
+		}
 		if ( ! is_string( $sub ) || ! is_string( $one ) ) {
 			return null;
 		}
@@ -944,6 +970,11 @@ function aafm_exec_avada_update_global_options( array $input ) {
 		if ( ! in_array( $key, aafm_avada_global_option_writable(), true ) ) {
 			return aafm_wpbakery_setting_error( 'aafm_builder_attribute_not_writable', $key );
 		}
+		if ( null === $value ) {
+			// previous names an option that was not stored with null; it is removed again.
+			$apply[ $key ] = null;
+			continue;
+		}
 		$clean = aafm_avada_validate_global_option( $key, $value );
 		if ( is_wp_error( $clean ) ) {
 			return $clean;
@@ -973,19 +1004,52 @@ function aafm_exec_avada_update_global_options( array $input ) {
 	$previous = array();
 	foreach ( $apply as $key => $value ) {
 		$before = $stored[ $key ] ?? null;
-		if ( 'typography' === $rules[ $key ] || 'palette' === $rules[ $key ] ) {
+		// previous holds only what this call changed (a typography or palette option: its changed sub-values, null
+		// where none was stored), so sending it back restores the stored bytes (fix pass 2, ruling 1).
+		$old = $before;
+		if ( null !== $value && ( 'typography' === $rules[ $key ] || 'palette' === $rules[ $key ] ) ) {
 			$merged = is_array( $before ) ? $before : array();
+			$old    = array();
 			foreach ( $value as $sub => $one ) {
-				$merged[ $sub ] = 'palette' === $rules[ $key ] ? array_merge( is_array( $merged[ $sub ] ?? null ) ? $merged[ $sub ] : array(), $one ) : $one;
+				$was = $merged[ $sub ] ?? null;
+				if ( 'palette' === $rules[ $key ] && is_array( $one ) ) {
+					$slot = is_array( $was ) ? $was : array();
+					$prev = array();
+					foreach ( $one as $field => $part ) {
+						if ( ( $slot[ $field ] ?? null ) !== $part ) {
+							$prev[ $field ] = $slot[ $field ] ?? null;
+						}
+						if ( null === $part ) {
+							unset( $slot[ $field ] );
+						} else {
+							$slot[ $field ] = $part;
+						}
+					}
+					$one = $slot;
+					if ( array() !== $prev ) {
+						$old[ $sub ] = null === $was ? null : $prev;
+					}
+				} elseif ( $was !== $one ) {
+					$old[ $sub ] = $was;
+				}
+				if ( null === $one ) {
+					unset( $merged[ $sub ] );
+				} else {
+					$merged[ $sub ] = $one;
+				}
 			}
 			$value = $merged;
 		}
 		if ( $before === $value ) {
 			continue;
 		}
-		$new[ $key ]      = $value;
+		if ( null === $value ) {
+			unset( $new[ $key ] );
+		} else {
+			$new[ $key ] = $value;
+		}
 		$changed[]        = $key;
-		$previous[ $key ] = $before;
+		$previous[ $key ] = $old;
 	}
 	$out = array(
 		'option_name' => $name,
@@ -1024,9 +1088,11 @@ function aafm_avada_layout_slots(): array {
 function aafm_args_avada_update_layout(): array {
 	$slots = array();
 	foreach ( aafm_avada_layout_slots() as $slot ) {
+		// Avada's Layouts screen stores the id as a string, which previous returns as stored (BR-7).
 		$slots[ $slot ] = array(
-			'type'    => 'integer',
+			'type'    => array( 'integer', 'string' ),
 			'minimum' => 0,
+			'pattern' => '^(0|[1-9][0-9]*)$',
 		);
 	}
 	return array(
@@ -1246,21 +1312,9 @@ function aafm_exec_avada_update_layout( array $input ) {
 			return aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', 'sections' );
 		}
 		foreach ( $sections as $slot => $section_id ) {
-			if ( ! in_array( $slot, aafm_avada_layout_slots(), true ) || ! is_int( $section_id ) || $section_id < 0 ) {
+			$digits = is_string( $section_id ) && 1 === preg_match( '/^(0|[1-9][0-9]*)$/', $section_id );
+			if ( ! in_array( $slot, aafm_avada_layout_slots(), true ) || ( ! is_int( $section_id ) && ! $digits ) || (int) $section_id < 0 ) {
 				return aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', 'sections' );
-			}
-			if ( $section_id > 0 ) {
-				$section = aafm_exact_object( 'post', $section_id );
-				$terms   = $section instanceof WP_Post ? get_the_terms( $section, 'fusion_tb_category' ) : false;
-				$kinds   = is_array( $terms ) ? array_merge( wp_list_pluck( $terms, 'slug' ), wp_list_pluck( $terms, 'name' ) ) : array();
-				if ( ! $section instanceof WP_Post || 'fusion_tb_section' !== $section->post_type || 'publish' !== $section->post_status || ! in_array( $slot, $kinds, true ) ) {
-					return new WP_Error(
-						'aafm_avada_layout_section_invalid',
-						/* translators: %s: the layout slot, such as footer. */
-						sprintf( __( 'The %s slot takes a published layout section of that type. Nothing was changed.', 'agent-abilities-for-mcp' ), $slot ),
-						array( 'status' => 400 )
-					);
-				}
 			}
 			$slots[ $slot ] = $section_id;
 		}
@@ -1277,11 +1331,31 @@ function aafm_exec_avada_update_layout( array $input ) {
 			array( 'status' => 409 )
 		);
 	}
-	$terms          = is_array( $current['template_terms'] ?? null ) ? $current['template_terms'] : array();
-	$old            = array(
+	$terms = is_array( $current['template_terms'] ?? null ) ? $current['template_terms'] : array();
+	$old   = array(
 		'sections'   => $terms,
 		'conditions' => is_array( $current['conditions'] ?? null ) ? $current['conditions'] : array(),
 	);
+	foreach ( $slots as $slot => $section_id ) {
+		// A slot sent back as it is stored is no change, so it needs no check (previous names it so, BR-7).
+		$stored_id = (string) ( $terms[ $slot ] ?? '' );
+		if ( $stored_id === (string) $section_id ) {
+			continue;
+		}
+		if ( (int) $section_id > 0 ) {
+			$section = aafm_exact_object( 'post', (int) $section_id );
+			$cats    = $section instanceof WP_Post ? get_the_terms( $section, 'fusion_tb_category' ) : false;
+			$kinds   = is_array( $cats ) ? array_merge( wp_list_pluck( $cats, 'slug' ), wp_list_pluck( $cats, 'name' ) ) : array();
+			if ( ! $section instanceof WP_Post || 'fusion_tb_section' !== $section->post_type || 'publish' !== $section->post_status || ! in_array( $slot, $kinds, true ) ) {
+				return new WP_Error(
+					'aafm_avada_layout_section_invalid',
+					/* translators: %s: the layout slot, such as footer. */
+					sprintf( __( 'The %s slot takes a published layout section of that type. Nothing was changed.', 'agent-abilities-for-mcp' ), $slot ),
+					array( 'status' => 400 )
+				);
+			}
+		}
+	}
 	$new_conditions = null;
 	if ( null !== $conditions ) {
 		$new_conditions = aafm_avada_layout_conditions( $conditions, $old['conditions'] );
@@ -1289,8 +1363,13 @@ function aafm_exec_avada_update_layout( array $input ) {
 			return $new_conditions;
 		}
 	}
+	// A write that names every stored slot, as previous does, also restores their order, so the bytes come back.
+	$full = array() === array_diff_key( $terms, $slots );
 	foreach ( $slots as $slot => $section_id ) {
-		if ( 0 === $section_id ) {
+		if ( $full ) {
+			unset( $terms[ $slot ] );
+		}
+		if ( 0 === (int) $section_id ) {
 			unset( $terms[ $slot ] );
 		} else {
 			$terms[ $slot ] = $section_id;
@@ -1888,6 +1967,11 @@ function aafm_exec_avada_update_slider_settings( array $input ) {
 		$key = (string) $key;
 		if ( ! isset( $keys[ $key ] ) ) {
 			return aafm_wpbakery_setting_error( 'aafm_builder_attribute_not_writable', $key );
+		}
+		if ( null === $value ) {
+			// previous names a setting that was not stored with null; Avada's set() drops a key set to ''.
+			$apply[ $key ] = '';
+			continue;
 		}
 		$clean = aafm_avada_slider_setting_value( $keys[ $key ], $value, $key );
 		if ( null === $clean ) {

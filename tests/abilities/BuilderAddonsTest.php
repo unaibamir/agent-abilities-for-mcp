@@ -838,6 +838,28 @@ final class BuilderAddonsTest extends TestCase {
 		);
 	}
 
+	/**
+	 * Fix pass 2, ruling 1: slider previous goes back as returned, null where a setting was not stored.
+	 */
+	public function test_slider_previous_goes_back_byte_for_byte(): void {
+		$term   = $this->slider();
+		$stored = array_diff_key( self::screen_saved(), array( 'slider_indicator_color' => true ) );
+		$meta   = $this->slider_meta( $stored );
+		$this->acting_as( 'administrator' );
+		$out = $this->slider_update(
+			$term,
+			array(
+				'autoplay'               => false,
+				'slider_width'           => '80%',
+				'slider_indicator_color' => '#ff0000',
+			)
+		);
+		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+		$back = $this->slider_update( $term, json_decode( (string) wp_json_encode( $out['previous'] ), true ) );
+		$this->assertIsArray( $back, is_wp_error( $back ) ? $back->get_error_message() : '' );
+		$this->assertSame( $stored, $meta->db );
+	}
+
 	public function test_the_slider_keys_allowlist_is_pinned(): void {
 		$this->assertSame(
 			array( 'slider_indicator', 'slider_indicator_color', 'typo_sensitivity', 'typo_factor', 'nav_box_width', 'nav_box_height', 'nav_arrow_size', 'slider_width', 'slider_height', 'full_screen', 'parallax', 'nav_arrows', 'autoplay', 'loop', 'animation', 'slideshow_speed', 'animation_speed' ),
@@ -1029,7 +1051,7 @@ final class BuilderAddonsTest extends TestCase {
 		$term = $this->slider();
 		$this->slider_meta( array() );
 		$this->acting_as( 'administrator' );
-		foreach ( array( 'x', array(), array( 'loop' => array( 1 ) ), array( 'slider_width' => null ), array( 'animation' => 1 ) ) as $set ) {
+		foreach ( array( 'x', array(), array( 'loop' => array( 1 ) ), array( 'slider_width' => false ), array( 'animation' => 1 ) ) as $set ) {
 			$out = $this->slider_update( $term, $set );
 			$this->assertInstanceOf( WP_Error::class, $out );
 			$this->assertSame( 400, $out->get_error_data()['status'] ?? null );

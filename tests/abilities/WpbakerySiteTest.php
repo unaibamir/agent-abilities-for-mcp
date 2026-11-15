@@ -821,6 +821,56 @@ final class WpbakerySiteTest extends TestCase {
 		$this->assertIsArray( $this->page_code( $id, array( 'custom_css' => '.a{}' ) ), 'CSS alone does not ask WPBakery.' );
 	}
 
+	/**
+	 * Fix pass 2, ruling 1: page code previous goes back as returned and restores the stored metas.
+	 */
+	public function test_page_code_previous_goes_back_byte_for_byte(): void {
+		$this->wpbakery_access( true );
+		$id = $this->page( self::SIMPLE );
+		$this->acting_as( 'administrator' );
+		update_post_meta( $id, '_wpb_post_custom_css', '.old{}' );
+		$out  = $this->page_code(
+			$id,
+			array(
+				'custom_css'       => '.new{}',
+				'custom_js_footer' => 'x();',
+			)
+		);
+		$back = $this->page_code( $id, (array) json_decode( (string) wp_json_encode( $out['previous'] ), true ) );
+		$this->assertIsArray( $back, is_wp_error( $back ) ? $back->get_error_message() : '' );
+		$this->assertSame( '.old{}', get_post_meta( $id, '_wpb_post_custom_css', true ) );
+		$this->assertFalse( metadata_exists( 'post', $id, '_wpb_post_custom_js_footer' ) );
+	}
+
+	/**
+	 * Fix pass 2, ruling 1: settings previous goes back as returned: a checkbox in the stored '1' or '' form, and null
+	 * for a setting that was not stored, which removes it again.
+	 */
+	public function test_settings_previous_goes_back_byte_for_byte(): void {
+		$this->clear_settings();
+		$filter = $this->vendor_settings();
+		update_option( 'wpb_js_shortcuts', '' );
+		update_option( 'wpb_js_css_loading', 'legacy' );
+		$this->acting_as( 'administrator' );
+		$out = aafm_exec_wpbakery_update_settings(
+			array(
+				'set' => array(
+					'shortcuts'          => true,
+					'css_loading'        => 'hybrid',
+					'not_responsive_css' => true,
+				),
+			)
+		);
+		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+		$back = aafm_exec_wpbakery_update_settings( array( 'set' => json_decode( (string) wp_json_encode( $out['previous'] ), true ) ) );
+		remove_filter( 'aafm_builder_vendor', $filter, 20 );
+		$this->assertIsArray( $back, is_wp_error( $back ) ? $back->get_error_message() : '' );
+		$this->assertSame( '', get_option( 'wpb_js_shortcuts' ) );
+		$this->assertSame( 'legacy', get_option( 'wpb_js_css_loading' ) );
+		$this->assertFalse( get_option( 'wpb_js_not_responsive_css' ) );
+		$this->clear_settings();
+	}
+
 	public function test_previous_holds_the_old_values(): void {
 		$id = $this->page( self::SIMPLE );
 		update_post_meta( $id, '_wpb_post_custom_css', '.old{}' );
@@ -1422,7 +1472,7 @@ final class WpbakerySiteTest extends TestCase {
 		$filter = $this->vendor_settings();
 		$this->acting_as( 'administrator' );
 		$cases = array(
-			array( 'shortcuts' => '1' ),
+			array( 'shortcuts' => 'yes' ),
 			array( 'not_responsive_css' => 1 ),
 			array( 'google_fonts_subsets' => 'latin' ),
 			array( 'google_fonts_subsets' => array( 'latin' => 'latin' ) ),

@@ -475,6 +475,16 @@ final class AvadaSiteTest extends TestCase {
 	}
 
 	/**
+	 * Fix pass 2, ruling 1: a previous value goes back as returned. The JSON round trip is the wire's.
+	 *
+	 * @param mixed $previous Previous.
+	 * @return mixed
+	 */
+	private static function wire( $previous ) {
+		return json_decode( (string) wp_json_encode( $previous ), true );
+	}
+
+	/**
 	 * R2-1: the runs-of-spaces refusal is for element attributes, which Avada's editor collapses; a page option is post
 	 * meta no editor collapses, so its text keeps a double space (and a non-breaking space).
 	 */
@@ -488,6 +498,129 @@ final class AvadaSiteTest extends TestCase {
 		$refused = aafm_avada_encode_value( 'text', 'Two  spaces', array( 'param_name' => 'title' ) );
 		$this->assertInstanceOf( WP_Error::class, $refused );
 		$this->assertSame( 'aafm_avada_repeated_spaces', $refused->get_error_code() );
+	}
+
+	public function test_page_css_previous_goes_back_byte_for_byte(): void {
+		$this->act_as_admin();
+		$id = $this->avada_post();
+		foreach ( array( '', '.a{color:red}' ) as $original ) {
+			'' === $original ? delete_post_meta( $id, '_fusion_builder_custom_css' ) : update_post_meta( $id, '_fusion_builder_custom_css', $original );
+			$previous = $this->page_css( $id, '.b{}' )['previous'];
+			$this->assertTrue( $this->page_css( $id, self::wire( $previous ) )['changed'] );
+			$this->assertSame( $original, (string) get_post_meta( $id, '_fusion_builder_custom_css', true ) );
+			$this->assertSame( '' !== $original, metadata_exists( 'post', $id, '_fusion_builder_custom_css' ) );
+		}
+	}
+
+	public function test_page_options_previous_goes_back_byte_for_byte(): void {
+		$this->force_avada_theme( true );
+		$this->act_as_admin();
+		$id     = $this->avada_post();
+		$image  = self::factory()->attachment->create_object( 'pic.jpg', 0, array( 'post_mime_type' => 'image/jpeg' ) );
+		$other  = self::factory()->attachment->create_object( 'two.jpg', 0, array( 'post_mime_type' => 'image/jpeg' ) );
+		$text   = $this->option_of( 'text' );
+		$csv    = $this->option_of( 'checkbox-buttonset' );
+		$upload = $this->option_of( 'upload' );
+		$color  = $this->option_of( 'color' );
+		$stored = array(
+			$text   => 'Two  spaces & more',
+			$csv    => 'small-visibility,large-visibility',
+			$upload => array(
+				'url' => wp_get_attachment_url( $image ),
+				'id'  => (string) $image,
+			),
+		);
+		update_post_meta( $id, '_fusion', $stored );
+		$out = $this->page_options(
+			$id,
+			array(
+				'set' => array(
+					$text   => 'New',
+					$csv    => array( 'small-visibility' ),
+					$upload => $other,
+					$color  => '#fff',
+				),
+			)
+		);
+		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+		$back = $this->page_options( $id, array( 'set' => self::wire( $out['previous'] ) ) );
+		$this->assertIsArray( $back, is_wp_error( $back ) ? $back->get_error_message() : '' );
+		$this->assertSame( $stored, get_post_meta( $id, '_fusion', true ) );
+	}
+
+	public function test_global_options_previous_goes_back_byte_for_byte(): void {
+		$stored = array(
+			'primary_color'   => '#111111',
+			'body_typography' => array(
+				'font-family' => 'Inter',
+				'font-size'   => '16px',
+				'variant'     => '400',
+				'font-backup' => '',
+			),
+			'color_palette'   => array(
+				'color1' => array(
+					'color' => '#ffffff',
+					'label' => 'White',
+				),
+			),
+		);
+		$out    = $this->global_write(
+			array(
+				'primary_color'   => '#222222',
+				'footer_text'     => 'Hi',
+				'body_typography' => array(
+					'font-size'      => '18px',
+					'letter-spacing' => '1px',
+				),
+				'color_palette'   => array(
+					'color1' => array( 'color' => '#000000' ),
+					'color9' => array(
+						'color' => '#123456',
+						'label' => 'New',
+					),
+				),
+			),
+			$stored
+		);
+		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+		$back = $this->global_write( self::wire( $out['previous'] ), null );
+		$this->assertIsArray( $back, is_wp_error( $back ) ? $back->get_error_message() : '' );
+		$this->assertSame( $stored, get_option( 'fusion_options' ) );
+	}
+
+	/**
+	 * BR-7: Avada's Layouts screen stores a section id as a string; previous returns it so, and it goes back so.
+	 */
+	public function test_layout_previous_goes_back_byte_for_byte_with_string_section_ids(): void {
+		$ids = $this->layout_fixture();
+		global $wpdb;
+		$raw = str_replace( '\"header\":' . $ids['header'], '\"header\":\"' . $ids['header'] . '\"', (string) get_post_field( 'post_content', $ids['layout'], 'raw' ) );
+		$wpdb->update( $wpdb->posts, array( 'post_content' => $raw ), array( 'ID' => $ids['layout'] ) );
+		clean_post_cache( $ids['layout'] );
+		$this->assertStringContainsString( '"header\":\"', $raw );
+		$out = $this->layout_write(
+			array(
+				'layout_id'  => $ids['layout'],
+				'sections'   => array(
+					'header' => 0,
+					'footer' => $ids['footer'],
+				),
+				'conditions' => array(),
+			)
+		);
+		$this->assertTrue( $out['changed'] );
+		$this->assertSame( (string) $ids['header'], $out['previous']['sections']['header'] );
+		$previous = self::wire( $out['previous'] );
+		$sections = $previous['sections'] + array( 'footer' => 0 );
+		$back     = $this->layout_write(
+			array(
+				'layout_id'  => $ids['layout'],
+				'sections'   => $sections,
+				'conditions' => $previous['conditions'],
+			)
+		);
+		$this->assertIsArray( $back, is_wp_error( $back ) ? $back->get_error_message() : '' );
+		$this->assertSame( $raw, get_post_field( 'post_content', $ids['layout'], 'raw' ) );
 	}
 
 	public function test_insert_library_item_returns_a_redacted_post(): void {
@@ -1359,7 +1492,17 @@ final class AvadaSiteTest extends TestCase {
 			$now['color_palette']['color2']
 		);
 		$this->assertSame( $stored['color_palette']['color1'], $now['color_palette']['color1'] );
-		$this->assertSame( $stored, (array) $out['previous'] );
+		// previous holds the old value of each sub-value this call changed, the form that goes straight back.
+		$this->assertSame(
+			array(
+				'body_typography' => array(
+					'font-size'   => '16px',
+					'line-height' => 'var(--awb-typography4-line-height)',
+				),
+				'color_palette'   => array( 'color2' => array( 'color' => '#000000' ) ),
+			),
+			(array) $out['previous']
+		);
 	}
 
 	public function test_only_the_named_keys_change_and_previous_holds_the_old_values(): void {
@@ -1718,7 +1861,7 @@ final class AvadaSiteTest extends TestCase {
 			);
 			$this->assertSame( 'aafm_avada_layout_section_invalid', $err->get_error_code() );
 		}
-		foreach ( array( array( 'sidebar' => 1 ), array( 'footer' => '5' ), array() ) as $sections ) {
+		foreach ( array( array( 'sidebar' => 1 ), array( 'footer' => 'five' ), array( 'footer' => '05' ), array() ) as $sections ) {
 			$err = $this->layout_write(
 				array(
 					'layout_id' => $ids['layout'],

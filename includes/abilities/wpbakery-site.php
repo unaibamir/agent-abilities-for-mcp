@@ -862,7 +862,11 @@ function aafm_wpbakery_setting_callback( string $key ): ?callable {
  */
 function aafm_wpbakery_sanitize_setting( string $key, $value ) {
 	$bools = array( 'not_responsive_css', 'local_google_fonts', 'shortcuts' );
-	$ok    = in_array( $key, $bools, true ) ? is_bool( $value )
+	if ( in_array( $key, $bools, true ) && in_array( $value, array( '1', '' ), true ) ) {
+		// The stored form of a checkbox, as previous returns it.
+		$value = '1' === $value;
+	}
+	$ok = in_array( $key, $bools, true ) ? is_bool( $value )
 		: ( 'google_fonts_subsets' === $key ? is_array( $value ) && array_values( $value ) === $value && array() === array_filter( $value, static fn( $one ): bool => ! is_string( $one ) ) : is_string( $value ) );
 	if ( ! $ok ) {
 		return aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $key );
@@ -1001,6 +1005,11 @@ function aafm_exec_wpbakery_update_settings( array $input ) {
 		if ( in_array( $key, array( 'custom_css', 'custom_js_header', 'custom_js_footer' ), true ) && ! current_user_can( 'unfiltered_html' ) ) {
 			return aafm_builder_error( 'aafm_builder_needs_unfiltered_html' );
 		}
+		if ( null === $value ) {
+			// previous names a setting that was not stored with null; it is removed again.
+			$apply[ $key ] = null;
+			continue;
+		}
 		$clean = aafm_wpbakery_sanitize_setting( $key, $value );
 		if ( is_wp_error( $clean ) ) {
 			return $clean;
@@ -1013,13 +1022,14 @@ function aafm_exec_wpbakery_update_settings( array $input ) {
 	$previous = array();
 	foreach ( $apply as $key => $value ) {
 		$before = $old[ $key ] ?? null;
-		if ( null !== $before && ( $before === $value || ( is_bool( $before ) && ( $before ? '1' : '' ) === $value ) ) ) {
+		if ( ( null === $before && null === $value ) || ( null !== $before && ( $before === $value || ( is_bool( $before ) && ( $before ? '1' : '' ) === $value ) ) ) ) {
 			continue;
 		}
 		if ( 'custom_css' === $key ) {
 			require_once ABSPATH . 'wp-admin/includes/template.php';
 		}
-		if ( ! aafm_update_option_verified( 'wpb_js_' . $key, $value ) ) {
+		$saved = null === $value ? aafm_delete_option_cache_safe( 'wpb_js_' . $key ) : aafm_update_option_verified( 'wpb_js_' . $key, $value );
+		if ( ! $saved ) {
 			return new WP_Error(
 				'aafm_wpbakery_setting_not_saved',
 				/* translators: %s: the setting key. */

@@ -682,12 +682,12 @@ final class AvadaSiteTest extends TestCase {
 		);
 		$this->assertTrue( $out['changed'] );
 		$this->assertSame( (string) $ids['header'], $out['previous']['sections']['header'] );
+		$this->assertSame( 0, $out['previous']['sections']['footer'], 'R3-2: a slot that was empty goes back as 0.' );
 		$previous = self::wire( $out['previous'] );
-		$sections = $previous['sections'] + array( 'footer' => 0 );
 		$back     = $this->layout_write(
 			array(
 				'layout_id'  => $ids['layout'],
-				'sections'   => $sections,
+				'sections'   => $previous['sections'],
 				'conditions' => $previous['conditions'],
 			)
 		);
@@ -1880,6 +1880,7 @@ final class AvadaSiteTest extends TestCase {
 				'sections'   => array(
 					'header'  => $ids['header'],
 					'content' => 999999,
+					'footer'  => 0,
 				),
 				'conditions' => array_values( $before['conditions'] ),
 			),

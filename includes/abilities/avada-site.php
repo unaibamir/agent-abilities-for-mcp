@@ -1380,12 +1380,14 @@ function aafm_exec_avada_update_layout( array $input ) {
 		'template_terms' => $terms,
 	) + $current;
 
-	$out = array(
+	// A slot this call names that was empty before goes back as 0, which clears it, so previous restores exactly.
+	$previous_sections = $old['sections'] + array_fill_keys( array_keys( array_diff_key( $slots, $old['sections'] ) ), 0 );
+	$out               = array(
 		'layout_id' => $global ? 'global' : $id,
 		'changed'   => false,
 		'previous'  => array(
 			// An empty map goes out as {} so a client can send it straight back.
-			'sections'   => array() === $old['sections'] ? new stdClass() : $old['sections'],
+			'sections'   => array() === $previous_sections ? new stdClass() : $previous_sections,
 			'conditions' => array_values( $old['conditions'] ),
 		),
 	);

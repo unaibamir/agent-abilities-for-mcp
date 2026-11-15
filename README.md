@@ -167,9 +167,9 @@ The Model Context Protocol is an open specification that Anthropic originally de
 ## Changelog
 ### 1.12.0
 
-* **Feature:** Agents can edit WPBakery Page Builder and Avada pages element by element: change, add, move or remove elements, or place a saved template or Library item. Restore revision works there too.
+* **Feature:** Agents can edit WPBakery Page Builder and Avada pages element by element with tools such as avada-update-element and wpbakery-insert-template. Restore revision works there too. [See every tool](https://agentabilitieswp.com/abilities/?utm_source=github&utm_medium=readme&utm_campaign=plugin-repo).
 * **Feature:** Users who can manage options can change WPBakery settings, Avada Global Options, layouts and Slider settings, and import Avada Studio items. Page CSS and page options can be set per page.
-* **Feature:** New navigation tools read and replace block-theme menus, pages take a parent and a template, update-site-settings sets the static homepage, and wc-update-product can remove an attribute.
+* **Feature:** list-navigations and update-navigation read and replace block-theme menus, pages take a parent and a template, update-site-settings sets the static homepage, and wc-update-product can remove an attribute.
 * **Feature:** Connection adds Add to Cursor and Add to VS Code links and can end tokens issued for an old site address. Other plugins is now Plugins' own tools, and the accent follows your Admin Color Scheme.
 * **Fix:** update-page, update-post and replace-in-post overwrote Divi page layouts and now refuse them, and avada-replace-text refuses a save that would strip other content.
 * **Fix:** Expired or revoked OAuth tokens now get error="invalid_token", and alert emails go through WP-Cron on hosts that can't finish the page before sending.

@@ -44,7 +44,7 @@ final class MetadataTest extends TestCase {
 		$lines = array(
 			array( 'readme.txt', 136, 'e389b5b81c7a5a6b0eb3fc6ea2e2f5c86d39d18cfe98689c51e89d991633dffc' ),
 			array( 'README.md', 144, 'e3d24f907d2ffd6252f9bdf4dd43d9fbac7bf75ec7f994c140902f8e736c00a3' ),
-			array( 'readme.txt', 262, '38c3cb281414de5247b8938f9de82b3ae24bc8f7b8719cc4b761e1ea8c3bc77d' ),
+			array( 'readme.txt', 270, '38c3cb281414de5247b8938f9de82b3ae24bc8f7b8719cc4b761e1ea8c3bc77d' ),
 		);
 		foreach ( $lines as list( $file, $line, $sha ) ) {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading the plugin's own readme.

@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-14T07:58:31+05:00\n"
+"POT-Creation-Date: 2026-11-15T14:02:04+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -216,7 +216,8 @@ msgid "Number of entries per page, clamped to the 1-200 range regardless of the 
 msgstr ""
 
 #: includes/abilities/activity-log.php:66
-#: includes/abilities/avada.php:923
+#: includes/abilities/avada-elements.php:702
+#: includes/abilities/avada.php:1632
 #: includes/abilities/blocks.php:153
 #: includes/abilities/blocks.php:258
 #: includes/abilities/comments.php:104
@@ -231,6 +232,8 @@ msgstr ""
 #: includes/abilities/tec/venues.php:207
 #: includes/abilities/terms.php:115
 #: includes/abilities/users.php:113
+#: includes/abilities/wpbakery-elements.php:966
+#: includes/abilities/wpbakery-site.php:231
 msgid "1-based page number for pagination. Defaults to 1."
 msgstr ""
 
@@ -330,12 +333,499 @@ msgstr ""
 msgid "ID of the post to render the All in One SEO head for."
 msgstr ""
 
+#: includes/abilities/avada-elements.php:55
+msgid "List Avada elements"
+msgstr ""
+
+#: includes/abilities/avada-elements.php:56
+msgid "Lists the elements Avada Builder has on this site, from Avada's own element map: tag, name, whether it holds other elements, and the one child element a parent element such as tabs takes. With tag it returns one element with its settings, each under the name Avada stores it (a padding setting is one per side): kind, label, default, the allowed values of a choice (at most 100), whether avada-update-element can write it, and needs, which is unfiltered_html for settings that can carry script or raw HTML. Typography and dynamic data settings are listed but cannot be written. The tablet, phone and hover variants Avada's builder adds are listed as settings of their own. Requires the edit_posts capability; Avada's Role Manager settings are not applied. Only while Avada is active."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:63
+msgid "Update an Avada element"
+msgstr ""
+
+#: includes/abilities/avada-elements.php:64
+msgid "Changes the settings or the inner text of one element on an Avada page, layout section, library item, form or off canvas panel, named by its index and by the tag and fingerprint avada-get-page-content returned with include_structure. set_atts sets settings by the names avada-list-elements gives, each value in the input form of its kind (an image as an attachment id under image_id, which writes the id and the URL together; a padding side such as padding_top as a CSS length); remove_atts takes settings off the element so Avada uses their default; text replaces the inner content of an element with no child elements. A double quote, a square bracket, two spaces in a row or a non-breaking space in a text setting is refused, because Avada's builder drops or changes it on its next save. Only a user who may post unfiltered HTML can put square brackets, percent-encoded brackets or data-* attributes in body text. Refused: a stale index or fingerprint, an element that shows a global library item (edit the item itself), a setting driven by dynamic data, a setting the element does not have or that cannot be written (typography and dynamic data cannot), a value its kind does not accept, and any change that would add or remove an element. Code blocks and settings that can carry script, such as link_attributes and custom attributes, need a user who may post unfiltered HTML. A save that would change other content for this user is refused, and nothing is saved. When a revision is kept, restore_revision_id brings the page back through restore-revision; the response also returns the element's new fingerprint and the page fingerprint. The outline stops at 2,000 elements. Not undoable from this plugin's change history. Requires edit access to the post, and for a layout section a user who can manage site options; Avada's Role Manager settings are not applied. Only while Avada is active."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:71
+msgid "Insert an Avada element"
+msgstr ""
+
+#: includes/abilities/avada-elements.php:72
+msgid "Adds one element, with its children, to an Avada page, layout section, library item, form or off canvas panel: before or after an element named by its index and fingerprint from avada-get-page-content with include_structure, or as that element's first or last child. element takes tag, atts (setting names and input forms from avada-list-elements), text and children. Every setting the element has is written with its default, as Avada's builder writes a new element; empty ones are left out when Avada's remove empty attributes setting is on. A container takes rows, a row takes columns, a column takes elements or nested columns, a nested row takes nested columns, and a parent element such as tabs takes only its own child element; a column needs type, its width, such as 1_2. Refused: an element type Avada's element map does not list, a place inside an element that shows a global library item, and a setting or value avada-update-element would refuse. A double quote, a square bracket, two spaces in a row or a non-breaking space in a text setting is refused. Code blocks and settings that can carry script need a user who may post unfiltered HTML, and so do square brackets, percent-encoded brackets and data-* attributes in body text. page_fingerprint must be the one from the last read or write; the response returns the new one with the new element's index and fingerprint. An empty post takes an insert with no anchor and is then marked as an Avada page. At most 50 elements, nested at most 6 deep. A save that would change other content for this user is refused, and nothing is saved. When a revision is kept, restore_revision_id brings the page back through restore-revision. Not undoable from this plugin's change history. Requires edit access to the post, and for a layout section a user who can manage site options; Avada's Role Manager settings are not applied. Only while Avada is active."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:79
+msgid "Move an Avada element"
+msgstr ""
+
+#: includes/abilities/avada-elements.php:80
+msgid "Moves one element, with its children, to a new place on the same Avada page, layout section, library item, form or off canvas panel: before or after another element, or as its first or last child. The element and the anchor are each named by index and fingerprint from avada-get-page-content with include_structure. The element's stored text moves byte for byte; nothing is rewritten. A move to a new parent follows Avada's nesting (a container takes rows, a row takes columns, a column takes elements or nested columns, a parent element such as tabs takes only its own child element), and a reorder under the same parent is always allowed. Refused: a move into the element itself or one of its children, an element type Avada's element map does not list, a place inside an element that shows a global library item, and a move that would leave a container with no row or a row with no column. A move to the place the element already has saves nothing and returns moved false. page_fingerprint must be the one from the last read or write; the response returns the new one with the element's new index and fingerprint. A save that would change other content for this user is refused, and nothing is saved. When a revision is kept, restore_revision_id brings the page back through restore-revision. Not undoable from this plugin's change history. Requires edit access to the post, and for a layout section a user who can manage site options; Avada's Role Manager settings are not applied. Only while Avada is active."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:87
+msgid "Remove an Avada element"
+msgstr ""
+
+#: includes/abilities/avada-elements.php:88
+msgid "Removes one element, with its children, from an Avada page, layout section or library item, named by its index and fingerprint from avada-get-page-content with include_structure. Every other byte of the page stays as it was. Refused before anything is saved when no revision could bring the element back: a form or an off canvas panel (they keep no revisions), revisions switched off, or a site that keeps only 1 revision per post. Also refused: the page's last top level container, or a library item's only top level element, an element inside an element that shows a global library item, and a removal that would leave a container with no row or a row with no column. page_fingerprint must be the one from the last read or write; the response returns the new one and the number of elements removed. A save that would change other content for this user is refused, and nothing is saved. restore_revision_id brings the page back through restore-revision. Not undoable from this plugin's change history. Requires edit access to the post, and for a layout section a user who can manage site options; Avada's Role Manager settings are not applied. Only while Avada is active."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:105
+msgid "Avada Builder's element map is not available in this request (it needs Avada Builder 3.15.6 or later), so its elements cannot be read or written here. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:358
+msgid "Square brackets in this text need a user who may post unfiltered HTML, because Avada can turn them into an element the next time the page is saved in its builder. Remove the brackets, or ask such a user to make the edit. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:365
+msgid "A percent-encoded square bracket in this text needs a user who may post unfiltered HTML. Remove it, or ask such a user to make the edit. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:375
+msgid "A data-* attribute in this text needs a user who may post unfiltered HTML. Remove the attribute, or ask such a user to make the edit. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:383
+#: includes/abilities/wpbakery.php:471
+msgid "This text ends inside an unfinished HTML tag, which needs a user who may post unfiltered HTML because the tag cannot be checked. Finish or remove the tag, or ask such a user to make the edit. Nothing was changed."
+msgstr ""
+
+#. translators: %s: the setting name.
+#: includes/abilities/avada-elements.php:469
+#, php-format
+msgid "The value of %s has a non-breaking or zero-width space, which Avada's editor turns into an ordinary space when the page is saved. Use an ordinary space. Nothing was changed."
+msgstr ""
+
+#. translators: %s: the setting name.
+#: includes/abilities/avada-elements.php:481
+#, php-format
+msgid "The value of %s has two or more spaces in a row, which Avada's editor turns into one space the next time the page is saved. Use single spaces. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:692
+msgid "One element's shortcode tag, such as fusion_button. Returns that element with its settings."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:696
+#: includes/abilities/wpbakery-elements.php:960
+msgid "Only elements whose name or tag contains this text."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:701
+#: includes/abilities/wpbakery-elements.php:965
+msgid "Number of elements per page, clamped to the 1-50 range. Defaults to 20 when omitted."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:720
+msgid "The one element a parent element such as tabs takes as its children, or null."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:724
+msgid "Only with tag. kind is how avada-update-element takes the value; writable says whether it can; needs is unfiltered_html for settings that can carry script or raw HTML."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:732
+msgid "Settings left out because the map gave them no setting name."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:865
+#: includes/abilities/wpbakery-elements.php:1226
+msgid "Pass to restore-revision to put the page back as it was. Null when nothing was saved or no revision is kept."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:870
+#: includes/abilities/wpbakery-elements.php:1231
+#: includes/abilities/wpbakery-elements.php:2169
+#: includes/abilities/wpbakery-elements.php:2256
+#: includes/abilities/wpbakery-elements.php:2395
+msgid "Present only when the restore point was gone after the save; says why there is no way back."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:887
+msgid "The element's index in the outline from avada-get-page-content with include_structure."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:900
+#: includes/abilities/wpbakery-elements.php:1193
+msgid "The tag and fingerprint the outline returned for that index. A page that changed since is refused."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:922
+#: includes/abilities/avada-elements.php:1865
+msgid "ID of the page, post, layout section, library item, form or off canvas panel."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:929
+msgid "Setting name to value, each name and value in the form avada-list-elements gives."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:934
+msgid "Setting names to take off the element, so Avada uses their default."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:938
+msgid "New inner content for an element with no child elements, such as a text block, a title or a button's text. HTML is filtered as in a post; a code block's code needs unfiltered HTML."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:952
+#: includes/abilities/wpbakery-elements.php:1222
+msgid "Settings whose stored value changed, and text when the inner content did. Empty when nothing was saved."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:975
+msgid "This post is not an Avada page. Edit a page built with another builder in that builder. Nothing was changed."
+msgstr ""
+
+#. translators: %s: the setting name.
+#: includes/abilities/avada-elements.php:1006
+#, php-format
+msgid "Dynamic data drives the setting %s on this element, so a stored value would be ignored when the page is shown. Change it in Avada's builder. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:1041
+#: includes/abilities/wpbakery-elements.php:1311
+msgid "Give at least one of set_atts, remove_atts or text. Nothing was changed."
+msgstr ""
+
+#. translators: %1$d: the library item's post id.
+#: includes/abilities/avada-elements.php:1058
+#, php-format
+msgid "This element shows the global library item %1$d, which every page that shows it shares. Edit item %1$d itself instead. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:1224
+#: includes/abilities/wpbakery-elements.php:1601
+msgid "One insert may add at most 50 elements, nested at most 6 deep. Split the change into smaller inserts. Nothing was changed."
+msgstr ""
+
+#. translators: 1: the refusal, 2: the parent tag or "top level", 3: the child tag.
+#: includes/abilities/avada-elements.php:1292
+#: includes/abilities/wpbakery-elements.php:1552
+#, php-format
+msgid "%1$s Parent: %2$s. Child: %3$s."
+msgstr ""
+
+#. translators: 1: the refusal, 2: the parent tag or "top level", 3: the child tag.
+#: includes/abilities/avada-elements.php:1292
+#: includes/abilities/wpbakery-elements.php:1552
+msgid "top level"
+msgstr ""
+
+#: includes/abilities/avada-elements.php:1445
+msgid "A column needs type set to its width, a fraction such as 1_2 or a percentage such as 25%. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:1559
+#: includes/abilities/wpbakery-elements.php:1906
+#: includes/abilities/wpbakery-elements.php:1933
+msgid "Give anchor_index, anchor_expect and placement together. Only an empty post takes an insert without them. Nothing was changed."
+msgstr ""
+
+#. translators: %1$d: the library item's post id.
+#: includes/abilities/avada-elements.php:1593
+#, php-format
+msgid "That place is inside the global library item %1$d, which every page that shows it shares. Change item %1$d itself instead. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:1637
+msgid "This stored content holds HTML that would be filtered out for this user, so it needs a user who may post unfiltered HTML. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:1870
+msgid "The page fingerprint from the last avada-get-page-content read or the last write's response. A page that changed since is refused."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:1878
+#: includes/abilities/wpbakery-elements.php:2093
+msgid "Index of the element the new place is named against, from the same outline."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:1879
+msgid "The tag and fingerprint the outline returned for anchor_index."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:1883
+#: includes/abilities/wpbakery-elements.php:2112
+msgid "Where, relative to the anchor element: before or after it, or as its first or last child."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:1908
+msgid "Setting name to value, each in the input form of its kind from avada-list-elements. A column needs type, its width: a fraction such as 1_2 or a percentage."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:1912
+msgid "Inner content for an element with no children, such as a text block, a title or a button's text."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:1917
+#: includes/abilities/wpbakery-elements.php:2146
+msgid "Child elements, each with the same keys: tag, atts, text, children."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:1922
+#: includes/abilities/wpbakery-elements.php:2151
+msgid "The element to add, with its children. At most 50 elements, nested at most 6 deep."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:1934
+msgid "Number of elements added, children included."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:1993
+msgid "The element was saved, but the marker that makes Avada open this page in its builder could not be confirmed, so the page may open in the default editor. Set the page to use Avada's builder there, or restore the page with restore_revision_id."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:2032
+msgid "A container must keep at least one row, and a row at least one column, so this change would break the layout. Move or remove the whole container or row instead. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:2059
+msgid "False when the element was already in that place and nothing was saved."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:2204
+msgid "Number of elements removed, children included."
+msgstr ""
+
+#: includes/abilities/avada-elements.php:2250
+msgid "This site keeps only 1 revision per post (WP_POST_REVISIONS or the wp_revisions_to_keep filter), so WordPress would delete the revision that brings the removed element back during the same save. Raise the limit to 2 or more, or remove the element in Avada's builder. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/avada-site.php:54
+msgid "Insert an Avada library item"
+msgstr ""
+
+#: includes/abilities/avada-site.php:55
+msgid "Places an item from Avada's library, named by its id from avada-list-library, on an Avada page, layout section or library item, before or after an element from the outline of avada-get-page-content or as its first or last child. A saved section goes at the top level, a saved column inside a row and a saved element inside a column, by Avada's own nesting rules. An ordinary item is copied byte for byte; a global item is placed as a reference to the item, as Avada's builder does, so every page that shows it keeps showing the item itself, and placing one needs a user who can edit private posts. An item may hold at most 50 elements, nested at most 6 deep. An item holding a code block, a raw setting or a setting named like an event handler needs a user who may post unfiltered HTML, and for any other user its text may hold no square bracket, percent-encoded bracket, data-* attribute, unfinished tag or HTML that WordPress would remove, for a copy and for a reference alike. A global item it shows by reference, at any depth, gets the same access check and content checks; a reference loop is refused. Requires page_fingerprint from the last read or write and returns the new one; a changed page is refused and nothing is saved. Other indexes may move, so read the outline again before the next structural change. When a revision is kept, restore_revision_id brings the page back through restore-revision. Not undoable from this plugin's change history. Requires edit access to the page and to the item; Avada's Role Manager is not applied. Only while Avada is active."
+msgstr ""
+
+#: includes/abilities/avada-site.php:62
+msgid "Update Avada page CSS"
+msgstr ""
+
+#: includes/abilities/avada-site.php:63
+msgid "Sets the custom CSS of one Avada page, layout section or library item, the CSS field of Avada's builder settings for that page. The value given replaces the page's existing CSS, and an empty string removes it; previous returns the old CSS, which is the way back. CSS that holds markup is refused, as WordPress refuses it in custom CSS, and so is a \"<\" or a percent-encoded sequence such as %20, which Avada rewrites or removes when it prints page CSS; any other CSS is stored exactly as sent. A value equal to what is stored is left alone and changed is false. No revision is kept, and the change is not undoable from this plugin's change history. Requires edit access to the post and a user who may post unfiltered HTML; Avada's Role Manager is not applied. Only while Avada is active."
+msgstr ""
+
+#: includes/abilities/avada-site.php:70
+msgid "Update Avada page options"
+msgstr ""
+
+#: includes/abilities/avada-site.php:71
+msgid "Sets or removes Avada page options on one post, the settings of Avada's page options panel: layout, title bar, sidebars, slider, header, footer, off canvas, form appearance, steps and confirmation, SEO and template settings from the fixed list avada-get-page-content returns with include_page_options. set maps option ids to values and remove lists ids to drop, so Avada's default applies; give at least one. Every other stored option is kept. A choice is its stored value, a color a hex, rgba, hsla or Avada color variable, an image an attachment id, and a multi choice a list. Text may hold no straight double quote or square bracket; for a user who may not post unfiltered HTML, a text or text area value WordPress would filter is refused, never stored altered. Option groups stored as several sub-values (dimensions, typography, sortable lists, media and display conditions) are not writable, and form notification, submission and privacy settings and code fields are never reachable. An empty value or default removes the option, as Avada's own save does. The old value of every option that changed comes back in previous, null where none was stored; send it back as set to undo the change. A value equal to what is stored is left alone and not listed in changed. No revision is kept, and the change is not undoable from this plugin's change history. Needs the Avada theme active and a post Avada owns, one of Avada's own types, or a page, post, portfolio item, Avada Slider slide or Elastic Slider slide that no other builder owns. Requires edit access to the post; layout sections need a user who can manage site options. Avada's Role Manager is not applied. Only while Avada is active."
+msgstr ""
+
+#: includes/abilities/avada-site.php:78
+msgid "Update Avada Global Options"
+msgstr ""
+
+#: includes/abilities/avada-site.php:79
+msgid "Overwrites site-wide Avada Global Options from the fixed list avada-get-global-options returns, apart from maintenance_mode, which stays read only. set maps option keys to values: a color as a hex, rgba, hsla or Avada color variable; site_width as a number with px or %; layout, header_position, header_layout, page_title_bar, footer_widgets, footer_copyright and responsive as one of their stored choices; logo as an image attachment id, whose URL and size are written with it; footer_text as HTML, refused for a user who may not post unfiltered HTML when WordPress would filter it; a typography option as an object of the sub-values to change (font-family, font-size, line-height, letter-spacing, font-weight, font-style, text-transform, color); color_palette as an object of the color slots to change, each with a color and a label. A value that fits no rule is refused and nothing is written. Every other stored option is kept. The old value of every option that changed comes back in previous (for a typography or palette option, of each sub-value that changed), null where none was stored; send it back as set to undo the change. The change applies to the whole site at once, and Avada's compiled CSS is rebuilt; a page cache plugin keeps serving its cached pages until the owner purges it. Not undoable from this plugin's change history. Needs the Avada theme active and a user who can manage site options (manage_options). Only while Avada is active."
+msgstr ""
+
+#: includes/abilities/avada-site.php:86
+msgid "Update an Avada layout"
+msgstr ""
+
+#: includes/abilities/avada-site.php:87
+msgid "Overwrites the sections and conditions of one Avada layout, named by its id from avada-list-layouts or \"global\" for the Global Layout. sections assigns a published layout section of the matching type to header, page_title_bar, content or footer, or 0 to clear that slot; the other slots are kept. conditions replaces the whole stored list: each condition takes mode (include or exclude), type, and under the key named by type a condition id that Avada's Layouts screen offers, or, for one specific page, post, term or author, the id Avada stores for it, such as specific_page|42, with parent naming the condition it belongs to. Give at least one of sections and conditions. Pages pick their layout from these conditions, so the change applies site-wide at once. The old sections and conditions come back in previous; send them back to undo the change. A layout is never created or deleted. A change equal to what is stored is left alone and changed is false. Not undoable from this plugin's change history. Requires a user who can manage site options (manage_options). Only while Avada is active."
+msgstr ""
+
+#: includes/abilities/avada-site.php:94
+msgid "List Avada Studio items"
+msgstr ""
+
+#: includes/abilities/avada-site.php:95
+msgid "Lists the ready-made items in Avada Studio, Avada's own library of templates, sections, elements, icons, forms and off canvas panels, from the catalog Avada itself loads: id, type, title and, where Avada has them, a category and a preview URL, plus total and from_cache. Filter by type and by a word in the title; at most 50 per page. When Avada has no cached catalog, this call makes Avada download it from Avada's servers under the site's own Avada registration and cache it for a day; this plugin sends nothing itself and never reads the registration. Refused until the site owner has unlocked the high-risk category and switched on the Avada Studio import, and while Studio is unavailable (the Avada theme off, Studio switched off in Avada, or the product not registered). Requires a user who can manage site options (manage_options). Only while Avada is active."
+msgstr ""
+
+#: includes/abilities/avada-site.php:102
+msgid "Import an Avada Studio item"
+msgstr ""
+
+#: includes/abilities/avada-site.php:103
+msgid "Imports one Avada Studio item, named by its id and type from avada-list-studio-items, into Avada's library on this site, through Avada's own importer: Avada downloads the item from Avada's servers under the site's own Avada registration and creates a published post of that type, and with media import (the default) also its images and whatever the item depends on, such as forms, menus and icons; with media placeholders, images become placeholders. Avada makes these requests and this plugin sends nothing itself; it never reads the registration. An item imported before is not imported again; was_imported is then true. Only the item's own post is confirmed, by its type and Avada's Studio marker; the media and other posts Avada adds are not checked one by one. Nothing is placed on a page: place the item with avada-insert-library-item. There is no undo from this plugin; the owner can delete the item in Avada's Library. Locked with the other high-risk tools until the site owner unlocks the category, then off until switched on. Requires a user who can manage site options (manage_options). Only while Avada is active."
+msgstr ""
+
+#: includes/abilities/avada-site.php:110
+msgid "Update Avada Slider settings"
+msgstr ""
+
+#: includes/abilities/avada-site.php:111
+msgid "Changes the settings of one Avada Slider, the slider as a whole and not its slides, for every page that shows it. A slider is a term of Avada's slide-page taxonomy, named by term_id. set maps setting keys to values: slider_width, slider_height, nav_box_width, nav_box_height and nav_arrow_size as a number with px, %, em, rem, vh or vw; full_screen, parallax, nav_arrows, autoplay and loop as true or false; animation as fade or slide; slideshow_speed and animation_speed as whole milliseconds; typo_sensitivity and typo_factor as numbers; slider_indicator as an empty string (none), scroll_down_indicator or pagination_circles; slider_indicator_color as a color or an empty string. Values are stored as Avada's slider screen stores them, written through Avada's own slider settings code and read back. A value equal to what is stored is left alone and not listed in changed. The old value of every setting that changed comes back in previous, null where none was stored; send it back as set to undo the change. When a slider still holds settings from an old Avada version, Avada itself copies them into its current store on the first read. Not undoable from this plugin's change history. Requires a user who can manage site options (manage_options). Only while Avada is active, and the slider needs Avada Core active."
+msgstr ""
+
+#: includes/abilities/avada-site.php:136
+msgid "The library item's id from avada-list-library."
+msgstr ""
+
+#: includes/abilities/avada-site.php:282
+msgid "ID of the Avada page, layout section or library item."
+msgstr ""
+
+#: includes/abilities/avada-site.php:286
+#: includes/abilities/wpbakery-site.php:524
+msgid "The page's custom CSS, replacing what is stored; an empty string removes it."
+msgstr ""
+
+#: includes/abilities/avada-site.php:295
+msgid "The CSS stored before this call, an empty string where there was none."
+msgstr ""
+
+#. translators: %s: the option id.
+#: includes/abilities/avada-site.php:479
+#, php-format
+msgid "The value of %s holds HTML that would be filtered out for this user, so it needs a user who may post unfiltered HTML. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/avada-site.php:505
+msgid "ID of the post whose Avada page options change."
+msgstr ""
+
+#: includes/abilities/avada-site.php:509
+msgid "Option id to value, ids from page_options of avada-get-page-content. A multi choice takes a list of values, an image an attachment id."
+msgstr ""
+
+#: includes/abilities/avada-site.php:514
+msgid "Option ids to drop, so Avada's default applies."
+msgstr ""
+
+#: includes/abilities/avada-site.php:530
+#: includes/abilities/avada-site.php:925
+msgid "The old value of each changed option, null where none was stored."
+msgstr ""
+
+#: includes/abilities/avada-site.php:564
+msgid "Page options can be changed only while the Avada theme is active. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/avada-site.php:580
+msgid "Give at least one option in set or remove. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/avada-site.php:909
+msgid "Option key to its new value, keys from avada-get-global-options."
+msgstr ""
+
+#: includes/abilities/avada-site.php:956
+msgid "The Avada theme is not active, so there are no Avada Global Options to change. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/avada-site.php:990
+msgid "Avada has not stored its Global Options yet. Open Avada > Options in wp-admin once, then try again. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/avada-site.php:997
+msgid "The Avada Global Options could not be read. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/avada-site.php:1066
+msgid "The Avada Global Options could not be saved. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/avada-site.php:1107
+msgid "The layout post id from avada-list-layouts, or \"global\" for the Global Layout."
+msgstr ""
+
+#: includes/abilities/avada-site.php:1113
+msgid "Slot to a published layout section id of that type, or 0 to clear the slot."
+msgstr ""
+
+#: includes/abilities/avada-site.php:1119
+msgid "The full new list of conditions, each with mode, type and the condition id under the key named by type."
+msgstr ""
+
+#: includes/abilities/avada-site.php:1132
+msgid "The sections and conditions stored before this call."
+msgstr ""
+
+#: includes/abilities/avada-site.php:1280
+msgid "No Avada layout has that id. Use an id from avada-list-layouts, or \"global\". Nothing was changed."
+msgstr ""
+
+#: includes/abilities/avada-site.php:1292
+msgid "Give at least one of sections and conditions. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/avada-site.php:1330
+msgid "Avada cannot read this layout's stored data, so it was not changed."
+msgstr ""
+
+#. translators: %s: the layout slot, such as footer.
+#: includes/abilities/avada-site.php:1353
+#, php-format
+msgid "The %s slot takes a published layout section of that type. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/avada-site.php:1400
+msgid "The Global Layout could not be saved. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/avada-site.php:1418
+msgid "The layout could not be confirmed as saved."
+msgstr ""
+
+#: includes/abilities/avada-site.php:1450
+msgid "Avada Studio is not available on this site: it needs the Avada theme active, Studio switched on in Avada and the product registered. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/avada-site.php:1475
+msgid "The Avada Studio tools need the site owner's approval first: unlock the high-risk category in this plugin's settings and switch on the Avada Studio import. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/avada-site.php:1499
+msgid "Avada could not load the Studio catalog from Avada's servers. Try again later. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/avada-site.php:1674
+msgid "The item's id from avada-list-studio-items."
+msgstr ""
+
+#: includes/abilities/avada-site.php:1697
+msgid "True when Avada found an earlier import of this item and created nothing."
+msgstr ""
+
+#: includes/abilities/avada-site.php:1762
+msgid "Avada could not import this Studio item. Nothing was confirmed as imported."
+msgstr ""
+
+#: includes/abilities/avada-site.php:1803
+msgid "Only the item's own post was confirmed; the attachments, forms, menus and icons Avada imports with it are not checked one by one. Place the item on a page with avada-insert-library-item."
+msgstr ""
+
+#: includes/abilities/avada-site.php:1889
+msgid "The slider: a term ID of Avada's slide-page taxonomy."
+msgstr ""
+
+#: includes/abilities/avada-site.php:1893
+msgid "Setting key to its new value, keys from the fixed slider settings list in the description."
+msgstr ""
+
+#: includes/abilities/avada-site.php:1909
+#: includes/abilities/wpbakery-site.php:935
+msgid "The old value of each changed setting, null where none was stored."
+msgstr ""
+
+#: includes/abilities/avada-site.php:1934
+msgid "Avada Slider is not available on this site: it needs the Avada theme and the Avada Core plugin active. Nothing was changed."
+msgstr ""
+
+#. translators: %s: the slider setting key.
+#: includes/abilities/avada-site.php:2026
+#, php-format
+msgid "The slider settings were written, but reading them back does not show the new value of %s. Check the slider in Avada's Sliders screen; previous in this error holds the old values."
+msgstr ""
+
 #: includes/abilities/avada.php:60
 msgid "Get Avada page content"
 msgstr ""
 
 #: includes/abilities/avada.php:61
-msgid "Reads the raw post content of an Avada/Fusion Builder page, unchanged. Fusion Builder shortcodes are returned exactly as stored, never rendered or stripped. Also returns is_avada_owned, true when Avada owns the content. With include_structure it also returns an outline of the Fusion Builder elements (tag, nesting depth, attributes, and the library item id of a global element) to find the element that holds the text before calling avada-replace-text. Requires edit access to the post."
+msgid "Reads the raw post content of an Avada/Fusion Builder page, unchanged. Fusion Builder shortcodes are returned exactly as stored, never rendered or stripped. Also returns is_avada_owned, true when Avada owns the content or the post is one of Avada's own types, and affects when an edit to this post reaches other pages (a layout section or a global library element). With include_structure it also returns an outline of the Fusion Builder elements (tag, nesting depth, attributes as stored and as Avada reads them, the inner text of an element with no child element, the library item id of a global element, and a fingerprint per element) plus a page fingerprint, to find the element that holds the text before calling avada-replace-text. The outline stops at 2,000 elements. With include_page_options it also returns the page CSS and the stored page options from a fixed list of layout, title bar, sidebar, slider, header, footer, off canvas, form appearance, steps and confirmation, SEO and template settings; form notification, submission and privacy settings and code fields are never returned. Page options are read only while the Avada theme is active, on an Avada page, one of Avada's own types, or a page, post, portfolio item, Avada Slider slide or Elastic Slider slide that no other builder owns. Requires edit access to the post; layout sections are open only to users who can manage site options. Avada's Role Manager is not applied. Only while Avada is active."
 msgstr ""
 
 #: includes/abilities/avada.php:68
@@ -343,7 +833,7 @@ msgid "Replace text in an Avada page"
 msgstr ""
 
 #: includes/abilities/avada.php:69
-msgid "Replaces literal text within an Avada/Fusion Builder page while requiring the Fusion shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee). A replacement that would touch a shortcode tag, its self-closing form, or an attribute is refused rather than risk breaking the layout. Requires edit access to the post."
+msgid "Replaces literal text within an Avada/Fusion Builder page while requiring the Fusion shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee). A replacement that would touch a shortcode tag, its self-closing form, or an attribute is refused rather than risk breaking the layout. If saving the page as this user would remove or change an element, or change other content on it (an embed the user may not keep, for example), the call is refused and nothing is saved. Also works on Avada's own library items, forms, off canvas content and layout sections; layout sections are open only to users who can manage site options. A successful call returns affects when the edit reaches other pages, for a layout section or a global library element. Requires edit access to the post; Avada's Role Manager is not applied. Only while Avada is active."
 msgstr ""
 
 #: includes/abilities/avada.php:76
@@ -355,7 +845,7 @@ msgid "Lists Avada Layouts in the order Avada checks them, with the Global Layou
 msgstr ""
 
 #: includes/abilities/avada.php:84
-msgid "Get Avada global options"
+msgid "Get Avada Global Options"
 msgstr ""
 
 #: includes/abilities/avada.php:85
@@ -367,119 +857,170 @@ msgid "List the Avada library"
 msgstr ""
 
 #: includes/abilities/avada.php:93
-msgid "Lists Avada Library items: saved elements, columns, sections and post cards, and full-page templates. Returns id, title, status, kind (the library category, template for a template, or uncategorized), is_global and modified date, plus content, the raw Fusion Builder markup, only with include_content. A global item is shared, so editing it changes every page that shows it, and its text is edited in Avada's Library, not on the page (avada-get-page-content with include_structure gives the global_id of such an element). Response includes total (the query-wide count of matching items; each page omits items you lack edit access to, so total can exceed the rows returned). Requires the edit_posts capability. Only while Avada is active."
+msgid "Lists Avada Library items: saved elements, columns, sections and post cards, and full-page templates. Returns id, title, status, kind (the library category, template for a template, or uncategorized), is_global and modified date, plus content, the raw Fusion Builder markup, only with include_content; a global item is listed without its content unless the user can edit private posts. A global item is shared, so editing it changes every page that shows it, and its text is edited in Avada's Library, not on the page (avada-get-page-content with include_structure gives the global_id of such an element). Response includes total (the query-wide count of matching items; each page omits items you lack edit access to, so total can exceed the rows returned). Requires the edit_posts capability. Only while Avada is active."
 msgstr ""
 
-#: includes/abilities/avada.php:132
+#: includes/abilities/avada.php:180
 msgid "ID of the post/page to read. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/avada.php:137
-msgid "When true, also returns structure: the Fusion Builder elements in document order with their nesting depth and attributes, and structure_status. Use it to find the element that holds the text you want to change before calling avada-replace-text."
+#: includes/abilities/avada.php:185
+msgid "When true, also returns structure: the Fusion Builder elements in document order with their nesting depth, attributes, decoded attributes, inner text and fingerprint, plus structure_status and page_fingerprint. Use it to find the element that holds the text you want to change before calling avada-replace-text."
 msgstr ""
 
-#: includes/abilities/avada.php:152
+#: includes/abilities/avada.php:190
+msgid "When true, also returns custom_css (the page CSS) and page_options (the stored Avada page options, limited to a fixed list). Needs the Avada theme active, and a post Avada owns, one of Avada's own types, or a page, post, portfolio item, Avada Slider slide or Elastic Slider slide that no other builder owns."
+msgstr ""
+
+#: includes/abilities/avada.php:204
+msgid "Present only when an edit here reaches more than this post: a layout section, or a global library element. Tell the owner before changing it."
+msgstr ""
+
+#: includes/abilities/avada.php:209
 msgid "Only with include_structure. ok: the outline is complete. unparseable: the shortcodes could not be read safely (avada-replace-text refuses this page too) and no structure is returned. truncated: only the first 2,000 elements are listed."
 msgstr ""
 
-#: includes/abilities/avada.php:156
+#: includes/abilities/avada.php:213
 msgid "Only with include_structure, when structure_status is ok or truncated. A global_id means the element shows a library item: its text lives in that item, not on this page."
 msgstr ""
 
-#: includes/abilities/avada.php:278
-#: includes/abilities/posts.php:1472
-#: includes/abilities/wpbakery.php:226
-msgid "ID of the post to edit."
+#: includes/abilities/avada.php:226
+#: includes/abilities/wpbakery.php:134
+msgid "First 16 hex characters of the SHA-256 of the element's stored source, children included. A later element write names the element by index, tag and this fingerprint."
 msgstr ""
 
-#: includes/abilities/avada.php:283
-#: includes/abilities/posts.php:1477
-#: includes/abilities/wpbakery.php:231
-msgid "Literal text to find in the post content. Matched as-is, not as a regular expression."
+#: includes/abilities/avada.php:230
+msgid "The attributes as Avada reads them: the entities its settings dialog writes turned back into characters, and a value Avada stores base64 encoded decoded."
 msgstr ""
 
-#: includes/abilities/avada.php:287
-#: includes/abilities/posts.php:1481
-#: includes/abilities/wpbakery.php:235
-msgid "Literal text to substitute for every match of search. Sanitized the same way as a full content update."
+#: includes/abilities/avada.php:234
+msgid "Only on an element with no child element: its inner content as stored, decoded for a code block that Avada stores base64 encoded."
 msgstr ""
 
-#: includes/abilities/avada.php:528
+#: includes/abilities/avada.php:241
+#: includes/abilities/wpbakery.php:149
+msgid "Only with include_structure: first 16 hex characters of the SHA-256 of the whole stored content."
+msgstr ""
+
+#: includes/abilities/avada.php:245
+msgid "Only with include_page_options: the page CSS as stored."
+msgstr ""
+
+#: includes/abilities/avada.php:249
+msgid "Only with include_page_options: the stored page options whose ids are on Avada's fixed list of layout, title bar, sidebar, slider, header, footer, off canvas, form appearance, steps and confirmation, SEO and template settings. Form notification, submission and privacy settings and code fields are never returned. An option not stored is absent and Avada's default applies."
+msgstr ""
+
+#: includes/abilities/avada.php:284
+msgid "Page options can be read only while the Avada theme is active."
+msgstr ""
+
+#: includes/abilities/avada.php:315
+#: includes/abilities/avada.php:1209
 msgid "This post is not owned by Avada/Fusion Builder."
 msgstr ""
 
-#: includes/abilities/avada.php:551
+#: includes/abilities/avada.php:510
+msgid "every page that uses this section"
+msgstr ""
+
+#: includes/abilities/avada.php:513
+msgid "every page that shows this global element"
+msgstr ""
+
+#: includes/abilities/avada.php:958
+#: includes/abilities/posts.php:1472
+#: includes/abilities/wpbakery.php:548
+msgid "ID of the post to edit."
+msgstr ""
+
+#: includes/abilities/avada.php:963
+#: includes/abilities/posts.php:1477
+#: includes/abilities/wpbakery.php:553
+msgid "Literal text to find in the post content. Matched as-is, not as a regular expression."
+msgstr ""
+
+#: includes/abilities/avada.php:967
+#: includes/abilities/posts.php:1481
+#: includes/abilities/wpbakery.php:557
+msgid "Literal text to substitute for every match of search. Sanitized the same way as a full content update."
+msgstr ""
+
+#: includes/abilities/avada.php:1232
 msgid "That replacement would change the Fusion Builder shortcode structure rather than its text. Choose a search term that appears in plain text between or inside elements, not one that would alter a shortcode tag, its self-closing form, or an attribute. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada.php:580
+#: includes/abilities/avada.php:1270
 #: includes/abilities/posts.php:1852
-#: includes/abilities/wpbakery.php:356
+#: includes/abilities/wpbakery.php:683
 msgid "The replacement could not be confirmed as saved."
 msgstr ""
 
-#: includes/abilities/avada.php:615
+#: includes/abilities/avada.php:1316
 msgid "When false, each layout is returned without its conditions."
 msgstr ""
 
-#: includes/abilities/avada.php:630
+#: includes/abilities/avada.php:1331
 msgid "The layout post id, or \"global\" for the Global Layout."
 msgstr ""
 
-#: includes/abilities/avada.php:636
+#: includes/abilities/avada.php:1337
 msgid "Position in the order Avada checks layouts, from 0. Avada checks them all and uses the last layout whose conditions match; the Global Layout applies only when none match."
 msgstr ""
 
-#: includes/abilities/avada.php:641
+#: includes/abilities/avada.php:1342
 msgid "unparseable: Avada cannot read this layout's stored data, so no sections or conditions are returned for it."
 msgstr ""
 
-#: includes/abilities/avada.php:645
+#: includes/abilities/avada.php:1346
 msgid "Keyed by section type (header, page_title_bar, content, footer). Only when parse_status is ok."
 msgstr ""
 
-#: includes/abilities/avada.php:650
+#: includes/abilities/avada.php:1351
 msgid "The stored conditions, unchanged: mode (include or exclude), type, the value under the key named by type, and parent for a child condition. Only when parse_status is ok and include_conditions is true."
 msgstr ""
 
-#: includes/abilities/avada.php:740
+#: includes/abilities/avada.php:1441
 msgid "Global Layout"
 msgstr ""
 
-#: includes/abilities/avada.php:829
+#: includes/abilities/avada.php:1530
 msgid "Only these options. Omit for the whole list."
 msgstr ""
 
-#: includes/abilities/avada.php:840
+#: includes/abilities/avada.php:1541
 msgid "Option key to its stored value, unchanged."
 msgstr ""
 
-#: includes/abilities/avada.php:845
+#: includes/abilities/avada.php:1546
 msgid "Requested keys with no stored value. Avada's built-in default applies to them."
 msgstr ""
 
-#: includes/abilities/avada.php:875
+#: includes/abilities/avada.php:1576
 msgid "The Avada theme is not active, so there are no Avada Global Options to read."
 msgstr ""
 
-#: includes/abilities/avada.php:884
+#: includes/abilities/avada.php:1586
+msgid "Avada has not stored its Global Options yet. Open Avada > Options in wp-admin once, then try again."
+msgstr ""
+
+#: includes/abilities/avada.php:1593
 msgid "The Avada Global Options could not be read."
 msgstr ""
 
-#: includes/abilities/avada.php:922
+#: includes/abilities/avada.php:1631
 msgid "Number of items per page, clamped to the 1-100 range regardless of the value requested. Defaults to 20 when omitted."
 msgstr ""
 
-#: includes/abilities/avada.php:930
+#: includes/abilities/avada.php:1639
 msgid "Only one library category, or templates for full-page templates. Defaults to all."
 msgstr ""
 
-#: includes/abilities/avada.php:934
+#: includes/abilities/avada.php:1643
 msgid "Free-text search using WordPress's normal post search, matched against the item's title and content."
 msgstr ""
 
-#: includes/abilities/avada.php:939
-msgid "When true, each item also carries content, its raw Fusion Builder markup, unrendered."
+#: includes/abilities/avada.php:1648
+msgid "When true, each item also carries content, its raw Fusion Builder markup, unrendered. A global item is listed without its content unless the user can edit private posts."
 msgstr ""
 
 #: includes/abilities/blocks.php:32
@@ -536,7 +1077,7 @@ msgid "Delete block"
 msgstr ""
 
 #: includes/abilities/blocks.php:81
-#: includes/admin/disclosures.php:166
+#: includes/admin/disclosures.php:170
 msgid "Moves a reusable block to the Trash, where you can restore it. Never a permanent delete. Requires delete access to that block."
 msgstr ""
 
@@ -1061,7 +1602,7 @@ msgid "Update menu"
 msgstr ""
 
 #: includes/abilities/menus.php:77
-#: includes/admin/disclosures.php:141
+#: includes/admin/disclosures.php:145
 msgid "Renames a navigation menu by id. Requires the edit-theme-options capability."
 msgstr ""
 
@@ -1722,7 +2263,7 @@ msgstr ""
 #: includes/abilities/posts.php:864
 #: includes/abilities/tec/events.php:233
 #: includes/abilities/tec/_shared.php:247
-#: includes/helpers.php:2105
+#: includes/helpers.php:2119
 msgid "Unsupported or unauthorized post status."
 msgstr ""
 
@@ -1968,7 +2509,7 @@ msgstr ""
 #. translators: %s: page builder names, for example Elementor and Divi.
 #: includes/abilities/revisions.php:46
 #, php-format
-msgid "Restore a post to one of its revisions. The current state is first saved as a fresh revision, so the restore is reversible. Refused when revisions are disabled for the post, since the current state could not be preserved and the restore would be irreversible, or when the post is owned by a foreign page builder (%s), since the restore would either have no visible effect or corrupt its own stored markup."
+msgid "Restore a post to one of its revisions. The current state is first saved as a fresh revision, so the restore is reversible. Refused when revisions are disabled for the post, since the current state could not be preserved and the restore would be irreversible. Also refused when the post is owned by a page builder (%s), since the restore would either have no visible effect or corrupt the builder's stored markup, except an Avada or WPBakery page while that builder is active: those keep the whole layout in the post content. An Avada or WPBakery restore, including one of a builder's own content types, is refused when saving the revision as this user would change it or the current page, for example by removing an element or an embed the user may not keep. So is a revision made with the other builder, for example a WPBakery revision of a page Avada owns now. After a WPBakery restore the page's generated CSS is rebuilt; if that fails the tool says the CSS may be stale."
 msgstr ""
 
 #: includes/abilities/revisions.php:55
@@ -1988,7 +2529,7 @@ msgid "Number of revisions per page, clamped to the 1-50 range regardless of the
 msgstr ""
 
 #: includes/abilities/revisions.php:188
-#: includes/abilities/revisions.php:412
+#: includes/abilities/revisions.php:504
 msgid "ID of the parent post. The caller must be able to edit it, and the revision must genuinely belong to it."
 msgstr ""
 
@@ -2012,15 +2553,23 @@ msgstr ""
 msgid "ID of the revision to restore the post to. The post's current state is saved as a fresh revision first, so this restore is itself reversible."
 msgstr ""
 
-#: includes/abilities/revisions.php:366
+#: includes/abilities/revisions.php:370
 msgid "Revisions are disabled for this post, so the current state cannot be saved before restoring and the restore would be irreversible. Refusing. Enable revisions for this post type to restore."
 msgstr ""
 
-#: includes/abilities/revisions.php:385
+#: includes/abilities/revisions.php:396
 msgid "The restore ran, but the post does not match the revision afterwards, so it could not be confirmed. Read the post to check its current state."
 msgstr ""
 
-#: includes/abilities/revisions.php:417
+#: includes/abilities/revisions.php:403
+msgid "The revision was restored, but WPBakery could not rebuild the page's generated CSS, so the page may look out of date until it is saved again in WPBakery."
+msgstr ""
+
+#: includes/abilities/revisions.php:474
+msgid "This revision was made with a different page builder than the one that owns the page now, so restoring it would leave content the current builder cannot edit. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/revisions.php:509
 msgid "ID of the revision to permanently delete from the post's history. This cannot be undone; the live post itself is never changed."
 msgstr ""
 
@@ -2753,7 +3302,7 @@ msgid "Update template"
 msgstr ""
 
 #: includes/abilities/themes.php:78
-#: includes/admin/disclosures.php:145
+#: includes/admin/disclosures.php:149
 msgid "Updates a database block template by id. Its markup is sanitized, and theme-file templates cannot be edited. Requires the edit-theme-options capability."
 msgstr ""
 
@@ -3005,7 +3554,7 @@ msgid "List WooCommerce coupons"
 msgstr ""
 
 #: includes/abilities/woocommerce/coupons.php:61
-#: includes/admin/disclosures.php:183
+#: includes/admin/disclosures.php:187
 msgid "Lists WooCommerce coupons with their id, code, amount, discount type, expiry date, and usage count, plus a total. Requires the manage-WooCommerce capability."
 msgstr ""
 
@@ -3014,7 +3563,7 @@ msgid "Get WooCommerce coupon"
 msgstr ""
 
 #: includes/abilities/woocommerce/coupons.php:70
-#: includes/admin/disclosures.php:184
+#: includes/admin/disclosures.php:188
 msgid "Reads one WooCommerce coupon by id: code, amount, discount type, expiry, usage limits, spend limits, product and email restrictions, and other config. Requires the manage-WooCommerce capability."
 msgstr ""
 
@@ -3023,7 +3572,7 @@ msgid "Create WooCommerce coupon"
 msgstr ""
 
 #: includes/abilities/woocommerce/coupons.php:79
-#: includes/admin/disclosures.php:185
+#: includes/admin/disclosures.php:189
 msgid "Creates a WooCommerce coupon from a code and discount type, with optional amount, usage limits, spend limits, product restrictions, and email restrictions. Returns the full coupon shape. The coupon is published and usable immediately. Requires the manage-WooCommerce capability."
 msgstr ""
 
@@ -3032,7 +3581,7 @@ msgid "Update WooCommerce coupon"
 msgstr ""
 
 #: includes/abilities/woocommerce/coupons.php:88
-#: includes/admin/disclosures.php:186
+#: includes/admin/disclosures.php:190
 msgid "Updates a WooCommerce coupon by id, changing only the fields you send. An empty request body is a no-op success. Returns the full coupon shape. Requires the manage-WooCommerce capability."
 msgstr ""
 
@@ -3351,7 +3900,7 @@ msgid "Create WooCommerce order note"
 msgstr ""
 
 #: includes/abilities/woocommerce/orders.php:122
-#: includes/admin/disclosures.php:159
+#: includes/admin/disclosures.php:163
 msgid "Adds a note to a WooCommerce order by order id. Optionally marks the note as customer-facing so it appears in the customer's account. Requires the manage-WooCommerce capability."
 msgstr ""
 
@@ -3967,7 +4516,7 @@ msgid "Get WooCommerce tax rate"
 msgstr ""
 
 #: includes/abilities/woocommerce/tax.php:70
-#: includes/admin/disclosures.php:196
+#: includes/admin/disclosures.php:200
 msgid "Reads one WooCommerce tax rate by id, returning id, country, state, rate, name, priority, compound flag, shipping flag, order, and class slug. Requires the manage-WooCommerce capability."
 msgstr ""
 
@@ -3984,7 +4533,7 @@ msgid "Update WooCommerce tax rate"
 msgstr ""
 
 #: includes/abilities/woocommerce/tax.php:88
-#: includes/admin/disclosures.php:198
+#: includes/admin/disclosures.php:202
 msgid "Updates a WooCommerce tax rate by id, changing only the fields you send. An empty body (only id) is a no-op success. Returns the updated rate shape. Requires the manage-WooCommerce capability."
 msgstr ""
 
@@ -3993,7 +4542,7 @@ msgid "List WooCommerce tax classes"
 msgstr ""
 
 #: includes/abilities/woocommerce/tax.php:98
-#: includes/admin/disclosures.php:199
+#: includes/admin/disclosures.php:203
 msgid "Lists all WooCommerce tax classes including the Standard class, returning name and slug for each. Requires the manage-WooCommerce capability."
 msgstr ""
 
@@ -4002,7 +4551,7 @@ msgid "Create WooCommerce tax class"
 msgstr ""
 
 #: includes/abilities/woocommerce/tax.php:107
-#: includes/admin/disclosures.php:200
+#: includes/admin/disclosures.php:204
 msgid "Creates a WooCommerce tax class from a name, with an optional slug. Returns the new class shape. Requires the manage-WooCommerce capability."
 msgstr ""
 
@@ -4322,12 +4871,278 @@ msgstr ""
 msgid "Billing phone number. Shipping has no phone field; the closed shipping schema rejects one if sent there."
 msgstr ""
 
+#: includes/abilities/wpbakery-elements.php:55
+msgid "List WPBakery elements"
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:56
+msgid "Lists the elements WPBakery Page Builder has on this site, add-ons included, from WPBakery's own element map: tag, name, category, whether it holds other elements, the elements it allows inside it and the ones it may sit in, and whether it is deprecated. With tag it returns one element with its settings: name, kind, label, default, the allowed values of a choice (at most 100), whether wpbakery-update-element can write it, and needs, which is unfiltered_html for Design Options and for settings that can carry script or raw HTML. With context grid it lists the Grid Builder's elements too. An element an add-on maps only inside wp-admin is not listed. Requires the edit_posts capability; WPBakery's Role Manager settings are not applied. Only while WPBakery Page Builder is active."
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:63
+msgid "Update a WPBakery element"
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:64
+msgid "Changes the settings or the inner text of one element on a WPBakery page or Grid Builder template, named by its index and by the tag and fingerprint wpbakery-get-page-content returned with include_structure. set_atts sets settings, each value in the form wpbakery-list-elements gives as its kind (a link as url, title, target and rel; an image as an attachment id; Design Options as fields such as margin_top, never as CSS); remove_atts returns settings to their default; text replaces the inner content of an element that has a content setting and no child elements. Only a user who may post unfiltered HTML can put square brackets, percent-encoded brackets or data-* attributes in body text, and even then text that would add an element is refused. Only the element's opening tag and, for text, its inner content change; every other byte of the page stays as it was. Refused: a stale index or fingerprint, a setting the element does not have or that cannot be written, a value its kind does not accept, already encoded values, and any change that would add or remove an element. Design Options and settings that can carry script or raw HTML need a user who may post unfiltered HTML. A save that would change other content for this user is refused, and nothing is saved. When a revision is kept, restore_revision_id brings the page back through restore-revision; the response also returns the element's new fingerprint and the page fingerprint. The outline stops at 2,000 elements. Not undoable from this plugin's change history. Requires edit access to the post; WPBakery's Role Manager settings are not applied, though its own save filter still runs. Only while WPBakery Page Builder is active."
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:71
+msgid "Insert a WPBakery element"
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:72
+msgid "Adds an element with its children to a WPBakery page or Grid Builder template, before or after an element from the outline of wpbakery-get-page-content or as its first or last child; element takes tag, atts in the input form of each kind from wpbakery-list-elements, text and children. WPBakery's own nesting rules apply: the top level takes rows and sections, a row takes columns, a column takes content elements or an inner row. At most 50 elements, nested at most 6 deep. On an empty post with no builder, leave out the anchor to start the page; this one check follows WPBakery's own setting for which post types its editor is on for. Raw HTML, raw JS, maps, custom onclick settings and Design Options need a user who may post unfiltered HTML, and only such a user can put square brackets, percent-encoded brackets or data-* attributes in body text. Requires page_fingerprint from the last read or write and returns the new one; a changed page is refused and nothing is saved. Other indexes may move, so read the outline again before the next structural change. When a revision is kept, restore_revision_id brings the page back through restore-revision. The page's generated CSS is rebuilt. Not undoable from this plugin's change history. Requires edit access to the post; WPBakery's Role Manager settings are not applied, though its own save filter still runs. Only while WPBakery Page Builder is active."
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:79
+msgid "Move a WPBakery element"
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:80
+msgid "Moves one element, with everything inside it, on a WPBakery page or Grid Builder template to a new place named against another element from the outline of wpbakery-get-page-content: before or after it, or as its first or last child. The element's stored text moves byte for byte; nothing in it is rewritten. WPBakery's own nesting rules apply to the new place, and a move into the element's own children or one that leaves a row with no column is refused. Requires page_fingerprint from the last read or write and returns the new one; a changed page is refused and nothing is saved. A move to the place the element already has saves nothing and returns moved false. Other indexes may move, so read the outline again before the next structural change. When a revision is kept, restore_revision_id brings the page back through restore-revision. The page's generated CSS is rebuilt. Not undoable from this plugin's change history. Requires edit access to the post; WPBakery's Role Manager settings are not applied, though its own save filter still runs. Only while WPBakery Page Builder is active."
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:87
+msgid "Remove a WPBakery element"
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:88
+msgid "Removes one element, with everything inside it, from a WPBakery page or Grid Builder template, named by its index and by the tag and fingerprint from the outline of wpbakery-get-page-content. The fingerprint covers the whole element, so one that gained content since the read is refused. Refused when the post keeps no revisions (a Grid Builder template keeps none) or the site keeps only one, for the page's last row or section, and when a row would be left with no column. Requires page_fingerprint from the last read or write and returns the new one; a changed page is refused and nothing is saved. Other indexes may move, so read the outline again before the next structural change. restore_revision_id brings the page back through restore-revision. The page's generated CSS is rebuilt. Not undoable from this plugin's change history. Requires edit access to the post; WPBakery's Role Manager settings are not applied, though its own save filter still runs. Only while WPBakery Page Builder is active."
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:105
+msgid "WPBakery's element map is not available in this request, so its elements cannot be read or written here. Nothing was changed."
+msgstr ""
+
+#. translators: 1: the refusal, 2: the setting name.
+#: includes/abilities/wpbakery-elements.php:333
+#, php-format
+msgid "%1$s Setting: %2$s."
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:952
+msgid "page for the elements of a page (the default), grid to include the Grid Builder's elements for a grid template."
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:956
+msgid "One element's shortcode tag, such as vc_custom_heading. Returns that element with its settings."
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:985
+msgid "From the map: only, the elements allowed inside, and except, the ones refused. Both empty when the map sets no rule."
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:989
+msgid "From the map: only, the elements it may sit in, and except, the ones it may not. Both empty when the map sets no rule."
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:994
+msgid "Only with tag. kind is how wpbakery-update-element takes the value; writable says whether it can; needs is unfiltered_html for Design Options and for settings that can carry script or raw HTML."
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:1002
+msgid "Map entries and settings left out because the map could not resolve them or they had no setting name."
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:1175
+#: includes/abilities/wpbakery-elements.php:2080
+msgid "ID of the page, post or Grid Builder template."
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:1180
+#: includes/abilities/wpbakery-elements.php:2092
+msgid "The element's index in the outline from wpbakery-get-page-content with include_structure."
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:1197
+msgid "Setting name to value, each value in the input form of its kind from wpbakery-list-elements."
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:1202
+msgid "Setting names to remove, which returns them to the element's default."
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:1206
+msgid "New inner content for an element with a content setting and no child elements, such as a text block. HTML is filtered as in a post; the code of a raw HTML or raw JS element needs unfiltered HTML."
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:1300
+#: includes/abilities/wpbakery-elements.php:2051
+#: includes/abilities/wpbakery-site.php:599
+msgid "This post is not a WPBakery page. Edit a page built with another builder in that builder. Nothing was changed."
+msgstr ""
+
+#. translators: 1: the parent tag, 2: the child tag.
+#: includes/abilities/wpbakery-elements.php:1534
+#, php-format
+msgid "WPBakery's element map on this site does not list %1$s outside its editor, so its nesting rule cannot be read and nothing can be placed inside it with this tool. Use WPBakery's editor for this container. Nothing was changed. Child: %2$s."
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:1614
+msgid "A row must keep at least one column, so this change would break the layout. Remove or move the whole row instead. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:1812
+msgid "Text in this template holds HTML that WordPress removes for a user who may not post unfiltered HTML, such as a script, an event attribute or a link protocol it does not allow. Remove it from the template, or ask such a user to insert it. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:1919
+msgid "WPBakery's editor is not switched on for this post type for this user, so a WPBakery page cannot be started here. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:2085
+msgid "The page fingerprint from the last wpbakery-get-page-content read or the last write's response. A page that changed since is refused."
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:2106
+msgid "The tag and fingerprint the outline returned for that index."
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:2137
+msgid "Setting name to value, each in the input form of its kind from wpbakery-list-elements."
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:2141
+msgid "Inner content for an element with a content setting and no children, such as a text block."
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:2430
+msgid "This site keeps only 1 revision per post (WP_POST_REVISIONS or the wp_revisions_to_keep filter), so WordPress would delete the revision that brings the removed element back during the same save. Raise the limit to 2 or more, or remove the element in WPBakery's editor. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:53
+msgid "List WPBakery templates"
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:54
+msgid "Lists the templates saved in WPBakery Page Builder's own template library on this site: id, source (saved) and name, plus total. With include_content each template's stored shortcode text comes back byte for byte; for a user who may not post unfiltered HTML, a template holding raw HTML, raw JS, a map, a custom onclick setting or Design Options comes back without its content and with content_withheld true. While the Templatera add-on is active, WPBakery's editor shows Templatera's own templates instead, and so does this list: its published template posts (source templatera, id the post id) that the user can edit and whose own role list allows the user's first role, and with for_post_id only those whose own post type list allows that post; templatera_active says which list this is. Requires the edit_posts capability; WPBakery's Role Manager settings are not applied. Only while WPBakery Page Builder is active."
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:61
+msgid "Insert a WPBakery template"
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:62
+msgid "Copies a template, named by its id and source from wpbakery-list-templates (saved, from WPBakery's own library, or templatera, a published Templatera template post the user can edit and may use on this post by the template's own role and post type lists, only while Templatera is active), into a WPBakery page or Grid Builder template, before or after an element from the outline of wpbakery-get-page-content or as its first or last child; on an empty post with no builder, leave out the anchor to start the page, where this one check follows WPBakery's own setting for which post types its editor is on for. The template's stored text is copied byte for byte; with mode reference (Templatera only) one Templatera element is placed instead, which shows the template's current content and gets the same unfiltered HTML checks on that content as a copy. A Templatera template it shows by reference, at any depth, gets the same access check and content checks; a reference loop is refused. WPBakery's own nesting rules apply to its top level, and a template may hold at most 50 elements, nested at most 6 deep. A template holding raw HTML, raw JS, a map, a custom onclick setting or Design Options needs a user who may post unfiltered HTML, and for any other user its text may hold no square bracket, percent-encoded bracket, data-* attribute, unfinished tag or HTML that WordPress would remove. Requires page_fingerprint from the last read or write and returns the new one; a changed page is refused and nothing is saved. Other indexes may move, so read the outline again before the next structural change. When a revision is kept, restore_revision_id brings the page back through restore-revision. The page's generated CSS is rebuilt. Not undoable from this plugin's change history. Requires edit access to the post; WPBakery's Role Manager settings are not applied, though its own save filter still runs. Only while WPBakery Page Builder is active."
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:69
+msgid "Update WPBakery page code"
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:70
+msgid "Sets the custom CSS, header JS and footer JS of one WPBakery page, the fields of the page settings in WPBakery's editor; give at least one of custom_css, custom_js_header and custom_js_footer. Each field given replaces the page's existing code for that field, and an empty string removes it; previous returns the old value of every field that changed, which is the way back. CSS that holds markup is refused, as WordPress refuses it in custom CSS, and so is a \"<\" followed by another character, such as a <= range query, where WPBakery cuts the CSS off when it prints it; any other CSS is stored exactly as sent. JS containing a closing script tag is refused, and the JS fields are refused when WPBakery's own Role Manager would not save custom JS for this user. A field equal to what is stored is left alone and not listed in changed. No revision is kept, and the change is not undoable from this plugin's change history. Requires edit access to the post and a user who may post unfiltered HTML. Only while WPBakery Page Builder is active."
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:77
+msgid "Get WPBakery settings"
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:78
+msgid "Reads a fixed list of WPBakery Page Builder's site-wide settings from its settings screen: responsive elements, Google Fonts subsets, local Google Fonts, keyboard shortcuts, CSS and JS loading, the Gutenberg switch, auto save, Design Options use, and the global custom CSS; the global header and footer JS only for a user who may post unfiltered HTML. Values come back as stored, and listed settings with no stored value are in not_set. Also returns the post types WPBakery's editor is on for and WPBakery's version. The license code and every other setting are never returned. Requires a user who can manage site options (manage_options). Only while WPBakery Page Builder is active."
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:85
+msgid "Update WPBakery settings"
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:86
+msgid "Overwrites site-wide WPBakery Page Builder settings from wpbakery-get-settings: not_responsive_css, local_google_fonts and shortcuts (true or false), google_fonts_subsets (a list), css_loading and js_loading (hybrid, optimized or legacy), and the global custom_css, custom_js_header and custom_js_footer, which also need a user who may post unfiltered HTML. Each value goes through WPBakery's own sanitize callback for that field, and a value it would change is refused. The global custom_css is the exception: it is refused when it holds markup or a \"<\" followed by another character, where WPBakery cuts custom.css off, and otherwise stored exactly as sent. A setting whose callback cannot be found, and the Gutenberg switch, auto save and Design Options use, are not writable. The change applies to the whole site at once; previous returns the old value of every setting that changed, null where none was stored, which is the way back. A value equal to what is stored is left alone. Writing custom_css rebuilds WPBakery's custom.css file, and the call reports an error when the file does not match afterwards. Not undoable from this plugin's change history. Requires a user who can manage site options (manage_options). Only while WPBakery Page Builder is active."
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:220
+msgid "Also return each template's stored shortcode text."
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:225
+msgid "With Templatera active: list only the templates Templatera offers on this post, by their post type lists. Needs edit access to the post."
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:230
+msgid "Number of templates per page, clamped to the 1-50 range. Defaults to 20 when omitted."
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:252
+msgid "Only with include_content: the stored shortcode text, unchanged."
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:256
+msgid "Present and true when the template holds raw HTML, raw JS, a map, a custom onclick setting or Design Options and the user may not post unfiltered HTML."
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:337
+msgid "The template's id from wpbakery-list-templates."
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:343
+msgid "saved, a template in WPBakery's own library; templatera, a Templatera template post, by the id wpbakery-list-templates gives while Templatera is active."
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:349
+msgid "copy (the default) puts the template's own elements on the page; reference, only with source templatera, puts one Templatera element that shows the template's current content, so later edits to the template show on the page."
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:383
+msgid "The Templatera add-on is not active, so there is no Templatera template to insert. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:442
+msgid "mode reference works only with source templatera: a saved WPBakery template has no element that shows it by reference. Use mode copy. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:520
+msgid "ID of the WPBakery page or post."
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:528
+msgid "JS printed in the page head, replacing what is stored; an empty string removes it."
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:532
+msgid "JS printed before the page's closing body tag, replacing what is stored; an empty string removes it."
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:548
+msgid "The old value of each changed field, an empty string where there was none."
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:617
+msgid "Give at least one of custom_css, custom_js_header and custom_js_footer. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:631
+msgid "WPBakery's Role Manager does not let this user save custom JS, so WPBakery's own save would skip it. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:732
+msgid "Setting key to its stored value, unchanged."
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:737
+msgid "Listed settings with no stored value; WPBakery's default applies."
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:920
+msgid "Setting key to its new value, keys from wpbakery-get-settings."
+msgstr ""
+
+#. translators: %s: the setting key.
+#: includes/abilities/wpbakery-site.php:1036
+#, php-format
+msgid "The WPBakery setting %s could not be saved. Settings listed in changed were saved before it."
+msgstr ""
+
+#: includes/abilities/wpbakery-site.php:1051
+msgid "The global CSS was saved, but WPBakery's custom.css file does not match it, so the site may still show the old CSS. Check that the uploads folder is writable, then save the CSS again."
+msgstr ""
+
 #: includes/abilities/wpbakery.php:59
 msgid "Get WPBakery page content"
 msgstr ""
 
 #: includes/abilities/wpbakery.php:60
-msgid "Reads the raw post content of a WPBakery page, unchanged. Shortcodes come back exactly as stored, never rendered or stripped, and attribute values keep the form WPBakery stores them in, including its escaped brackets and quotes and base64 encoded values such as raw HTML, so search for text as it is stored. Also returns is_wpbakery_owned, true when WPBakery owns the page. With include_structure it also returns an outline of the shortcode elements (tag, nesting depth, attributes) to find the text block that holds the text before calling wpbakery-replace-text. Requires edit access to the post; WPBakery's Role Manager settings are not applied. Only while WPBakery Page Builder is active."
+msgid "Reads the raw post content of a WPBakery page, unchanged. Shortcodes come back exactly as stored, never rendered or stripped, and attribute values keep the form WPBakery stores them in, including its escaped brackets and quotes and base64 encoded values such as raw HTML, so search for text as it is stored. Also returns is_wpbakery_owned, true when WPBakery owns the page or the post is a Grid Builder template. With include_structure it also returns an outline of the shortcode elements (tag, nesting depth, attributes as stored and decoded the way WPBakery reads them, the inner text of an element with no child element, decoded for raw HTML and raw JS, and a fingerprint per element) plus a page fingerprint, to find the text block that holds the text before calling wpbakery-replace-text. The outline stops at 2,000 elements. With include_page_settings it also returns the page custom CSS and the editor status, and the page custom JS only to users who may post unfiltered HTML. Requires edit access to the post; WPBakery's Role Manager settings are not applied. Only while WPBakery Page Builder is active."
 msgstr ""
 
 #: includes/abilities/wpbakery.php:67
@@ -4335,7 +5150,7 @@ msgid "Replace text in a WPBakery page"
 msgstr ""
 
 #: includes/abilities/wpbakery.php:68
-msgid "Replaces literal text within a WPBakery page while requiring the shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee). Text that WPBakery keeps in an element's settings, such as a heading or a button label, cannot be changed here and is refused, as is any replacement that would add, remove or alter an element. If saving the page as this user would remove or change elements, or change other content on the page, the call is refused and nothing is saved. Not undoable from this plugin's change history; WordPress keeps a revision when revisions are on. Requires edit access to the post; WPBakery's Role Manager settings are not applied. Only while WPBakery Page Builder is active."
+msgid "Replaces literal text within a WPBakery page while requiring the shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee). Text that WPBakery keeps in an element's settings, such as a heading or a button label, cannot be changed here and is refused, as is any replacement that would add, remove or alter an element. Only a user who may post unfiltered HTML can put square brackets, percent-encoded brackets or data-* attributes in body text, and even then text that would add an element is refused. If saving the page as this user would remove or change elements, or change other content on the page, the call is refused and nothing is saved. Not undoable from this plugin's change history; WordPress keeps a revision when revisions are on. Requires edit access to the post; WPBakery's Role Manager settings are not applied. Only while WPBakery Page Builder is active."
 msgstr ""
 
 #: includes/abilities/wpbakery.php:93
@@ -4343,34 +5158,62 @@ msgid "ID of the post or page to read. The current user must have edit access to
 msgstr ""
 
 #: includes/abilities/wpbakery.php:98
-msgid "When true, also returns structure: the shortcode elements in document order with their nesting depth and attributes, and structure_status. Use it to find the element that holds the text you want to change before calling wpbakery-replace-text."
+msgid "When true, also returns structure: the shortcode elements in document order with their nesting depth, attributes, decoded attributes, inner text and fingerprint, plus structure_status and page_fingerprint. Use it to find the element that holds the text you want to change before calling wpbakery-replace-text."
 msgstr ""
 
-#: includes/abilities/wpbakery.php:113
+#: includes/abilities/wpbakery.php:103
+msgid "When true, also returns page_settings: the page custom CSS, the editor status and, for a user who may post unfiltered HTML, the page custom JS for the header and the footer."
+msgstr ""
+
+#: includes/abilities/wpbakery.php:118
 msgid "Only with include_structure. ok: the outline is complete. unparseable: the shortcodes could not be read safely (wpbakery-replace-text refuses this page too) and no structure is returned. truncated: only the first 2,000 elements are listed."
 msgstr ""
 
-#: includes/abilities/wpbakery.php:117
+#: includes/abilities/wpbakery.php:122
 msgid "Only with include_structure, when structure_status is ok or truncated. Attribute values are shown as WPBakery stores them."
 msgstr ""
 
-#: includes/abilities/wpbakery.php:284
+#: includes/abilities/wpbakery.php:138
+msgid "The attributes as WPBakery reads them: escaped quotes and brackets restored, a link split into url, title, target and rel, a param group as rows, and a #E-8_ value decoded."
+msgstr ""
+
+#: includes/abilities/wpbakery.php:142
+msgid "Only on an element with no child element: its inner content as stored. For raw HTML and raw JS elements, the decoded code; absent when the stored value does not decode."
+msgstr ""
+
+#: includes/abilities/wpbakery.php:153
+msgid "Only with include_page_settings. custom_js_header and custom_js_footer are present only for a user who may post unfiltered HTML."
+msgstr ""
+
+#: includes/abilities/wpbakery.php:443
+msgid "Square brackets in this text need a user who may post unfiltered HTML, because WPBakery can turn them into an element the next time the page is saved in its editor. Remove the brackets, or ask such a user to make the edit. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/wpbakery.php:451
+msgid "A percent-encoded square bracket in this text needs a user who may post unfiltered HTML, because WordPress's editor can decode it into an element the next time the page is saved in WPBakery. Remove it, or ask such a user to make the edit. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/wpbakery.php:462
+msgid "A data-* attribute in this text needs a user who may post unfiltered HTML, because WordPress's editor can turn one into page text the next time the page is saved in WPBakery. Remove the attribute, or ask such a user to make the edit. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/wpbakery.php:606
 msgid "This post is not a WPBakery page. Use replace-in-post for an ordinary post, and edit a page built with another builder in that builder."
 msgstr ""
 
-#: includes/abilities/wpbakery.php:308
+#: includes/abilities/wpbakery.php:635
 msgid "This page uses more distinct shortcode names than can be checked safely, so its text cannot be replaced here. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/wpbakery.php:316
+#: includes/abilities/wpbakery.php:643
 msgid "That replacement would change a WPBakery element rather than the text between elements. WPBakery keeps heading text, button labels and other element settings inside the element itself, so change that text in WPBakery. Choose a search term that appears only in plain text, such as a text block. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/wpbakery.php:324
+#: includes/abilities/wpbakery.php:651
 msgid "Saving this page as the current user would change content outside the requested text, for example by removing embedded HTML or WPBakery elements this user is not allowed to keep. Ask a user with fuller rights to make the edit, or make it in WPBakery. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/wpbakery.php:334
+#: includes/abilities/wpbakery.php:661
 msgid "Saving the new text would remove or change WPBakery elements on this page, so the replacement was not saved. Nothing was changed."
 msgstr ""
 
@@ -4657,7 +5500,7 @@ msgid "The allowlist could not be saved. Please try again."
 msgstr ""
 
 #: includes/admin/allowlist.php:270
-#: includes/admin/settings.php:1182
+#: includes/admin/settings.php:1183
 msgid "Ability allowlist"
 msgstr ""
 
@@ -4744,7 +5587,7 @@ msgstr ""
 #: includes/admin/allowlist.php:372
 #: includes/admin/page.php:359
 #: includes/audit/log-query.php:499
-#: includes/server.php:1670
+#: includes/server.php:1695
 #, php-format
 msgid "%1$s (%2$s)"
 msgstr ""
@@ -4786,7 +5629,7 @@ msgid "See more about tools from other plugins"
 msgstr ""
 
 #: includes/admin/bridge-directory.php:109
-#: includes/admin/integrations.php:440
+#: includes/admin/integrations.php:444
 #: includes/admin/page.php:2223
 msgid "Save changes"
 msgstr ""
@@ -4893,7 +5736,7 @@ msgid "Disable all"
 msgstr ""
 
 #: includes/admin/bridge-directory.php:599
-#: includes/admin/integrations.php:573
+#: includes/admin/integrations.php:598
 #: includes/admin/page.php:2257
 msgid "Enable all reads"
 msgstr ""
@@ -4926,7 +5769,7 @@ msgid "Locked"
 msgstr ""
 
 #: includes/admin/bridge-directory.php:842
-#: includes/admin/integrations.php:649
+#: includes/admin/integrations.php:674
 #: includes/admin/page.php:2359
 msgid "high-risk"
 msgstr ""
@@ -5313,7 +6156,7 @@ msgstr ""
 
 #: includes/admin/connection-cards.php:188
 #: includes/admin/connection-cards.php:237
-#: includes/admin/integrations.php:455
+#: includes/admin/integrations.php:459
 #: includes/admin/page.php:165
 #: includes/admin/page.php:199
 #: includes/admin/playbooks.php:76
@@ -6629,343 +7472,437 @@ msgstr ""
 msgid "Writes one allowlisted scalar meta value to a term you can edit. Only allowlisted keys; protected keys are blocked. The response returns the old value when it is plain text or a number."
 msgstr ""
 
-#: includes/admin/disclosures.php:136
-msgid "Restores a post to one of its revisions. The current state is saved as a fresh revision first, so the change is reversible. Refuses to run when revisions are disabled for the post, because that snapshot could not be taken."
+#. translators: %s: page builder names, for example Elementor and Divi.
+#: includes/admin/disclosures.php:138
+#, php-format
+msgid "Restores a post to one of its revisions. The current state is saved as a fresh revision first, so the change is reversible. Refuses to run when revisions are disabled for the post, because that snapshot could not be taken. Refuses a post owned by a page builder (%s), except an Avada or WPBakery page while that builder is active, and refuses even those when saving the revision as this user would change it."
 msgstr ""
 
-#: includes/admin/disclosures.php:137
+#: includes/admin/disclosures.php:141
 msgid "Edits a user's display name, name, or email. Changing a role needs the promote-users capability and never demotes the last administrator. Requires edit access to that user."
 msgstr ""
 
-#: includes/admin/disclosures.php:138
+#: includes/admin/disclosures.php:142
 msgid "Creates a reusable block. Its markup is sanitized, and the author is always the agent. Requires the edit-posts capability, and respects force-draft if you turned it on."
 msgstr ""
 
-#: includes/admin/disclosures.php:139
+#: includes/admin/disclosures.php:143
 msgid "Updates a reusable block's title or markup by id. The markup is sanitized. Requires edit access to that block."
 msgstr ""
 
-#: includes/admin/disclosures.php:140
+#: includes/admin/disclosures.php:144
 msgid "Creates a navigation menu. The menu is not attached to any theme location; that step is manual. On a block theme it is invisible on the front end until a human wires it into a template, since the core/navigation block reads from a separate mechanism this ability does not touch. Requires the edit-theme-options capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:142
+#: includes/admin/disclosures.php:146
 msgid "Adds an item (link) to a navigation menu. The URL is sanitized. Requires the edit-theme-options capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:143
+#: includes/admin/disclosures.php:147
 msgid "Updates a menu item's title, URL, parent item or position by id. A parent must be another item of the same menu, never the item itself or one of its sub-items. Requires the edit-theme-options capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:144
+#: includes/admin/disclosures.php:148
 msgid "Replaces the links of one block-theme navigation menu with a plain list of labels and URLs, up to three levels and 100 items. Everything else in that navigation is replaced too, and each link is saved without its own settings such as open in a new tab, rel, CSS classes or a binding to a page. An empty list is refused. URLs are checked and a page-builder-owned navigation is refused. This cannot be undone from the Changes tab; with revisions on, WordPress keeps the earlier version as a revision. Requires the edit-theme-options capability. Off by default."
 msgstr ""
 
-#: includes/admin/disclosures.php:146
+#: includes/admin/disclosures.php:150
 msgid "Writes a post's Yoast SEO fields to its post meta. URL fields are sanitized as URLs, and the robots directives are checked against what Yoast accepts before they are saved. Requires edit access to that post. The response returns each field's old value when it is plain text or a number."
 msgstr ""
 
-#: includes/admin/disclosures.php:147
+#: includes/admin/disclosures.php:151
 msgid "Writes a post's Rank Math SEO fields to its post meta. URL fields are sanitized as URLs, and robots is stored in the directive-array form Rank Math expects. Requires edit access to that post. The response returns each field's old value when it is plain text or a number."
 msgstr ""
 
-#: includes/admin/disclosures.php:148
+#: includes/admin/disclosures.php:152
 msgid "Writes a post's structured-data schema of a given type to Rank Math. The whole object is sanitized, top to bottom. Requires edit access to that post."
 msgstr ""
 
-#: includes/admin/disclosures.php:149
+#: includes/admin/disclosures.php:153
 msgid "Writes a post's SEO fields through All in One SEO's own data store, not post meta. URL fields are sanitized as URLs. Requires edit access to that post."
 msgstr ""
 
-#: includes/admin/disclosures.php:150
+#: includes/admin/disclosures.php:154
 msgid "Writes ACF field values on a post by field key. Each value is sanitized for its field type before it is saved. Requires edit access to that post."
 msgstr ""
 
-#: includes/admin/disclosures.php:151
+#: includes/admin/disclosures.php:155
 msgid "Writes ACF field values on a term by field key. Each value is sanitized for its field type. Requires edit access to that term."
 msgstr ""
 
-#: includes/admin/disclosures.php:152
+#: includes/admin/disclosures.php:156
 msgid "Writes ACF field values on a user by field key, each value sanitized for its field type. It only writes ACF fields, never the account's role or login. Requires edit access to that user."
 msgstr ""
 
-#: includes/admin/disclosures.php:153
+#: includes/admin/disclosures.php:157
 msgid "Creates a WooCommerce product from a name, plus optional type, status, description, prices, SKU, stock, categories, tags, images, and attributes. Requires the manage-WooCommerce capability, and respects force-draft if you turned it on."
 msgstr ""
 
-#: includes/admin/disclosures.php:154
+#: includes/admin/disclosures.php:158
 msgid "Updates a WooCommerce product by id, changing only the fields you send. It can also remove attributes, but never one a variation uses, and not at all on a product with more than 1,000 unpublished variations. Requires the manage-WooCommerce capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:155
+#: includes/admin/disclosures.php:159
 msgid "Creates a variation under a variable product (parent product id required) from optional status, description, prices, SKU, stock, image, and attribute values. Requires the manage-WooCommerce capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:156
+#: includes/admin/disclosures.php:160
 msgid "Updates a product variation by id, changing only the fields you send. Requires the manage-WooCommerce capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:157
+#: includes/admin/disclosures.php:161
 msgid "Creates a global WooCommerce product attribute taxonomy from a name, plus optional slug, type, sort order, and public-archives flag. Requires the manage-WooCommerce capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:158
+#: includes/admin/disclosures.php:162
 msgid "Updates a global product attribute taxonomy by id, changing only the fields you send. Requires the manage-WooCommerce capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:160
+#: includes/admin/disclosures.php:164
 msgid "Creates a refund on a WooCommerce order by order id. Accepts an amount, optional reason, and optional line-item breakdown. The refund reason is returned verbatim and may contain customer-entered text; it is returned under the Integrations security disclaimer. Requires the manage-WooCommerce capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:163
+#: includes/admin/disclosures.php:167
 msgid "Moves a post the agent can edit to the Trash, where you can restore it. Never a permanent delete. Reaches a page, product or event only while that type's own tool is on."
 msgstr ""
 
-#: includes/admin/disclosures.php:164
+#: includes/admin/disclosures.php:168
 msgid "Moves a page to the Trash, where you can restore it. Never a permanent delete."
 msgstr ""
 
-#: includes/admin/disclosures.php:165
+#: includes/admin/disclosures.php:169
 msgid "Removes an allowlisted meta key and all its values from a post the agent can edit. Only allowlisted keys. The response returns the old value when it is plain text or a number."
 msgstr ""
 
-#: includes/admin/disclosures.php:169
+#: includes/admin/disclosures.php:173
 msgid "Permanently removes one revision from a post's history. The live post is unchanged, but the deleted revision cannot be recovered. Requires edit access to the parent post."
 msgstr ""
 
-#: includes/admin/disclosures.php:170
+#: includes/admin/disclosures.php:174
 msgid "Permanently deletes an attachment: the file and its library entry are removed and cannot be recovered. Requires delete access to that attachment."
 msgstr ""
 
-#: includes/admin/disclosures.php:171
+#: includes/admin/disclosures.php:175
 msgid "Removes an allowlisted meta key and all its values from a term you can edit. While change history is on, the owner can revert it from the Changes tab. Only allowlisted keys. The response returns the old value when it is plain text or a number."
 msgstr ""
 
-#: includes/admin/disclosures.php:172
+#: includes/admin/disclosures.php:176
 msgid "Permanently deletes a comment. This bypasses the Trash and cannot be undone. Use moderate-comment to trash a comment recoverably instead. Requires edit access to that comment."
 msgstr ""
 
-#: includes/admin/disclosures.php:173
+#: includes/admin/disclosures.php:177
 msgid "Creates a new user with the site default role only (never an admin or a caller-chosen role). Requires the create-users capability. Off by default."
 msgstr ""
 
-#: includes/admin/disclosures.php:174
+#: includes/admin/disclosures.php:178
 msgid "Permanently deletes a user and reassigns their content to another user. Never deletes you or the last administrator. Requires the delete-users capability. Off by default. On multisite this removes the user from the current site only; the network account and its logins remain."
 msgstr ""
 
-#: includes/admin/disclosures.php:175
+#: includes/admin/disclosures.php:179
 msgid "Removes an allowlisted user meta key from a user the agent can edit. This cannot be undone. Auth and capability keys can never be touched. The response returns the old value when it is plain text or a number."
 msgstr ""
 
-#: includes/admin/disclosures.php:176
+#: includes/admin/disclosures.php:180
 msgid "Permanently deletes a post, bypassing the Trash. This cannot be undone. Use trash-post to remove a post recoverably instead. Requires delete access to that post. Reaches a page or product only while that type's own tool is on. Off by default."
 msgstr ""
 
-#: includes/admin/disclosures.php:177
+#: includes/admin/disclosures.php:181
 msgid "Permanently deletes a page, bypassing the Trash. This cannot be undone. Use trash-page to remove a page recoverably instead. Requires delete access to that page. Off by default."
 msgstr ""
 
-#: includes/admin/disclosures.php:178
+#: includes/admin/disclosures.php:182
 msgid "Writes a small allowlist of site settings only (name, tagline, timezone, formats, posts per page, and the static front page and posts page, which must be published pages). If one homepage setting does not save, it says which did. It can never change the site URL, admin email, default role, or open registration. Requires manage-options. Off by default."
 msgstr ""
 
-#: includes/admin/disclosures.php:179
+#: includes/admin/disclosures.php:183
 msgid "Permanently deletes a navigation menu and all of its items. This cannot be undone: menus have no Trash. Requires the edit-theme-options capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:180
+#: includes/admin/disclosures.php:184
 msgid "Permanently removes one item from a navigation menu. This cannot be undone. Requires the edit-theme-options capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:181
+#: includes/admin/disclosures.php:185
 msgid "Permanently deletes a WooCommerce product, bypassing the Trash. This cannot be undone. Requires the manage-WooCommerce capability. Off by default."
 msgstr ""
 
-#: includes/admin/disclosures.php:182
+#: includes/admin/disclosures.php:186
 msgid "Permanently deletes a product variation, bypassing the Trash. This cannot be undone. Requires the manage-WooCommerce capability. Off by default."
 msgstr ""
 
-#: includes/admin/disclosures.php:187
+#: includes/admin/disclosures.php:191
 msgid "Lists WooCommerce shipping zones with their id, name, and order. The Rest of World zone (id 0) is always present. Requires the manage-WooCommerce capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:188
+#: includes/admin/disclosures.php:192
 msgid "Reads one WooCommerce shipping zone by id, including its name, order, and configured zone locations. Requires the manage-WooCommerce capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:189
+#: includes/admin/disclosures.php:193
 msgid "Creates a WooCommerce shipping zone from a name and optional order. Returns the full zone shape. Requires the manage-WooCommerce capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:190
+#: includes/admin/disclosures.php:194
 msgid "Updates a WooCommerce shipping zone by id, changing only the fields you send. An empty request body is a no-op success. Returns the full zone shape. Requires the manage-WooCommerce capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:191
+#: includes/admin/disclosures.php:195
 msgid "Lists the shipping methods configured in a WooCommerce shipping zone, by zone id. Each method now includes its per-instance settings, which is where a carrier or gateway plugin may keep account details and API credentials. Field names matching a known secret pattern are dropped first, but that is a denylist over names third-party plugins choose, so it cannot cover every one. Requires the manage-WooCommerce capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:192
+#: includes/admin/disclosures.php:196
 msgid "Reads one shipping method from a WooCommerce shipping zone by zone id and instance id, including its type, title, enabled state, and per-instance settings. Those settings are where a carrier or gateway plugin may keep account details and API credentials. Field names matching a known secret pattern are dropped first, but that is a denylist over names third-party plugins choose, so it cannot cover every one. Requires the manage-WooCommerce capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:193
+#: includes/admin/disclosures.php:197
 msgid "Adds a shipping method to a WooCommerce shipping zone. Provide the zone id and method type (such as flat_rate, free_shipping, or local_pickup). Returns the new method shape. Requires the manage-WooCommerce capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:194
+#: includes/admin/disclosures.php:198
 msgid "Updates a shipping method in a WooCommerce shipping zone by zone id and instance id, changing only the fields you send. Returns the updated method shape. Requires the manage-WooCommerce capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:195
+#: includes/admin/disclosures.php:199
 msgid "Lists all WooCommerce tax rates across every tax class, returning id, country, state, rate, name, priority, compound flag, shipping flag, order, and class slug for each. Requires the manage-WooCommerce capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:197
+#: includes/admin/disclosures.php:201
 msgid "Creates a WooCommerce tax rate from a rate value, with optional country, state, name, priority, compound flag, shipping flag, order, and class slug. Returns the full rate shape. Requires the manage-WooCommerce capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:201
+#: includes/admin/disclosures.php:205
 msgid "Returns a sales summary (total sales, order count, net sales, average order value) for a date range you specify. Queries completed and processing orders only. Defaults to the current calendar month. Requires the manage-WooCommerce capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:202
+#: includes/admin/disclosures.php:206
 msgid "Returns the top-selling products for a period (week, month, or year) ordered by quantity sold. Returns only the product id, name, and quantity, without pricing data. Requires the manage-WooCommerce capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:203
+#: includes/admin/disclosures.php:207
 msgid "Returns order counts broken down by the built-in WooCommerce statuses (pending, processing, on-hold, completed, cancelled, refunded, failed) and a grand total covering every registered status, including custom ones. Read-only. Requires the manage-WooCommerce capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:204
+#: includes/admin/disclosures.php:208
 msgid "Returns product counts broken down by post status (publish, draft, private, pending, trash) and a total of non-trashed products. Read-only. Requires the manage-WooCommerce capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:205
+#: includes/admin/disclosures.php:209
 msgid "Lists all registered WooCommerce payment gateways with id, title, and enabled state. Credential and secret settings are never returned. Read-only. Requires the manage-WooCommerce capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:206
+#: includes/admin/disclosures.php:210
 msgid "Reads one payment gateway by id: title, description, enabled state, order, and non-secret settings. Fields whose names contain key, secret, token, password, api, or private are always stripped before the response is sent. Requires the manage-WooCommerce capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:207
+#: includes/admin/disclosures.php:211
 msgid "Updates a payment gateway by id, changing only the fields you send: enabled state, title, description, or display order. Credential and secret fields can never be written through this ability. Returns the updated gateway shape with secrets redacted. Requires the manage-WooCommerce capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:210
+#: includes/admin/disclosures.php:214
 msgid "Lists events via the Events Calendar, filtered by an optional search term. An optional status filter can include draft/pending/future events you can edit, or private events if you have that access. Drafts, pending and future events are limited to the caller's own unless they can edit other people's events."
 msgstr ""
 
-#: includes/admin/disclosures.php:211
+#: includes/admin/disclosures.php:215
 msgid "Reads a single event by id, including its dates, venue, and organizers."
 msgstr ""
 
-#: includes/admin/disclosures.php:212
+#: includes/admin/disclosures.php:216
 msgid "Creates an event. Defaults to draft; a publicly-visible status additionally requires the publish-events capability. Requires the edit-events capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:213
+#: includes/admin/disclosures.php:217
 msgid "Updates an event by id. A publicly-visible status additionally requires the publish-events capability. Requires edit access to that event."
 msgstr ""
 
-#: includes/admin/disclosures.php:217
+#: includes/admin/disclosures.php:221
 msgid "Moves an event to the Trash, where you can restore it. Never a permanent delete. Requires delete access to that event."
 msgstr ""
 
-#: includes/admin/disclosures.php:218
+#: includes/admin/disclosures.php:222
 msgid "Lists venues via the Events Calendar. An optional status filter can include draft/pending/future venues you can edit, or private venues if you have that access."
 msgstr ""
 
-#: includes/admin/disclosures.php:219
+#: includes/admin/disclosures.php:223
 msgid "Reads a single venue by id."
 msgstr ""
 
-#: includes/admin/disclosures.php:220
+#: includes/admin/disclosures.php:224
 msgid "Creates a venue. Defaults to draft; a publicly-visible status additionally requires the publish-venues capability. Requires the edit-venues capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:221
+#: includes/admin/disclosures.php:225
 msgid "Updates a venue by id. A publicly-visible status additionally requires the publish-venues capability. Requires edit access to that venue."
 msgstr ""
 
-#: includes/admin/disclosures.php:222
+#: includes/admin/disclosures.php:226
 msgid "Lists organizers via the Events Calendar. An optional status filter can include draft/pending/future organizers you can edit, or private organizers if you have that access."
 msgstr ""
 
-#: includes/admin/disclosures.php:223
+#: includes/admin/disclosures.php:227
 msgid "Reads a single organizer by id."
 msgstr ""
 
-#: includes/admin/disclosures.php:224
+#: includes/admin/disclosures.php:228
 msgid "Creates an organizer. Defaults to draft; a publicly-visible status additionally requires the publish-organizers capability. Requires the edit-organizers capability."
 msgstr ""
 
-#: includes/admin/disclosures.php:225
+#: includes/admin/disclosures.php:229
 msgid "Updates an organizer by id. A publicly-visible status additionally requires the publish-organizers capability. Requires edit access to that organizer."
 msgstr ""
 
-#: includes/admin/disclosures.php:226
+#: includes/admin/disclosures.php:230
 msgid "Lists every ticket for one event, across every ticketing provider. Requires edit access to that event. Read-only: no ticket write ability is offered, since ticket creation and RSVP processing are commerce flows this plugin does not touch."
 msgstr ""
 
-#: includes/admin/disclosures.php:227
+#: includes/admin/disclosures.php:231
 msgid "Reads a single ticket by id. Requires edit access to its parent event."
 msgstr ""
 
-#: includes/admin/disclosures.php:228
+#: includes/admin/disclosures.php:232
 msgid "Lists attendees and RSVPs for one event. Requires edit access to that event. Read-only."
 msgstr ""
 
-#: includes/admin/disclosures.php:231
+#: includes/admin/disclosures.php:235
 msgid "Reads a post's Slim SEO fields (title, description, canonical, social images, and the noindex flag). Requires edit access to that post."
 msgstr ""
 
-#: includes/admin/disclosures.php:232
+#: includes/admin/disclosures.php:236
 msgid "Writes a post's Slim SEO fields. A field omitted from the call is left untouched. Requires edit access to that post."
 msgstr ""
 
-#: includes/admin/disclosures.php:235
-msgid "Reads the raw post content of an Avada/Fusion Builder page, unchanged. Fusion Builder shortcodes are returned exactly as stored, never rendered or stripped. With include_structure it also lists the Fusion Builder elements and their attributes, and marks an element whose text lives in a global library item. Requires edit access to the post."
+#: includes/admin/disclosures.php:239
+msgid "Reads the raw post content of an Avada/Fusion Builder page, unchanged. Fusion Builder shortcodes are returned exactly as stored, never rendered or stripped. With include_structure it also lists the Fusion Builder elements with their attributes as stored and decoded, their inner text and fingerprints, and marks an element whose text lives in a global library item. With include_page_options it adds the page CSS and the page options from a fixed list; form notification, submission and privacy settings are never returned. Says when an edit would reach other pages (affects). Requires edit access to the post; Avada's Role Manager is not applied."
 msgstr ""
 
-#: includes/admin/disclosures.php:240
-msgid "Replaces literal text within an Avada/Fusion Builder page while requiring the Fusion shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee). A replacement that would touch a shortcode tag or its attributes is refused rather than risk breaking the layout. Requires edit access to the post."
+#: includes/admin/disclosures.php:244
+msgid "Replaces literal text within an Avada/Fusion Builder page while requiring the Fusion shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee). A replacement that would touch a shortcode tag or its attributes is refused rather than risk breaking the layout, and so is a save that would change other content on the page for this user, such as an embed the user may not keep. Works on Avada's library items and layout sections too; sections only for users who can manage site options. Returns affects when the edit reaches other pages, such as a layout section or a global library element. Requires edit access to the post."
 msgstr ""
 
-#: includes/admin/disclosures.php:241
+#: includes/admin/disclosures.php:245
 msgid "Lists Avada Layouts in the order Avada checks them (the last match wins), with each one's header, page title bar, content and footer sections and its stored conditions. It does not work out which layout a page gets. Admins only."
 msgstr ""
 
-#: includes/admin/disclosures.php:242
+#: includes/admin/disclosures.php:246
 msgid "Reads a fixed list of Avada Global Options: colors, typography, header, logo, footer text and maintenance mode. API keys, passwords, custom CSS and the head and body code fields are never returned; footer text comes back as the stored HTML. Admins only."
 msgstr ""
 
-#: includes/admin/disclosures.php:243
+#: includes/admin/disclosures.php:247
 msgid "Lists the Avada Library (saved elements, columns, sections, post cards and templates) and marks the global items shared across pages, with their raw markup on request. Shows only items the user can edit."
 msgstr ""
 
-#: includes/admin/disclosures.php:246
-msgid "Reads the raw content of a WPBakery page, unchanged, and says whether WPBakery owns it. With include_structure it also lists the shortcode elements and their attributes as WPBakery stores them. Requires edit access to the post; WPBakery's Role Manager is not applied."
+#: includes/admin/disclosures.php:248
+msgid "Lists the elements Avada Builder has on this site and, for one element, its settings: how each is written, whether it can be written and whether it needs a user who may post unfiltered HTML. Tablet, phone and hover variants are listed as settings of their own. Requires the edit_posts capability; Avada's Role Manager is not applied."
 msgstr ""
 
-#: includes/admin/disclosures.php:247
-msgid "Replaces literal text between the elements of a WPBakery page. Heading text, button labels and other text kept in element settings are refused, as is any change to an element or attribute, or a save that would change other content on the page for this user. Not undoable here; WordPress keeps a revision when revisions are on. Requires edit access to the post; WPBakery's Role Manager is not applied."
+#: includes/admin/disclosures.php:249
+msgid "Changes the settings or the inner text of one element on an Avada page, section, library item, form or off canvas panel, named by its index and fingerprint from the page read; every other byte of the page stays as it was. Two spaces in a row or a non-breaking space in a text setting is refused, since Avada's builder would change it. Code blocks and settings that can carry script need a user who may post unfiltered HTML, an element that shows a global library item is refused, and a save that would change other content for this user is refused. When a revision is kept, its id lets restore-revision bring the page back. Requires edit access to the post; Avada's Role Manager is not applied."
 msgstr ""
 
 #: includes/admin/disclosures.php:250
-msgid "Lists GeoDirectory business/place listings (title, status, link)."
+msgid "Adds an element, with its children, to an Avada page, section, library item, form or off canvas panel at a place named by an element's index and fingerprint from the page read, writing every setting with its default as Avada's builder does, and only where Avada allows that nesting. Two spaces in a row or a non-breaking space in a text setting is refused, since Avada's builder would change it. Code blocks and settings that can carry script need a user who may post unfiltered HTML, and a save that would change other content for this user is refused. When a revision is kept, its id lets restore-revision bring the page back. Requires edit access to the post; Avada's Role Manager is not applied."
 msgstr ""
 
 #: includes/admin/disclosures.php:251
-msgid "Reads one GeoDirectory listing by id, including its address and coordinates."
+msgid "Moves an element, with its children, to a new place on the same Avada page, section, library item, form or off canvas panel, named by index and fingerprint from the page read, keeping its stored text byte for byte and only where Avada allows that nesting. A save that would change other content for this user is refused. When a revision is kept, its id lets restore-revision bring the page back. Requires edit access to the post; Avada's Role Manager is not applied."
 msgstr ""
 
 #: includes/admin/disclosures.php:252
-msgid "Creates a GeoDirectory business/place listing with a title, content, and optional address/coordinates."
+msgid "Removes an element, with its children, from an Avada page, section or library item, named by index and fingerprint from the page read. Refused unless a revision can bring it back, so forms, off canvas panels and sites keeping one revision are refused; the last top level container is never removed. When the removal is saved, restore-revision brings the page back with its revision id. Requires edit access to the post; Avada's Role Manager is not applied."
 msgstr ""
 
 #: includes/admin/disclosures.php:253
+msgid "Places an item from Avada's library on an Avada page: an ordinary item is copied byte for byte, a global item is placed as a reference to the item, which needs a user who can edit private posts. Avada's own nesting rules, the 50 element limit and the page_fingerprint check apply; an item holding script needs a user who may post unfiltered HTML, and for other users its text may hold nothing WordPress would filter, for a copy and a reference alike. Items it shows by reference get the same checks. Its restore_revision_id brings the page back. Requires edit access to the page and the item; Avada's Role Manager is not applied."
+msgstr ""
+
+#: includes/admin/disclosures.php:254
+msgid "Sets the custom CSS of an Avada page, layout section or library item. The value given replaces the page's existing CSS, and previous returns the old CSS as the way back; no revision is kept. CSS that holds markup, a \"<\" or a %20 style sequence is refused, since Avada would change it when printing. Needs edit access to the post and a user who may post unfiltered HTML."
+msgstr ""
+
+#: includes/admin/disclosures.php:255
+msgid "Sets or removes Avada page options on one post from a fixed list of layout, title bar, sidebar, slider, header, footer, off canvas, form, SEO and template settings; every other stored option is kept, and previous returns the old values as the way back, with no revision kept. Form notification, submission and privacy settings and code fields are never reachable, option groups are not writable, and a text or text area value WordPress would filter is refused for a user who may not post unfiltered HTML. Needs the Avada theme and edit access to the post; Avada's Role Manager is not applied."
+msgstr ""
+
+#: includes/admin/disclosures.php:256
+msgid "Overwrites site-wide Avada Global Options from a fixed list of colors, typography, layout, header, logo, title bar and footer settings, applied to the whole site at once, each value checked against its own rule; maintenance mode stays read only. Avada's compiled CSS is rebuilt without any object cache flush, and previous returns the old values as the way back. Needs a user who can manage site options."
+msgstr ""
+
+#: includes/admin/disclosures.php:257
+msgid "Overwrites the sections and conditions of one Avada layout or the Global Layout, applied site-wide at once: each section must be a published layout section of the matching type and each condition one Avada's Layouts screen offers, specific pages, posts, terms and authors included, and previous returns the old sections and conditions as the way back. Layouts are never created or deleted. Needs a user who can manage site options."
+msgstr ""
+
+#: includes/admin/disclosures.php:258
+msgid "Lists the ready-made items in Avada Studio from the catalog Avada itself loads; with no cached catalog, Avada downloads it from Avada's servers under the site's own registration, and this plugin sends nothing itself. Refused until the owner unlocks the high-risk category and switches on the Studio import. Needs a user who can manage site options."
+msgstr ""
+
+#: includes/admin/disclosures.php:259
+msgid "Imports one Avada Studio item into Avada's library through Avada's own importer, which downloads it, its images and what it depends on from Avada's servers under the site's own registration; this plugin sends nothing itself and never reads the registration. Locked with the other high-risk tools until the owner unlocks the category, then off until switched on. Nothing is placed on a page and there is no undo here. Needs a user who can manage site options."
+msgstr ""
+
+#: includes/admin/disclosures.php:261
+msgid "Changes one Avada Slider's own settings, such as its size, autoplay, loop, navigation and animation, for every page that shows that slider, from a fixed list of settings each checked against its own rule and written through Avada's own slider settings code, and previous returns the old values as the way back; there is no undo here. Needs a user who can manage site options and Avada Core active."
+msgstr ""
+
+#: includes/admin/disclosures.php:264
+msgid "Reads the raw content of a WPBakery page or Grid Builder template, unchanged, and says whether WPBakery owns it. With include_structure it also lists the shortcode elements with their attributes as stored and decoded, their inner text and fingerprints. With include_page_settings it adds the page custom CSS and, only for users who may post unfiltered HTML, the page custom JS. Requires edit access to the post; WPBakery's Role Manager is not applied."
+msgstr ""
+
+#: includes/admin/disclosures.php:265
+msgid "Replaces literal text between the elements of a WPBakery page. Heading text, button labels and other text kept in element settings are refused, as is any change to an element or attribute, or a save that would change other content on the page for this user. Not undoable here; WordPress keeps a revision when revisions are on. Requires edit access to the post; WPBakery's Role Manager is not applied."
+msgstr ""
+
+#: includes/admin/disclosures.php:266
+msgid "Lists the elements WPBakery Page Builder has on this site, add-ons included, and for one element its settings: how each is written, whether it can be written and whether it needs a user who may post unfiltered HTML. Elements an add-on loads only inside wp-admin are not listed. Requires the edit_posts capability; WPBakery's Role Manager is not applied."
+msgstr ""
+
+#: includes/admin/disclosures.php:267
+msgid "Changes the settings or the inner text of one element on a WPBakery page or Grid Builder template, named by its index and fingerprint from the page read; every other byte of the page stays as it was. Design Options and settings that can carry script or raw HTML need a user who may post unfiltered HTML, and a save that would change other content for this user is refused. The outline stops at 2,000 elements. When a revision is kept, its id lets restore-revision bring the page back. Requires edit access to the post; WPBakery's Role Manager is not applied."
+msgstr ""
+
+#: includes/admin/disclosures.php:268
+msgid "Adds an element with its children to a WPBakery page or Grid Builder template at a place named from the page read, under WPBakery's own nesting rules, at most 50 elements per call. On an empty post it can start the page where WPBakery's own setting has its editor on. Raw HTML, maps, custom onclick settings and Design Options need a user who may post unfiltered HTML. Needs edit access to the post and the page_fingerprint from the last read; when revisions are on, a revision is kept so restore-revision can bring the page back. WPBakery's Role Manager is not applied."
+msgstr ""
+
+#: includes/admin/disclosures.php:269
+msgid "Moves one element, with everything inside it, to another place on a WPBakery page or Grid Builder template; its stored text moves unchanged and WPBakery's own nesting rules apply to the new place. Needs edit access to the post and the page_fingerprint from the last read; when revisions are on, a revision is kept so restore-revision can bring the page back. WPBakery's Role Manager is not applied."
+msgstr ""
+
+#: includes/admin/disclosures.php:270
+msgid "Removes one element, with everything inside it, from a WPBakery page or Grid Builder template, named by its index and fingerprint from the page read. Refused when the post keeps no revisions or the site keeps only one, for the page's last row or section, and when a row would be left with no column. Needs edit access to the post and the page_fingerprint from the last read; the revision it keeps lets restore-revision bring the page back. WPBakery's Role Manager is not applied."
+msgstr ""
+
+#: includes/admin/disclosures.php:271
+msgid "Lists the templates saved in WPBakery's own template library, with their stored shortcode text on request. A template holding raw HTML, raw JS, Design Options or another setting that can carry script is listed without its text for a user who may not post unfiltered HTML. While the Templatera add-on is active, the list holds Templatera's own published templates instead, as WPBakery's editor then shows, filtered by edit access and each template's own role and post type lists. Needs the edit_posts capability; WPBakery's Role Manager is not applied."
+msgstr ""
+
+#: includes/admin/disclosures.php:272
+msgid "Copies a template from WPBakery's own library, or a Templatera template post the user may use, or places a Templatera template by reference, into a WPBakery page at a place named from the page read, under WPBakery's own nesting rules, at most 50 elements nested 6 deep. A template holding raw HTML, raw JS, Design Options or another setting that can carry script needs a user who may post unfiltered HTML, as a copy or a reference, templates it shows by reference included, and for any other user its text may not carry brackets, data-* attributes or HTML that WordPress removes. Needs edit access to the post and the page_fingerprint from the last read; when revisions are on, restore-revision brings the page back. WPBakery's Role Manager is not applied."
+msgstr ""
+
+#: includes/admin/disclosures.php:273
+msgid "Sets a WPBakery page's custom CSS, header JS and footer JS. Each field given replaces the page's existing code for it, and previous returns the old values as the way back; no revision is kept. CSS that holds markup or a \"<\" WPBakery would cut at, and JS with a closing script tag, are refused, and the JS fields follow WPBakery's own Role Manager check for custom JS. Needs edit access to the post and a user who may post unfiltered HTML."
+msgstr ""
+
+#: includes/admin/disclosures.php:274
+msgid "Reads a fixed list of WPBakery's site-wide settings, the global custom CSS included, plus the post types its editor is on for and its version; the global JS only for a user who may post unfiltered HTML. The license code is never returned. Needs a user who can manage site options."
+msgstr ""
+
+#: includes/admin/disclosures.php:275
+msgid "Overwrites site-wide WPBakery settings, applied to the whole site at once, each value through WPBakery's own sanitize callback; previous returns the old values as the way back. The global CSS and JS need a user who may post unfiltered HTML, and CSS that holds markup or a \"<\" WPBakery would cut at is refused, and a CSS change rebuilds WPBakery's custom.css file. Needs a user who can manage site options."
+msgstr ""
+
+#: includes/admin/disclosures.php:278
+msgid "Lists GeoDirectory business/place listings (title, status, link)."
+msgstr ""
+
+#: includes/admin/disclosures.php:279
+msgid "Reads one GeoDirectory listing by id, including its address and coordinates."
+msgstr ""
+
+#: includes/admin/disclosures.php:280
+msgid "Creates a GeoDirectory business/place listing with a title, content, and optional address/coordinates."
+msgstr ""
+
+#: includes/admin/disclosures.php:281
 msgid "Updates an existing GeoDirectory listing's title, content, or address/coordinates. Fields omitted from the call are left untouched."
 msgstr ""
 
@@ -7324,57 +8261,73 @@ msgstr ""
 msgid "Maintained by Agent Abilities."
 msgstr ""
 
-#: includes/admin/integrations.php:456
+#: includes/admin/integrations.php:460
 msgid "Update required"
 msgstr ""
 
-#: includes/admin/integrations.php:457
+#: includes/admin/integrations.php:461
 msgid "Requires The Events Calendar"
 msgstr ""
 
-#: includes/admin/integrations.php:458
+#: includes/admin/integrations.php:462
 msgid "Inactive"
 msgstr ""
 
-#: includes/admin/integrations.php:459
+#: includes/admin/integrations.php:463
 msgid "Not installed"
 msgstr ""
 
-#: includes/admin/integrations.php:482
+#: includes/admin/integrations.php:484
+msgid "Avada Core: active."
+msgstr ""
+
+#: includes/admin/integrations.php:485
+msgid "Avada Core: not active. The Avada Slider settings tool needs it."
+msgstr ""
+
+#: includes/admin/integrations.php:488
+msgid "Templatera: active."
+msgstr ""
+
+#: includes/admin/integrations.php:489
+msgid "Templatera: not active. Templatera templates and references need it."
+msgstr ""
+
+#: includes/admin/integrations.php:507
 msgid "Active. Turn on the abilities you want this agent to use."
 msgstr ""
 
 #. translators: 1: the integration plugin name, e.g. WooCommerce. 2: the minimum required version. 3: the version installed on this site.
-#: includes/admin/integrations.php:499
+#: includes/admin/integrations.php:524
 #, php-format
 msgid "%1$s %2$s or newer is required for these abilities; this site is running %3$s."
 msgstr ""
 
-#: includes/admin/integrations.php:507
+#: includes/admin/integrations.php:532
 msgid "Event Tickets is active, but its ticket abilities are gated on a parent event and need The Events Calendar active too. Install and activate The Events Calendar to use these abilities."
 msgstr ""
 
 #. translators: %s: the integration plugin name, e.g. WooCommerce.
-#: includes/admin/integrations.php:511
+#: includes/admin/integrations.php:536
 #, php-format
 msgid "Installed but not active. Activate %s to use these abilities."
 msgstr ""
 
-#: includes/admin/integrations.php:516
+#: includes/admin/integrations.php:541
 msgid "Not installed. Install and activate the plugin to expose its abilities here."
 msgstr ""
 
-#: includes/admin/integrations.php:572
+#: includes/admin/integrations.php:597
 #: includes/admin/page.php:2256
 msgid "Enable all / Disable all"
 msgstr ""
 
-#: includes/admin/integrations.php:643
+#: includes/admin/integrations.php:668
 #: includes/admin/page.php:2352
 msgid "read-only"
 msgstr ""
 
-#: includes/admin/integrations.php:653
+#: includes/admin/integrations.php:678
 msgid "Saved, currently unavailable"
 msgstr ""
 
@@ -7497,7 +8450,7 @@ msgstr ""
 #: includes/admin/quickconnect.php:439
 #: includes/catalog.php:105
 #: includes/oauth/consent-template.php:237
-#: includes/server.php:1805
+#: includes/server.php:1830
 msgid "Agent Abilities for MCP"
 msgstr ""
 
@@ -7531,7 +8484,7 @@ msgstr ""
 
 #. translators: %s: the name of the setting, for example "Read-only mode".
 #: includes/admin/onboarding-pointer.php:102
-#: includes/helpers.php:3304
+#: includes/helpers.php:3318
 #, php-format
 msgid "%s could not be changed: the site's persistent object cache is still returning the old value. Flush the object cache (Redis, Memcached, or your host's cache) and save again."
 msgstr ""
@@ -7611,7 +8564,7 @@ msgstr ""
 #: includes/admin/playbooks.php:76
 #: includes/admin/playbooks.php:125
 #: includes/admin/quickconnect.php:712
-#: includes/admin/settings.php:1192
+#: includes/admin/settings.php:1193
 #: includes/audit/notifications.php:52
 msgid "Off"
 msgstr ""
@@ -7998,8 +8951,8 @@ msgid "Error: %s"
 msgstr ""
 
 #: includes/admin/page.php:304
-#: includes/admin/settings.php:1205
 #: includes/admin/settings.php:1206
+#: includes/admin/settings.php:1207
 #: includes/bootstrap.php:277
 msgid "unknown"
 msgstr ""
@@ -9413,8 +10366,8 @@ msgstr ""
 
 #: includes/admin/quickconnect.php:632
 #: includes/admin/settings.php:1086
-#: includes/admin/settings.php:1137
-#: includes/admin/settings.php:1212
+#: includes/admin/settings.php:1138
+#: includes/admin/settings.php:1213
 msgid "Off by default"
 msgstr ""
 
@@ -9663,17 +10616,17 @@ msgid "The activity log retention setting"
 msgstr ""
 
 #: includes/admin/settings.php:416
-#: includes/admin/settings.php:1233
+#: includes/admin/settings.php:1234
 msgid "Force draft on create"
 msgstr ""
 
 #: includes/admin/settings.php:417
-#: includes/admin/settings.php:1255
+#: includes/admin/settings.php:1256
 msgid "Strict block validation"
 msgstr ""
 
 #: includes/admin/settings.php:418
-#: includes/admin/settings.php:1336
+#: includes/admin/settings.php:1337
 msgid "Delete data on uninstall"
 msgstr ""
 
@@ -9821,252 +10774,256 @@ msgid "Read-only mode is on, so this does nothing right now. Every high-risk abi
 msgstr ""
 
 #: includes/admin/settings.php:1119
-msgid "Allow refunds, creating and changing orders, payment gateway settings, coupons, and tax rates to be switched on individually."
+msgid "Allow refunds, creating and changing orders, payment gateway settings, coupons, tax rates and the Avada Studio import to be switched on individually."
 msgstr ""
 
 #: includes/admin/settings.php:1120
-msgid "While this is off, no agent can issue a refund, create or change an order, change a payment gateway setting, or create or change a coupon or a tax rate through this plugin's own tools. WooCommerce's own order status and order update tools on the Plugins' own tools tab are held too, and so are the Secure Custom Fields tools that can store a callback name. Order notes stay available."
+msgid "While this is off, no agent can issue a refund, create or change an order, change a payment gateway setting, create or change a coupon or a tax rate, or import an Avada Studio item through this plugin's own tools. WooCommerce's own order status and order update tools on the Plugins' own tools tab are held too, and so are the Secure Custom Fields tools that can store a callback name. Order notes stay available."
 msgstr ""
 
-#: includes/admin/settings.php:1122
+#: includes/admin/settings.php:1121
+msgid "One switch covers every tool listed here. Turning it on for one of them, such as the Avada Studio import, also reopens every other high-risk tool you had already switched on."
+msgstr ""
+
+#: includes/admin/settings.php:1123
 msgid "Your host or a site setting keeps this locked, whatever this switch says."
 msgstr ""
 
-#: includes/admin/settings.php:1125
+#: includes/admin/settings.php:1126
 msgid "Turn it on and each of those becomes an ordinary checkbox you switch on one at a time, still badged high-risk so you can always tell them apart."
 msgstr ""
 
-#: includes/admin/settings.php:1126
+#: includes/admin/settings.php:1127
 msgid "Other plugins' tools are held only if listed here or named with the aafm_high_risk_abilities filter, so check the rest yourself."
 msgstr ""
 
-#: includes/admin/settings.php:1127
+#: includes/admin/settings.php:1128
 msgid "The plugin logs every flip of this switch, and those entries are kept for the same number of days as everything else in the activity log. Raise the retention setting below if you want a longer record of when the category was opened."
 msgstr ""
 
-#: includes/admin/settings.php:1130
+#: includes/admin/settings.php:1131
 msgid "See more about the high-risk category"
 msgstr ""
 
-#: includes/admin/settings.php:1136
+#: includes/admin/settings.php:1137
 msgid "Unlock the category"
 msgstr ""
 
-#: includes/admin/settings.php:1140
+#: includes/admin/settings.php:1141
 msgid "Held by read-only mode"
 msgstr ""
 
-#: includes/admin/settings.php:1152
+#: includes/admin/settings.php:1153
 msgid "Rate limit"
 msgstr ""
 
-#: includes/admin/settings.php:1153
+#: includes/admin/settings.php:1154
 msgid "Per minute"
 msgstr ""
 
-#: includes/admin/settings.php:1157
+#: includes/admin/settings.php:1158
 msgid "Rate limit, per minute"
 msgstr ""
 
-#: includes/admin/settings.php:1159
+#: includes/admin/settings.php:1160
 msgid "How many agent calls one connection can make per minute. Off by default (0), so nothing is capped until you set a number here. If you are not sure where to start, 60 is a reasonable limit for a single connected agent. Developers can also set this with the aafm_rate_limit_per_min filter."
 msgstr ""
 
-#: includes/admin/settings.php:1167
+#: includes/admin/settings.php:1168
 msgid "Before you save a list with anything in it, add the IP address your AI client connects from. As soon as this list has one entry, any request from an address that is not on it is blocked, including your own agent. Get it wrong and every agent call stops."
 msgstr ""
 
-#: includes/admin/settings.php:1172
+#: includes/admin/settings.php:1173
 msgid "IP allowlist"
 msgstr ""
 
-#: includes/admin/settings.php:1173
+#: includes/admin/settings.php:1174
 msgid "One per line"
 msgstr ""
 
-#: includes/admin/settings.php:1177
+#: includes/admin/settings.php:1178
 msgid "IP allowlist, one per line"
 msgstr ""
 
-#: includes/admin/settings.php:1178
+#: includes/admin/settings.php:1179
 msgid "One IP address or CIDR range per line. Leave it empty to allow connections from anywhere. When you save, any line that is not a valid IP or range is dropped. A blocked client is refused before it signs in. Claude shows that as a firewall or sign-in error, and ChatGPT shows the reason."
 msgstr ""
 
 #. translators: %s: link to the Ability allowlist card on the Connection tab.
-#: includes/admin/settings.php:1181
+#: includes/admin/settings.php:1182
 #, php-format
 msgid "To limit which abilities a role or a connection can use, see the %s on the Connection tab."
 msgstr ""
 
-#: includes/admin/settings.php:1193
+#: includes/admin/settings.php:1194
 msgid "Cloudflare"
 msgstr ""
 
-#: includes/admin/settings.php:1194
+#: includes/admin/settings.php:1195
 #: includes/presets.php:34
 msgid "Custom"
 msgstr ""
 
 #. translators: 1: the address the plugin uses, 2: the connection address.
-#: includes/admin/settings.php:1204
+#: includes/admin/settings.php:1205
 #, php-format
 msgid "As this plugin sees it now: %1$s. Connection address: %2$s."
 msgstr ""
 
-#: includes/admin/settings.php:1211
-#: includes/admin/settings.php:1215
+#: includes/admin/settings.php:1212
+#: includes/admin/settings.php:1216
 msgid "Real visitor address behind a proxy or CDN"
 msgstr ""
 
-#: includes/admin/settings.php:1218
+#: includes/admin/settings.php:1219
 msgid "Header"
 msgstr ""
 
-#: includes/admin/settings.php:1220
+#: includes/admin/settings.php:1221
 msgid "Proxy addresses or ranges, one per line"
 msgstr ""
 
-#: includes/admin/settings.php:1225
+#: includes/admin/settings.php:1226
 msgid "Off by default. Turn it on only if this site sits behind Cloudflare or another proxy, so the IP allowlist, the Activity Log and the abuse limits see the visitor and not the proxy. The header is believed only when the request really comes from the proxy's own addresses, so ranges must be no wider than /8 (IPv4) or /16 (IPv6). Cloudflare's address list is built into the plugin and refreshed with each release; if it falls behind, a new Cloudflare address is not trusted and the proxy's own address is used. To keep other Cloudflare customers from reaching your server directly, use Authenticated Origin Pulls or accept connections only from the proxy's addresses."
 msgstr ""
 
-#: includes/admin/settings.php:1235
+#: includes/admin/settings.php:1236
 msgid "Save the content an agent creates as a draft, no matter what status the request asked for."
 msgstr ""
 
-#: includes/admin/settings.php:1236
+#: includes/admin/settings.php:1237
 msgid "Turn this on if you want to look over agent-created content before it goes live. Covers posts, pages, custom content items, reusable blocks, and WooCommerce products. Product variations save as disabled instead, because a draft variation disappears from WooCommerce's editor. Things without a draft state (media, menus, terms, comments, users, coupons, orders) are not affected."
 msgstr ""
 
-#: includes/admin/settings.php:1244
+#: includes/admin/settings.php:1245
 msgid "Keep change history"
 msgstr ""
 
-#: includes/admin/settings.php:1246
+#: includes/admin/settings.php:1247
 msgid "Record what agents change so you can revert it from the Changes tab."
 msgstr ""
 
-#: includes/admin/settings.php:1247
+#: includes/admin/settings.php:1248
 msgid "History is kept for 30 days while the plugin is active, because the clean-up needs the plugin loaded. The before-values stay in this site's database and its backups, and they are dropped when the plugin is uninstalled. Turning this off does not delete history that is already kept."
 msgstr ""
 
-#: includes/admin/settings.php:1257
+#: includes/admin/settings.php:1258
 msgid "Reject an agent write when its block markup would show as invalid content in the editor."
 msgstr ""
 
-#: includes/admin/settings.php:1258
+#: includes/admin/settings.php:1259
 msgid "When this is off (the default), a write with questionable block markup still saves, and the agent is sent a warning so it can fix its next attempt. Turn it on to refuse the write instead, so nothing that could look broken in the editor is ever stored."
 msgstr ""
 
-#: includes/admin/settings.php:1265
+#: includes/admin/settings.php:1266
 msgid "Maximum title length"
 msgstr ""
 
-#: includes/admin/settings.php:1266
+#: includes/admin/settings.php:1267
 msgid "Characters"
 msgstr ""
 
-#: includes/admin/settings.php:1270
+#: includes/admin/settings.php:1271
 msgid "Maximum title length, in characters"
 msgstr ""
 
-#: includes/admin/settings.php:1272
+#: includes/admin/settings.php:1273
 msgid "The longest title, in characters, an agent can set. Set it to 0 to leave the limit off."
 msgstr ""
 
-#: includes/admin/settings.php:1279
+#: includes/admin/settings.php:1280
 msgid "Keep activity log for"
 msgstr ""
 
-#: includes/admin/settings.php:1280
+#: includes/admin/settings.php:1281
 msgid "Days"
 msgstr ""
 
-#: includes/admin/settings.php:1284
+#: includes/admin/settings.php:1285
 msgid "Keep activity log for, in days"
 msgstr ""
 
-#: includes/admin/settings.php:1286
+#: includes/admin/settings.php:1287
 msgid "How many days of activity to keep. A daily cleanup removes anything older. Set it to 0 to keep every entry."
 msgstr ""
 
-#: includes/admin/settings.php:1294
+#: includes/admin/settings.php:1295
 msgid "Automatic (on only when another plugin publishes tools there)"
 msgstr ""
 
-#: includes/admin/settings.php:1295
+#: includes/admin/settings.php:1296
 msgid "Always on"
 msgstr ""
 
-#: includes/admin/settings.php:1296
+#: includes/admin/settings.php:1297
 msgid "Always off"
 msgstr ""
 
-#: includes/admin/settings.php:1298
+#: includes/admin/settings.php:1299
 msgid "Allow the MCP Adapter default server"
 msgstr ""
 
-#: includes/admin/settings.php:1305
+#: includes/admin/settings.php:1306
 msgid "Allow the MCP Adapter's default server"
 msgstr ""
 
-#: includes/admin/settings.php:1306
+#: includes/admin/settings.php:1307
 msgid "Other plugins' tools"
 msgstr ""
 
-#: includes/admin/settings.php:1308
+#: includes/admin/settings.php:1309
 msgid "The MCP Adapter has a built-in server that other plugins can publish their tools to. Tools served there are not governed by this plugin: no allowlist, read-only mode or audit log applies to them, and WordPress core's own public abilities are reachable there too. Agent Abilities for MCP's own tools are never on that server, whatever you choose."
 msgstr ""
 
-#: includes/admin/settings.php:1327
+#: includes/admin/settings.php:1328
 msgid "Permanently remove all plugin data when the plugin is deleted."
 msgstr ""
 
-#: includes/admin/settings.php:1328
+#: includes/admin/settings.php:1329
 msgid "When this is off (the default), your settings, activity log, and OAuth data are kept if you delete the plugin, so a reinstall picks up your configuration. Change history is the exception: it is removed on every uninstall, whatever this says. Turn this on only if you want everything else removed too. This cannot be undone."
 msgstr ""
 
-#: includes/admin/settings.php:1330
+#: includes/admin/settings.php:1331
 msgid "See more about deleting data on uninstall"
 msgstr ""
 
-#: includes/admin/settings.php:1331
+#: includes/admin/settings.php:1332
 msgid "Either way, uninstalling this plugin never revokes an agent's access on its own. It never removes the dedicated agent user or any Application Password issued to it, since those are ordinary WordPress account credentials the plugin does not own. To cut off an agent, revoke its OAuth grant on the Connection tab, or delete its Application Password or user account from the Users screen, before or after you remove the plugin."
 msgstr ""
 
-#: includes/admin/settings.php:1347
+#: includes/admin/settings.php:1348
 msgid "These controls change how agent requests behave. Test a connection after you change anything here so you do not lock yourself out or quietly drop valid requests."
 msgstr ""
 
-#: includes/admin/settings.php:1352
+#: includes/admin/settings.php:1353
 msgid "Safety controls"
 msgstr ""
 
-#: includes/admin/settings.php:1353
+#: includes/admin/settings.php:1354
 msgid "These safety controls are optional. They all start off, and the plugin runs fine without any of them. Turn on only what you need."
 msgstr ""
 
-#: includes/admin/settings.php:1367
+#: includes/admin/settings.php:1368
 msgid "Save settings"
 msgstr ""
 
-#: includes/admin/settings.php:1377
+#: includes/admin/settings.php:1378
 msgid "Danger zone"
 msgstr ""
 
-#: includes/admin/settings.php:1380
+#: includes/admin/settings.php:1381
 msgid "Reset plugin"
 msgstr ""
 
-#: includes/admin/settings.php:1380
+#: includes/admin/settings.php:1381
 msgid "Cannot be undone"
 msgstr ""
 
-#: includes/admin/settings.php:1382
+#: includes/admin/settings.php:1383
 msgid "Reset plugin to defaults"
 msgstr ""
 
-#: includes/admin/settings.php:1383
+#: includes/admin/settings.php:1384
 msgid "Clears every plugin setting - enabled abilities, exposed content types and meta keys, and all safety controls - and empties the activity log and the change history. Your agent user and anything it created (posts and other content) are left untouched. This cannot be undone."
 msgstr ""
 
@@ -10716,23 +11673,135 @@ msgstr ""
 #. translators: %s: the post's numeric ID.
 #: includes/audit/detail.php:1255
 #, php-format
+msgid "Ran an element update on Avada page #%s"
+msgstr ""
+
+#. translators: %s: the post's numeric ID.
+#: includes/audit/detail.php:1266
+#, php-format
+msgid "Ran an element insert on Avada page #%s"
+msgstr ""
+
+#. translators: %s: the post's numeric ID.
+#: includes/audit/detail.php:1277
+#, php-format
+msgid "Ran an element move on Avada page #%s"
+msgstr ""
+
+#. translators: %s: the post's numeric ID.
+#: includes/audit/detail.php:1288
+#, php-format
+msgid "Ran an element removal on Avada page #%s"
+msgstr ""
+
+#. translators: %s: the post's numeric ID.
+#: includes/audit/detail.php:1299
+#, php-format
+msgid "Ran a library item insert on Avada page #%s"
+msgstr ""
+
+#. translators: %s: the post's numeric ID.
+#: includes/audit/detail.php:1310
+#, php-format
+msgid "Ran a page CSS update on Avada page #%s"
+msgstr ""
+
+#. translators: %s: the post's numeric ID.
+#: includes/audit/detail.php:1321
+#, php-format
+msgid "Ran a page options update on Avada post #%s"
+msgstr ""
+
+#. translators: %s: the post's numeric ID.
+#: includes/audit/detail.php:1332
+#, php-format
 msgid "Ran a text replace on WPBakery page #%s"
 msgstr ""
 
+#. translators: %s: the post's numeric ID.
+#: includes/audit/detail.php:1343
+#, php-format
+msgid "Ran an element update on WPBakery page #%s"
+msgstr ""
+
+#. translators: %s: the post's numeric ID.
+#: includes/audit/detail.php:1354
+#, php-format
+msgid "Ran an element insert on WPBakery page #%s"
+msgstr ""
+
+#. translators: %s: the post's numeric ID.
+#: includes/audit/detail.php:1365
+#, php-format
+msgid "Ran an element move on WPBakery page #%s"
+msgstr ""
+
+#. translators: %s: the post's numeric ID.
+#: includes/audit/detail.php:1376
+#, php-format
+msgid "Ran an element removal on WPBakery page #%s"
+msgstr ""
+
+#. translators: %s: the post's numeric ID.
+#: includes/audit/detail.php:1387
+#, php-format
+msgid "Ran a template insert on WPBakery page #%s"
+msgstr ""
+
+#. translators: %s: comma-separated list of the Avada Global Option keys in the call.
+#: includes/audit/detail.php:1398
+#, php-format
+msgid "Ran an Avada Global Options update: %s"
+msgstr ""
+
+#. translators: %s: the layout's numeric ID.
+#: includes/audit/detail.php:1409
+#, php-format
+msgid "Ran an Avada layout update on layout #%s"
+msgstr ""
+
+#: includes/audit/detail.php:1410
+msgid "Ran an Avada layout update on the Global Layout"
+msgstr ""
+
+#. translators: 1: the Avada Studio item type, 2: the Studio item's numeric ID.
+#: includes/audit/detail.php:1421
+#, php-format
+msgid "Ran an Avada Studio import of %1$s item #%2$s"
+msgstr ""
+
+#. translators: %s: the slider's numeric term ID.
+#: includes/audit/detail.php:1437
+#, php-format
+msgid "Ran an Avada slider settings update on slider #%s"
+msgstr ""
+
+#. translators: %s: the post's numeric ID.
+#: includes/audit/detail.php:1448
+#, php-format
+msgid "Ran a page code update on WPBakery page #%s"
+msgstr ""
+
+#. translators: %s: comma-separated list of the WPBakery setting keys in the call.
+#: includes/audit/detail.php:1459
+#, php-format
+msgid "Ran a WPBakery settings update: %s"
+msgstr ""
+
 #. translators: %s: the new listing's numeric ID.
-#: includes/audit/detail.php:1266
+#: includes/audit/detail.php:1470
 #, php-format
 msgid "Created listing #%s"
 msgstr ""
 
 #. translators: %s: the listing's numeric ID.
-#: includes/audit/detail.php:1272
+#: includes/audit/detail.php:1476
 #, php-format
 msgid "Updated listing #%s"
 msgstr ""
 
 #. translators: %s: what the call tried to do, such as "Updated meta key `x` on post #5".
-#: includes/audit/detail.php:1368
+#: includes/audit/detail.php:1572
 #, php-format
 msgid "Attempted: %s"
 msgstr ""
@@ -11251,6 +12320,140 @@ msgstr ""
 msgid "A plugin that registers tools under the \"%1$s\" namespace returned an error: %2$s"
 msgstr ""
 
+#: includes/builder-shortcodes.php:37
+msgid "The page content could not be read as builder elements, so nothing was changed."
+msgstr ""
+
+#: includes/builder-shortcodes.php:38
+msgid "No element matches that index, tag and fingerprint. The page may have changed, or the index is past the 2,000 element outline. Read the outline again. Nothing was changed."
+msgstr ""
+
+#: includes/builder-shortcodes.php:39
+msgid "The page changed since the page fingerprint was read. Read the outline again and retry with the new fingerprint. Nothing was changed."
+msgstr ""
+
+#: includes/builder-shortcodes.php:40
+msgid "The change would alter the page layout beyond the element that was named, for example by adding a shortcode inside text. Nothing was changed."
+msgstr ""
+
+#: includes/builder-shortcodes.php:41
+msgid "That element setting cannot be written by this tool. Nothing was changed."
+msgstr ""
+
+#: includes/builder-shortcodes.php:42
+msgid "A setting value has the wrong type or form. Nothing was changed."
+msgstr ""
+
+#: includes/builder-shortcodes.php:43
+msgid "That setting can carry script or raw HTML, so it needs a user who may post unfiltered HTML. Nothing was changed."
+msgstr ""
+
+#: includes/builder-shortcodes.php:44
+msgid "That element type is not known to the page builder on this site. Nothing was changed."
+msgstr ""
+
+#: includes/builder-shortcodes.php:45
+msgid "An element cannot be placed there: it cannot hold child elements, or the builder does not allow that nesting. Nothing was changed."
+msgstr ""
+
+#: includes/builder-shortcodes.php:46
+msgid "An element cannot be moved into itself or into one of its own children. Nothing was changed."
+msgstr ""
+
+#: includes/builder-shortcodes.php:47
+msgid "Revisions are off for this post, so a removed element could not be brought back. Nothing was changed."
+msgstr ""
+
+#: includes/builder-shortcodes.php:48
+msgid "The last top level element of a page cannot be removed. Nothing was changed."
+msgstr ""
+
+#: includes/builder-shortcodes.php:49
+msgid "No template with that id was found. Nothing was changed."
+msgstr ""
+
+#: includes/builder-shortcodes.php:51
+msgid "The request could not be completed. Nothing was changed."
+msgstr ""
+
+#. translators: %s: the CSS field.
+#: includes/builder-shortcodes.php:70
+#, php-format
+msgid "%s holds markup, which WordPress does not allow in custom CSS. Remove the tags. Nothing was changed."
+msgstr ""
+
+#. translators: %s: the CSS field.
+#: includes/builder-shortcodes.php:92
+#, php-format
+msgid "%s holds a percent-encoded sequence such as %%20, which Avada removes when it prints page CSS. Write the character itself. Nothing was changed."
+msgstr ""
+
+#. translators: %s: the CSS field.
+#: includes/builder-shortcodes.php:95
+#, php-format
+msgid "%s holds a \"<\" character, which Avada rewrites when it prints page CSS. Use min-width or max-width instead of a <= range query. Nothing was changed."
+msgstr ""
+
+#. translators: %s: the CSS field.
+#: includes/builder-shortcodes.php:98
+#, php-format
+msgid "%s holds a \"<\" followed by another character, such as a <= range query, and WPBakery cuts the CSS off there when it prints it. Use min-width or max-width instead. Nothing was changed."
+msgstr ""
+
+#. translators: %d: the maximum depth.
+#: includes/builder-shortcodes.php:158
+#, php-format
+msgid "This content shows a template or library item that shows itself again, or nests references more than %d deep. Nothing was changed."
+msgstr ""
+
+#. translators: %d: the template or library item id.
+#: includes/builder-shortcodes.php:174
+#, php-format
+msgid "This content shows template or library item %d by reference, which the current user may not use. Nothing was changed."
+msgstr ""
+
+#: includes/builder-shortcodes.php:827
+msgid "Saving this page as the current user would change content outside the requested change, for example by removing embedded HTML or elements this user is not allowed to keep. Ask a user with fuller rights to make the edit, or make it in the page builder. Nothing was changed."
+msgstr ""
+
+#: includes/builder-shortcodes.php:841
+msgid "Saving the change as the current user would remove or change page builder elements, so it was not saved. Nothing was changed."
+msgstr ""
+
+#: includes/builder-shortcodes.php:848
+msgid "Saving this content as the current user would change it, for example by removing embedded HTML this user is not allowed to keep. Ask a user with fuller rights to make the change. Nothing was changed."
+msgstr ""
+
+#: includes/builder-shortcodes.php:919
+msgid "The page builder cannot rebuild this page's generated CSS right now, so the change was not saved. Nothing was changed."
+msgstr ""
+
+#. translators: %d: the number of revisions the site keeps per post.
+#: includes/builder-shortcodes.php:987
+#, php-format
+msgid "The revision that held the page before this change was no longer there after the save, so there is no way back from this plugin. The usual cause is the site's revision limit (WP_POST_REVISIONS or the wp_revisions_to_keep filter); this site keeps %d revision per post."
+msgid_plural "The revision that held the page before this change was no longer there after the save, so there is no way back from this plugin. The usual cause is the site's revision limit (WP_POST_REVISIONS or the wp_revisions_to_keep filter); this site keeps %d revisions per post."
+msgstr[0] ""
+msgstr[1] ""
+
+#: includes/builder-shortcodes.php:991
+msgid "The revision that held the page before this change was no longer there after the save, so there is no way back from this plugin. This site keeps every revision, so something other than the revision limit deleted it."
+msgstr ""
+
+#: includes/builder-shortcodes.php:999
+msgid "The change could not be confirmed as saved. Read the page to check its current state."
+msgstr ""
+
+#: includes/builder-shortcodes.php:1009
+msgid "The content was saved, but the page builder could not rebuild the page's generated CSS, so the page may look out of date until it is saved again in the builder."
+msgstr ""
+
+#. translators: %d: revision id.
+#: includes/builder-shortcodes.php:1011
+#, php-format
+msgid "The content was saved, but the page builder could not rebuild the page's generated CSS, so the page may look out of date until it is saved again in the builder. Revision %d restores the content as it was before."
+msgstr ""
+
 #: includes/default-server.php:268
 msgid "Currently running"
 msgstr ""
@@ -11291,107 +12494,107 @@ msgstr ""
 msgid "This meta key is not available to agents."
 msgstr ""
 
-#: includes/helpers.php:1190
+#: includes/helpers.php:1204
 msgid "Some removals are permanent."
 msgstr ""
 
-#: includes/helpers.php:1191
+#: includes/helpers.php:1205
 msgid "Abilities that bypass the Trash say so in their own description."
 msgstr ""
 
-#: includes/helpers.php:1192
+#: includes/helpers.php:1206
 msgid "Some removals are permanent"
 msgstr ""
 
-#: includes/helpers.php:1197
+#: includes/helpers.php:1211
 msgid "Deletes go to Trash."
 msgstr ""
 
-#: includes/helpers.php:1198
+#: includes/helpers.php:1212
 msgid "Removals are recoverable, not permanent."
 msgstr ""
 
-#: includes/helpers.php:1199
+#: includes/helpers.php:1213
 msgid "Deletes go to Trash"
 msgstr ""
 
-#: includes/helpers.php:1242
-#: includes/helpers.php:1249
+#: includes/helpers.php:1256
+#: includes/helpers.php:1263
 #: includes/write-contract.php:962
 #: includes/write-contract.php:1209
 msgid "Only text, number, or boolean meta values are supported."
 msgstr ""
 
-#: includes/helpers.php:1328
+#: includes/helpers.php:1342
 msgid "This term meta key is not available to agents."
 msgstr ""
 
-#: includes/helpers.php:1360
-#: includes/helpers.php:1367
+#: includes/helpers.php:1374
+#: includes/helpers.php:1381
 msgid "Only text, number, or boolean term meta values are supported."
 msgstr ""
 
-#: includes/helpers.php:1496
+#: includes/helpers.php:1510
 msgid "This user meta key is not available to agents."
 msgstr ""
 
-#: includes/helpers.php:1533
-#: includes/helpers.php:1540
+#: includes/helpers.php:1547
+#: includes/helpers.php:1554
 msgid "Only text, number, or boolean user meta values are supported."
 msgstr ""
 
-#: includes/helpers.php:1859
+#: includes/helpers.php:1873
 msgid "Unsupported taxonomy."
 msgstr ""
 
-#: includes/helpers.php:2257
+#: includes/helpers.php:2271
 msgid "WPML language code of this item. Present only when WPML is active."
 msgstr ""
 
-#: includes/helpers.php:2262
+#: includes/helpers.php:2276
 msgid "Pages only: the parent page id, 0 for none."
 msgstr ""
 
-#: includes/helpers.php:2266
+#: includes/helpers.php:2280
 msgid "Pages only: the page template (a file name on a classic theme, a template slug on a block theme), or \"default\"."
 msgstr ""
 
-#: includes/helpers.php:2280
+#: includes/helpers.php:2294
 msgid "Present on single-post reads and when include_content=true; omitted for password-protected posts."
 msgstr ""
 
-#: includes/helpers.php:2284
+#: includes/helpers.php:2298
 msgid "Byte length of the raw stored content (strlen of post_content), present even when include_content is false so a caller can preflight size before a full fetch. Reported as 0 for a password-protected post, regardless of its real length."
 msgstr ""
 
-#: includes/helpers.php:2289
+#: includes/helpers.php:2303
 msgid "True when the excerpt was generated by WordPress from the post body because the post has no excerpt of its own. False when the author wrote one, or for a password-protected post."
 msgstr ""
 
-#: includes/helpers.php:2883
+#: includes/helpers.php:2897
 msgid "The request could not be completed."
 msgstr ""
 
-#: includes/helpers.php:3068
+#: includes/helpers.php:3082
 msgid "Trash is disabled on this site, so this content cannot be moved to the Trash. Refusing to permanently delete it."
 msgstr ""
 
-#: includes/helpers.php:3259
+#: includes/helpers.php:3273
 msgid "The item's place in this list, numbered 1 to N. It is not the stored position, which create-menu-item and update-menu-item return."
 msgstr ""
 
-#: includes/helpers.php:3260
+#: includes/helpers.php:3274
 msgid "The item's stored position (menu_order), which can start at 0 and have gaps. list-menu-items numbers its items 1 to N instead, so compare places there."
 msgstr ""
 
 #. translators: 1: name of the value that saved, 2: name of the value that could not be.
-#: includes/helpers.php:3321
+#: includes/helpers.php:3335
 #, php-format
 msgid "%1$s was saved, but %2$s could not be changed: the site's persistent object cache is still returning the old value. The site is now stricter than requested. Flush the object cache (Redis, Memcached, or your host's cache) and save again."
 msgstr ""
 
 #. translators: 1: name of the value that saved, 2: name of the value that could not be.
-#: includes/helpers.php:3342
+#: includes/helpers.php:3356
 #, php-format
 msgid "%1$s was saved, but %2$s could not be changed: the site's persistent object cache is still returning the old value. Some of your changes did not take - re-check your settings rather than assuming this save either fully applied or fully failed. Flush the object cache (Redis, Memcached, or your host's cache) and save again."
 msgstr ""
@@ -12255,57 +13458,57 @@ msgstr[1] ""
 msgid "The site could not check its rate limit, so the call was refused. Try again shortly."
 msgstr ""
 
-#: includes/server.php:1072
+#: includes/server.php:1097
 msgid "This connection is paused by the site owner. It keeps its sign-in and works again as soon as they resume it."
 msgstr ""
 
-#: includes/server.php:1195
+#: includes/server.php:1220
 msgid "The MCP request body must be a JSON object."
 msgstr ""
 
-#: includes/server.php:1678
+#: includes/server.php:1703
 msgid "Agent Abilities for MCP left one ability out of the agent tool list because it exceeded a safety limit:"
 msgid_plural "Agent Abilities for MCP left some abilities out of the agent tool list because they exceeded a safety limit:"
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/server.php:1699
+#: includes/server.php:1724
 msgid "its schema is nested too deeply"
 msgstr ""
 
-#: includes/server.php:1701
+#: includes/server.php:1726
 msgid "its schema has too many fields"
 msgstr ""
 
-#: includes/server.php:1703
+#: includes/server.php:1728
 msgid "its schema contains a value that is not valid JSON"
 msgstr ""
 
-#: includes/server.php:1705
+#: includes/server.php:1730
 msgid "its schema is too large"
 msgstr ""
 
-#: includes/server.php:1707
+#: includes/server.php:1732
 msgid "its schema could not be serialized"
 msgstr ""
 
-#: includes/server.php:1709
+#: includes/server.php:1734
 msgid "the enabled tool limit was reached"
 msgstr ""
 
-#: includes/server.php:1711
+#: includes/server.php:1736
 msgid "another plugin has already registered a tool under this name"
 msgstr ""
 
-#: includes/server.php:1713
+#: includes/server.php:1738
 msgid "it exceeded a safety limit"
 msgstr ""
 
-#: includes/server.php:1934
+#: includes/server.php:1959
 msgid "Your network address is not allowed to use this endpoint."
 msgstr ""
 
-#: includes/server.php:2186
+#: includes/server.php:2211
 msgid "Session could not be persisted; please retry."
 msgstr ""
 

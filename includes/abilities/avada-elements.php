@@ -881,7 +881,7 @@ function aafm_avada_write_output_schema( array $extra ): array {
 				'reversible'          => array( 'type' => 'boolean' ),
 				'reversible_reason'   => array(
 					'type'        => 'string',
-					'description' => __( 'Present only when there is no restore point: the site keeps no revisions, or its revision limit removed the one saved before the change. Says why there is no way back.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'Present only when there is no restore point: the site or the content type keeps no revisions, WordPress saved none before the change, or the one saved was deleted during the save by the revision limit or another plugin. Says why there is no way back.', 'agent-abilities-for-mcp' ),
 				),
 			)
 		),

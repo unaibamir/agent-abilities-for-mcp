@@ -862,6 +862,24 @@ function aafm_builder_revisions_off_reason(): string {
 }
 
 /**
+ * The reason a write has no restore point because its content type keeps no revisions.
+ *
+ * @return string
+ */
+function aafm_builder_type_no_revisions_reason(): string {
+	return __( 'This content type keeps no revisions, so there is no restore point for this change.', 'agent-abilities-for-mcp' );
+}
+
+/**
+ * The reason a write has no restore point because WordPress saved no revision of the content before it.
+ *
+ * @return string
+ */
+function aafm_builder_snapshot_failed_reason(): string {
+	return __( 'WordPress did not save a revision of the page before this change, so there is no restore point for it.', 'agent-abilities-for-mcp' );
+}
+
+/**
  * The reason a builder write has no restore point because the revision saved before it was gone after the save.
  *
  * @param WP_Post $post The post written.
@@ -940,14 +958,14 @@ function aafm_builder_restore_point( int $id, string $old ): ?int {
  * @param callable|null             $after    callable( int $post_id, bool $probe ): bool, or null.
  * @param string                    $builder  avada or wpbakery.
  * @return array{post:WP_Post,restore_revision_id:?int,reversible:bool,unchanged:bool,page_fingerprint:string,reversible_reason?:string}|WP_Error
- *         reversible_reason is present when there is no restore point: revisions are off, or the save pruned it.
+ *         reversible_reason is present when there is no restore point; the aafm_builder_*_reason() helpers give why.
  */
 function aafm_builder_commit( WP_Post $post, string $old, string $new, array $tags, array $expected, ?callable $after, string $builder ) { // phpcs:ignore Universal.NamingConventions.NoReservedKeywordParameterNames.newFound -- $new is the contracted parameter name (plan 326 S7-2).
 	$id         = (int) $post->ID;
 	$prefix     = 'wpbakery' === $builder ? 'wpbakery' : 'avada';
 	$reversible = post_type_supports( $post->post_type, 'revisions' ) && wp_revisions_enabled( $post );
 	// Demo #8: revisions off site-wide (a plugin such as GeoDirectory can define WP_POST_REVISIONS 0) is a reason too.
-	$reversible_reason = post_type_supports( $post->post_type, 'revisions' ) && ! $reversible ? aafm_builder_revisions_off_reason() : null;
+	$reversible_reason = post_type_supports( $post->post_type, 'revisions' ) ? ( $reversible ? null : aafm_builder_revisions_off_reason() ) : aafm_builder_type_no_revisions_reason();
 
 	// Step 0 (Ruling R3-PR2-8): nothing to save.
 	if ( $new === $old ) {
@@ -1004,6 +1022,9 @@ function aafm_builder_commit( WP_Post $post, string $old, string $new, array $ta
 	if ( $reversible ) {
 		$restore_revision_id = aafm_builder_restore_point( $id, $old );
 		$reversible          = null !== $restore_revision_id;
+		if ( ! $reversible ) {
+			$reversible_reason = aafm_builder_snapshot_failed_reason();
+		}
 	}
 
 	// Step 7.

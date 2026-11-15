@@ -213,6 +213,25 @@ final class AvadaTest extends TestCase {
 		$this->assertIsArray( $out );
 		$this->assertArrayNotHasKey( 'restore_revision_id', $out );
 		$this->assertStringContainsString( 'keeps no revisions', $out['reversible_reason'] );
+
+		// Final Codex pass: a type without revision support says so too.
+		$other = $this->make_avada_post( '[fusion_builder_container]Hello world[/fusion_builder_container]' );
+		remove_post_type_support( 'post', 'revisions' );
+		$out = aafm_exec_avada_replace_text(
+			array(
+				'post_id' => $other,
+				'search'  => 'Hello world',
+				'replace' => 'Greetings world',
+			)
+		);
+		add_post_type_support( 'post', 'revisions' );
+		$this->assertIsArray( $out );
+		$this->assertArrayNotHasKey( 'restore_revision_id', $out );
+		$this->assertStringContainsString( 'content type keeps no revisions', $out['reversible_reason'] );
+		// The schema text names a restore point deleted during the save by another plugin.
+		foreach ( array( aafm_args_avada_replace_text(), aafm_args_avada_update_element(), aafm_args_wpbakery_update_element() ) as $args ) {
+			$this->assertStringContainsString( 'another plugin', $args['output_schema']['properties']['reversible_reason']['description'] );
+		}
 	}
 
 	/**

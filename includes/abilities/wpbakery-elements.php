@@ -1239,7 +1239,7 @@ function aafm_args_wpbakery_update_element(): array {
 				'reversible'          => array( 'type' => 'boolean' ),
 				'reversible_reason'   => array(
 					'type'        => 'string',
-					'description' => __( 'Present only when there is no restore point: the site keeps no revisions, or its revision limit removed the one saved before the change. Says why there is no way back.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'Present only when there is no restore point: the site or the content type keeps no revisions, WordPress saved none before the change, or the one saved was deleted during the save by the revision limit or another plugin. Says why there is no way back.', 'agent-abilities-for-mcp' ),
 				),
 			),
 		),
@@ -2189,7 +2189,7 @@ function aafm_args_wpbakery_insert_element(): array {
 				'reversible'          => array( 'type' => 'boolean' ),
 				'reversible_reason'   => array(
 					'type'        => 'string',
-					'description' => __( 'Present only when there is no restore point: the site keeps no revisions, or its revision limit removed the one saved before the change. Says why there is no way back.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'Present only when there is no restore point: the site or the content type keeps no revisions, WordPress saved none before the change, or the one saved was deleted during the save by the revision limit or another plugin. Says why there is no way back.', 'agent-abilities-for-mcp' ),
 				),
 			),
 		),
@@ -2276,7 +2276,7 @@ function aafm_args_wpbakery_move_element(): array {
 				'reversible'          => array( 'type' => 'boolean' ),
 				'reversible_reason'   => array(
 					'type'        => 'string',
-					'description' => __( 'Present only when there is no restore point: the site keeps no revisions, or its revision limit removed the one saved before the change. Says why there is no way back.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'Present only when there is no restore point: the site or the content type keeps no revisions, WordPress saved none before the change, or the one saved was deleted during the save by the revision limit or another plugin. Says why there is no way back.', 'agent-abilities-for-mcp' ),
 				),
 			),
 		),
@@ -2418,7 +2418,7 @@ function aafm_args_wpbakery_remove_element(): array {
 				'restore_revision_id' => array( 'type' => array( 'integer', 'null' ) ),
 				'reversible_reason'   => array(
 					'type'        => 'string',
-					'description' => __( 'Present only when there is no restore point: the site keeps no revisions, or its revision limit removed the one saved before the change. Says why there is no way back.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'Present only when there is no restore point: the site or the content type keeps no revisions, WordPress saved none before the change, or the one saved was deleted during the save by the revision limit or another plugin. Says why there is no way back.', 'agent-abilities-for-mcp' ),
 				),
 			),
 		),

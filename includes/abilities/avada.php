@@ -981,7 +981,7 @@ function aafm_args_avada_replace_text(): array {
 				),
 				'reversible_reason'   => array(
 					'type'        => 'string',
-					'description' => __( 'Present only when there is no restore point: the site keeps no revisions, or its revision limit removed the one saved before the change. Says why there is no way back.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'Present only when there is no restore point: the site or the content type keeps no revisions, WordPress saved none before the change, or the one saved was deleted during the save by the revision limit or another plugin. Says why there is no way back.', 'agent-abilities-for-mcp' ),
 				),
 				'affects'             => array( 'type' => 'string' ),
 			),
@@ -1253,8 +1253,16 @@ function aafm_exec_avada_replace_text( array $input ) {
 
 	// Demo #4: keep the page before the change as a revision, the way the element tools do, so it can be undone.
 	$supports = post_type_supports( $post->post_type, 'revisions' );
-	$restore  = $supports && wp_revisions_enabled( $post ) ? aafm_builder_restore_point( $id, $content ) : null;
-	$reason   = $supports && ! wp_revisions_enabled( $post ) ? aafm_builder_revisions_off_reason() : null;
+	$enabled  = $supports && wp_revisions_enabled( $post );
+	$restore  = $enabled ? aafm_builder_restore_point( $id, $content ) : null;
+	$reason   = null;
+	if ( ! $supports ) {
+		$reason = aafm_builder_type_no_revisions_reason();
+	} elseif ( ! $enabled ) {
+		$reason = aafm_builder_revisions_off_reason();
+	} elseif ( null === $restore ) {
+		$reason = aafm_builder_snapshot_failed_reason();
+	}
 
 	$updated = wp_update_post(
 		wp_slash(

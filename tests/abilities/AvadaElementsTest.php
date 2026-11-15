@@ -835,6 +835,21 @@ final class AvadaElementsTest extends TestCase {
 		$this->assertStringContainsString( 'keeps 1 revision per post', $out['reversible_reason'] );
 	}
 
+	/**
+	 * Demo #8: with revisions off site-wide (GeoDirectory defines WP_POST_REVISIONS 0), the reason says so.
+	 */
+	public function test_revisions_off_gives_the_reason(): void {
+		$this->act_as_admin();
+		$id   = $this->avada_post();
+		$keep = static fn(): int => 0;
+		add_filter( 'wp_revisions_to_keep', $keep );
+		$out  = aafm_exec_avada_update_element( $this->addr( $id, 'fusion_button', array( 'set_atts' => array( 'title' => 'No revisions' ) ) ) );
+		remove_filter( 'wp_revisions_to_keep', $keep );
+		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+		$this->assertFalse( $out['reversible'] );
+		$this->assertStringContainsString( 'keeps no revisions', $out['reversible_reason'] );
+	}
+
 	public function test_output_schemas_declare_reversible_reason(): void {
 		$schema = aafm_args_avada_update_element()['output_schema'];
 		$this->assertSame( 'string', $schema['properties']['reversible_reason']['type'] );

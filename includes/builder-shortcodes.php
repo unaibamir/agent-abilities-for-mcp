@@ -919,6 +919,10 @@ function aafm_builder_commit( WP_Post $post, string $old, string $new, array $ta
 	$id         = (int) $post->ID;
 	$prefix     = 'wpbakery' === $builder ? 'wpbakery' : 'avada';
 	$reversible = post_type_supports( $post->post_type, 'revisions' ) && wp_revisions_enabled( $post );
+	// Demo #8: revisions off site-wide (a plugin such as GeoDirectory can define WP_POST_REVISIONS 0) is a reason too.
+	$reversible_reason = post_type_supports( $post->post_type, 'revisions' ) && ! $reversible
+		? __( 'This site keeps no revisions, so there is no restore point for this change. A plugin or wp-config.php can turn revisions off site-wide; a WP_POST_REVISIONS line in wp-config.php sets how many are kept.', 'agent-abilities-for-mcp' )
+		: null;
 
 	// Step 0 (Ruling R3-PR2-8): nothing to save.
 	if ( $new === $old ) {
@@ -993,7 +997,6 @@ function aafm_builder_commit( WP_Post $post, string $old, string $new, array $ta
 
 	// Core saves its own revision inside the update and prunes the oldest down to wp_revisions_to_keep(); with one kept,
 	// that deletes the revision saved above, and a plugin can delete it too. Never report a restore point that is gone.
-	$reversible_reason = null;
 	if ( null !== $restore_revision_id && ! aafm_exact_object( 'post', $restore_revision_id ) instanceof WP_Post ) {
 		$restore_revision_id = null;
 		$reversible          = false;

@@ -329,13 +329,20 @@ final class AvadaElementsTest extends TestCase {
 	 * repeated spaces while the tool reports success.
 	 */
 	public function test_text_keeps_every_character_it_does_not_refuse(): void {
-		foreach ( array( 'Press <Ctrl> + S', 'Save 100%25 now  with   spaces', ' padded ', 'Use <strong> here' ) as $text ) {
+		foreach ( array( 'Press <Ctrl> + S', 'Save 100%25 now', ' padded ', 'Use <strong> here' ) as $text ) {
 			$encoded = $this->encode( 'fusion_button', 'title', $text );
 			$this->assertIsString( $encoded, $text );
 			$this->assertSame( $text, aafm_avada_decode_atts( 'fusion_button', array( 'title' => $encoded ) )['title'], $text );
 		}
 		$this->assertSame( 'Press &lt;Ctrl&gt; + S', $this->encode( 'fusion_button', 'title', 'Press <Ctrl> + S' ) );
 		$this->assert_error( $this->encode( 'fusion_button', 'title', "tab\there" ), 'aafm_builder_invalid_value', 400 );
+		// Avada's editor collapses a run of spaces in an attribute on its next save (smoke site, fix round 1), so it is
+		// refused with a message that names it rather than stored to be changed later.
+		foreach ( array( 'two  spaces', 'two&#32;&#32;spaces' ) as $text ) {
+			$out = $this->encode( 'fusion_button', 'title', $text );
+			$this->assert_error( $out, 'aafm_avada_repeated_spaces', 400 );
+			$this->assertStringContainsString( 'two or more spaces in a row', $out->get_error_message() );
+		}
 	}
 
 	public function test_link_refuses_javascript_and_data_urls(): void {

@@ -460,6 +460,18 @@ function aafm_avada_encode_value( string $kind, $value, array $param ) {
 		$text = aafm_wpbakery_scalar_text( $value );
 		return null === $text ? aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $name ) : aafm_avada_body_text( $text );
 	}
+	if ( 'text' === $kind && is_string( $value ) && false !== strpos( html_entity_decode( $value, ENT_QUOTES | ENT_HTML5, 'UTF-8' ), '  ' ) ) {
+		// Avada's editor collapses a run of spaces in an attribute on its next save, so the value would not stay as sent.
+		return new WP_Error(
+			'aafm_avada_repeated_spaces',
+			/* translators: %s: the setting name. */
+			sprintf( __( 'The value of %s has two or more spaces in a row, which Avada\'s editor turns into one space the next time the page is saved. Use single spaces. Nothing was changed.', 'agent-abilities-for-mcp' ), $name ),
+			array(
+				'status'  => 400,
+				'setting' => $name,
+			)
+		);
+	}
 	$out = aafm_avada_encode_clean( $kind, $value, $param );
 	return null === $out ? aafm_wpbakery_setting_error( 'aafm_builder_invalid_value', $name ) : $out;
 }

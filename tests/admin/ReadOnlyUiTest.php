@@ -590,7 +590,7 @@ final class ReadOnlyUiTest extends TestCase {
 
 		$this->assertStringContainsString( "querySelectorAll( '.aafm-enable-writes' )", $js );
 		$this->assertStringContainsString(
-			'.aafm-ability-row[data-risk="write"]:not([data-high-risk]) input[type="checkbox"][name="aafm_abilities[]"]:not([disabled])',
+			'.aafm-ability-row[data-risk="write"]:not([data-high-risk]):not([data-own-switch]) input[type="checkbox"][name="aafm_abilities[]"]:not([disabled])',
 			$js,
 			'The write sweep must scope to non-destructive, non-high-risk writes through the attributes the renderer emits.'
 		);

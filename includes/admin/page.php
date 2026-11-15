@@ -2277,7 +2277,7 @@ function aafm_render_abilities_bulk_toolbar( string $slug, array $tab_rows ): vo
 function aafm_enable_writes_button_html( string $slug, array $rows ): string {
 	foreach ( $rows as $ability ) {
 		$write_name = (string) ( $ability['name'] ?? '' );
-		if ( 'write' !== (string) ( $ability['risk'] ?? '' ) || aafm_ability_is_high_risk( $write_name ) || null !== aafm_ability_lock_reason( $write_name ) ) {
+		if ( 'write' !== (string) ( $ability['risk'] ?? '' ) || aafm_ability_is_high_risk( $write_name ) || aafm_ability_needs_own_switch( $write_name ) || null !== aafm_ability_lock_reason( $write_name ) ) {
 			continue;
 		}
 		// The note is not decoration: "writes" on its own reads as "everything that changes the
@@ -2327,9 +2327,11 @@ function aafm_render_ability_row( array $ability, array $enabled, array $disclos
 	// this attribute covers the unlocked window, which is a supported configuration. Emitted as a
 	// server-rendered fact for the same reason data-risk is, rather than guessed from the badge.
 	printf(
-		'<div class="aafm-ability-row" data-risk="%1$s"%2$s>',
+		'<div class="aafm-ability-row" data-risk="%1$s"%2$s%3$s>',
 		esc_attr( $risk ),
-		aafm_ability_is_high_risk( $name ) ? ' data-high-risk="1"' : ''
+		aafm_ability_is_high_risk( $name ) ? ' data-high-risk="1"' : '',
+		// The Studio import is never ticked by a bulk control (aafm_ability_needs_own_switch()).
+		aafm_ability_needs_own_switch( $name ) ? ' data-own-switch="1"' : ''
 	);
 
 	// Presentation only. The security boundary is the subtraction in aafm_get_enabled_abilities();

@@ -382,4 +382,26 @@ final class HighRiskUiTest extends TestCase {
 		$this->assertStringNotContainsString( 'aafm-ability-locked', $html );
 		$this->assertStringNotContainsString( 'aafm-badge-high-risk', $html );
 	}
+
+	/**
+	 * Fix round 1 ruling: the Studio import needs its own tick. Its row carries data-own-switch, no other row does, and a
+	 * set whose only write is the import gets no "Enable all writes" button.
+	 */
+	public function test_bulk_enable_never_ticks_the_studio_import(): void {
+		$this->assertStringContainsString( 'data-own-switch="1"', $this->render_integration_row( 'aafm/avada-import-studio-item' ) );
+		$this->assertStringNotContainsString( 'data-own-switch', $this->render_integration_row( 'aafm/avada-list-studio-items' ) );
+		$this->assertStringNotContainsString( 'data-own-switch', $this->render_row( 'aafm/update-post' ) );
+		$registry = aafm_get_abilities_registry_full();
+		$this->assertSame( '', aafm_enable_writes_button_html( 'studio', array( array( 'name' => 'aafm/avada-import-studio-item' ) + $registry['aafm/avada-import-studio-item'] ) ) );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Reading a local plugin asset off disk, never a remote URL.
+		$js = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
+		$this->assertStringContainsString( '.aafm-ability-row[data-risk="write"]:not([data-high-risk]):not([data-own-switch])', $js );
+		foreach ( array( '#bindSectionToggles() {', '#bindIntegrationToggles() {' ) as $method ) {
+			$start = (int) strpos( $js, $method );
+			$body  = substr( $js, $start, (int) strpos( $js, "\n\t\t#", $start + 1 ) - $start );
+			$this->assertStringContainsString( "enabling && b.closest( '.aafm-ability-row' )?.hasAttribute( 'data-own-switch' )", $body, $method );
+			// An unticked import alone never turns the button into an enable click, so Disable all stays reachable.
+			$this->assertStringContainsString( "! b.checked && ! b.closest( '.aafm-ability-row' )?.hasAttribute( 'data-own-switch' )", $body, $method );
+		}
+	}
 }

@@ -923,7 +923,7 @@
 						return;
 					}
 					const boxes = scope.querySelectorAll(
-						'.aafm-ability-row[data-risk="write"]:not([data-high-risk]) input[type="checkbox"][name="aafm_abilities[]"]:not([disabled])'
+						'.aafm-ability-row[data-risk="write"]:not([data-high-risk]):not([data-own-switch]) input[type="checkbox"][name="aafm_abilities[]"]:not([disabled])'
 					);
 					boxes.forEach( ( b ) => {
 						b.checked = true;
@@ -954,7 +954,10 @@
 					const boxes = panel.querySelectorAll(
 						'input[type="checkbox"][name="aafm_abilities[]"]'
 					);
-					const enabling = Array.from( boxes ).some( ( b ) => ! b.checked );
+					// A row that needs its own tick never makes this an enable click on its own.
+					const enabling = Array.from( boxes ).some(
+						( b ) => ! b.checked && ! b.closest( '.aafm-ability-row' )?.hasAttribute( 'data-own-switch' )
+					);
 					if ( enabling && btn.dataset.hasDestructive === '1' ) {
 						const msg = this.#t(
 							'sectionToggleConfirm',
@@ -965,6 +968,10 @@
 						}
 					}
 					boxes.forEach( ( b ) => {
+						// The Studio import needs its own tick; Disable all still clears it.
+						if ( enabling && b.closest( '.aafm-ability-row' )?.hasAttribute( 'data-own-switch' ) ) {
+							return;
+						}
 						b.checked = enabling;
 					} );
 					// Setting .checked fires no event, so tell the unsaved-changes dot directly.
@@ -994,8 +1001,9 @@
 					const boxes = card.querySelectorAll(
 						'input[type="checkbox"][name="aafm_abilities[]"]'
 					);
+					// A row that needs its own tick never makes this an enable click on its own.
 					const enabling = Array.from( boxes ).some(
-						( b ) => ! b.checked
+						( b ) => ! b.checked && ! b.closest( '.aafm-ability-row' )?.hasAttribute( 'data-own-switch' )
 					);
 					if ( enabling && btn.dataset.hasSensitive === '1' ) {
 						const msg = this.#t(
@@ -1007,6 +1015,10 @@
 						}
 					}
 					boxes.forEach( ( b ) => {
+						// The Studio import needs its own tick; Disable all still clears it.
+						if ( enabling && b.closest( '.aafm-ability-row' )?.hasAttribute( 'data-own-switch' ) ) {
+							return;
+						}
 						b.checked = enabling;
 					} );
 					// Setting .checked fires no event, so tell the unsaved-changes dot directly.

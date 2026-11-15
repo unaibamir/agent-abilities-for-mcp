@@ -1498,6 +1498,17 @@ function aafm_avada_studio_approved(): bool {
 }
 
 /**
+ * Whether an ability is left out of every bulk enable control, so the owner ticks it on its own: the Studio import,
+ * whose switch is also the approval for the Studio list (fix round 1 ruling).
+ *
+ * @param string $name Ability name.
+ * @return bool
+ */
+function aafm_ability_needs_own_switch( string $name ): bool {
+	return 'aafm/avada-import-studio-item' === $name;
+}
+
+/**
  * The refusal while the Studio tools are not approved.
  *
  * @return WP_Error

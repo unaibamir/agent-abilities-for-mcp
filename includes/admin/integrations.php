@@ -643,10 +643,12 @@ function aafm_render_integration_ability_row( array $ability, array $enabled, ar
 	// coupons and tax rates once the operator unlocks the category. See the fuller note in
 	// aafm_render_ability_row(). Held bridge rows carry the same attribute on the Plugins' own tools tab.
 	printf(
-		'<div class="aafm-ability-row" data-risk="%1$s"%2$s%3$s>',
+		'<div class="aafm-ability-row" data-risk="%1$s"%2$s%3$s%4$s>',
 		esc_attr( $risk ),
 		aafm_ability_is_high_risk( $name ) ? ' data-high-risk="1"' : '',
-		$disabled ? ' aria-disabled="true"' : ''
+		$disabled ? ' aria-disabled="true"' : '',
+		// The Studio import is never ticked by a bulk control (aafm_ability_needs_own_switch()).
+		aafm_ability_needs_own_switch( $name ) ? ' data-own-switch="1"' : ''
 	);
 
 	// An inactive host has nothing enabled, so a disabled row never renders checked; it also

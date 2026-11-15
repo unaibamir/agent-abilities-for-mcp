@@ -473,6 +473,8 @@ final class BuilderAddonsTest extends TestCase {
 			'[vc_row][vc_column][vc_column_text]<p>%5Bvc_raw_js%5D</p>[/vc_column_text][/vc_column][/vc_row]' => array( 'aafm_wpbakery_encoded_brackets_need_unfiltered_html', 400 ),
 			'[vc_row][vc_column][vc_column_text]<p>&#91;vc_raw_js&#93;</p>[/vc_column_text][/vc_column][/vc_row]' => array( 'aafm_wpbakery_brackets_need_unfiltered_html', 400 ),
 			'[vc_row][vc_column][vc_column_text]<p>x</p><img src="a" onerror=[/vc_column_text][/vc_column][/vc_row]' => array( 'aafm_wpbakery_incomplete_html_needs_unfiltered_html', 400 ),
+			// CX-FZ-1: the text between a container's children.
+			'[vc_row][vc_column][vc_column_text]x[/vc_column_text]<script>alert(1)</script>[vc_column_text]y[/vc_column_text][/vc_column][/vc_row]' => array( 'aafm_wpbakery_text_needs_unfiltered_html', 403 ),
 		);
 		foreach ( $cases as $text => list( $code, $status ) ) {
 			$tid   = (string) $this->template( $text );
@@ -508,6 +510,54 @@ final class BuilderAddonsTest extends TestCase {
 			$id = $this->page();
 			$this->act_as_restricted_editor();
 			$this->assert_error( $this->insert( $id, $wrap, array( 'mode' => $mode ), $anchor ), 'aafm_builder_needs_unfiltered_html', 403 );
+			$this->assertSame( self::SIMPLE, get_post_field( 'post_content', $id, 'raw' ), $mode );
+			$this->acting_as( 'administrator' );
+			$this->assertIsArray( $this->insert( $id, $wrap, array( 'mode' => $mode ), $anchor ), $mode );
+		}
+	}
+
+	/**
+	 * CX-FZ-1: Templatera prints the whole stored template, so HTML before, between or after its rows is refused as a
+	 * reference for a restricted user, page unchanged. A copy places the rows alone, so that HTML never reaches the
+	 * page. An administrator places the reference.
+	 */
+	public function test_html_outside_the_rows_of_a_template_is_refused_as_a_reference_and_never_copied(): void {
+		add_filter( 'aafm_templatera_active', '__return_true' );
+		$row   = static fn( string $text ): string => '[vc_row][vc_column][vc_column_text]' . $text . '[/vc_column_text][/vc_column][/vc_row]';
+		$texts = array(
+			'before rows'  => '<script>alert(1)</script>' . $row( 'x' ),
+			'between rows' => $row( 'x' ) . '<p onclick="alert(1)">x</p>' . $row( 'y' ),
+			'after rows'   => $row( 'x' ) . '<script>alert(1)</script>',
+		);
+		foreach ( $texts as $label => $text ) {
+			$tid = (string) $this->template( $text );
+			$id  = $this->page();
+			$this->act_as_restricted_editor();
+			$this->assert_error( $this->insert( $id, $tid, array( 'mode' => 'reference' ), 2 ), 'aafm_wpbakery_text_needs_unfiltered_html', 403 );
+			$this->assertSame( self::SIMPLE, get_post_field( 'post_content', $id, 'raw' ), $label );
+			$this->assertIsArray( $this->insert( $id, $tid, array( 'mode' => 'copy' ), 0 ), $label );
+			$page = (string) get_post_field( 'post_content', $id, 'raw' );
+			$this->assertStringNotContainsString( '<script', $page, $label );
+			$this->assertStringNotContainsString( 'onclick', $page, $label );
+			$this->acting_as( 'administrator' );
+			$this->assertIsArray( $this->insert( $this->page(), $tid, array( 'mode' => 'reference' ), 2 ), $label );
+		}
+	}
+
+	/**
+	 * CX-FZ-1: a nested template whose loose HTML sits after its last row is checked like the rest of its text.
+	 */
+	public function test_a_nested_templatera_reference_checks_the_text_outside_its_rows(): void {
+		add_filter( 'aafm_templatera_active', '__return_true' );
+		$loose = $this->template( '[vc_row][vc_column][vc_column_text]x[/vc_column_text][/vc_column][/vc_row]<script>alert(1)</script>' );
+		$wrap  = (string) $this->template( '[vc_row][vc_column][templatera id="' . $loose . '"][/vc_column][/vc_row]' );
+		foreach ( array(
+			'copy'      => 0,
+			'reference' => 2,
+		) as $mode => $anchor ) {
+			$id = $this->page();
+			$this->act_as_restricted_editor();
+			$this->assert_error( $this->insert( $id, $wrap, array( 'mode' => $mode ), $anchor ), 'aafm_wpbakery_text_needs_unfiltered_html', 403 );
 			$this->assertSame( self::SIMPLE, get_post_field( 'post_content', $id, 'raw' ), $mode );
 			$this->acting_as( 'administrator' );
 			$this->assertIsArray( $this->insert( $id, $wrap, array( 'mode' => $mode ), $anchor ), $mode );

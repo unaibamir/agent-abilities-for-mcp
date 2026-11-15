@@ -1775,7 +1775,7 @@ function aafm_wpbakery_serialize_nodes( array $nodes, array $map, array $tags, i
 
 /**
  * SEC-S9b-2 (Ruling R-S11-1), for a user without unfiltered_html: every run of body text in stored shortcode text
- * (an element's inner content outside its child elements) goes through aafm_wpbakery_body_text(), and is refused
+ * (an element's inner content outside its child elements, and the text outside every root) goes through aafm_wpbakery_body_text(), and is refused
  * when kses would remove a tag, an attribute, a style rule or text from it. Core's save runs kses for this user and
  * the save replay compares only the outline, so a strip would otherwise be saved as a silent partial write.
  *
@@ -1788,7 +1788,19 @@ function aafm_wpbakery_stored_text_gate( string $text, array $tags ) {
 	if ( null === $elements ) {
 		return aafm_builder_error( 'aafm_builder_unparseable' );
 	}
-	foreach ( $elements as $element ) {
+	// The whole text is one more container, so the text before, between and after the roots, which Templatera
+	// prints with the rest, is checked too.
+	$containers = array_merge(
+		array(
+			array(
+				'index'     => null,
+				'open_end'  => 0,
+				'inner_end' => strlen( $text ),
+			),
+		),
+		$elements
+	);
+	foreach ( $containers as $element ) {
 		$from     = (int) $element['open_end'];
 		$segments = array();
 		foreach ( $elements as $child ) {

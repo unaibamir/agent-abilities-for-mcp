@@ -774,4 +774,304 @@ final class RevisionsTest extends TestCase {
 		$this->assertTrue( $out['restored'] );
 		$this->assertSame( $oldest->post_content, get_post( $pid )->post_content );
 	}
+
+	public function test_revision_tools_reach_a_layout_section(): void {
+		register_post_type(
+			'fusion_tb_section',
+			array(
+				'public'          => false,
+				'capability_type' => 'post',
+				'map_meta_cap'    => true,
+				'supports'        => array( 'title', 'editor', 'revisions' ),
+			)
+		);
+		$this->acting_as( 'administrator' );
+		$id = self::factory()->post->create( array( 'post_type' => 'fusion_tb_section' ) );
+		$this->assertTrue( aafm_perm_list_revisions( array( 'post_id' => $id ) ) );
+
+		$this->acting_as( 'editor' );
+		$this->assertFalse( aafm_perm_list_revisions( array( 'post_id' => $id ) ) );
+	}
+
+	private const AV_A  = '[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1"][fusion_text]Alpha.[/fusion_text][fusion_text]Extra.[/fusion_text][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]';
+	private const AV_B  = '[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1"][fusion_text]Bravo.[/fusion_text][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]';
+	private const WPB_A = '[vc_row][vc_column][vc_column_text]<p>Alpha.</p>[/vc_column_text][/vc_column][/vc_row]';
+	private const WPB_B = '[vc_row][vc_column][vc_column_text]<p>Bravo.</p>[/vc_column_text][/vc_column][/vc_row]';
+
+	/**
+	 * Rebuilds the seam recorded, as (post id, kind) pairs.
+	 *
+	 * @var list<array{0:int,1:string}>
+	 */
+	private $rebuilds = array();
+
+	/**
+	 * A post whose oldest revision holds $old while the post holds $current, written as an administrator.
+	 *
+	 * @param string $old     Content the oldest revision holds.
+	 * @param string $current Content the post holds.
+	 * @param string $type    Post type.
+	 * @param int    $author  Post author, or 0 for the acting administrator.
+	 * @return array{0:int,1:int} Post id and the id of the revision holding $old.
+	 */
+	private function builder_post( string $old, string $current, string $type = 'page', int $author = 0 ): array {
+		$this->acting_as( 'administrator' );
+		$args = array(
+			'post_type'    => $type,
+			'post_content' => 'seed',
+		);
+		if ( $author ) {
+			$args['post_author'] = $author;
+		}
+		$pid = self::factory()->post->create( $args );
+		foreach ( array( $old, $current ) as $content ) {
+			wp_update_post(
+				wp_slash(
+					array(
+						'ID'           => $pid,
+						'post_content' => $content,
+					)
+				)
+			);
+		}
+		$revs = wp_get_post_revisions( $pid );
+		$rev  = end( $revs );
+		$this->assertSame( $old, $rev->post_content );
+		$this->assertSame( $current, get_post_field( 'post_content', $pid, 'raw' ) );
+		return array( $pid, (int) $rev->ID );
+	}
+
+	private function restore( int $pid, int $rid ) {
+		return aafm_exec_restore_revision(
+			array(
+				'post_id'     => $pid,
+				'revision_id' => $rid,
+			)
+		);
+	}
+
+	private function record_rebuilds(): void {
+		$this->rebuilds = array();
+		add_filter( 'aafm_builder_vendor', array( $this, 'rebuild_seam' ), 10, 2 );
+	}
+
+	/**
+	 * Seam filter recording each CSS rebuild.
+	 *
+	 * @param callable|null $resolved Resolved entry.
+	 * @param string        $entry    Entry.
+	 * @return callable|null
+	 */
+	public function rebuild_seam( $resolved, string $entry ) {
+		if ( 'wpbakery_css_rebuild' !== $entry ) {
+			return $resolved;
+		}
+		return function ( int $id, string $type ): void {
+			$this->rebuilds[] = array( $id, $type );
+		};
+	}
+
+	private function assert_restore_refused( $out, string $code, int $pid, string $current ): void {
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( $code, $out->get_error_code() );
+		clean_post_cache( $pid );
+		$this->assertSame( $current, get_post_field( 'post_content', $pid, 'raw' ) );
+	}
+
+	public function tear_down(): void {
+		remove_filter( 'aafm_builder_vendor', array( $this, 'rebuild_seam' ), 10 );
+		remove_all_filters( 'aafm_integration_active_avada' );
+		remove_all_filters( 'aafm_integration_active_wpbakery' );
+		parent::tear_down();
+	}
+
+	public function test_restore_is_allowed_on_an_avada_page_while_avada_is_active(): void {
+		add_filter( 'aafm_integration_active_avada', '__return_true' );
+		list( $pid, $rid ) = $this->builder_post( self::AV_A, self::AV_B );
+		update_post_meta( $pid, 'fusion_builder_status', 'active' );
+		$this->assertSame( 'avada', aafm_post_has_foreign_builder_ownership( $pid ) );
+
+		$out = $this->restore( $pid, $rid );
+
+		$this->assertIsArray( $out );
+		$this->assertTrue( $out['restored'] );
+		$this->assertSame( self::AV_A, get_post_field( 'post_content', $pid, 'raw' ) );
+	}
+
+	public function test_restore_is_allowed_on_a_wpbakery_page_while_wpbakery_is_active(): void {
+		add_filter( 'aafm_integration_active_wpbakery', '__return_true' );
+		$this->record_rebuilds();
+		list( $pid, $rid ) = $this->builder_post( self::WPB_A, self::WPB_B );
+		$this->assertSame( 'wpbakery', aafm_post_has_foreign_builder_ownership( $pid ) );
+
+		$out = $this->restore( $pid, $rid );
+
+		$this->assertIsArray( $out );
+		$this->assertTrue( $out['restored'] );
+		$this->assertSame( self::WPB_A, get_post_field( 'post_content', $pid, 'raw' ) );
+	}
+
+	public function test_restore_stays_refused_on_those_pages_while_the_integration_is_inactive(): void {
+		add_filter( 'aafm_integration_active_avada', '__return_false' );
+		add_filter( 'aafm_integration_active_wpbakery', '__return_false' );
+		list( $pid, $rid ) = $this->builder_post( self::AV_A, self::AV_B );
+		update_post_meta( $pid, 'fusion_builder_status', 'active' );
+		$this->assert_restore_refused( $this->restore( $pid, $rid ), 'aafm_page_builder_owned', $pid, self::AV_B );
+
+		list( $pid, $rid ) = $this->builder_post( self::WPB_A, self::WPB_B );
+		$this->assert_restore_refused( $this->restore( $pid, $rid ), 'aafm_page_builder_owned', $pid, self::WPB_B );
+	}
+
+	public function test_restore_stays_refused_on_an_elementor_page_and_on_unknown_ownership(): void {
+		add_filter( 'aafm_integration_active_avada', '__return_true' );
+		list( $pid, $rid ) = $this->builder_post( self::AV_A, self::AV_B );
+		update_post_meta( $pid, '_elementor_data', '[]' );
+		$this->assertSame( 'elementor', aafm_post_has_foreign_builder_ownership( $pid ) );
+		$this->assert_restore_refused( $this->restore( $pid, $rid ), 'aafm_page_builder_owned', $pid, self::AV_B );
+
+		update_post_meta( $pid, 'fusion_builder_status', 'active' );
+		$this->assertSame( 'unknown', aafm_post_has_foreign_builder_ownership( $pid ) );
+		$this->assert_restore_refused( $this->restore( $pid, $rid ), 'aafm_page_builder_owned', $pid, self::AV_B );
+	}
+
+	public function test_a_section_restore_is_refused_when_the_replay_would_strip_an_element(): void {
+		add_filter( 'aafm_integration_active_avada', '__return_true' );
+		register_post_type(
+			'fusion_tb_section',
+			array(
+				'public'          => false,
+				'capability_type' => 'post',
+				'map_meta_cap'    => true,
+				'supports'        => array( 'title', 'editor', 'revisions' ),
+			)
+		);
+		list( $pid, $rid ) = $this->builder_post( self::AV_A, self::AV_B, 'fusion_tb_section' );
+		$this->assertFalse( aafm_post_has_foreign_builder_ownership( $pid ) );
+		$strip = static fn( $value ) => str_replace( '[fusion_text]Extra.[/fusion_text]', '', (string) $value );
+		add_filter( 'content_save_pre', $strip );
+		try {
+			$out = $this->restore( $pid, $rid );
+		} finally {
+			remove_filter( 'content_save_pre', $strip );
+		}
+
+		$this->assert_restore_refused( $out, 'aafm_avada_save_would_change_layout', $pid, self::AV_B );
+	}
+
+	public function test_a_wpbakery_page_without_a_root_row_gets_the_checks_and_the_rebuild_when_its_revision_has_one(): void {
+		add_filter( 'aafm_integration_active_wpbakery', '__return_true' );
+		$this->record_rebuilds();
+		list( $pid, $rid ) = $this->builder_post( self::WPB_A, '<p>Plain.</p>' );
+		$this->assertFalse( aafm_post_has_foreign_builder_ownership( $pid ) );
+
+		$out = $this->restore( $pid, $rid );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( self::WPB_A, get_post_field( 'post_content', $pid, 'raw' ) );
+		$this->assertSame( array( array( $pid, 'default' ), array( $pid, 'custom' ) ), $this->rebuilds );
+	}
+
+	public function test_restore_refuses_a_page_its_own_save_would_change(): void {
+		add_filter( 'aafm_integration_active_wpbakery', '__return_true' );
+		$this->record_rebuilds();
+		$current           = self::WPB_B . '<iframe></iframe>';
+		list( $pid, $rid ) = $this->builder_post( self::WPB_A, $current );
+		$strip             = static fn( $value ) => str_replace( '<iframe></iframe>', '', (string) $value );
+		add_filter( 'content_save_pre', $strip );
+		try {
+			$out = $this->restore( $pid, $rid );
+		} finally {
+			remove_filter( 'content_save_pre', $strip );
+		}
+
+		$this->assert_restore_refused( $out, 'aafm_wpbakery_save_would_change_page', $pid, $current );
+		$this->assertSame( array(), $this->rebuilds );
+	}
+
+	public function test_restore_refuses_a_revision_whose_embed_the_users_save_would_strip(): void {
+		add_filter( 'aafm_integration_active_avada', '__return_true' );
+		$author            = self::factory()->user->create( array( 'role' => 'author' ) );
+		$old               = str_replace( 'Alpha.', 'Alpha.<iframe src="https://example.com/embed"></iframe>', self::AV_A );
+		list( $pid, $rid ) = $this->builder_post( $old, self::AV_B, 'post', $author );
+		update_post_meta( $pid, 'fusion_builder_status', 'active' );
+		wp_set_current_user( $author );
+		$this->assertFalse( current_user_can( 'unfiltered_html' ) );
+		$this->assertTrue(
+			aafm_perm_restore_revision(
+				array(
+					'post_id'     => $pid,
+					'revision_id' => $rid,
+				)
+			)
+		);
+
+		$this->assert_restore_refused( $this->restore( $pid, $rid ), 'aafm_avada_save_would_change_page', $pid, self::AV_B );
+	}
+
+	public function test_restore_rebuilds_wpbakery_css_once(): void {
+		add_filter( 'aafm_integration_active_wpbakery', '__return_true' );
+		$this->record_rebuilds();
+		list( $pid, $rid ) = $this->builder_post( self::WPB_A, self::WPB_B );
+
+		$this->assertIsArray( $this->restore( $pid, $rid ) );
+		$this->assertSame( array( array( $pid, 'default' ), array( $pid, 'custom' ) ), $this->rebuilds );
+	}
+
+	public function test_restore_reports_stale_css_when_the_rebuild_fails(): void {
+		add_filter( 'aafm_integration_active_wpbakery', '__return_true' );
+		$absent            = static fn( $resolved, string $entry ) => 'wpbakery_css_rebuild' === $entry ? null : $resolved;
+		add_filter( 'aafm_builder_vendor', $absent, 10, 2 );
+		list( $pid, $rid ) = $this->builder_post( self::WPB_A, self::WPB_B );
+		try {
+			$out = $this->restore( $pid, $rid );
+		} finally {
+			remove_filter( 'aafm_builder_vendor', $absent, 10 );
+		}
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_wpbakery_css_stale', $out->get_error_code() );
+		$this->assertSame( self::WPB_A, get_post_field( 'post_content', $pid, 'raw' ) );
+	}
+
+	public function test_restore_description_lists_the_refused_builders_and_names_the_two_exceptions(): void {
+		$text = aafm_get_abilities_registry()['aafm/restore-revision']['description'];
+
+		$this->assertStringContainsString( aafm_page_builder_names(), $text );
+		$this->assertStringContainsString( 'except an Avada or WPBakery page while that builder is active', $text );
+		$this->assertStringContainsString( 'So is a revision made with the other builder', $text );
+		$this->assertStringNotContainsString( ' - ', $text );
+	}
+
+	public function test_restore_refuses_a_wpbakery_revision_on_a_page_avada_owns_now(): void {
+		add_filter( 'aafm_integration_active_avada', '__return_true' );
+		add_filter( 'aafm_integration_active_wpbakery', '__return_true' );
+		list( $pid, $rid ) = $this->builder_post( self::WPB_A, self::AV_B );
+		update_post_meta( $pid, 'fusion_builder_status', 'active' );
+		$this->assertSame( 'avada', aafm_post_has_foreign_builder_ownership( $pid ) );
+
+		$this->assert_restore_refused( $this->restore( $pid, $rid ), 'aafm_restore_other_builder', $pid, self::AV_B );
+	}
+
+	public function test_restore_refuses_an_avada_revision_on_a_page_wpbakery_owns_now(): void {
+		add_filter( 'aafm_integration_active_avada', '__return_true' );
+		add_filter( 'aafm_integration_active_wpbakery', '__return_true' );
+		$this->record_rebuilds();
+		list( $pid, $rid ) = $this->builder_post( self::AV_A, self::WPB_B );
+		$this->assertSame( 'wpbakery', aafm_post_has_foreign_builder_ownership( $pid ) );
+
+		$this->assert_restore_refused( $this->restore( $pid, $rid ), 'aafm_restore_other_builder', $pid, self::WPB_B );
+		$this->assertSame( array(), $this->rebuilds );
+	}
+
+	public function test_restore_of_a_same_builder_revision_still_runs_with_both_builders_active(): void {
+		add_filter( 'aafm_integration_active_avada', '__return_true' );
+		add_filter( 'aafm_integration_active_wpbakery', '__return_true' );
+		list( $pid, $rid ) = $this->builder_post( self::AV_A, self::AV_B );
+		update_post_meta( $pid, 'fusion_builder_status', 'active' );
+
+		$out = $this->restore( $pid, $rid );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( self::AV_A, get_post_field( 'post_content', $pid, 'raw' ) );
+	}
 }

@@ -94,12 +94,11 @@ final class IntegrationsTabTest extends TestCase {
 		// ability is ever added to or removed from another integration's manifest.
 		$wc = aafm_integration_manifest()['woocommerce'];
 		$this->assertStringContainsString( 'aafm-integration-count', $html );
-		// The enabled figure is wrapped in its own span so admin.js can patch it after a save
-		// (see the Integrations card staleness fix); assert the wrapped form the renderer
-		// actually produces, not the bare digit.
+		// An inactive card counts what is saved for it, not what is usable (always 0 there), and
+		// carries no .aafm-enabled-num span, so the live save patch cannot overwrite that count.
 		$this->assertStringContainsString(
 			sprintf(
-				'<span class="aafm-enabled-num">0</span> / %1$d · %2$s',
+				'0 saved / %1$d · %2$s',
 				$wc['total'],
 				aafm_integration_count_breakdown( $wc )
 			),
@@ -145,6 +144,32 @@ final class IntegrationsTabTest extends TestCase {
 			$summary,
 			'The destructive count must be visible in the card header, not silently dropped from the breakdown.'
 		);
+	}
+
+	/**
+	 * EV-L2: an active Avada or WPBakery card says whether the add-on its add-on tools need is active.
+	 */
+	public function test_builder_cards_name_their_add_on_state(): void {
+		$this->acting_as( 'administrator' );
+		add_filter( 'aafm_integration_active_avada', '__return_true' );
+		add_filter( 'aafm_integration_active_wpbakery', '__return_true' );
+		$render = static function (): string {
+			ob_start();
+			aafm_render_integrations_tab();
+			return (string) ob_get_clean();
+		};
+		$off    = $render();
+		add_filter( 'aafm_templatera_active', '__return_true' );
+		add_filter( 'aafm_avada_core_active', '__return_true' );
+		$on = $render();
+		remove_all_filters( 'aafm_templatera_active' );
+		remove_all_filters( 'aafm_avada_core_active' );
+		remove_filter( 'aafm_integration_active_avada', '__return_true' );
+		remove_filter( 'aafm_integration_active_wpbakery', '__return_true' );
+		$this->assertStringContainsString( 'Avada Core: not active. The Avada Slider settings tool needs it.', $off );
+		$this->assertStringContainsString( 'Templatera: not active. Templatera templates and references need it.', $off );
+		$this->assertStringContainsString( 'Avada Core: active.', $on );
+		$this->assertStringContainsString( 'Templatera: active.', $on );
 	}
 
 	public function test_active_card_shows_the_real_enabled_count(): void {
@@ -399,9 +424,9 @@ final class IntegrationsTabTest extends TestCase {
 		remove_filter( 'aafm_yoast_active', '__return_false', 99 );
 
 		// Each card carries a per-card filter: a search input plus the All / Read Only / Write group.
-		// There are ten integration cards (1.7.4 adds Slim SEO, The Events Calendar, Event
-		// Tickets, Avada, and GeoDirectory), so each control appears at least ten times.
-		$this->assertSame( 10, substr_count( $html, 'aafm-integration-filter' ) );
+		// There are eleven integration cards (1.7.4 adds Slim SEO, The Events Calendar, Event
+		// Tickets, Avada, and GeoDirectory; 1.12.0 adds WPBakery), so each control appears eleven times.
+		$this->assertSame( 11, substr_count( $html, 'aafm-integration-filter' ) );
 		$this->assertStringContainsString( 'type="search"', $html );
 		$this->assertStringContainsString( 'data-filter-risk="all"', $html );
 		$this->assertStringContainsString( 'data-filter-risk="read"', $html );

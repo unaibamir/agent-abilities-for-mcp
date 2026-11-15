@@ -301,4 +301,32 @@ final class HighRiskTest extends TestCase {
 		$this->assertFalse( aafm_ability_is_high_risk( 'woocommerce/order-add-note' ), 'Order notes stay open.' );
 		$this->assertFalse( aafm_ability_is_high_risk( 'woocommerce/orders-create' ) );
 	}
+
+	/**
+	 * Operator decision B (2026-11-15): the Avada Studio import is an ordinary tool, not held by the high-risk lock.
+	 */
+	public function test_the_studio_import_is_not_high_risk(): void {
+		$this->assertFalse( aafm_ability_is_high_risk( 'aafm/avada-import-studio-item' ) );
+		$this->assertFalse( aafm_ability_is_locked( 'aafm/avada-import-studio-item' ) );
+		$this->assertFalse( aafm_ability_is_high_risk( 'aafm/avada-list-studio-items' ) );
+		$this->assertNotContains( 'aafm/avada-import-studio-item', aafm_high_risk_abilities() );
+		$this->assertFalse( function_exists( 'aafm_high_risk_vendor_builtin' ) );
+	}
+
+	public function test_the_money_and_authority_list_still_has_its_ten(): void {
+		$this->assertCount( 10, aafm_high_risk_abilities_builtin() );
+		$this->assertNotContains( 'aafm/avada-import-studio-item', aafm_high_risk_abilities_builtin() );
+	}
+
+	public function test_the_studio_import_is_registered_once_switched_on_with_high_risk_locked(): void {
+		add_filter( 'aafm_integration_active_avada', '__return_true' );
+		aafm_flush_registry_cache();
+		delete_option( 'aafm_high_risk_abilities_unlocked' );
+		update_option( 'aafm_enabled_abilities', array( 'aafm/avada-import-studio-item', 'aafm/avada-list-studio-items' ) );
+		$this->assertContains( 'aafm/avada-import-studio-item', aafm_get_enabled_abilities() );
+		$this->assertContains( 'aafm/avada-list-studio-items', aafm_get_enabled_abilities() );
+		$this->assertTrue( aafm_ability_is_locked( 'aafm/wc-create-order-refund' ) );
+		remove_filter( 'aafm_integration_active_avada', '__return_true' );
+		aafm_flush_registry_cache();
+	}
 }

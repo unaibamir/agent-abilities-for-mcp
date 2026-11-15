@@ -100,7 +100,7 @@ function aafm_tec_events_registry_definitions(): array {
 		),
 		'aafm/tec-delete-event' => array(
 			'label'        => __( 'Delete event', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Trash an event by ID (goes to Trash, matching this plugin\'s trash-post convention - never a permanent delete). Requires delete access to that event.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Trash an event by ID (it goes to Trash, matching this plugin\'s trash-post convention, and is never deleted permanently). Requires delete access to that event.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'destructive',
 			'subject'      => 'tec',

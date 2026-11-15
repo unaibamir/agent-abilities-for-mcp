@@ -323,6 +323,16 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 		return new WP_Error( 'invalid_grant', __( 'This account can no longer connect apps.', 'agent-abilities-for-mcp' ) );
 	}
 
+	// A token minted for an address this endpoint no longer has (a permalink change, an http to
+	// https move) would only mint another pair the bearer check refuses. Refuse it unconsumed; ending
+	// the old tokens stays the owner's click.
+	if ( ! aafm_oauth_resource_is_this_endpoint( (string) $row['resource'] ) ) {
+		return new WP_Error(
+			'invalid_grant',
+			__( 'The refresh token was issued for an address this site no longer uses. Add the connector again with the current address.', 'agent-abilities-for-mcp' )
+		);
+	}
+
 	// Expired refresh token: reject without rotating. The PHP string compare is
 	// safe because 'Y-m-d H:i:s' is a fixed-width, zero-padded, lexicographically
 	// ordered datetime format.
@@ -868,6 +878,123 @@ function aafm_oauth_user_has_active_tokens( int $user_id ): bool {
 	);
 
 	return ! $count['ok'] || (int) $count['value'] > 0;
+}
+
+/**
+ * Every audience bearer validation can accept on this site, so the old-address check below agrees
+ * with it exactly.
+ *
+ * Validation (validator.php) compares a token's stored resource with aafm_endpoint_url() using
+ * hash_equals(), on the REST request. That URL is built from the home address, and core upgrades it
+ * to https when the request itself is https. So a REST request accepts the endpoint in the home
+ * address's own scheme and, for an http home, the https form too; nothing else. The URL computed
+ * on this screen cannot stand in for it: in wp-admin, FORCE_SSL_ADMIN or an https admin page makes
+ * core return the https form even when REST requests over http expect http.
+ *
+ * @return list<string> Exact endpoint URLs.
+ */
+function aafm_oauth_accepted_audiences(): array {
+	$endpoint = aafm_endpoint_url();
+	$home     = wp_parse_url( (string) get_option( 'home' ), PHP_URL_SCHEME );
+	return array_values( array_unique( array( set_url_scheme( $endpoint, 'https' ), set_url_scheme( $endpoint, 'http' === $home ? 'http' : 'https' ) ) ) );
+}
+
+/**
+ * Whether bearer validation can accept a token minted for this resource: the same hash_equals()
+ * comparison validator.php makes, against every audience aafm_oauth_accepted_audiences() names.
+ * Byte for byte, so a case or trailing-space variant is not accepted, as it is not in validation.
+ *
+ * @param string $resource_url Stored token resource.
+ * @return bool
+ */
+function aafm_oauth_audience_accepted( string $resource_url ): bool {
+	foreach ( aafm_oauth_accepted_audiences() as $audience ) {
+		if ( hash_equals( $audience, $resource_url ) ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * Ids of the active token rows bearer validation would reject for their audience: tokens minted
+ * for an old address of this site. Null when the read failed.
+ *
+ * @return list<int>|null
+ */
+function aafm_oauth_stale_token_ids(): ?array {
+	global $wpdb;
+	$suppressed = $wpdb->suppress_errors();
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$view = aafm_wpdb_results( $wpdb->prepare( 'SELECT id, resource FROM %i WHERE is_active = 1', $wpdb->prefix . 'aafm_oauth_access_tokens' ) );
+	$wpdb->suppress_errors( $suppressed );
+	if ( ! $view['ok'] || ! is_array( $view['value'] ) ) {
+		return null;
+	}
+	$ids = array();
+	foreach ( $view['value'] as $row ) {
+		if ( ! aafm_oauth_audience_accepted( (string) $row['resource'] ) ) {
+			$ids[] = (int) $row['id'];
+		}
+	}
+	return $ids;
+}
+
+/**
+ * Count active token rows minted for an old address of this site: rows bearer validation rejects
+ * for their audience (aafm_oauth_audience_accepted()), so they can never authenticate again.
+ *
+ * Display only: a failed read counts as 0.
+ *
+ * @return int
+ */
+function aafm_oauth_stale_token_count(): int {
+	global $wpdb;
+	// One row per distinct audience, grouped on its bytes so a case or trailing-space variant of an
+	// accepted address stays its own group, as aafm_oauth_audience_accepted() compares it.
+	$suppressed = $wpdb->suppress_errors();
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$view = aafm_wpdb_results( $wpdb->prepare( 'SELECT CAST(resource AS BINARY) AS audience, COUNT(*) AS n FROM %i WHERE is_active = 1 GROUP BY CAST(resource AS BINARY)', $wpdb->prefix . 'aafm_oauth_access_tokens' ) );
+	$wpdb->suppress_errors( $suppressed );
+	if ( ! $view['ok'] || ! is_array( $view['value'] ) ) {
+		return 0;
+	}
+	$count = 0;
+	foreach ( $view['value'] as $row ) {
+		if ( ! aafm_oauth_audience_accepted( (string) $row['audience'] ) ) {
+			$count += (int) $row['n'];
+		}
+	}
+	return $count;
+}
+
+/**
+ * Deactivate every active token row minted for an old address (the rows
+ * aafm_oauth_stale_token_count() counts). Tokens validation accepts and consent rows are never
+ * touched, so a person who approved an app keeps the approval and only reconnects.
+ *
+ * @return int Rows deactivated, or -1 when a read or an update failed or a checked recount still
+ *             finds a stale active row. A caller must not read -1 as "nothing to deactivate".
+ */
+function aafm_oauth_revoke_stale_tokens(): int {
+	global $wpdb;
+	$ids = aafm_oauth_stale_token_ids();
+	if ( null === $ids ) {
+		return -1;
+	}
+	$changed = 0;
+	foreach ( array_chunk( $ids, 500 ) as $chunk ) {
+		$suppressed = $wpdb->suppress_errors();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- one %d placeholder per id, all bound here.
+		$result = $wpdb->query( $wpdb->prepare( 'UPDATE %i SET is_active = 0 WHERE is_active = 1 AND id IN (' . implode( ', ', array_fill( 0, count( $chunk ), '%d' ) ) . ')', array_merge( array( $wpdb->prefix . 'aafm_oauth_access_tokens' ), $chunk ) ) );
+		$wpdb->suppress_errors( $suppressed );
+		if ( false === $result ) {
+			return -1;
+		}
+		$changed += (int) $wpdb->rows_affected;
+	}
+	$left = aafm_oauth_stale_token_ids();
+	return null === $left || array() !== $left ? -1 : $changed;
 }
 
 /**

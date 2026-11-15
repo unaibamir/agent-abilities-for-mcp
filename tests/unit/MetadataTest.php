@@ -32,8 +32,49 @@ final class MetadataTest extends TestCase {
 		$this->assertSame( $this->plugin_headers()['Version'], AAFM_VERSION );
 	}
 
-	public function test_release_version_is_one_eleven_two(): void {
-		$this->assertSame( '1.11.2', AAFM_VERSION );
+	public function test_release_version_is_one_twelve_zero(): void {
+		$this->assertSame( '1.12.0', AAFM_VERSION );
+	}
+
+	/**
+	 * The website session's approved Avada Studio lines (2026-11-15) are in place word for word, and no readme line
+	 * about Avada Studio still says it waits for the high-risk unlock.
+	 */
+	public function test_readme_carries_the_approved_studio_lines(): void {
+		$lines = array(
+			array( 'readme.txt', 136, 'e389b5b81c7a5a6b0eb3fc6ea2e2f5c86d39d18cfe98689c51e89d991633dffc' ),
+			array( 'README.md', 144, 'e3d24f907d2ffd6252f9bdf4dd43d9fbac7bf75ec7f994c140902f8e736c00a3' ),
+			array( 'readme.txt', 270, '38c3cb281414de5247b8938f9de82b3ae24bc8f7b8719cc4b761e1ea8c3bc77d' ),
+		);
+		foreach ( $lines as list( $file, $line, $sha ) ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading the plugin's own readme.
+			$text = explode( "\n", (string) file_get_contents( AAFM_PLUGIN_DIR . $file ) );
+			$this->assertSame( $sha, hash( 'sha256', $text[ $line - 1 ] ), "$file:$line" );
+		}
+		foreach ( array( 'readme.txt', 'README.md' ) as $file ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading the plugin's own readme.
+			$text = (string) file_get_contents( AAFM_PLUGIN_DIR . $file );
+			$this->assertStringNotContainsString( 'import unlocked and on', $text, $file );
+			foreach ( explode( "\n", $text ) as $i => $row ) {
+				if ( false !== stripos( $row, 'Studio' ) ) {
+					$this->assertDoesNotMatchRegularExpression( '/high-risk/i', $row, "$file:" . ( $i + 1 ) . ' ties Avada Studio to the high-risk unlock' );
+				}
+			}
+		}
+	}
+
+	public function test_the_faq_explains_the_adapter_conflict_notice(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading the plugin's own readme.
+		$readme = (string) file_get_contents( AAFM_PLUGIN_DIR . 'readme.txt' );
+		$this->assertStringContainsString( '= Why do I see "Another version of MCP Adapter is already loaded"? =', $readme );
+		$this->assertLessThan( strpos( $readme, '= Why do I see "Another version of MCP Adapter' ), strpos( $readme, '= Do I need to install the MCP Adapter?' ), 'It follows the adapter question.' );
+
+		// The GitHub readme carries the same entry, word for word.
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading the plugin's own readme.
+		$markdown = (string) file_get_contents( AAFM_PLUGIN_DIR . 'README.md' );
+		$this->assertStringContainsString( '### Why do I see "Another version of MCP Adapter is already loaded"?', $markdown );
+		$this->assertSame( 1, preg_match( '/= Why do I see "Another version of MCP Adapter is already loaded"\? =\n\n(.+?)\n\n= /s', $readme, $txt_entry ) );
+		$this->assertStringContainsString( $txt_entry[1], $markdown, 'README.md repeats the readme.txt answer word for word.' );
 	}
 
 	public function test_readme_stable_tag_matches_version(): void {
@@ -68,6 +109,16 @@ final class MetadataTest extends TestCase {
 		$this->assertIsArray( $manifest );
 		$this->assertArrayHasKey( 'version', $manifest );
 		$this->assertSame( AAFM_VERSION, $manifest['version'] );
+	}
+
+	public function test_server_json_hostname_description_scopes_the_exposure_claim(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$manifest = json_decode( (string) file_get_contents( AAFM_PLUGIN_DIR . 'server.json' ), true );
+		$this->assertIsArray( $manifest );
+		$this->assertStringContainsString(
+			'Nothing from this plugin is exposed until you enable abilities in wp-admin.',
+			(string) ( $manifest['remotes'][0]['variables']['hostname']['description'] ?? '' )
+		);
 	}
 
 	/**
@@ -213,7 +264,7 @@ final class MetadataTest extends TestCase {
 		$readme = (string) file_get_contents( AAFM_PLUGIN_DIR . 'readme.txt' );
 		$this->assertSame( 1, preg_match( '/== External Services ==(.+?)== Screenshots ==/s', $readme, $m ) );
 		$this->assertStringNotContainsString( 'a same-origin call', $m[1] );
-		$this->assertStringContainsString( 'requests your site makes to its own address', $m[1] );
+		$this->assertStringContainsString( 'requests from your site to its own address', $m[1] );
 	}
 
 	/**
@@ -227,7 +278,7 @@ final class MetadataTest extends TestCase {
 		$this->assertSame( 1, preg_match( '/^== Description ==\n(.+?)(?=^== )/ms', $readme, $description ) );
 		$this->assertSame( 1, preg_match( '/^== External Services ==\n(.+?)(?=^== )/ms', $readme, $external ) );
 		$words = count( preg_split( '/\s+/', trim( $description[1] . ' ' . $external[1] ) ) );
-		$this->assertLessThanOrEqual( 2450, $words, 'Description plus External Services is over the wordpress.org cap margin.' );
+		$this->assertLessThanOrEqual( 2449, $words, 'Description plus External Services is over the wordpress.org cap margin.' );
 	}
 
 	public function test_readme_ability_counts_are_not_drifted(): void {

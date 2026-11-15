@@ -252,6 +252,16 @@ final class HighRiskUiTest extends TestCase {
 	 * its absence so it cannot quietly come back alongside the row and give the operator two
 	 * switches for one option.
 	 */
+	/**
+	 * Operator decision B (2026-11-15): the Studio import left the high-risk set, so the switch no longer names it and
+	 * still says plainly that one unlock opens every held tool already switched on.
+	 */
+	public function test_the_switch_does_not_name_the_studio_import(): void {
+		$html = (string) preg_replace( '/\s+/', ' ', wp_strip_all_tags( $this->render_settings_tab() ) );
+		$this->assertStringNotContainsString( 'Avada Studio', $html );
+		$this->assertStringContainsString( 'One switch covers every tool listed here', $html );
+	}
+
 	public function test_the_standalone_high_risk_card_is_gone(): void {
 		$this->assertStringNotContainsString(
 			'aafm-card-head-title">High-risk abilities',
@@ -363,5 +373,35 @@ final class HighRiskUiTest extends TestCase {
 		remove_filter( 'aafm_force_block_high_risk_abilities', '__return_true' );
 
 		$this->assertStringContainsString( 'Your host or a site setting keeps this locked, whatever this switch says.', $forced );
+	}
+
+	public function test_the_studio_import_shows_as_an_ordinary_switch(): void {
+		delete_option( 'aafm_high_risk_abilities_unlocked' );
+		$html = $this->render_integration_row( 'aafm/avada-import-studio-item' );
+		$this->assertStringContainsString( 'name="aafm_abilities[]" value="aafm/avada-import-studio-item"', $html );
+		$this->assertStringNotContainsString( 'aafm-ability-locked', $html );
+		$this->assertStringNotContainsString( 'aafm-badge-high-risk', $html );
+	}
+
+	/**
+	 * Fix round 1 ruling: the Studio import needs its own tick. Its row carries data-own-switch, no other row does, and a
+	 * set whose only write is the import gets no "Enable all writes" button.
+	 */
+	public function test_bulk_enable_never_ticks_the_studio_import(): void {
+		$this->assertStringContainsString( 'data-own-switch="1"', $this->render_integration_row( 'aafm/avada-import-studio-item' ) );
+		$this->assertStringNotContainsString( 'data-own-switch', $this->render_integration_row( 'aafm/avada-list-studio-items' ) );
+		$this->assertStringNotContainsString( 'data-own-switch', $this->render_row( 'aafm/update-post' ) );
+		$registry = aafm_get_abilities_registry_full();
+		$this->assertSame( '', aafm_enable_writes_button_html( 'studio', array( array( 'name' => 'aafm/avada-import-studio-item' ) + $registry['aafm/avada-import-studio-item'] ) ) );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Reading a local plugin asset off disk, never a remote URL.
+		$js = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
+		$this->assertStringContainsString( '.aafm-ability-row[data-risk="write"]:not([data-high-risk]):not([data-own-switch])', $js );
+		foreach ( array( '#bindSectionToggles() {', '#bindIntegrationToggles() {' ) as $method ) {
+			$start = (int) strpos( $js, $method );
+			$body  = substr( $js, $start, (int) strpos( $js, "\n\t\t#", $start + 1 ) - $start );
+			$this->assertStringContainsString( "enabling && b.closest( '.aafm-ability-row' )?.hasAttribute( 'data-own-switch' )", $body, $method );
+			// An unticked import alone never turns the button into an enable click, so Disable all stays reachable.
+			$this->assertStringContainsString( "! b.checked && ! b.closest( '.aafm-ability-row' )?.hasAttribute( 'data-own-switch' )", $body, $method );
+		}
 	}
 }

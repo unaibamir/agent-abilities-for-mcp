@@ -240,4 +240,30 @@ final class BridgeDirectoryLabelsTest extends TestCase {
 		$this->assertMatchesRegularExpression( '/class="aafm-ability-row is-destructive" data-risk="destructive"/', $html );
 		$this->assertSame( 3, substr_count( $html, 'name="bridged_abilities[]"' ), 'The notices add no field to the form.' );
 	}
+
+	public function test_inactive_plugin_heading_is_a_clean_string(): void {
+		update_option( 'aafm_enabled_bridged_abilities', array( 'gone-plugin/tool' ) );
+
+		$html = $this->render();
+
+		$this->assertStringContainsString( '<h2>' . esc_html__( 'Unavailable (plugin inactive)', 'agent-abilities-for-mcp' ) . '</h2>', $html );
+	}
+
+	public function test_every_row_carries_its_slug_including_a_locked_one(): void {
+		$this->register_foreign_abilities(
+			'demo',
+			array(
+				'reader' => array( 'readonly' => true ),
+				'writer' => array(),
+			)
+		);
+		add_filter( 'aafm_high_risk_abilities', static fn( array $e ): array => array_merge( $e, array( 'demo/writer' ) ) );
+
+		$html = $this->render();
+		remove_all_filters( 'aafm_high_risk_abilities' );
+
+		$this->assertStringNotContainsString( 'value="demo/writer"', $html, 'Precondition: the writer row is locked and has no input.' );
+		$this->assertStringContainsString( 'data-slug="demo/writer"', $html );
+		$this->assertStringContainsString( 'data-slug="demo/reader"', $html );
+	}
 }

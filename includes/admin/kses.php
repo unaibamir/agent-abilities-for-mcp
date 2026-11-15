@@ -176,6 +176,8 @@ function aafm_admin_allowed_html(): array {
 		'aria-live'        => true,
 		'aria-selected'    => true,
 		'aria-pressed'     => true,
+		'aria-checked'     => true,
+		'aria-current'     => true,
 		'aria-expanded'    => true,
 		'aria-controls'    => true,
 		'aria-labelledby'  => true,
@@ -225,6 +227,8 @@ function aafm_admin_allowed_html(): array {
 		'data-undo-revert'          => true,
 		'data-undo-revert-group'    => true,
 		'data-undo-fields'          => true,
+		// 1.12.0 Active grants table, paged on the server (admin.js leaves it to the links).
+		'data-aafm-server-paged'    => true,
 	);
 
 	$global = array_merge(

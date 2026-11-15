@@ -138,6 +138,20 @@ final class UninstallTest extends TestCase {
 	}
 
 	/**
+	 * A delete-data uninstall removes the durable first-call flag with the rest of the config.
+	 */
+	public function test_delete_data_uninstall_clears_first_call_option(): void {
+		aafm_install_activity_log();
+		aafm_install_oauth_tables();
+		update_option( 'aafm_first_call_recorded', '1' );
+		update_option( 'aafm_delete_data_on_uninstall', true );
+
+		aafm_uninstall_site_data();
+
+		$this->assertFalse( get_option( 'aafm_first_call_recorded', false ) );
+	}
+
+	/**
 	 * The one-time OAuth upgrade-preserve guard is a real stored option, so a delete-data uninstall
 	 * must remove it rather than orphan it. It must NOT be swept by reset: clearing it on reset would
 	 * let the preserve migration re-run and could flip OAuth back on after a reset.

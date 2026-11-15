@@ -87,14 +87,16 @@ const SHOTS = [
 		},
 	},
 	{ n: 13, url: plugin( 'tab=dashboard' ), prep: ( page ) => top( page, '#aafm-review-inbox' ) },
-	{ n: 14, url: plugin( 'tab=settings' ), prep: ( page ) => top( page, '#aafm-notify-mode', 130 ) },
+	// The card description now opens the body above the mode select, so frame the card head instead.
+	{ n: 14, url: plugin( 'tab=settings' ), prep: ( page ) => top( page, '.aafm-card:has(#aafm-notify-mode)', 42 ) },
 	{ n: 15, url: plugin( 'tab=connection' ), prep: ( page ) => top( page, '#aafm-card-grants', 20 ) },
 	{
 		n: 16,
 		url: plugin( 'tab=connection' ),
 		prep: async ( page ) => {
 			await click( page.locator( '[data-conn-tab="app-passwords"]' ) );
-			await top( page, '#aafm-card-pause-all', 20 );
+			// The Connect with OAuth card now sits above the tabs, so frame the passwords card itself.
+			await top( page, '#aafm-card-app-passwords', 70 );
 		},
 	},
 ];

@@ -4,7 +4,7 @@ Tags: mcp-server, ai-agent, claude, mcp, abilities-api
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.11.2
+Stable tag: 1.12.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -25,7 +25,7 @@ Once connected, you can ask things like:
 * "Which WooCommerce orders are still on hold?"
 * "Write a post about the spring sale and save it as a draft."
 
-There are 186 abilities (the tools an AI client can call), 92 for WordPress itself and 94 for plugins such as WooCommerce, ACF and Yoast SEO. Every one starts switched off.
+There are 216 abilities (the tools an AI client can call), 94 for WordPress itself and 122 for plugins such as WooCommerce, ACF and Yoast SEO. Every one starts switched off.
 
 = What is a WordPress MCP server? =
 
@@ -69,13 +69,13 @@ With ACF active, the AI can read a post's fields and write new values, each sani
 
 = Limit what an AI agent can do on your site =
 
-These controls cover this plugin's own tools, plus any tool from another plugin that you switch on from the Other plugins tab. Each call is checked against the capabilities of the WordPress user the AI connects as, over OAuth or an Application Password.
+These controls cover this plugin's own tools, plus any other plugin's tool you switch on from the Plugins' own tools tab. Each call is checked against the capabilities of the WordPress user the AI connects as, over OAuth or an Application Password.
 
 **Pause all access** on the Connection tab is the emergency stop, the one switch that pauses all agents at once. It refuses every MCP request through your site, OAuth apps and Application Passwords alike. An Application Password can still use the rest of the REST API, so revoke it too for a full cut-off. To pause an AI agent without disconnecting it, use Pause and Resume next to Revoke on an OAuth connection. An OAuth connection can also get an end date, for access that expires, and a lower rate limit of its own; an Application Password has neither.
 
 When you approve an app, or run Quick Connect, you pick an access preset (Read only, Content editor, Shop manager or Custom) that only ever narrows what is already switched on. Per-role and per-connection allowlists narrow it further, since a tool has to be in the global list, the role's list and the connection's list before the AI can call it. The **rate limit**, the **IP allowlist**, Force draft on create and a maximum title length sit on the Settings tab and do nothing until you set them.
 
-Ten WooCommerce tools that move money or grant authority (refunds, creating and changing orders, customer updates, payment gateways, coupons and tax rates) stay locked until you unlock them in Settings, even if you've ticked them. Deletes work differently: the tools named Trash post and Trash page move content to the Trash, but most tools named Delete, such as Delete post, Delete page and Delete media, remove it permanently.
+Ten WooCommerce tools that move money or grant authority (refunds, creating and changing orders, customer updates, payment gateways, coupons and tax rates) stay locked until you unlock them in Settings, even if you've ticked them. Deletes work differently: the tools named Trash post and Trash page move content to the Trash, but most Delete tools, such as Delete post, Delete page and Delete media, remove it permanently.
 
 = What these controls do not cover =
 
@@ -97,11 +97,11 @@ Two read tools, List playbooks and Get playbook, stay off until you enable them 
 
 When one of these plugins is active, its abilities appear on the Integrations tab. WooCommerce has the most, 52, covering products, variations, orders, customers, coupons, shipping, tax, payment gateways and reports, and because they reach names, emails and addresses an admin notice flags them. ACF adds 7 for field groups and the field values on posts, terms and users, and Rank Math (5), Yoast SEO (3), All in One SEO (3) and Slim SEO (2) let the AI read and edit a post's SEO data.
 
-The Events Calendar has 13 abilities, Event Tickets has 3, and Avada has 2 that read a page's Fusion Builder markup and replace text inside it. GeoDirectory has 4 for business listings, which stay off until you enable that integration on the Integrations tab, even when GeoDirectory is active.
+The Events Calendar has 13 abilities, Event Tickets 3, Avada 18 and WPBakery Page Builder 12, both for editing pages and builder settings. GeoDirectory's 4 business listing tools stay off until you enable that integration, even with GeoDirectory active.
 
 Minimum versions: WooCommerce 9.1, All in One SEO 4.9.8, The Events Calendar 6.17.3.1 and Event Tickets 5.29.3.1. Below these, their tools stay hidden and the Integrations tab says why.
 
-Plugins that register their own abilities with the WordPress Abilities API appear on the Other plugins tab, and this plugin does not filter what another plugin's ability returns.
+Plugins that register their own abilities with the WordPress Abilities API appear on the Plugins' own tools tab, and this plugin does not filter what another plugin's ability returns.
 
 Each tool shows which plugin provides it (or its namespace, when the plugin cannot be identified), carries a Read, Write or Destructive label from the plugin's own annotations (an unlabelled tool is treated as Destructive and says so), and gets a notice when it may return personal data (a hint from the plugin and tool name, not a full check). Tools a plugin update adds wait for your review.
 
@@ -111,9 +111,9 @@ A plugin that doesn't declare its reads as read-only has them treated as writes,
 
 WordPress 6.9 added the Abilities API, and the official MCP Adapter turns those abilities into MCP tools. The Adapter comes bundled, so there is nothing else to install, and if you also run the standalone Adapter plugin, this plugin uses whichever copy loads first.
 
-= Elementor, Divi and other page builder pages: AI edits are refused =
+= Page builders: Avada and WPBakery editable, the rest refused =
 
-A page builder owns its page's layout, so an edit to the post text can report success and change nothing on the page. For Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks and WPBakery the plugin checks first and refuses the write with an error naming the builder. There are two exceptions: an edit that only sets the excerpt goes through and leaves the stored content as it was, unless the plugin can't tell which builder owns the post, and Avada's two own tools can change text and refuse shortcode changes.
+A page builder owns its page's layout, so an edit to the post text can report success and change nothing. For Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks and WPBakery the plugin's general content tools refuse the write, though an excerpt-only edit goes through unless the plugin can't tell which builder owns the post. Avada and WPBakery pages get their own editing tools, which refuse any save that changes anything else; Restore revision also works there.
 
 = Is this the right WordPress MCP plugin for you? =
 
@@ -123,7 +123,7 @@ It's a poor fit if you want every tool on from day one, or an undo for every kin
 
 = Compatible clients =
 
-Any MCP client that can reach your endpoint can connect. Claude (web and Desktop), ChatGPT and Manus are hosted apps and use OAuth, while Claude Code, Cursor, VS Code, Windsurf and Gemini CLI can use OAuth or an Application Password. The hosted Gemini app is not supported yet. A client that can't connect directly can go through a bridge such as `mcp-remote`, which runs on your own machine.
+Any MCP client that can reach your endpoint can connect. Claude (web and Desktop), ChatGPT and Manus are hosted apps and use OAuth, while Claude Code, Cursor, VS Code, Windsurf and Gemini CLI can use OAuth or an Application Password. The Gemini app has no known way to add a custom MCP server. A client that can't connect directly can go through a bridge such as `mcp-remote`, which runs on your own machine.
 
 = Disclaimer =
 
@@ -133,7 +133,7 @@ The Model Context Protocol is an open specification that Anthropic originally de
 
 This plugin calls no AI provider and sends no telemetry.
 
-It makes two kinds of outbound request on its own. The first is the Connection tab's checks, which are requests your site makes to its own address to test the MCP endpoint, the headers and body it receives and, with OAuth on, the discovery documents. The second only happens if you enable the upload-media-from-url ability, which is off by default: it fetches the exact HTTPS URL your AI client supplies so the file can be added to your media library, refuses private and reserved addresses and follows no redirects. The server at that URL sees the URL, your site's IP address and the time of the request, and the request carries none of your content, credentials or site data.
+It makes two kinds of outbound request on its own. The first is the Connection tab's checks: requests from your site to its own address that test the MCP endpoint, header and body delivery and, with OAuth on, the discovery documents. The second only happens if you enable the upload-media-from-url ability, which is off by default: it fetches the exact HTTPS URL your AI client supplies so the file can be added to your media library, refuses private and reserved addresses and follows no redirects. The server at that URL sees the URL, your site's IP address and the time of the request, and the request carries none of your content, credentials or site data. When an agent calls Avada Studio tools, Avada downloads content from avada.studio under your Avada registration; this plugin sends nothing. Avada's [terms](https://avada.com/terms-and-conditions/) and [privacy policy](https://avada.com/privacy-policy/) apply.
 
 Connecting a client happens in the client. Some clients reach your endpoint directly, and others use a bridge that runs on your own machine and is not bundled with the plugin:
 
@@ -198,17 +198,17 @@ Yes. Each approved OAuth connection on the Connection tab has Pause next to Revo
 
 For an OAuth connection, yes. Set an end date on its row on the Connection tab and the connection stops at the end of that day and stays refused until a site administrator renews it, and its old tokens never work again. An Application Password has no end date, so revoke it when the job is done.
 
-= Can the AI read my site without changing anything? =
+= How do I give Claude read-only access to WordPress? =
 
-Turn on read-only mode in Settings and no write tool is loaded, whatever else is ticked, including write abilities you bridged from other plugins. Search and read keep working, and your selections come back when you switch it off. To limit a single connection instead, pick the Read only preset when you approve it.
+Turn on read-only mode in Settings and this plugin loads no write tool, whatever else is ticked, including write abilities you bridged from other plugins. Search and read keep working, and your selections come back when you switch it off. To limit a single connection instead, pick the Read only preset when you approve it.
 
-= Can the agent only save drafts so I approve before anything goes live? =
+= Can I let ChatGPT draft posts without publishing them? =
 
 With Force draft on create switched on in Settings, anything the AI creates and any request to publish is saved as a draft, which covers posts, pages, custom content items, reusable blocks and WooCommerce products. Product variations save as disabled instead, because a draft variation disappears from WooCommerce's editor. Edits to a post that's already live still go live, so if every change should be reviewed, connect the AI as a Contributor, who can't edit published posts. The drafts wait on the Needs review card on the Dashboard.
 
 = Can I stop an AI agent from deleting my posts? =
 
-I'd leave the delete tools off, which is how they ship. Trash post and Trash page move content to the Trash where you can restore it, but most of the tools named Delete, such as Delete post, Delete page and Delete media, remove it permanently. Read-only mode takes away every write and delete tool at once and the Content editor preset has no deletes in it, and the Activity Log shows which tool ran on which item though it keeps no copy of deleted content.
+I'd leave the delete tools off, which is how they ship. Trash post and Trash page move content to the Trash where you can restore it, but most of the tools named Delete, such as Delete post, Delete page and Delete media, remove it permanently. Read-only mode takes away every write and delete tool of this plugin's at once and the Content editor preset has no deletes in it, and the Activity Log shows which tool ran on which item though it keeps no copy of deleted content.
 
 = How do I see what ChatGPT or Claude did on my site? =
 
@@ -249,7 +249,27 @@ For layout, the AI can list block types and read one block's attributes, plus fi
 
 = Will an agent break my Elementor or Divi page? =
 
-Before any content write the plugin checks whether a page builder owns the post, and if one does it refuses with an error that names the builder. Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks and WPBakery are covered, so edit those pages in the builder itself. The one write it lets through is an edit that only sets the excerpt, which leaves the stored content as it was. Avada's two dedicated tools can replace text in a page and refuse changes to its shortcodes.
+A page builder owns its page's layout, so an edit to the post text could report success and change nothing. Before any write, update-post, update-page, replace-in-post and the other general content tools check whether a page builder owns the post, and if one does they refuse with an error that names the builder.
+
+Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks and WPBakery are covered. The one write they let through is an edit that only sets the excerpt, which leaves the stored content as it was, and even that is refused when the plugin can't tell which builder owns the post. Pages built with the other eight builders are edited in the builder itself.
+
+Avada and WPBakery Page Builder pages have editing tools of their own: they read a page as an outline of elements, change an element's settings or text, add, move and remove elements, and place a saved template or Library item. Each write is refused, with nothing saved, if saving the page as your user would change anything else on it.
+
+Restore revision works on these pages too, and when WordPress keeps a revision the editing tool returns it so the page can be brought back. Remove element is refused when no revision could bring the element back, which means revisions are off, the site keeps only one revision, or the target is an Avada form or off canvas panel. All of these tools start off, and the writes are in no preset except Custom.
+
+= What can an agent change on a WPBakery or Avada page? =
+
+Text, links, images, colours and spacing work for anyone who can edit the page. Code blocks, raw HTML and JS, Design Options, page CSS and JS, and settings that can carry script need a user who may post unfiltered HTML, and so do square brackets, percent-encoded brackets and data-* attributes in body text.
+
+The site-wide tools (WPBakery settings, Avada Global Options, Avada layouts and their sections, Avada Slider settings and both Avada Studio tools) need a user who can manage options, and so does editing the elements of an Avada layout section. Neither builder's Role Manager is applied, so the agent gets what its WordPress user can do and no more.
+
+With Templatera active, its templates are listed in place of WPBakery's saved templates and can be copied into a page or placed by reference, and a Templatera template can be edited like a WPBakery page.
+
+With Avada Core active, an agent can change an Avada Slider's settings, and Avada page options also work on Avada Slider and Elastic Slider slides. The settings tools return the previous values, which is the way back.
+
+The Avada Studio tools start switched off. The import has its own switch, which no Enable all button ticks, and the list tool is refused until the import is on. When an agent uses them, Avada downloads the catalogue and items from avada.studio under your site's Avada registration; this plugin sends nothing in that exchange and only checks with Avada that Studio is available. Avada's [terms](https://avada.com/terms-and-conditions/) and [privacy policy](https://avada.com/privacy-policy/) apply.
+
+Refused on both builders: an element type the builder's own element map doesn't list, and a stale element index or page fingerprint. A global Avada Library element is edited in the Library, not on the page that shows it. Adding an element to a WPBakery flexbox or grid container item, or moving one into it, isn't supported yet, though elements already inside one can be reordered, updated and removed.
 
 = Can an AI agent manage my WooCommerce store? =
 
@@ -263,13 +283,19 @@ The Adapter also has a built-in default server that other plugins can publish to
 
 Under Settings, Allow the MCP Adapter's default server starts on Automatic, which runs it only when another active plugin publishes tools there. Choose Always off to keep it off, or Always on if you ran the standalone Adapter only to reach WordPress core's public abilities, since those don't count as a publisher. This plugin's own tools are never on that server.
 
+= Why do I see "Another version of MCP Adapter is already loaded"? =
+
+That notice comes from a copy of the MCP Adapter that runs its own loader and finds the adapter already loaded by a different copy. This plugin bundles adapter 0.7.1 and loads it without that loader, so its own copy never prints the notice. When the standalone MCP Adapter plugin is active too, this plugin asks it to step aside quietly, unless your site already sets the WP_MCP_AUTOLOAD constant.
+
+If the notice still shows, another plugin ships its own copy of the adapter. The Connection Doctor report on the Connection tab shows which copy is running. If it says bundled, this plugin's copy is in use and the notice comes from the other plugin's copy, so update or remove the plugin that bundles its own MCP Adapter.
+
 = How is this different from other WordPress MCP plugins? =
 
 Because this plugin's tools are all off until you switch them on, it's a poor fit if you want everything available from day one. In exchange the AI acts as a user you choose, each OAuth connection can be paused or given an end date, and the plugin builds on the Abilities API and the MCP Adapter instead of running a server of its own.
 
 = Does it send my content to OpenAI, Anthropic or Google? =
 
-The plugin never contacts an AI provider and has no telemetry, but your AI client does receive whatever a tool returns, because that is how it reads your site, and what it does with that is covered by the vendor's terms and your plan. The only request the plugin makes to an outside address is the upload-media-from-url tool, which stays off until you enable it, and External Services above has the details.
+The plugin never contacts an AI provider and has no telemetry, but your AI client does receive whatever a tool returns, because that is how it reads your site, and what it does with that is covered by the vendor's terms and your plan. The only request the plugin makes to an outside address is the upload-media-from-url tool, which stays off until you enable it, and External Services above has the details. If you switch on the Avada Studio tools, Avada itself fetches the Studio catalogue and items from Avada's servers under your Avada registration, and this plugin adds nothing to those requests.
 
 = Is it free? Which WordPress and PHP versions? Do I need to know how to code? =
 
@@ -293,13 +319,13 @@ The MCP endpoint refuses requests sent from a web page on another site, as the M
 
 = Can I get an email when something important happens? =
 
-Under Settings, Notifications, pick an admin notice, an email right away or one email a day, then tick the events you care about, such as a new app being authorized or a burst of denied calls. Nothing is sent until you do. The [safety controls guide](https://agentabilitieswp.com/docs/safety-controls/?utm_source=wordpress.org&utm_medium=readme&utm_campaign=plugin-listing) lists every event and the sending limits, and the emails themselves link to the Activity Log and never include the content of a call, a user name or an IP address.
+Under Settings, Notifications, pick Admin notice only, Email alerts as they happen or One email a day, then tick the events you care about, such as a new app being authorized or a burst of denied calls. Nothing is sent until you do. The [safety controls guide](https://agentabilitieswp.com/docs/safety-controls/?utm_source=wordpress.org&utm_medium=readme&utm_campaign=plugin-listing) lists every event and the sending limits, and the emails themselves link to the Activity Log and never include the content of a call, a user name or an IP address. Where WP-Cron never runs, an alert can arrive an hour or more late.
 
 = Can I undo what an AI agent changed? =
 
 Yes, for edits made with 25 of this plugin's tools: posts, pages and custom post types, creates, trashes, block edits, terms, custom fields (post and term meta), featured images and SEO fields. The Changes tab keeps up to 30 days and reverts a change if the item hasn't been edited since, and it refuses a revert that would overwrite a newer edit. It lists field names, never contents, though the earlier values are stored in a table in your site's database, and when the history is full the oldest values go first.
 
-No other tool of this plugin's can be undone, including permanent deletes, orders, refunds, user accounts, file uploads, WooCommerce products, ACF field values, menus, comments and events, and each of them says so in its response. Tools from other plugins aren't recorded either. Notifications, webhooks and anything already read are not recalled.
+No other tool of this plugin's can be undone, including permanent deletes, orders, refunds, user accounts, file uploads, WooCommerce products, ACF field values, menus, comments and events, and each of them says so in its response. That includes the WPBakery and Avada tools, but a page edit keeps a WordPress revision when revisions are on, and the tool returns it for restore-revision; their settings tools return the previous values instead, and an imported Avada Studio item is removed by deleting it in Avada's Library. Tools from other plugins aren't recorded either. Notifications, webhooks and anything already read are not recalled. Some plugins, GeoDirectory among them, turn revisions off for the whole site; a WP_POST_REVISIONS line in wp-config.php turns them back on.
 
 Two optional tools, list-changes and undo-change, let an agent undo its own changes from the last 24 hours, and both start off. History records only while the plugin is active, can be switched off in Settings and is removed on uninstall. WordPress's export and erase personal data tools cover it.
 
@@ -315,22 +341,31 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 
 1. First-run setup walks you through connecting an agent in three steps: turn the connection on, choose what it can touch, then hand the endpoint to your AI client.
 2. The Abilities tab. Nothing from this plugin is exposed until you switch it on. Abilities are grouped by section, here Menus with its reads on and its writes off, and each section has buttons to enable all reads or all writes.
-3. Read-only mode on. The header badge says Read-only and the Content section loses its Enable all writes button.
+3. Read-only mode on. The header badge says Read-only and the Enable all writes button is gone.
 4. The Read-only mode switch under Safety controls on the Settings tab. While it is on, the high-risk unlock beneath it is held too, and says so.
 5. WooCommerce tools that change orders, issue refunds or touch payment settings stay locked behind a second switch on the Settings tab.
-6. Each integration has a card showing whether its plugin is active and how many of its abilities are on. WooCommerce and Yoast SEO are active here, and the rest say Not installed.
+6. Each integration has a card showing whether its plugin is active and how many of its abilities are on. Here WooCommerce and Yoast SEO are active, and Rank Math, All in One SEO, ACF and Slim SEO are not installed.
 7. Abilities that other plugins register, grouped by plugin and off until you turn them on. A warning says this plugin does not filter what they return.
-8. The Connection tab: the Pause all access switch, then the OAuth and Application Passwords tabs, a token lifetimes card, registered clients and active grants.
+8. The Connection tab: the Pause all access button, then Connect with OAuth, where you pick your client and get its steps and your endpoint address, with the token lifetimes card below.
 9. The Activity Log with a 7-day summary, filters, the connection and IP of each call, duration, a Live view and a CSV export that follows the filters.
-10. The Dashboard: a setup checklist, the Needs review card, enabled abilities, recent agents, audit history, your endpoint and the versions in play.
+10. The Dashboard after setup: the Needs review card with two drafts from agents, and the Why is my tool missing card, which lists tools that are switched on but that agents cannot see right now, each with the reason.
 11. Site Brief: a few plain rules every connected agent reads when its session starts, such as spelling and what to leave alone.
 12. Connection Doctor checks the connection from your own server and says what to fix. Each finding says whether you or your host can fix it, and some come with a snippet to paste.
 13. Needs review: drafts and pending posts your agents wrote, with Preview, Open in editor, Publish and Discard.
-14. Notifications, off until you choose an admin notice, an email right away or a daily email for the events you tick.
+14. Notifications, off until you choose "Admin notice only", "Email alerts as they happen" or "One email a day" for the events you tick.
 15. Active grants: each approved connection with its access, last use, optional end date and rate limit, and its status, with Pause or Resume next to Revoke.
 16. Application Passwords: the agent users' passwords with when each was created and last used, the address it was last used from, and a Revoke button.
 
 == Changelog ==
+
+= 1.12.0 =
+
+* **Feature:** Agents can edit WPBakery Page Builder and Avada pages element by element with tools such as avada-update-element and wpbakery-insert-template. Restore revision works there too. [See every tool](https://agentabilitieswp.com/abilities/?utm_source=wordpress.org&utm_medium=readme&utm_campaign=plugin-listing).
+* **Feature:** Users who can manage options can change WPBakery settings, Avada Global Options, layouts and Slider settings, and import Avada Studio items. Page CSS and page options can be set per page.
+* **Feature:** list-navigations and update-navigation read and replace block-theme menus, pages take a parent and a template, update-site-settings sets the static homepage, and wc-update-product can remove an attribute.
+* **Feature:** Connection adds Add to Cursor and Add to VS Code links and can end tokens issued for an old site address. Other plugins is now Plugins' own tools, and the accent follows your Admin Color Scheme.
+* **Fix:** update-page, update-post and replace-in-post overwrote Divi page layouts and now refuse them, and avada-replace-text refuses a save that would strip other content.
+* **Fix:** Expired or revoked OAuth tokens now get error="invalid_token", and alert emails go through WP-Cron on hosts that can't finish the page before sending.
 
 = 1.11.2 =
 
@@ -445,6 +480,10 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 [Full release history](https://agentabilitieswp.com/changelog/?utm_source=wordpress.org&utm_medium=readme&utm_campaign=plugin-listing).
 
 == Upgrade Notice ==
+
+= 1.12.0 =
+
+Adds element editing for WPBakery Page Builder and Avada pages, their templates and Library, admin-only builder settings and block-theme navigation tools. Every new tool starts off. Divi pages are no longer overwritten by update-page, update-post and replace-in-post.
 
 = 1.11.2 =
 

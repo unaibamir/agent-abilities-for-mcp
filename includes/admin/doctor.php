@@ -77,7 +77,7 @@ function aafm_doctor_interpret_http_status( int $code, bool $oauth_on ): array {
 		return array(
 			'status' => $oauth_on ? 'fail' : 'warn',
 			'who'    => 'plugin',
-			'detail' => __( 'WordPress answered 401 before this plugin could reply, so something requires a login for the whole REST API. Agents cannot finish connecting while that is on.', 'agent-abilities-for-mcp' ),
+			'detail' => __( 'WordPress answered 401 before this plugin could reply, so something requires a login for the whole REST API. AI apps that sign in with OAuth cannot finish connecting while that is on. A membership or security plugin is the usual cause. A request with a correct Application Password is signed in, so it is not refused this way.', 'agent-abilities-for-mcp' ),
 		);
 	}
 	if ( 403 === $code ) {
@@ -606,6 +606,32 @@ function aafm_doctor_check_https(): array {
 }
 
 /**
+ * Row: OAuth accepts plain HTTP on a site whose address does not look local. Only the warning case
+ * has a row: a site set to development by mistake, or a leftover AAFM_OAUTH_ALLOW_HTTP, would
+ * otherwise let sign-in codes and tokens travel unencrypted with nothing on screen saying so.
+ *
+ * @return array<string,mixed>|null
+ */
+function aafm_doctor_check_oauth_http(): ?array {
+	if ( ! aafm_oauth_enabled() || aafm_oauth_https_required() ) {
+		return null;
+	}
+	$host = wp_parse_url( home_url(), PHP_URL_HOST );
+	if ( is_string( $host ) && aafm_host_looks_local( $host ) ) {
+		return null;
+	}
+	$detail = defined( 'AAFM_OAUTH_ALLOW_HTTP' ) && AAFM_OAUTH_ALLOW_HTTP
+		? __( 'OAuth accepts plain HTTP because AAFM_OAUTH_ALLOW_HTTP is set, and this site address does not look local. Sign-in codes and tokens can then travel unencrypted. Remove the constant from wp-config.php once the site uses HTTPS.', 'agent-abilities-for-mcp' )
+		: sprintf(
+			/* translators: %s: the WordPress environment type, e.g. "development". */
+			__( 'OAuth accepts plain HTTP because the WordPress environment type is %s, and this site address does not look local. Sign-in codes and tokens can then travel unencrypted. If this is a live site, set WP_ENVIRONMENT_TYPE to production in wp-config.php.', 'agent-abilities-for-mcp' ),
+			wp_get_environment_type()
+		);
+
+	return aafm_doctor_row( 'oauth_http', __( 'OAuth requires HTTPS', 'agent-abilities-for-mcp' ), 'warn', 'you', $detail );
+}
+
+/**
  * Row: permalinks. Plain permalinks make the endpoint address awkward and break some clients.
  *
  * @return array<string,mixed>
@@ -613,7 +639,7 @@ function aafm_doctor_check_https(): array {
 function aafm_doctor_check_permalinks(): array {
 	$label = __( 'Permalinks', 'agent-abilities-for-mcp' );
 	if ( '' === (string) get_option( 'permalink_structure', '' ) ) {
-		return aafm_doctor_row( 'permalinks', $label, 'warn', 'you', __( 'Permalinks are set to Plain. The endpoint address then carries ?rest_route= and some clients and discovery documents fail. Pick any other structure under Settings, Permalinks. Use this exact endpoint address in your agent:', 'agent-abilities-for-mcp' ), aafm_endpoint_url() );
+		return aafm_doctor_row( 'permalinks', $label, 'warn', 'you', __( 'Permalinks are set to Plain. The endpoint address then carries ?rest_route= and some clients and discovery documents fail. Pick any other structure under Settings, Permalinks. Switching changes the endpoint address, so every OAuth connection ends and each app has to be removed and added again with the new address, which the MCP endpoint card at the top of this tab shows once you save. Use this exact endpoint address in your agent until you switch:', 'agent-abilities-for-mcp' ), aafm_endpoint_url() );
 	}
 
 	return aafm_doctor_row( 'permalinks', $label, 'pass', '', __( 'Pretty permalinks are on.', 'agent-abilities-for-mcp' ) );
@@ -640,6 +666,36 @@ function aafm_doctor_known_blockers(): array {
 }
 
 /**
+ * Whether BuddyBoss Platform refuses this plugin's OAuth routes. Its bb_restricate_rest_api_callback()
+ * refuses a request only when no user is signed in, so an Application Password or a valid bearer
+ * token passes; what it stops is the unauthenticated OAuth flow: client registration and the token
+ * exchange. So this reads false with OAuth off, and otherwise checks the same conditions BuddyBoss
+ * does: Private REST APIs on, and, when BuddyBoss App is active, its private app on too; and the
+ * register or token route missing from Public Rest APIs (bb_is_allowed_endpoint() returns true for
+ * an allowed route and null otherwise). All three functions are BuddyBoss's own, so a site without
+ * it reads false.
+ *
+ * @return bool
+ */
+function aafm_doctor_buddyboss_private_rest(): bool {
+	if ( ! aafm_oauth_enabled() ) {
+		return false;
+	}
+	if ( ! function_exists( 'bp_enable_private_rest_apis' ) || true !== (bool) bp_enable_private_rest_apis() ) {
+		return false;
+	}
+	if ( function_exists( 'bbapp_is_private_app_enabled' ) && true !== (bool) bbapp_is_private_app_enabled() ) {
+		return false;
+	}
+	foreach ( array( '/register', '/token' ) as $path ) {
+		if ( ! function_exists( 'bb_is_allowed_endpoint' ) || ! bb_is_allowed_endpoint( '/' . aafm_oauth_rest_namespace() . $path ) ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
  * Row: security plugins that can get in the way.
  *
  * @return array<string,mixed>
@@ -656,18 +712,19 @@ function aafm_doctor_check_security_plugins(): array {
 			$active[] = (string) $name;
 		}
 	}
-	if ( array() === $active ) {
+	$details = array();
+	if ( array() !== $active ) {
+		/* translators: %s: comma-separated plugin names. */
+		$details[] = sprintf( __( '%s can restrict the REST API or Application Passwords. If a connection fails, check its REST API and login settings first.', 'agent-abilities-for-mcp' ), implode( ', ', $active ) );
+	}
+	if ( aafm_doctor_buddyboss_private_rest() ) {
+		$details[] = __( 'BuddyBoss has Private Rest APIs switched on, so it answers anyone it does not see as signed in with "Only authenticated users can access the REST API." That stops an AI client finishing OAuth. In the BuddyBoss Privacy settings, add wp-json/agent-abilities-for-mcp/ to Public Rest APIs, or switch Private Rest APIs off.', 'agent-abilities-for-mcp' );
+	}
+	if ( array() === $details ) {
 		return aafm_doctor_row( 'security_plugins', $label, 'pass', '', __( 'None of the security plugins this check knows about is active.', 'agent-abilities-for-mcp' ) );
 	}
 
-	return aafm_doctor_row(
-		'security_plugins',
-		$label,
-		'warn',
-		'plugin',
-		/* translators: %s: comma-separated plugin names. */
-		sprintf( __( '%s can restrict the REST API or Application Passwords. If a connection fails, check its REST API and login settings first.', 'agent-abilities-for-mcp' ), implode( ', ', $active ) )
-	);
+	return aafm_doctor_row( 'security_plugins', $label, 'warn', 'plugin', implode( ' ', $details ) );
 }
 
 /**
@@ -814,15 +871,45 @@ function aafm_doctor_run_checks(): array {
 		array(
 			aafm_doctor_check_app_passwords(),
 			aafm_doctor_check_https(),
+			aafm_doctor_check_oauth_http(),
 			aafm_doctor_check_permalinks(),
 			aafm_doctor_check_security_plugins(),
 		)
 	);
+	// The OAuth-over-HTTP row exists only in its warning case.
+	$rows = array_values( array_filter( $rows ) );
 	if ( $oauth_on ) {
 		$rows = array_merge( $rows, aafm_doctor_check_oauth_discovery() );
 	}
 
 	return $rows;
+}
+
+/**
+ * Where the running MCP adapter copy came from, for the Doctor report: "bundled" when it is this
+ * plugin's own copy (aafm_adapter_declared_elsewhere() false), "from plugin: <slug>" when its class
+ * file sits in another plugin's folder, "from outside the plugins folder" otherwise. Only the
+ * plugin's folder name is printed, never a path, so the report stays free of paths and host names.
+ *
+ * @param string|null $file      The McpAdapter class file, or null when it cannot be read.
+ * @param bool        $elsewhere Whether the class was declared by a copy other than ours.
+ * @return string
+ */
+function aafm_doctor_adapter_origin( ?string $file, bool $elsewhere ): string {
+	if ( ! $elsewhere ) {
+		return 'bundled';
+	}
+	$real    = realpath( WP_PLUGIN_DIR );
+	$plugins = trailingslashit( wp_normalize_path( false === $real ? WP_PLUGIN_DIR : $real ) );
+	$real    = null === $file ? false : realpath( $file );
+	$path    = null === $file ? '' : wp_normalize_path( false === $real ? $file : $real );
+	if ( '' !== $path && 0 === strpos( $path, $plugins ) ) {
+		$slug = (string) preg_replace( '/[^A-Za-z0-9._-]/', '', (string) strtok( substr( $path, strlen( $plugins ) ), '/' ) );
+		if ( '' !== $slug ) {
+			return 'from plugin: ' . $slug;
+		}
+	}
+	return 'from outside the plugins folder';
 }
 
 /**
@@ -850,6 +937,11 @@ function aafm_doctor_build_report( array $rows ): string {
 	$software = isset( $_SERVER['SERVER_SOFTWARE'] ) ? (string) preg_replace( '/[^A-Za-z0-9._-].*$/', '', (string) wp_unslash( $_SERVER['SERVER_SOFTWARE'] ) ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- reduced to the product name by the regex.
 	$scheme   = wp_parse_url( (string) get_option( 'home' ), PHP_URL_SCHEME );
 	$adapter  = aafm_loaded_adapter_version();
+	if ( null !== $adapter ) {
+		// The class file comes from the same ReflectionClass read aafm_adapter_declared_elsewhere() makes.
+		$adapter_file = class_exists( 'WP\\MCP\\Core\\McpAdapter', false ) ? ( new ReflectionClass( 'WP\\MCP\\Core\\McpAdapter' ) )->getFileName() : false;
+		$adapter     .= ' (' . aafm_doctor_adapter_origin( is_string( $adapter_file ) ? $adapter_file : null, aafm_adapter_declared_elsewhere() ) . ')';
+	}
 
 	$lines = array(
 		'Agent Abilities for MCP connection report',
@@ -857,9 +949,11 @@ function aafm_doctor_build_report( array $rows ): string {
 		'Environment: ' . wp_get_environment_type() . ' | Server: ' . ( '' !== $software ? $software : 'unknown' ),
 		'Permalinks: ' . ( '' === (string) get_option( 'permalink_structure', '' ) ? 'plain' : 'pretty' ) . ' | HTTPS: ' . ( 'https' === $scheme ? 'yes' : 'no' ) . ' | OAuth: ' . ( aafm_oauth_enabled() ? 'on' : 'off' ),
 		'Active plugins (' . count( $names ) . '): ' . implode( ', ', $names ),
-		'',
-		'Checks:',
 	);
+	if ( in_array( 'oauth_http', array_column( $rows, 'id' ), true ) ) {
+		$lines[] = 'OAuth over HTTP: allowed';
+	}
+	array_push( $lines, '', 'Checks:' );
 	foreach ( $rows as $row ) {
 		$line = '- ' . $row['id'] . ': ' . $row['status'];
 		if ( '' !== $row['who'] ) {

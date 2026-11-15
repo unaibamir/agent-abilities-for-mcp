@@ -63,7 +63,7 @@ function aafm_wc_orders_registry_definitions(): array {
 		// audited, not stripped.
 		'aafm/wc-list-orders'         => array(
 			'label'        => __( 'List WooCommerce orders', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists WooCommerce orders with their id, number, status, total, currency, date, and customer id, plus a total count. List rows are lean - no billing or shipping details. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Lists WooCommerce orders with their id, number, status, total, currency, date, and customer id, plus a total count. List rows leave out billing and shipping details. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -315,7 +315,7 @@ function aafm_args_wc_list_orders(): array {
 					'status' => array(
 						'type'        => 'string',
 						'enum'        => array( 'any', 'pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed', 'checkout-draft' ),
-						'description' => "Order status to filter by; 'any' (the default) covers every registered order status - including custom ones - but never the internal checkout-draft status, which must be requested explicitly. Uses the short form without the wc- prefix.",
+						'description' => "Order status to filter by; 'any' (the default) covers every registered order status (including custom ones) but never the internal checkout-draft status, which must be requested explicitly. Uses the short form without the wc- prefix.",
 					),
 				)
 			),
@@ -1519,7 +1519,7 @@ function aafm_wc_order_output_properties(): array {
 				'properties'           => array(
 					'id'         => array(
 						'type'        => 'integer',
-						'description' => __( "The order's own line item id - the value wc-create-order-refund's line_items[].line_item_id expects. Not a product id.", 'agent-abilities-for-mcp' ),
+						'description' => __( "The order's own line item id: the value wc-create-order-refund's line_items[].line_item_id expects. Not a product id.", 'agent-abilities-for-mcp' ),
 					),
 					'name'       => array( 'type' => 'string' ),
 					'product_id' => array( 'type' => 'integer' ),

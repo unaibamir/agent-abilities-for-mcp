@@ -394,4 +394,11 @@ class SettingsAccessCardsTest extends TestCase {
 		);
 		$this->assertFalse( $json['success'] );
 	}
+
+	public function test_ip_allowlist_help_links_to_the_ability_allowlist_card(): void {
+		$html = $this->render();
+		$at   = strpos( $html, 'id="aafm-ip-allowlist"' );
+		$this->assertNotFalse( $at );
+		$this->assertMatchesRegularExpression( '/<a href="[^"]*page=agent-abilities-for-mcp[^"]*tab=connection#aafm-card-allowlist">[^<]*Ability allowlist[^<]*<\/a>/', substr( $html, (int) $at, 3000 ) );
+	}
 }

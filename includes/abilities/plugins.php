@@ -27,7 +27,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_plugins_definitions' );
 function aafm_register_plugins_definitions( array $registry ): array {
 	$registry['aafm/list-plugins'] = array(
 		'label'        => __( 'List plugins', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Lists installed plugins with their name, version, and active state. Read-only - it can never activate, deactivate, or change a plugin. Requires the activate-plugins capability.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Lists installed plugins with their name, version, and active state. Read-only: it can never activate, deactivate, or change a plugin. Requires the activate-plugins capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',

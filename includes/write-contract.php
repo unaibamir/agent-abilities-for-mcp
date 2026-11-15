@@ -2189,8 +2189,10 @@ function aafm_activity_log_write_outcome( array $result, array $target ): void {
 	// The alert engine rewrites these two options on every alert it records. Logging each write would
 	// let one contributor creating Application Passwords flood the log, and would show an
 	// administrator-level agent when alerts fire. They hold no setting an owner chose; the
-	// aafm_notifications settings row is the one that stays logged.
-	if ( 'option' === ( $target['kind'] ?? null ) && in_array( $target['key'] ?? null, array( 'aafm_notify_pending', 'aafm_notify_queue' ), true ) ) {
+	// aafm_notifications settings row is the one that stays logged. The first-call flag is the same
+	// kind of bookkeeping: set during an agent's first call or a Dashboard visit, it is not a setting
+	// the agent or the admin changed.
+	if ( 'option' === ( $target['kind'] ?? null ) && in_array( $target['key'] ?? null, array( 'aafm_notify_pending', 'aafm_notify_queue', 'aafm_first_call_recorded' ), true ) ) {
 		return;
 	}
 

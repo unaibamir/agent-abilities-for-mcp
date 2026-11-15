@@ -73,20 +73,8 @@ function aafm_site_is_local(): bool {
 	$is_local = in_array( wp_get_environment_type(), array( 'local', 'development' ), true );
 
 	if ( ! $is_local ) {
-		$host = wp_parse_url( home_url(), PHP_URL_HOST );
-		if ( is_string( $host ) ) {
-			$host = strtolower( $host );
-			if ( 'localhost' === $host || '127.0.0.1' === $host ) {
-				$is_local = true;
-			} else {
-				foreach ( array( '.test', '.local', '.localhost', '.ddev.site', '.wip' ) as $suffix ) {
-					if ( str_ends_with( $host, $suffix ) ) {
-						$is_local = true;
-						break;
-					}
-				}
-			}
-		}
+		$host     = wp_parse_url( home_url(), PHP_URL_HOST );
+		$is_local = is_string( $host ) && aafm_host_looks_local( $host );
 	}
 
 	/**
@@ -95,6 +83,26 @@ function aafm_site_is_local(): bool {
 	 * @param bool $is_local Whether the site is considered local/development.
 	 */
 	return (bool) apply_filters( 'aafm_site_is_local', $is_local );
+}
+
+/**
+ * Whether a host name looks like a local install: localhost, 127.0.0.1, or a common local suffix.
+ * The one list of local hosts, shared by aafm_site_is_local() and the Connection Doctor.
+ *
+ * @param string $host Host name, any case.
+ * @return bool
+ */
+function aafm_host_looks_local( string $host ): bool {
+	$host = strtolower( $host );
+	if ( 'localhost' === $host || '127.0.0.1' === $host ) {
+		return true;
+	}
+	foreach ( array( '.test', '.local', '.localhost', '.ddev.site', '.wip' ) as $suffix ) {
+		if ( str_ends_with( $host, $suffix ) ) {
+			return true;
+		}
+	}
+	return false;
 }
 
 /**
@@ -443,6 +451,51 @@ function aafm_config_snippet_clients(): array {
 }
 
 /**
+ * How each OAuth client connects, as the second line on its picker card. Worded from the steps the
+ * picker shows: hosted apps add the site as a connector, the rest paste a config and then sign in.
+ *
+ * @return array<string,string> Client slug => method label.
+ */
+function aafm_client_method_labels(): array {
+	$labels = array();
+	foreach ( array_keys( aafm_quickstart_clients() ) as $slug ) {
+		$labels[ $slug ] = aafm_client_is_hosted_web_app( $slug )
+			? __( 'Added as a connector inside the app', 'agent-abilities-for-mcp' )
+			: __( 'Paste a config, then sign in', 'agent-abilities-for-mcp' );
+	}
+	return $labels;
+}
+
+/**
+ * A one-click install link for the OAuth path: the endpoint URL and a server name, never a credential.
+ *
+ * Only clients with a documented link format get one. Cursor: cursor://anysphere.cursor-deeplink/mcp/install
+ * with `name` and a base64 JSON `config` (cursor.com/docs/mcp/install-links). VS Code: vscode:mcp/install
+ * followed by the URL-encoded JSON server config with its `name` (VS Code MCP extension guide). The
+ * client still runs the OAuth sign-in itself.
+ *
+ * @param string $client Client slug.
+ * @return string Raw link, or '' when the client has no documented format.
+ */
+function aafm_client_install_link( string $client ): string {
+	$url = aafm_endpoint_url();
+	switch ( $client ) {
+		case 'cursor':
+			$config = (string) wp_json_encode( array( 'url' => $url ), JSON_UNESCAPED_SLASHES );
+			return 'cursor://anysphere.cursor-deeplink/mcp/install?name=agent-abilities&config=' . rawurlencode( base64_encode( $config ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- the link format Cursor documents.
+		case 'vscode':
+			$config = array(
+				'name' => 'agent-abilities',
+				'type' => 'http',
+				'url'  => $url,
+			);
+			return 'vscode:mcp/install?' . rawurlencode( (string) wp_json_encode( $config, JSON_UNESCAPED_SLASHES ) );
+		default:
+			return '';
+	}
+}
+
+/**
  * The one-line "where do I put this?" note for each quickstart client.
  *
  * Kept as plain prose with no markup so the render can escape each line wholesale.
@@ -544,9 +597,9 @@ function aafm_oauth_client_note( string $client ): string {
 	// eagerly built array would translate all nine notes on every call instead of one.
 	switch ( $client ) {
 		case 'chatgpt':
-			return __( 'Turn on Developer mode in ChatGPT settings, then add a custom connector: give it a name, paste the endpoint URL as the MCP server URL, create it, and approve the sign-in. Developer mode needs a paid ChatGPT plan.', 'agent-abilities-for-mcp' );
+			return __( 'On ChatGPT web, open Plugins, select the plus button, then Add custom MCP server. Name it, paste the endpoint URL under Connection, choose OAuth, tick the risk acknowledgment, select Create as a plugin, and approve the sign-in. You don\'t need to turn on Developer Mode first.', 'agent-abilities-for-mcp' );
 		case 'claude':
-			return __( 'Open Settings, then Connectors, add a custom connector, paste the endpoint URL, and approve the sign-in. The claude.ai web app and Claude Desktop use the same flow.', 'agent-abilities-for-mcp' );
+			return __( 'Open Customize, then Connectors, choose + Add, then Add custom connector, paste the endpoint URL, and approve the sign-in. The claude.ai web app and Claude Desktop use the same flow.', 'agent-abilities-for-mcp' );
 		case 'claude-code':
 			return __( 'Run: claude mcp add --transport http agent-abilities <endpoint-url>', 'agent-abilities-for-mcp' );
 		case 'cursor':
@@ -631,23 +684,17 @@ function aafm_ajax_oauth_revoke_client(): void {
 	// still send success, and the code-table delete above was never
 	// certified at all).
 	//
-	// F6 (1.7.5 deferred): aafm_oauth_revoke_client_tokens() reports a genuine query failure as
-	// -1 (N1), and the final-state read above can still find zero active tokens even when that
-	// UPDATE itself failed (there was nothing to update either way) - so this response used to
-	// send the -1 sentinel straight through as revoked_tokens. The admin JS reads it as
-	// Number(revoked_tokens) and subtracts it from the displayed count, so a -1 INCREASED the
-	// shown token count instead of decreasing it. A genuine query failure is refused the same as
+	// aafm_oauth_revoke_client_tokens() reports a genuine query failure as -1, and the final-state
+	// read can still find zero active tokens when that UPDATE failed, so -1 is refused the same as
 	// any other unconfirmed revoke.
+	$app = sprintf( ' (app %s)', substr( $client_id, 0, 8 ) );
 	if ( ! $deactivated || -1 === $revoked || aafm_oauth_client_has_active_tokens( $client_id ) || aafm_oauth_client_has_pending_codes( $client_id ) ) {
+		aafm_log_setting_change( 'aafm/oauth-client', __( 'Could not revoke the app', 'agent-abilities-for-mcp' ) . $app, false );
 		wp_send_json_error( array( 'message' => __( 'Could not fully revoke the client. Please try again.', 'agent-abilities-for-mcp' ) ) );
 	}
 
-	wp_send_json_success(
-		array(
-			'client_id'      => $client_id,
-			'revoked_tokens' => $revoked,
-		)
-	);
+	aafm_log_setting_change( 'aafm/oauth-client', __( 'App revoked', 'agent-abilities-for-mcp' ) . $app );
+	wp_send_json_success( array( 'client_id' => $client_id ) );
 }
 
 /**
@@ -719,20 +766,21 @@ function aafm_ajax_oauth_revoke_grant(): void {
 	// send success while the bearer token kept validating, and the code-table
 	// delete above was never certified at all).
 	//
-	// F6 (1.7.5 deferred): same sentinel leak as aafm_ajax_oauth_revoke_client() above -
-	// aafm_oauth_revoke_user_client_tokens() reports a genuine query failure as -1 (N1), and the
-	// final-state read can still find zero active tokens even when that UPDATE itself failed, so
-	// this response used to send the -1 sentinel straight through as revoked_tokens, which the
-	// admin JS then subtracted, INCREASING the displayed count instead of decreasing it.
+	// aafm_oauth_revoke_user_client_tokens() reports a genuine query failure as -1, and the
+	// final-state read can still find zero active tokens when that UPDATE failed, so -1 is refused
+	// the same as any other unconfirmed revoke.
+	$grant = sprintf( ' (user ID %1$d, app %2$s)', $user_id, substr( $client_id, 0, 8 ) );
 	if ( ! $consent_deleted || -1 === $revoked || aafm_oauth_user_client_has_active_tokens( $user_id, $client_id ) || aafm_oauth_user_client_has_pending_codes( $user_id, $client_id ) ) {
+		aafm_log_setting_change( 'aafm/oauth-grant', __( 'Could not revoke the grant', 'agent-abilities-for-mcp' ) . $grant, false );
 		wp_send_json_error( array( 'message' => __( 'Could not fully revoke the grant. Please try again.', 'agent-abilities-for-mcp' ) ) );
 	}
 
+	aafm_log_setting_change( 'aafm/oauth-grant', __( 'Grant revoked', 'agent-abilities-for-mcp' ) . $grant );
+
 	wp_send_json_success(
 		array(
-			'user_id'        => $user_id,
-			'client_id'      => $client_id,
-			'revoked_tokens' => $revoked,
+			'user_id'   => $user_id,
+			'client_id' => $client_id,
 		)
 	);
 }
@@ -875,10 +923,12 @@ function aafm_format_admin_datetime( string $utc ): string {
  *
  * @param string               $label_id Id of the OS label that names the tablist.
  * @param string               $grid_id  Id of the client grid.
- * @param array<string,string> $clients  Client slug => label, in display order.
+ * @param array<string,string> $clients       Client slug => label, in display order.
+ * @param array<string,string> $method_labels Client slug => how it connects, shown as a second line
+ *                                            inside the card (so it is part of the radio's name).
  * @return void
  */
-function aafm_render_client_picker( string $label_id, string $grid_id, array $clients ): void {
+function aafm_render_client_picker( string $label_id, string $grid_id, array $clients, array $method_labels = array() ): void {
 	echo '<div class="aafm-connect-os">';
 	echo '<div class="aafm-stat-label" id="' . esc_attr( $label_id ) . '">' . esc_html__( 'Your operating system', 'agent-abilities-for-mcp' ) . '</div>';
 	// The OS tabs are a cross-cutting filter over the per-client snippet pairs (one tablist,
@@ -897,21 +947,25 @@ function aafm_render_client_picker( string $label_id, string $grid_id, array $cl
 	echo '</div>';
 
 	echo '<div class="aafm-connect-client">';
-	echo '<div class="aafm-stat-label">' . esc_html__( 'Your client', 'agent-abilities-for-mcp' ) . '</div>';
-	echo '<div class="aafm-client-grid" id="' . esc_attr( $grid_id ) . '">';
+	echo '<div class="aafm-stat-label" id="' . esc_attr( $grid_id . '-label' ) . '">' . esc_html__( 'Your client', 'agent-abilities-for-mcp' ) . '</div>';
+	// One choice from a set: a named radiogroup of radio buttons, with one tab stop and the arrow
+	// keys moving the selection (admin.js keeps aria-checked, tabindex and .on in step).
+	echo '<div class="aafm-client-grid" id="' . esc_attr( $grid_id ) . '" role="radiogroup" aria-labelledby="' . esc_attr( $grid_id . '-label' ) . '">';
 	$first = true;
 	foreach ( $clients as $slug => $label ) {
-		// A real <button> with aria-pressed, not a click-only div: the OAuth picker is the
-		// only route to the OAuth instructions, so it has to be reachable by keyboard
-		// and announce its selected state. admin.js keeps aria-pressed and .on in step.
+		// A real <button>, not a click-only div: the OAuth picker is the only route to the OAuth
+		// instructions, so it has to be reachable by keyboard and announce its selected state.
 		echo wp_kses(
 			sprintf(
-				'<button type="button" class="aafm-client%1$s" data-client="%2$s" aria-pressed="%5$s"><span class="ci">%3$s</span>%4$s</button>',
+				'<button type="button" class="aafm-client%1$s" data-client="%2$s" role="radio" aria-checked="%5$s" tabindex="%6$s"><span class="ci">%3$s</span>%4$s</button>',
 				$first ? ' on' : '',
 				esc_attr( $slug ),
 				aafm_icon( 'client-' . $slug ),
-				esc_html( $label ),
-				$first ? 'true' : 'false'
+				isset( $method_labels[ $slug ] )
+					? '<span class="aafm-client-text"><span class="aafm-client-name">' . esc_html( $label ) . '</span> <span class="aafm-client-method">' . esc_html( $method_labels[ $slug ] ) . '</span></span>'
+					: esc_html( $label ),
+				$first ? 'true' : 'false',
+				$first ? '0' : '-1'
 			),
 			aafm_admin_allowed_html()
 		);
@@ -1012,7 +1066,7 @@ function aafm_render_connection_tab(): void {
 
 		// OAuth client picker: OS tabs + client grid + per-client instructions and bridge snippet.
 		echo '<div class="aafm-connect-controls aafm-oauth-picker">';
-		aafm_render_client_picker( 'aafm-os-label-oauth', 'aafm-oauth-clients', aafm_quickstart_clients() );
+		aafm_render_client_picker( 'aafm-os-label-oauth', 'aafm-oauth-clients', aafm_quickstart_clients(), aafm_client_method_labels() );
 		echo '</div>'; // .aafm-oauth-picker
 
 		// Per-client OAuth instructions + bridge snippet: hidden data cards the JS swaps in.
@@ -1059,6 +1113,22 @@ function aafm_render_connection_tab(): void {
 				// Native: lead with URL-paste instructions, offer bridge as secondary.
 				if ( '' !== $note ) {
 					echo '<p class="aafm-oauth-note">' . esc_html( $note ) . '</p>';
+				}
+				// One-click install where the client documents a link format. OAuth path only: the
+				// link carries the endpoint and a server name, and the client signs in itself.
+				$install = aafm_client_install_link( $slug );
+				if ( '' !== $install ) {
+					$protocol = (string) strtok( $install, ':' );
+					echo wp_kses(
+						sprintf(
+							'<p class="aafm-oauth-install"><a class="aafm-btn aafm-btn-secondary" href="%1$s">%2$s</a></p>',
+							esc_url( $install, array( $protocol ) ),
+							/* translators: %s: client name, e.g. "Cursor". */
+							esc_html( sprintf( __( 'Add to %s', 'agent-abilities-for-mcp' ), $label ) )
+						),
+						aafm_admin_allowed_html(),
+						array_merge( wp_allowed_protocols(), array( $protocol ) )
+					);
 				}
 				// Local cert notice for native-mode clients when the site is local.
 				if ( $is_local ) {

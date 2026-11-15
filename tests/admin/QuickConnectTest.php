@@ -256,6 +256,16 @@ final class QuickConnectTest extends TestCase {
 	 * on returns success + '1'; turning it back off returns success + '0'. This is the contract the
 	 * JS relies on to stop advancing on a failed write.
 	 */
+	public function test_wizard_paste_line_follows_the_readme_client_paths(): void {
+		$this->acting_as( 'administrator' );
+		ob_start();
+		aafm_quickconnect_render();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'ChatGPT &rarr; Plugins &rarr; Add custom MCP server', $html );
+		$this->assertStringContainsString( 'Claude &rarr; Customize &rarr; Connectors', $html );
+	}
+
 	public function test_oauth_handler_returns_success_and_resulting_state(): void {
 		$this->acting_as( 'administrator' );
 
@@ -590,7 +600,7 @@ final class QuickConnectTest extends TestCase {
 		$this->assertIsArray( $result );
 		$user_id = (int) $result['user_id'];
 		$this->assertSame( 1, (int) get_user_meta( $user_id, aafm_agent_user_marker_meta_key(), true ) );
-		$this->assertTrue( aafm_has_created_agent_user() );
+		$this->assertNotSame( array(), aafm_created_agent_users() );
 	}
 
 	/**
@@ -615,5 +625,82 @@ final class QuickConnectTest extends TestCase {
 		$this->assertFalse( get_option( 'aafm_quickconnect_finished', false ) );
 		$this->assertFalse( get_option( 'aafm_quickconnect_dismissed', false ) );
 		$this->assertTrue( aafm_quickconnect_should_render(), 'After a reset the wizard shows again.' );
+	}
+
+	/**
+	 * The wizard's last screen.
+	 *
+	 * @return string
+	 */
+	private function wizard_html(): string {
+		$this->acting_as( 'administrator' );
+		ob_start();
+		aafm_quickconnect_render();
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Finishing the wizard saves settings; nothing has connected yet, so the finish screen must not
+	 * say it has. The approve-in-your-client sentence stays.
+	 */
+	public function test_finish_screen_does_not_claim_connected_before_a_connection(): void {
+		$html = $this->wizard_html();
+		$this->assertStringNotContainsString( 'Connected and governed', $html );
+		$this->assertStringNotContainsString( 'can reach this site through the MCP server now', $html );
+		$this->assertStringContainsString( '<h2>Ready to connect</h2>', $html );
+		$this->assertStringContainsString( 'approve the connection when it asks', $html );
+		$this->assertStringNotContainsString( 'exactly what you allowed', $html, 'Tools are also limited by the role of the account the agent connects as.' );
+		$this->assertStringContainsString( 'and only what its WordPress role permits', $html );
+	}
+
+	public function test_wizard_step_headers_are_buttons_inside_headings(): void {
+		$html = $this->wizard_html();
+		// h2 under the dialog's h1. No step is done yet, so no head can act: all start aria-disabled.
+		$this->assertSame( 3, preg_match_all( '#<h2 class="aafm-qc-job-heading"><button type="button" class="aafm-qc-job-head" aria-expanded="(true|false)" aria-disabled="true">#', $html, $m ) );
+		$this->assertSame( array( 'true', 'false', 'false' ), $m[1], 'Only the first step starts expanded.' );
+		$this->assertStringNotContainsString( '<h3 class="aafm-qc-job-heading">', $html );
+		// Only step heads that cannot act are aria-disabled; the app-password disclosure always works.
+		$this->assertSame( 1, preg_match( '#<button type="button" class="aafm-qc-alttrigger"[^>]*>#', $html, $alt ) );
+		$this->assertStringNotContainsString( 'aria-disabled', $alt[0] );
+		$this->assertSame( 3, substr_count( $html, 'aria-disabled="true"' ), 'Exactly the three step heads.' );
+		$this->assertStringNotContainsString( '<div class="aafm-qc-job-head"', $html );
+	}
+
+	public function test_wizard_progress_meter_has_progressbar_role_and_values(): void {
+		$html = $this->wizard_html();
+		$this->assertSame( 1, preg_match( '#<div class="aafm-qc-meter"([^>]*)>#', $html, $m ) );
+		$this->assertStringContainsString( 'role="progressbar"', $m[1] );
+		$this->assertStringContainsString( 'aria-valuemin="1"', $m[1] );
+		$this->assertStringContainsString( 'aria-valuemax="3"', $m[1] );
+		$this->assertStringContainsString( 'aria-valuenow="1"', $m[1] );
+		$this->assertStringContainsString( 'aria-label="', $m[1] );
+		$this->assertStringNotContainsString( 'aria-hidden', $m[1] );
+	}
+
+	public function test_wizard_render_updates_aria_valuenow(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a bundled static asset from disk in a test.
+		$js = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
+		$at = strpos( $js, 'if ( stepNow ) {', (int) strpos( $js, '#bindQuickConnect() {' ) );
+		$this->assertNotFalse( $at );
+		$branch = substr( $js, (int) $at, 500 );
+		$this->assertStringContainsString( 'stepNow.textContent = String( state.step );', $branch );
+		$this->assertStringContainsString( "meter?.setAttribute( 'aria-valuenow', String( state.step ) );", $branch );
+		$this->assertStringContainsString( "head?.setAttribute( 'aria-expanded', String( i === state.step ) );", $js );
+		$this->assertStringContainsString( "head?.setAttribute( 'aria-disabled', String( i >= state.step ) );", $js, 'Only a done step head can act.' );
+	}
+
+	public function test_wizard_shows_no_percent_beside_the_step_count(): void {
+		$this->acting_as( 'administrator' );
+		ob_start();
+		aafm_quickconnect_render();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringNotContainsString( 'data-qc-pct', $html );
+		$this->assertStringNotContainsString( '0%', $html );
+		$this->assertStringContainsString( 'data-qc-stepnow', $html );
+		$this->assertStringContainsString( 'aria-valuetext="Step 1 of 3"', $html );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$js = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
+		$this->assertStringNotContainsString( 'qc-pct', $js );
 	}
 }

@@ -77,6 +77,8 @@ final class ConnectionDoctorTest extends TestCase {
 		remove_all_filters( 'pre_http_request' );
 		remove_all_filters( 'wp_is_application_passwords_available' );
 		remove_all_filters( 'aafm_doctor_known_blockers' );
+		remove_all_filters( 'bp_enable_private_rest_apis' );
+		remove_all_filters( 'aafm_test_bb_allowed_endpoint' );
 		foreach ( $this->slots_seen as $slot ) {
 			delete_transient( $slot );
 		}
@@ -721,6 +723,9 @@ final class ConnectionDoctorTest extends TestCase {
 		$row = $this->row( aafm_doctor_run_checks(), 'permalinks' );
 		$this->assertSame( 'warn', $row['status'] );
 		$this->assertSame( 'you', $row['who'] );
+		$this->assertStringContainsString( 'every OAuth connection ends', $row['detail'], 'The advice says what switching costs.' );
+		$this->assertStringContainsString( 'the MCP endpoint card at the top of this tab', $row['detail'], 'The passing row shows no address, so the advice points where the new one is.' );
+		$this->assertStringNotContainsString( 'this row shows', $row['detail'] );
 		update_option( 'permalink_structure', '/%postname%/' );
 		$this->assertSame( 'pass', $this->row( aafm_doctor_run_checks(), 'permalinks' )['status'] );
 	}
@@ -914,5 +919,131 @@ final class ConnectionDoctorTest extends TestCase {
 		$this->assertStringContainsString( 'id="aafm-doctor-show-all"', $html );
 		$this->assertMatchesRegularExpression( '/id="aafm-doctor-copy"[^>]*hidden/', $html );
 		$this->assertStringContainsString( 'run from this site&#039;s own server', str_replace( '&apos;', '&#039;', $html ) );
+	}
+
+	/**
+	 * Make BuddyBoss Platform's private REST switch read as on or off. The stub mirrors the real
+	 * bp_enable_private_rest_apis() (bp-core/bp-core-options.php): a bool that ends in its own
+	 * filter of the same name. Without BuddyBoss App the restriction applies whenever it is true.
+	 *
+	 * @param bool $on Whether private REST APIs are on.
+	 * @return void
+	 */
+	private function buddyboss_private_rest( bool $on ): void {
+		if ( ! function_exists( 'bp_enable_private_rest_apis' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a global vendor function cannot be declared inside this namespaced file.
+			eval( 'function bp_enable_private_rest_apis( $default = false ) { return apply_filters( \'bp_enable_private_rest_apis\', (bool) $default ); }' );
+		}
+		add_filter( 'bp_enable_private_rest_apis', $on ? '__return_true' : '__return_false' );
+	}
+
+	public function test_doctor_flags_buddyboss_private_rest_with_a_specific_line(): void {
+		$this->respond( $this->endpoint_ok() );
+		update_option( 'aafm_oauth_enabled', '1' );
+		$this->buddyboss_private_rest( false );
+		$this->assertSame( 'pass', $this->row( aafm_doctor_run_checks(), 'security_plugins' )['status'], 'BuddyBoss with private REST off is no warning.' );
+
+		$this->buddyboss_private_rest( true );
+		$row = $this->row( aafm_doctor_run_checks(), 'security_plugins' );
+
+		$this->assertSame( 'warn', $row['status'] );
+		$this->assertSame( 'plugin', $row['who'] );
+		$this->assertStringContainsString( 'BuddyBoss', $row['detail'] );
+		$this->assertStringContainsString( 'Only authenticated users can access the REST API.', $row['detail'], 'The owner can match the error they saw.' );
+		$this->assertStringContainsString( 'wp-json/agent-abilities-for-mcp/', $row['detail'] );
+		$this->assertStringContainsString( 'Public Rest APIs', $row['detail'] );
+		$this->assertStringNotContainsString( 'Application Password', $row['detail'], 'BuddyBoss lets a signed-in Application Password through.' );
+	}
+
+	public function test_doctor_buddyboss_line_is_silent_with_oauth_off(): void {
+		$this->respond( $this->endpoint_ok() );
+		$this->buddyboss_private_rest( true );
+		$this->assertFalse( aafm_oauth_enabled(), 'precondition: OAuth is off.' );
+
+		$this->assertFalse( aafm_doctor_buddyboss_private_rest(), 'Every call carries an Application Password, which BuddyBoss lets through.' );
+		$this->assertSame( 'pass', $this->row( aafm_doctor_run_checks(), 'security_plugins' )['status'] );
+
+		update_option( 'aafm_oauth_enabled', '1' );
+		$this->assertTrue( aafm_doctor_buddyboss_private_rest(), 'With OAuth on, the unauthenticated OAuth routes are refused.' );
+	}
+
+	public function test_doctor_generic_rest_login_line_is_not_duplicated(): void {
+		add_filter(
+			'aafm_doctor_known_blockers',
+			static function ( array $known ): array {
+				$known['fake-firewall/fake-firewall.php'] = 'Fake Firewall';
+				return $known;
+			}
+		);
+		update_option( 'active_plugins', array( 'fake-firewall/fake-firewall.php' ) );
+		update_option( 'aafm_oauth_enabled', '1' );
+		$this->buddyboss_private_rest( true );
+		// On a real BuddyBoss site with private REST on, the probe gets BuddyBoss's 401.
+		$this->respond( fn() => $this->http( 401 ) );
+
+		$rows   = aafm_doctor_run_checks();
+		$detail = $this->row( $rows, 'security_plugins' )['detail'];
+		$all    = implode( "\n", array_column( $rows, 'detail' ) );
+		$probe  = $this->row( $rows, 'endpoint' )['detail'];
+
+		$this->assertStringContainsString( 'Fake Firewall can restrict the REST API', $detail, 'The generic line names only the known plugins.' );
+		$this->assertSame( 1, substr_count( $all, 'BuddyBoss has Private Rest APIs switched on' ), 'The BuddyBoss line appears once.' );
+		$this->assertStringNotContainsString( 'BuddyBoss can restrict', $all, 'BuddyBoss is not also folded into the generic line.' );
+		$this->assertSame( 1, substr_count( $all, 'can restrict the REST API' ) );
+		$this->assertSame( 1, substr_count( $all, 'requires a login for the whole REST API' ), 'The generic 401 diagnosis appears once, on the endpoint row.' );
+		$this->assertStringContainsString( 'A membership or security plugin is the usual cause', $probe, 'The endpoint row names the symptom.' );
+		$this->assertStringNotContainsString( 'BuddyBoss', $probe, 'The cause is named once, on the plugins row.' );
+	}
+
+	public function test_doctor_401_diagnosis_names_membership_lockdown(): void {
+		$read = aafm_doctor_interpret_http_status( 401, false );
+
+		$this->assertStringContainsString( 'requires a login for the whole REST API', $read['detail'] );
+		$this->assertStringContainsString( 'membership', $read['detail'] );
+		$this->assertStringNotContainsString( 'even a correct Application Password', $read['detail'], 'A signed-in Application Password request gets through, as on the Connection tab.' );
+		$this->assertStringContainsString( 'OAuth', $read['detail'] );
+	}
+
+	/**
+	 * Make BuddyBoss's own endpoint check answer for this test. The stub mirrors the real
+	 * bb_is_allowed_endpoint() (bp-core/bp-core-functions.php): true for an allowed route, null otherwise.
+	 *
+	 * @param array<int,string> $allowed Routes to allow.
+	 * @return void
+	 */
+	private function buddyboss_allows( array $allowed ): void {
+		if ( ! function_exists( 'bb_is_allowed_endpoint' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a global vendor function cannot be declared inside this namespaced file.
+			eval( 'function bb_is_allowed_endpoint( $current_endpoint ) { return apply_filters( \'aafm_test_bb_allowed_endpoint\', null, $current_endpoint ); }' );
+		}
+		add_filter(
+			'aafm_test_bb_allowed_endpoint',
+			static fn( $verdict, string $route ) => in_array( $route, $allowed, true ) ? true : null,
+			10,
+			2
+		);
+	}
+
+	public function test_doctor_buddyboss_line_clears_once_both_routes_are_public(): void {
+		$this->respond( $this->endpoint_ok() );
+		update_option( 'aafm_oauth_enabled', '1' );
+		$this->buddyboss_private_rest( true );
+		$oauth = '/' . aafm_oauth_rest_namespace();
+
+		$this->buddyboss_allows( array( aafm_mcp_rest_route(), $oauth . '/token' ) );
+		$this->assertSame( 'warn', $this->row( aafm_doctor_run_checks(), 'security_plugins' )['status'], 'Client registration is still blocked, and it is the first call an AI client makes.' );
+
+		remove_all_filters( 'aafm_test_bb_allowed_endpoint' );
+		$this->buddyboss_allows( array( $oauth . '/register', $oauth . '/token' ) );
+		$this->assertSame( 'pass', $this->row( aafm_doctor_run_checks(), 'security_plugins' )['status'], 'The owner followed the advice, so the line is gone.' );
+	}
+
+	public function test_the_plugin_who_line_names_membership_plugins_too(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a plugin source file in a test.
+		$js = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a plugin source file in a test.
+		$page = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/page.php' );
+		$this->assertStringContainsString( "'doctorWhoPlugin', 'A security or membership plugin may be the cause'", $js );
+		$this->assertStringContainsString( "'doctorWhoPlugin'          => __( 'A security or membership plugin may be the cause'", $page );
 	}
 }

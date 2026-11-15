@@ -1024,7 +1024,8 @@ class ValidatorTest extends TestCase {
 		// quoted names inside the guard itself.
 		$guard      = (int) strpos( $code, "function_exists( 'aafm_mcp_rest_route' )" );
 		$route_call = strpos( $code, 'aafm_oauth_request_targets_mcp_route(' );
-		$url_call   = strpos( $code, 'aafm_endpoint_url(' );
+		// The audience check calls aafm_endpoint_url() through aafm_oauth_resource_is_this_endpoint().
+		$url_call = strpos( $code, 'aafm_oauth_resource_is_this_endpoint(' );
 
 		$this->assertNotFalse( $route_call, 'The resolver is expected to match the MCP route.' );
 		$this->assertNotFalse( $url_call, 'The resolver is expected to bind the token audience.' );

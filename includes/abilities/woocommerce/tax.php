@@ -486,7 +486,7 @@ function aafm_wc_tax_class_slug_error( string $slug ): ?\WP_Error {
 		'aafm_wc_unknown_tax_class',
 		sprintf(
 			/* translators: 1: the unknown tax class slug, 2: comma-separated list of existing class slugs. */
-			__( 'Unknown tax class "%1$s" - WooCommerce would silently file this rate under the Standard class. Existing class slugs: %2$s. Create the class first with wc-create-tax-class if it should exist.', 'agent-abilities-for-mcp' ),
+			__( 'Unknown tax class "%1$s". WooCommerce would silently file this rate under the Standard class. Existing class slugs: %2$s. Create the class first with wc-create-tax-class if it should exist.', 'agent-abilities-for-mcp' ),
 			$slug,
 			implode( ', ', array_merge( array( 'standard' ), $known ) )
 		)
@@ -974,7 +974,7 @@ function aafm_exec_wc_create_tax_class( array $input ) {
 			'aafm_wc_tax_class_write_unconfirmed',
 			sprintf(
 				/* translators: %s: the tax class slug that could not be confirmed. */
-				__( 'WooCommerce reported the tax class "%s" was created, but it could not be confirmed as stored - a concurrent request may have claimed the slug first. Check WooCommerce\'s tax settings before retrying.', 'agent-abilities-for-mcp' ),
+				__( 'WooCommerce reported the tax class "%s" was created, but it could not be confirmed as stored. A concurrent request may have claimed the slug first. Check WooCommerce\'s tax settings before retrying.', 'agent-abilities-for-mcp' ),
 				$stored_slug_check
 			)
 		);

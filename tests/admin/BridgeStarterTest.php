@@ -76,23 +76,38 @@ final class BridgeStarterTest extends TestCase {
 	/**
 	 * Run a handler with a valid nonce.
 	 *
-	 * @param callable $handler AJAX callback.
-	 * @param string   $plugin  Group key.
+	 * @param callable               $handler AJAX callback.
+	 * @param string                 $plugin  Group key.
+	 * @param array<int,string>|null $slugs   The shown slugs to post; null posts what is registered now.
 	 * @return array<string,mixed>
 	 */
-	private function post( callable $handler, string $plugin ): array {
+	private function post( callable $handler, string $plugin, ?array $slugs = null ): array {
 		$this->intercept_die();
 		$nonce             = wp_create_nonce( 'aafm_admin' );
 		$_POST['nonce']    = $nonce;
 		$_REQUEST['nonce'] = $nonce;
 		$_POST['plugin']   = $plugin;
+		$_POST['slugs']    = $slugs ?? $this->shown( $plugin );
 		return $this->run_handler( $handler );
+	}
+
+	/**
+	 * The slugs a screen rendered now would show for a group key, or for every group on the all key.
+	 *
+	 * @param string $plugin Group key.
+	 * @return array<int,string>
+	 */
+	private function shown( string $plugin ): array {
+		if ( aafm_bridge_review_all_key() === $plugin ) {
+			return aafm_bridge_foreign_slugs();
+		}
+		return aafm_bridge_group_slugs( aafm_bridge_foreign_slugs() )[ $plugin ] ?? array();
 	}
 
 	public function test_it_enables_only_the_groups_reads_and_turns_its_other_tools_off(): void {
 		update_option( 'aafm_enabled_bridged_abilities', array( 'plugina/delete', 'plugina/write-one' ) );
 
-		$result = aafm_bridge_apply_read_only_starter( 'plugina' );
+		$result = aafm_bridge_apply_read_only_starter( 'plugina', $this->shown( 'plugina' ) );
 
 		$this->assertTrue( $result['ok'] );
 		$this->assertSame( 2, $result['reads'] );
@@ -105,14 +120,14 @@ final class BridgeStarterTest extends TestCase {
 	public function test_other_plugins_selections_are_untouched(): void {
 		update_option( 'aafm_enabled_bridged_abilities', array( 'pluginb/b-delete', 'plugina/delete' ) );
 
-		aafm_bridge_apply_read_only_starter( 'plugina' );
+		aafm_bridge_apply_read_only_starter( 'plugina', $this->shown( 'plugina' ) );
 
 		$this->assertContains( 'pluginb/b-delete', $this->stored() );
 		$this->assertNotContains( 'pluginb/b-read', $this->stored(), 'The starter does not add to another plugin either.' );
 	}
 
 	public function test_it_uses_the_read_only_preset_classifier(): void {
-		aafm_bridge_apply_read_only_starter( 'plugina' );
+		aafm_bridge_apply_read_only_starter( 'plugina', $this->shown( 'plugina' ) );
 
 		$stored = $this->stored();
 		foreach ( array( 'read-one', 'read-two', 'write-one', 'delete', 'unlabeled' ) as $tool ) {
@@ -125,7 +140,7 @@ final class BridgeStarterTest extends TestCase {
 		$this->register_foreign_abilities( 'silent', array( 'do-thing' => array() ) );
 		update_option( 'aafm_enabled_bridged_abilities', array( 'silent/do-thing' ) );
 
-		$result = aafm_bridge_apply_read_only_starter( 'silent' );
+		$result = aafm_bridge_apply_read_only_starter( 'silent', $this->shown( 'silent' ) );
 
 		$this->assertTrue( $result['ok'] );
 		$this->assertSame( 0, $result['reads'] );
@@ -163,7 +178,7 @@ final class BridgeStarterTest extends TestCase {
 	public function test_it_logs_one_toggle_row_per_change(): void {
 		update_option( 'aafm_enabled_bridged_abilities', array( 'plugina/delete', 'plugina/read-one' ) );
 
-		aafm_bridge_apply_read_only_starter( 'plugina' );
+		aafm_bridge_apply_read_only_starter( 'plugina', $this->shown( 'plugina' ) );
 
 		$this->assertSame( array( 'plugina/read-two' ), $this->toggled( 'ability_enabled' ), 'A tool already on writes no row.' );
 		$this->assertSame( array( 'plugina/delete' ), $this->toggled( 'ability_disabled' ) );
@@ -187,7 +202,7 @@ final class BridgeStarterTest extends TestCase {
 		$this->register_foreign_abilities( 'plugina', array( 'read-new' => array( 'readonly' => true ) ) );
 		$this->register_foreign_abilities( 'pluginb', array( 'b-new' => array( 'readonly' => true ) ) );
 
-		aafm_bridge_apply_read_only_starter( 'plugina' );
+		aafm_bridge_apply_read_only_starter( 'plugina', $this->shown( 'plugina' ) );
 
 		$this->assertSame( array( 'pluginb/b-new' ), aafm_bridge_new_tools() );
 	}
@@ -232,7 +247,7 @@ final class BridgeStarterTest extends TestCase {
 	public function test_the_starter_never_adds_a_tool_that_is_not_registered(): void {
 		update_option( 'aafm_enabled_bridged_abilities', array( 'plugina/ghost' ) );
 
-		$result = aafm_bridge_apply_read_only_starter( 'plugina' );
+		$result = aafm_bridge_apply_read_only_starter( 'plugina', $this->shown( 'plugina' ) );
 
 		$this->assertNotContains( 'plugina/ghost', $this->stored() );
 		$this->assertNotContains( 'plugina/ghost', $result['enabled'] );
@@ -242,7 +257,7 @@ final class BridgeStarterTest extends TestCase {
 		$this->unregister_foreign_ability( 'plugina/delete' );
 		update_option( 'aafm_enabled_bridged_abilities', array( 'plugina/delete', 'plugina/read-one', 'pluginb/not-here-now' ) );
 
-		aafm_bridge_apply_read_only_starter( 'plugina' );
+		aafm_bridge_apply_read_only_starter( 'plugina', $this->shown( 'plugina' ) );
 
 		$this->assertNotContains( 'plugina/delete', $this->stored() );
 		$this->assertContains( 'pluginb/not-here-now', $this->stored(), 'Another plugin\'s unregistered slug stays.' );
@@ -260,7 +275,7 @@ final class BridgeStarterTest extends TestCase {
 		wp_cache_set( 'alloptions', $all, 'options' );
 		$this->assertSame( $stale, get_option( 'aafm_enabled_bridged_abilities' ), 'Precondition: the stale copy is what get_option() sees.' );
 
-		$result = aafm_bridge_apply_read_only_starter( 'plugina' );
+		$result = aafm_bridge_apply_read_only_starter( 'plugina', $this->shown( 'plugina' ) );
 
 		$this->assertTrue( $result['ok'] );
 		$this->assertContains( 'pluginb/b-delete', $this->stored() );
@@ -273,7 +288,7 @@ final class BridgeStarterTest extends TestCase {
 
 		$result = QueryFaultInjector::fail_query(
 			'aafm_enabled_bridged_abilities',
-			static fn() => aafm_bridge_apply_read_only_starter( 'plugina' )
+			fn() => aafm_bridge_apply_read_only_starter( 'plugina', $this->shown( 'plugina' ) )
 		);
 
 		$this->assertFalse( $result['ok'] );
@@ -284,12 +299,78 @@ final class BridgeStarterTest extends TestCase {
 		$this->register_foreign_abilities( 'plugina', array( 'read-new' => array( 'readonly' => true ) ) );
 		add_filter( 'pre_update_option_aafm_bridge_review', static fn( $value, $old ) => $old, 10, 2 );
 
-		$result = aafm_bridge_apply_read_only_starter( 'plugina' );
+		$result = aafm_bridge_apply_read_only_starter( 'plugina', $this->shown( 'plugina' ) );
 
 		$this->assertTrue( $result['ok'] );
 		$this->assertStringContainsString( 'could not be marked as reviewed', $result['message'] );
 		$this->assertFalse( $result['reviewed'], 'The screen keeps the tools in the card.' );
 		$this->assertContains( 'plugina/read-new', $this->stored() );
 		$this->assertContains( 'plugina/read-new', aafm_bridge_new_tools() );
+	}
+
+	public function test_starter_rejects_slugs_from_another_group(): void {
+		update_option( 'aafm_enabled_bridged_abilities', array( 'plugina/delete' ) );
+
+		$result = aafm_bridge_apply_read_only_starter( 'plugina', array( 'plugina/read-one', 'pluginb/b-read' ) );
+
+		$this->assertFalse( $result['ok'] );
+		$this->assertSame( array( 'plugina/delete' ), $this->stored(), 'Nothing was written.' );
+		$json = $this->post( 'aafm_ajax_bridge_read_only_starter', 'plugina', array( 'pluginb/b-read' ) );
+		$this->assertFalse( $json['success'] ?? true );
+	}
+
+	public function test_starter_acts_only_on_shown_slugs(): void {
+		$shown = $this->shown( 'plugina' );
+		$this->register_foreign_abilities( 'plugina', array( 'read-late' => array( 'readonly' => true ) ) );
+
+		$json = $this->post( 'aafm_ajax_bridge_read_only_starter', 'plugina', $shown );
+
+		$this->assertTrue( $json['success'] ?? false );
+		$this->assertEqualsCanonicalizing( array( 'plugina/read-one', 'plugina/read-two' ), $this->stored(), 'The read tool registered after the page rendered stays off.' );
+	}
+
+	public function test_mark_reviewed_acts_only_on_shown_slugs(): void {
+		$this->register_foreign_abilities( 'plugina', array( 'seen' => array( 'readonly' => true ) ) );
+		$shown = $this->shown( 'plugina' );
+		$this->register_foreign_abilities( 'plugina', array( 'late' => array( 'readonly' => true ) ) );
+
+		$json = $this->post( 'aafm_ajax_bridge_mark_reviewed', 'plugina', $shown );
+
+		$this->assertTrue( $json['success'] ?? false );
+		$this->assertSame( array( 'plugina/late' ), aafm_bridge_new_tools() );
+		$this->assertFalse( aafm_option_row( 'aafm_enabled_bridged_abilities' )['found'], 'Marking reviewed enables nothing.' );
+	}
+
+	public function test_tool_added_after_render_stays_unreviewed(): void {
+		$this->register_foreign_abilities( 'plugina', array( 'seen' => array( 'readonly' => true ) ) );
+		$this->register_foreign_abilities( 'pluginb', array( 'b-seen' => array( 'readonly' => true ) ) );
+		$all = $this->shown( aafm_bridge_review_all_key() );
+		$this->register_foreign_abilities( 'pluginb', array( 'b-late' => array( 'readonly' => true ) ) );
+
+		$this->post( 'aafm_ajax_bridge_mark_reviewed', aafm_bridge_review_all_key(), $all );
+		$this->assertSame( array( 'pluginb/b-late' ), aafm_bridge_new_tools(), 'Mark all covers only what was shown.' );
+
+		$shown = $this->shown( 'pluginb' );
+		$this->register_foreign_abilities( 'pluginb', array( 'b-later' => array( 'readonly' => true ) ) );
+		aafm_bridge_apply_read_only_starter( 'pluginb', $shown );
+		$this->assertSame( array( 'pluginb/b-later' ), aafm_bridge_new_tools() );
+		$this->assertNotContains( 'pluginb/b-later', $this->stored() );
+	}
+
+	public function test_unknown_posted_slug_is_ignored(): void {
+		$json = $this->post( 'aafm_ajax_bridge_read_only_starter', 'plugina', array_merge( $this->shown( 'plugina' ), array( 'ghost/tool', 'plugina/ghost', '<b>x</b>' ) ) );
+
+		$this->assertTrue( $json['success'] ?? false );
+		$this->assertEqualsCanonicalizing( array( 'plugina/read-one', 'plugina/read-two' ), $this->stored() );
+		$this->assertNotContains( 'plugina/ghost', aafm_bridge_review_state()['reviewed'] );
+		$this->assertNotContains( 'ghost/tool', aafm_bridge_review_state()['reviewed'] );
+	}
+
+	public function test_a_request_with_no_shown_slugs_changes_nothing(): void {
+		update_option( 'aafm_enabled_bridged_abilities', array( 'plugina/delete' ) );
+
+		$this->assertFalse( $this->post( 'aafm_ajax_bridge_read_only_starter', 'plugina', array() )['success'] ?? true );
+		$this->assertFalse( $this->post( 'aafm_ajax_bridge_mark_reviewed', 'plugina', array() )['success'] ?? true );
+		$this->assertSame( array( 'plugina/delete' ), $this->stored() );
 	}
 }

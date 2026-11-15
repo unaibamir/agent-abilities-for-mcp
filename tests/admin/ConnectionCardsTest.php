@@ -9,6 +9,8 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Admin;
 
+use AAFM\Tests\Support\AjaxHarness;
+use AAFM\Tests\Support\SeedsGrants;
 use AAFM\Tests\TestCase;
 
 /**
@@ -16,6 +18,9 @@ use AAFM\Tests\TestCase;
  * aafm_render_connection_tabs().
  */
 class ConnectionCardsTest extends TestCase {
+
+	use AjaxHarness;
+	use SeedsGrants;
 
 	private const CLIENT = 'client_cards';
 
@@ -28,6 +33,8 @@ class ConnectionCardsTest extends TestCase {
 	}
 
 	public function tear_down(): void {
+		$this->reset_ajax_harness();
+		unset( $_GET['grants_page'] );
 		delete_option( 'aafm_oauth_enabled' );
 		parent::tear_down();
 	}
@@ -195,24 +202,33 @@ class ConnectionCardsTest extends TestCase {
 		$this->seed_grant();
 		preg_match( '/<table[^>]*aafm-grants-table.*?<\/thead>/s', $this->grants_html(), $m );
 		$this->assertNotEmpty( $m );
-		preg_match_all( '/<th>(?:<span[^>]*>)?([^<]+)/', $m[0], $heads );
+		preg_match_all( '/<th scope="col">(?:<span[^>]*>)?([^<]+)/', $m[0], $heads );
 		$this->assertSame( array( 'User', 'Current role', 'App', 'Access', 'Last used', 'Ends', 'Limit', 'Status', 'Actions' ), $heads[1] );
 	}
 
 	/**
-	 * Revoking a grant removes its row, so the script must also lower the "(N)" in the card title.
-	 * There is no JS runner here: this pins the markup the script reads and the script's use of it.
+	 * The grants card is paged on the server, so a Revoke reloads the current page instead of
+	 * recounting the rows left in it, and the reloaded page puts focus back on the card. There is no
+	 * JS runner here: this pins the script's use of a one-use marker on both sides of the reload.
 	 */
-	public function test_revoking_a_grant_updates_the_card_title_count(): void {
-		$this->seed_grant();
-		$html = $this->grants_html();
-		$this->assertMatchesRegularExpression( '/id="aafm-card-grants".*?<h2 class="aafm-card-head-title">Active grants \(1\)<\/h2>/s', $html );
-
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a bundled static asset from disk in a test.
-		$js = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
-		$at = strpos( $js, 'this.#adjustClientTokens( root, clientId, -revoked );' );
+	public function test_revoking_a_grant_reloads_the_server_page_and_returns_focus(): void {
+		$js = $this->admin_js();
+		$at = strpos( $js, '#bindOauthRevoke() {' );
 		$this->assertNotFalse( $at );
-		$this->assertStringContainsString( '#aafm-card-grants .aafm-card-head-title', substr( $js, (int) $at, 600 ) );
+		$revoke = substr( $js, (int) $at, (int) strpos( $js, '#paginateTable(', (int) $at ) - (int) $at );
+		$this->assertStringContainsString( "sessionStorage.setItem( 'aafmFocusCard', isGrant ? 'aafm-card-grants' : 'aafm-card-clients' )", $revoke, 'Focus returns to the card the revoke came from.' );
+		$this->assertStringContainsString( '.nav-tab[data-tab="connection"] .aafm-dirty-dot', $revoke, 'A reload with unsaved edits on the tab says so before it happens.' );
+		$this->assertStringContainsString( "this.#t( 'revokeReloadLosesEdits'", $revoke );
+		$this->assertStringContainsString( 'window.location.reload()', $revoke );
+		$this->assertStringNotContainsString( "querySelectorAll( '#aafm-card-grants tr[data-grant-row]' ).length", $revoke, 'The card count never comes from rendered rows.' );
+
+		$at = strpos( $js, '#focusCardAfterReload() {' );
+		$this->assertNotFalse( $at );
+		$load = substr( $js, (int) $at, 700 );
+		$this->assertStringContainsString( "sessionStorage.removeItem( 'aafmFocusCard' )", $load );
+		$this->assertStringContainsString( "[ 'aafm-card-grants', 'aafm-card-clients' ].includes( card )", $load, 'Only a known card id from storage is used as a selector.' );
+		$this->assertStringContainsString( '.aafm-card-head-title', $load );
+		$this->assertStringContainsString( 'this.#focusCardAfterReload();', $js );
 	}
 
 	public function test_the_access_select_lists_the_four_presets_with_the_current_one_selected_and_a_custom_default_for_a_null_preset(): void {
@@ -286,5 +302,291 @@ class ConnectionCardsTest extends TestCase {
 		$html = $this->render( static fn() => aafm_render_grants_card( aafm_connection_grants_data() ) );
 		$this->assertStringContainsString( 'This connection acts with elevated permissions.', $html );
 		$this->assertStringNotContainsString( 'full administrator access', $html );
+	}
+
+	/**
+	 * The bundled admin script.
+	 *
+	 * @return string
+	 */
+	private function admin_js(): string {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a bundled static asset from disk in a test.
+		return (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
+	}
+
+	/**
+	 * Seed one active access token with the given audience.
+	 *
+	 * @param string $audience Stored resource.
+	 * @return void
+	 */
+	private function seed_token( string $audience ): void {
+		global $wpdb;
+		$wpdb->insert(
+			$wpdb->prefix . 'aafm_oauth_access_tokens',
+			array(
+				'token_hash'   => hash( 'sha256', 't' . wp_rand() ),
+				'refresh_hash' => hash( 'sha256', 'r' . wp_rand() ),
+				'client_id'    => self::CLIENT,
+				'wp_user_id'   => 1,
+				'resource'     => $audience,
+				'is_active'    => 1,
+			)
+		);
+	}
+
+	public function test_grants_card_shows_page_2_of_3_with_links(): void {
+		$this->seed_grants( 105, 'pg_' );
+		$_GET['grants_page'] = '2';
+		$html                = $this->grants_html();
+
+		$this->assertStringContainsString( 'Active grants (105)', $html );
+		$this->assertStringContainsString( 'Showing 51 to 100 of 105', $html );
+		$this->assertSame( 2, preg_match_all( '/<a [^>]*href="[^"]*grants_page=1[^"]*"[^>]*>Previous<\/a>/', $html ), 'Previous links to page 1, above and below the table.' );
+		$this->assertSame( 2, preg_match_all( '/<a [^>]*href="[^"]*grants_page=3[^"]*"[^>]*>Next<\/a>/', $html ), 'Next links to page 3, above and below the table.' );
+		preg_match( '/<tbody>(.*?)<\/tbody>/s', $html, $body );
+		$this->assertSame( 50, substr_count( $body[1], '<tr' ) );
+	}
+
+	public function test_grants_pager_is_reachable_before_the_rows(): void {
+		$this->seed_grants( 105, 'pg_' );
+		$_GET['grants_page'] = '2';
+		$html                = $this->grants_html();
+
+		$this->assertSame( 2, substr_count( $html, 'class="aafm-pager aafm-grants-pager"' ) );
+		$this->assertLessThan( strpos( $html, '<table' ), strpos( $html, 'aafm-grants-pager' ), 'A keyboard user reaches Next without tabbing through every row.' );
+		preg_match_all( '/<nav class="aafm-pager aafm-grants-pager" aria-label="([^"]+)"/', $html, $labels );
+		$this->assertCount( 2, array_unique( $labels[1] ), 'The two page navigations have different names.' );
+	}
+
+	public function test_grants_page_junk_renders_page_1(): void {
+		$this->seed_grants( 105, 'pg_' );
+		foreach ( array( 'abc', '0', '-5', array( '2' ), '' ) as $junk ) {
+			$_GET['grants_page'] = $junk;
+			$this->assertSame( 1, aafm_connection_grants_data()['page'], wp_json_encode( $junk ) );
+		}
+		$_GET['grants_page'] = '9999';
+		$this->assertSame( 3, aafm_connection_grants_data()['page'], 'A page past the end clamps to the last page.' );
+		$this->assertStringContainsString( 'Showing 101 to 105 of 105', $this->grants_html() );
+	}
+
+	public function test_grants_table_marked_server_paged(): void {
+		$this->seed_grant();
+		$this->assertMatchesRegularExpression( '/<table [^>]*class="[^"]*aafm-grants-table[^"]*"[^>]*data-aafm-server-paged="1"/', $this->grants_html() );
+		$this->assertStringNotContainsString( 'aafm-grants-pager', $this->grants_html(), 'One page needs no pager.' );
+	}
+
+	public function test_rendered_grants_card_keeps_server_paged_after_kses(): void {
+		$this->seed_grant();
+		// The card body goes through aafm_render_section(), which filters it with aafm_admin_allowed_html().
+		$this->assertStringContainsString( 'data-aafm-server-paged="1"', $this->grants_html() );
+		$this->assertArrayHasKey( 'data-aafm-server-paged', aafm_admin_allowed_html()['table'] );
+	}
+
+	public function test_clients_and_grants_headers_have_scope_col(): void {
+		$this->seed_grant();
+		$html = $this->render( static fn() => aafm_render_clients_card( aafm_connection_clients_data() ) ) . $this->grants_html();
+		$this->assertSame( 2, preg_match_all( '/<thead>(.*?)<\/thead>/s', $html, $heads ) );
+		foreach ( $heads[1] as $head ) {
+			$this->assertGreaterThan( 0, substr_count( $head, '<th' ) );
+			$this->assertSame( substr_count( $head, '<th' ), substr_count( $head, '<th scope="col"' ) );
+		}
+	}
+
+	public function test_stale_token_notice_shows_count_and_button_only_when_count_positive(): void {
+		$this->seed_grant();
+		$this->seed_token( aafm_endpoint_url() );
+		$this->assertStringNotContainsString( 'aafm-revoke-stale-tokens', $this->grants_html() );
+
+		$this->seed_token( 'https://old.example/wp-json/aafm/v1/mcp' );
+		$this->seed_token( 'https://old.example/wp-json/aafm/v1/mcp' );
+		$html = $this->grants_html();
+		$this->assertStringContainsString( '2 tokens were issued for an old address of this site', $html );
+		$this->assertMatchesRegularExpression( '/<button type="button" class="[^"]*aafm-revoke-stale-tokens[^"]*"/', $html );
+		// Authorization refuses the old address, so a plain reconnect fails: the connector has to be added again.
+		$this->assertStringNotContainsString( 'reconnect from their client', $html );
+		$this->assertStringContainsString( 'remove the connector and add it again with', $html );
+		// The address is its own copyable line, so no sentence punctuation sticks to it.
+		$url = aafm_endpoint_url();
+		$this->assertStringContainsString( '<code>' . esc_html( $url ) . '</code>', $html );
+		$this->assertStringContainsString( 'data-copy="' . esc_attr( $url ) . '"', $html );
+		$this->assertStringNotContainsString( esc_html( $url ) . '.', $html );
+	}
+
+	public function test_stale_token_confirm_matches_the_notice(): void {
+		$js = $this->admin_js();
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a plugin source file in a test.
+		$page = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/page.php' );
+		foreach ( array( $js, $page ) as $source ) {
+			$this->assertStringNotContainsString( 'those apps reconnect', $source );
+			$this->assertStringContainsString( 'Approvals stay, but each app has to be removed and added again with the new address.', $source );
+		}
+	}
+
+	public function test_stale_token_action_requires_nonce_and_capability(): void {
+		$this->seed_token( 'https://old.example/wp-json/aafm/v1/mcp' );
+
+		$this->post_as( 'administrator' );
+		$_POST['nonce']    = 'bad';
+		$_REQUEST['nonce'] = 'bad';
+		$this->assertNotTrue( $this->run_handler( 'aafm_ajax_revoke_stale_tokens' )['success'] ?? null );
+		$this->assertSame( 1, aafm_oauth_stale_token_count(), 'A bad nonce changes nothing.' );
+
+		$this->post_as( 'editor' );
+		$json = $this->run_handler( 'aafm_ajax_revoke_stale_tokens' );
+		$this->assertFalse( $json['success'] );
+		$this->assertSame( 1, aafm_oauth_stale_token_count(), 'An editor changes nothing.' );
+	}
+
+	public function test_stale_token_action_reports_deactivated_count(): void {
+		$this->seed_token( aafm_endpoint_url() );
+		$this->seed_token( 'https://old.example/wp-json/aafm/v1/mcp' );
+		$this->seed_token( 'https://old.example/wp-json/aafm/v1/mcp' );
+		$this->seed_token( 'https://old.example/wp-json/aafm/v1/mcp' );
+
+		$this->post_as( 'administrator' );
+		$json = $this->run_handler( 'aafm_ajax_revoke_stale_tokens' );
+		$this->assertTrue( $json['success'] );
+		$this->assertSame( 3, $json['data']['deactivated'] );
+		$this->assertStringContainsString( '3 tokens', $json['data']['message'] );
+		$this->assertStringContainsString( 'Reload the page to update the Active tokens counts.', $json['data']['message'], 'The clients table still shows the ended tokens until a reload.' );
+		$this->assertSame( 0, aafm_oauth_stale_token_count() );
+	}
+
+	public function test_client_picker_is_a_labelled_radiogroup(): void {
+		$html = $this->render( static fn() => aafm_render_client_picker( 'aafm-os-label-test', 'aafm-test-clients', aafm_quickstart_clients() ) );
+		$this->assertMatchesRegularExpression( '/<div class="aafm-client-grid" id="aafm-test-clients" role="radiogroup" aria-labelledby="aafm-test-clients-label">/', $html );
+		$this->assertStringContainsString( 'id="aafm-test-clients-label"', $html );
+	}
+
+	public function test_rendered_client_picker_keeps_radio_and_aria_checked_after_kses(): void {
+		$html = $this->render( static fn() => aafm_render_client_picker( 'aafm-os-label-test', 'aafm-test-clients', aafm_quickstart_clients() ) );
+		$this->assertSame( count( aafm_quickstart_clients() ), preg_match_all( '/<button type="button" class="aafm-client[^"]*"[^>]*role="radio"[^>]*aria-checked="(true|false)"[^>]*tabindex="(0|-1)"/', $html, $m ) );
+		$this->assertSame( array( 'true' ), array_values( array_unique( array_filter( $m[1], static fn( $v ) => 'true' === $v ) ) ) );
+		$this->assertSame( 1, substr_count( $html, 'aria-checked="true"' ), 'Exactly one client starts selected.' );
+		$this->assertStringNotContainsString( 'aria-pressed', $html );
+	}
+
+	public function test_client_picker_script_keeps_aria_checked_and_arrow_keys(): void {
+		$js = $this->admin_js();
+		foreach ( array( '#bindClientPicker() {', '#bindOauthClientPicker() {' ) as $handler ) {
+			$at = strpos( $js, $handler );
+			$this->assertNotFalse( $at, $handler );
+			$body = substr( $js, (int) $at, (int) strpos( $js, "\n\t\t}\n", (int) $at ) - (int) $at );
+			$this->assertStringContainsString( "setAttribute( 'aria-checked'", $body, $handler );
+			$this->assertStringNotContainsString( 'aria-pressed', $body, $handler );
+			$this->assertStringContainsString( 'this.#wireTablistKeys(', $body, $handler . ' moves the selection with the arrow keys.' );
+			$this->assertStringContainsString( 'this.#rovingTabindex(', $body, $handler );
+		}
+	}
+
+	public function test_save_and_pause_work_on_a_grant_beyond_page_1(): void {
+		$pairs = $this->seed_grants( 60, 'pg_' );
+		$grant = $pairs[0]; // The oldest grant, number 60 newest first, on page 2.
+		$this->assertNull(
+			current( array_filter( aafm_connection_grants_data()['rows'], static fn( $r ) => $grant[0] === $r['user_id'] && $grant[1] === $r['client_id'] ) ) ?: null
+		);
+
+		$this->post_as(
+			'administrator',
+			array(
+				'user_id'   => (string) $grant[0],
+				'client_id' => $grant[1],
+				'paused'    => '1',
+			)
+		);
+		$json = $this->run_handler( 'aafm_ajax_oauth_update_grant' );
+		$this->assertTrue( $json['success'] );
+		$this->assertSame( 'paused', $json['data']['status'] );
+		$this->assertSame( $grant[0], $json['data']['user_id'] );
+	}
+
+	public function test_switch_thumb_has_an_rtl_rule(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a bundled static asset from disk in a test.
+		$css = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.css' );
+		$this->assertMatchesRegularExpression( '/\[dir="rtl"\] &:not\(\.aafm-switch--lg\) input:checked \+ \.aafm-switch-track::before \{ transform: translateX\(-16px\); \}/', $css );
+		$this->assertSame( 1, substr_count( $css, 'translateX(16px)' ), 'The physical offset appears once, beside its RTL twin.' );
+	}
+
+	public function test_grant_update_on_a_revoked_client_is_refused_and_writes_nothing(): void {
+		global $wpdb;
+		$user = $this->seed_grant();
+		$wpdb->update( $wpdb->prefix . 'aafm_oauth_clients', array( 'is_active' => 0 ), array( 'client_id' => self::CLIENT ) );
+
+		$this->post_as(
+			'administrator',
+			array(
+				'user_id'   => (string) $user,
+				'client_id' => self::CLIENT,
+				'paused'    => '1',
+			)
+		);
+		$json = $this->run_handler( 'aafm_ajax_oauth_update_grant' );
+		$this->assertFalse( $json['success'] );
+		$this->assertSame( 'Missing grant.', $json['data']['message'] );
+		$this->assertFalse( aafm_oauth_grant_state( $user, self::CLIENT )['paused'], 'No pause lands on a grant the card no longer lists.' );
+	}
+
+	public function test_stale_token_action_logs_a_pluralised_row_and_a_failure_row(): void {
+		global $wpdb;
+		$this->seed_token( 'https://old.example/wp-json/aafm/v1/mcp' );
+		$this->post_as( 'administrator' );
+		$this->assertTrue( $this->run_handler( 'aafm_ajax_revoke_stale_tokens' )['success'] );
+		$detail = $wpdb->get_var( $wpdb->prepare( 'SELECT detail FROM %i WHERE ability = %s ORDER BY id DESC LIMIT 1', aafm_activity_log_table(), 'aafm/oauth-stale-tokens' ) );
+		$this->assertStringContainsString( 'Ended 1 token issued for an old site address', (string) $detail );
+
+		$this->seed_token( 'https://old.example/wp-json/aafm/v1/mcp' );
+		$fail       = static fn( $query ) => false !== strpos( $query, 'SET is_active = 0 WHERE is_active = 1 AND id IN (' ) ? 'SELECT broken FROM nowhere' : $query;
+		add_filter( 'query', $fail );
+		$suppressed = $wpdb->suppress_errors( true );
+		try {
+			$this->post_as( 'administrator' );
+			$json = $this->run_handler( 'aafm_ajax_revoke_stale_tokens' );
+		} finally {
+			remove_filter( 'query', $fail );
+			$wpdb->suppress_errors( $suppressed );
+		}
+		$this->assertFalse( $json['success'] );
+		$status = $wpdb->get_var( $wpdb->prepare( 'SELECT status FROM %i WHERE ability = %s ORDER BY id DESC LIMIT 1', aafm_activity_log_table(), 'aafm/oauth-stale-tokens' ) );
+		$this->assertSame( 'error', $status, 'A failed attempt leaves an error row.' );
+	}
+
+	public function test_client_revoke_always_reloads(): void {
+		$js     = $this->admin_js();
+		$at     = (int) strpos( $js, '#bindOauthRevoke() {' );
+		$revoke = substr( $js, $at, (int) strpos( $js, '#paginateTable(', $at ) - $at );
+		$this->assertSame( 1, substr_count( $revoke, 'window.location.reload()' ), 'One reload path serves both revokes.' );
+		$this->assertStringNotContainsString( 'if ( isGrant || ', $revoke, 'A client revoke reloads whether or not its people are on this page.' );
+		$this->assertStringNotContainsString( 'grantRow', $revoke );
+		$this->assertStringNotContainsString( "querySelector( '.aafm-status-cell .aafm-pill' )", $revoke, 'No in-place client row update is left to go stale.' );
+	}
+
+	public function test_stale_token_success_removes_the_warning(): void {
+		$js    = $this->admin_js();
+		$at    = (int) strpos( $js, '#bindStaleTokens() {' );
+		$stale = substr( $js, $at, 1600 );
+		$this->assertStringContainsString( "btn.closest( '.aafm-stale-tokens' )?.querySelector( '.aafm-notice' )?.remove();", $stale, 'The warning goes once the tokens are ended.' );
+	}
+
+	public function test_pager_links_name_the_target_page_on_a_middle_page(): void {
+		$this->seed_grants( 105, 'pg_' );
+		$_GET['grants_page'] = '2';
+		$html                = $this->grants_html();
+
+		$this->assertSame( 2, preg_match_all( '/<a [^>]*aria-label="Previous page, 1 of 3"[^>]*>Previous<\/a>/', $html ) );
+		$this->assertSame( 2, preg_match_all( '/<a [^>]*aria-label="Next page, 3 of 3"[^>]*>Next<\/a>/', $html ) );
+	}
+
+	public function test_first_and_last_page_have_no_label_for_the_absent_link(): void {
+		$this->seed_grants( 105, 'pg_' );
+		$_GET['grants_page'] = '1';
+		$first               = $this->grants_html();
+		$this->assertStringNotContainsString( 'Previous page', $first );
+		$this->assertSame( 2, substr_count( $first, 'aria-label="Next page, 2 of 3"' ) );
+
+		$_GET['grants_page'] = '3';
+		$last                = $this->grants_html();
+		$this->assertStringNotContainsString( 'Next page', $last );
+		$this->assertSame( 2, substr_count( $last, 'aria-label="Previous page, 2 of 3"' ) );
 	}
 }

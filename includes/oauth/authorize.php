@@ -742,7 +742,7 @@ function aafm_oauth_show_consent( array $valid, ?array $renewing = null ): void 
 }
 
 /**
- * Handle the authorization endpoint, hooked on `init`.
+ * Handle the authorization endpoint, hooked on `wp_loaded` (after every init callback).
  *
  * Runs only for ?aafm_oauth=authorize. Enforces the surface toggle, HTTPS, rate
  * limiting, login (logged-out users go to wp-login and return to this exact URL), and

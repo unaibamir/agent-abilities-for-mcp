@@ -53,7 +53,8 @@ class TokensTest extends TestCase {
 		return array(
 			'client_id'  => 'client_abc',
 			'wp_user_id' => 42,
-			'resource'   => 'https://site.example/wp-json/aafm/v1/mcp',
+			// This endpoint's own address: refresh rotation refuses a token minted for another one.
+			'resource'   => aafm_endpoint_url(),
 		);
 	}
 
@@ -402,6 +403,31 @@ class TokensTest extends TestCase {
 	}
 
 	/**
+	 * A refresh token minted for an address the endpoint no longer has (Plain permalinks switched
+	 * to a pretty structure) is refused, so the client does not get another stale pair. The row is
+	 * left alone: ending old tokens stays the owner's click.
+	 */
+	public function test_rotate_refresh_refuses_a_token_for_an_address_this_endpoint_no_longer_has(): void {
+		$this->set_permalink_structure( '' );
+		$ctx             = $this->ctx();
+		$ctx['resource'] = aafm_endpoint_url();
+		$tokens          = aafm_oauth_mint_tokens( $ctx );
+		$this->assertIsArray( aafm_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] ), 'precondition: it rotates at its own address.' );
+
+		$stale = aafm_oauth_mint_tokens( $ctx );
+		$this->set_permalink_structure( '/%postname%/' );
+		$this->assertNotSame( $ctx['resource'], aafm_endpoint_url(), 'precondition: the endpoint address changed.' );
+
+		$res = aafm_oauth_rotate_refresh( $stale['refresh_token'], $ctx['client_id'] );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'invalid_grant', $res->get_error_code() );
+		$row = $this->row_by_refresh( $stale['refresh_token'] );
+		$this->assertSame( 1, (int) $row['is_active'], 'Not consumed.' );
+		$this->assertSame( 0, $this->count_children_of( (int) $row['id'] ), 'No successor minted.' );
+	}
+
+	/**
 	 * Rotating with the wrong client_id is rejected.
 	 */
 	public function test_rotate_refresh_wrong_client_returns_error(): void {
@@ -507,7 +533,7 @@ class TokensTest extends TestCase {
 			array(
 				'client_id'  => $client_id,
 				'wp_user_id' => 42,
-				'resource'   => 'https://site.example/wp-json/aafm/v1/mcp',
+				'resource'   => aafm_endpoint_url(),
 			)
 		);
 		$this->assertIsArray( $tokens );

@@ -39,8 +39,16 @@ final class ChallengeTest extends TestCase {
 	 */
 	private $original_remote_addr;
 
+	/**
+	 * $_SERVER as set_up() found it, for the bearer tests that set headers and HTTPS.
+	 *
+	 * @var array<string,mixed>
+	 */
+	private array $server = array();
+
 	public function set_up(): void {
 		parent::set_up();
+		$this->server = $_SERVER;
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash
 		$this->original_remote_addr = $_SERVER['REMOTE_ADDR'] ?? null;
 
@@ -50,6 +58,9 @@ final class ChallengeTest extends TestCase {
 	}
 
 	public function tear_down(): void {
+		$_SERVER = $this->server;
+		aafm_oauth_invalid_bearer( false );
+		$this->set_permalink_structure( '' );
 		if ( null === $this->original_remote_addr ) {
 			unset( $_SERVER['REMOTE_ADDR'] );
 		} else {
@@ -273,5 +284,127 @@ final class ChallengeTest extends TestCase {
 		$response = apply_filters( 'rest_post_dispatch', rest_ensure_response( $response ), rest_get_server(), $request );
 
 		$this->assertSame( aafm_oauth_challenge_header(), $response->get_headers()['WWW-Authenticate'] ?? '' );
+	}
+
+	/**
+	 * Put a request on the MCP route over HTTPS with OAuth tables, one active client and an approved
+	 * grant, and mint a token for it.
+	 *
+	 * @return string The raw access token.
+	 */
+	private function mint_mcp_token(): string {
+		$this->set_permalink_structure( '/%postname%/' );
+		$_SERVER['REQUEST_URI'] = '/' . trim( rest_get_url_prefix(), '/' ) . self::MCP_ROUTE;
+		$this->route_as_rest_request();
+		$_SERVER['HTTPS'] = 'on';
+		aafm_install_oauth_tables();
+		aafm_truncate_oauth_tables();
+		global $wpdb;
+		$user = self::factory()->user->create( array( 'role' => 'editor' ) );
+		$wpdb->insert(
+			$wpdb->prefix . 'aafm_oauth_clients',
+			array(
+				'client_id'   => 'client_challenge',
+				'client_name' => 'Challenge',
+				'is_active'   => 1,
+			)
+		);
+		$wpdb->insert(
+			$wpdb->prefix . 'aafm_oauth_consents',
+			array(
+				'wp_user_id' => $user,
+				'client_id'  => 'client_challenge',
+			)
+		);
+		$tokens = aafm_oauth_mint_tokens(
+			array(
+				'wp_user_id' => $user,
+				'client_id'  => 'client_challenge',
+				'resource'   => aafm_endpoint_url(),
+			)
+		);
+		$this->assertIsArray( $tokens );
+		return $tokens['access_token'];
+	}
+
+	/**
+	 * Resolve the request's credentials the way determine_current_user does, then run an MCP 401
+	 * through the challenge filter.
+	 *
+	 * @param string|null $authorization The Authorization header, or null for none.
+	 * @param string      $route         The REST route of the 401.
+	 * @return array<string,string> The response headers.
+	 */
+	private function challenge_after( ?string $authorization, string $route = self::MCP_ROUTE ): array {
+		unset( $_SERVER['HTTP_AUTHORIZATION'], $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] );
+		if ( null !== $authorization ) {
+			$_SERVER['HTTP_AUTHORIZATION'] = $authorization;
+		}
+		$this->assertFalse( aafm_oauth_resolve_current_user( false ), 'The credential must not resolve a user.' );
+		$out = aafm_oauth_filter_rest_challenge( new \WP_REST_Response( null, 401 ), rest_get_server(), $this->request_for_route( $route ) );
+		return $out->get_headers();
+	}
+
+	public function test_expired_token_challenge_has_invalid_token_error(): void {
+		$token = $this->mint_mcp_token();
+		global $wpdb;
+		$wpdb->update( $wpdb->prefix . 'aafm_oauth_access_tokens', array( 'expires_at' => '2020-01-01 00:00:00' ), array( 'token_hash' => hash( 'sha256', $token ) ) );
+
+		$headers = $this->challenge_after( 'Bearer ' . $token );
+
+		$this->assertSame( aafm_oauth_challenge_header() . ', error="invalid_token"', $headers['WWW-Authenticate'] ?? '' );
+		$this->assertStringNotContainsString( $token, $headers['WWW-Authenticate'] ?? '', 'The challenge never echoes the credential.' );
+	}
+
+	public function test_revoked_token_challenge_has_invalid_token_error(): void {
+		$token = $this->mint_mcp_token();
+		global $wpdb;
+		$wpdb->update( $wpdb->prefix . 'aafm_oauth_access_tokens', array( 'is_active' => 0 ), array( 'token_hash' => hash( 'sha256', $token ) ) );
+
+		$this->assertSame( aafm_oauth_challenge_header( true ), $this->challenge_after( 'Bearer ' . $token )['WWW-Authenticate'] ?? '' );
+	}
+
+	public function test_a_token_of_a_deactivated_client_gets_invalid_token_error(): void {
+		$token = $this->mint_mcp_token();
+		global $wpdb;
+		$wpdb->update( $wpdb->prefix . 'aafm_oauth_clients', array( 'is_active' => 0 ), array( 'client_id' => 'client_challenge' ) );
+
+		$this->assertSame( aafm_oauth_challenge_header( true ), $this->challenge_after( 'Bearer ' . $token )['WWW-Authenticate'] ?? '' );
+	}
+
+	public function test_no_credentials_keeps_plain_challenge(): void {
+		$token = $this->mint_mcp_token();
+		global $wpdb;
+		$wpdb->update( $wpdb->prefix . 'aafm_oauth_access_tokens', array( 'is_active' => 0 ), array( 'token_hash' => hash( 'sha256', $token ) ) );
+		// A failed bearer earlier in the same process must not leak into the next resolution.
+		$this->challenge_after( 'Bearer ' . $token );
+
+		$headers = $this->challenge_after( null );
+
+		$this->assertSame( aafm_oauth_challenge_header(), $headers['WWW-Authenticate'] ?? '' );
+		$this->assertStringNotContainsString( 'error=', $headers['WWW-Authenticate'] ?? '' );
+	}
+
+	public function test_application_password_credentials_keep_plain_challenge(): void {
+		$this->mint_mcp_token();
+
+		$headers = $this->challenge_after( 'Basic ' . base64_encode( 'nobody:wrong pass word' ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- the Basic scheme is base64 by definition.
+
+		$this->assertSame( aafm_oauth_challenge_header(), $headers['WWW-Authenticate'] ?? '' );
+	}
+
+	public function test_non_mcp_route_challenge_unchanged(): void {
+		$token = $this->mint_mcp_token();
+		global $wpdb;
+		$wpdb->update( $wpdb->prefix . 'aafm_oauth_access_tokens', array( 'is_active' => 0 ), array( 'token_hash' => hash( 'sha256', $token ) ) );
+
+		$this->assertArrayNotHasKey( 'WWW-Authenticate', $this->challenge_after( 'Bearer ' . $token, '/wp/v2/posts' ) );
+	}
+
+	public function test_the_failed_bearer_flag_is_cleared_at_shutdown(): void {
+		$this->assertNotFalse( has_action( 'shutdown', 'aafm_oauth_reset_current_client_id' ) );
+		aafm_oauth_invalid_bearer( true );
+		aafm_oauth_reset_current_client_id();
+		$this->assertFalse( aafm_oauth_invalid_bearer() );
 	}
 }

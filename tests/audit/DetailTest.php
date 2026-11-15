@@ -51,6 +51,7 @@ final class DetailTest extends TestCase {
 			'numeric string id' => array( 'id', '482', '482' ),
 			'meta key'          => array( 'key', '_yoast_wpseo_metadesc', '_yoast_wpseo_metadesc' ),
 			'hyphen key'        => array( 'key', 'bacs', 'bacs' ),
+			'role as stored'    => array( 'role', ' Shop_Manager', 'shop_manager' ),
 			'ability slug'      => array( 'slug', 'aafm/wc-create-refund', 'aafm/wc-create-refund' ),
 			'zero count'        => array( 'count', 0, '0' ),
 			'template id'       => array( 'template', 'twentytwentyfive//single', 'twentytwentyfive//single' ),
@@ -83,6 +84,7 @@ final class DetailTest extends TestCase {
 			'key with markup'    => array( 'key', '<b>k</b>' ),
 			'key with quote'     => array( 'key', "k'x" ),
 			'over long key'      => array( 'key', str_repeat( 'a', 65 ) ),
+			'role with no chars' => array( 'role', '<> !?' ),
 			'sentence as key'    => array( 'key', 'The quick brown fox jumped' ),
 			'slug without slash' => array( 'slug', 'wc-create-refund' ),
 			'negative count'     => array( 'count', -3 ),
@@ -242,7 +244,7 @@ final class DetailTest extends TestCase {
 			foreach ( $entry['args'] ?? array() as $field ) {
 				$this->assertContains(
 					$field['type'],
-					array( 'id', 'key', 'slug', 'template', 'enum', 'count', 'keys' ),
+					array( 'id', 'key', 'role', 'slug', 'template', 'enum', 'count', 'keys' ),
 					"{$ability} declares field type '{$field['type']}', which is not identifier-safe."
 				);
 			}
@@ -1687,5 +1689,87 @@ final class DetailTest extends TestCase {
 			ARRAY_A
 		);
 		return is_array( $row ) ? $row : array();
+	}
+
+	public function test_update_user_detail_includes_new_role(): void {
+		$this->assertSame(
+			'Updated user #5, role set to shop_manager',
+			aafm_build_activity_detail(
+				'aafm/update-user',
+				array(
+					'user_id' => 5,
+					'role'    => 'shop_manager',
+					'email'   => 'person@example.com',
+				)
+			)
+		);
+		// A role with no identifier characters never reaches the row; the user is still named.
+		$this->assertSame(
+			'Updated user #5',
+			aafm_build_activity_detail(
+				'aafm/update-user',
+				array(
+					'user_id' => 5,
+					'role'    => '<> !?',
+				)
+			)
+		);
+		// The row names the role the ability stores, sanitize_key() of the caller's value.
+		foreach ( array( 'Editor', ' editor' ) as $sent ) {
+			$this->assertSame(
+				'Updated user #5, role set to editor',
+				aafm_build_activity_detail(
+					'aafm/update-user',
+					array(
+						'user_id' => 5,
+						'role'    => $sent,
+					)
+				),
+				"Sent as '{$sent}'."
+			);
+		}
+		$this->assertSame(
+			'Attempted: Updated user #5, role set to administrator',
+			aafm_build_activity_detail(
+				'aafm/update-user',
+				array(
+					'user_id' => 5,
+					'role'    => 'administrator',
+				),
+				'denied'
+			)
+		);
+	}
+
+	public function test_update_user_detail_without_role_unchanged(): void {
+		$this->assertSame(
+			'Updated user #5',
+			aafm_build_activity_detail(
+				'aafm/update-user',
+				array(
+					'user_id'    => 5,
+					'first_name' => 'Ann',
+				)
+			)
+		);
+		$this->assertNull( aafm_build_activity_detail( 'aafm/update-user', array( 'role' => 'editor' ) ), 'The user id is still required.' );
+		$entry = aafm_activity_detail_map()['aafm/update-user'];
+		$this->assertSame( 1, substr_count( (string) $entry['fallback_template'], '%' ), 'The fallback takes the required id only.' );
+	}
+
+	/**
+	 * The three single-post replace tools log before the result is known, and a search that matches
+	 * nothing writes nothing, so the row must not claim text was replaced.
+	 */
+	public function test_single_post_replace_rows_do_not_claim_a_replacement(): void {
+		$expected = array(
+			'aafm/replace-in-post'       => 'Ran a text replace on post #7',
+			'aafm/avada-replace-text'    => 'Ran a text replace on Avada page #7',
+			'aafm/wpbakery-replace-text' => 'Ran a text replace on WPBakery page #7',
+		);
+		foreach ( $expected as $ability => $detail ) {
+			$this->assertSame( $detail, aafm_build_activity_detail( $ability, array( 'post_id' => 7 ) ) );
+			$this->assertSame( 'Attempted: ' . $detail, aafm_build_activity_detail( $ability, array( 'post_id' => 7 ), 'error' ) );
+		}
 	}
 }

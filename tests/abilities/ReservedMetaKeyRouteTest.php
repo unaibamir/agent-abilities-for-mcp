@@ -523,6 +523,41 @@ final class ReservedMetaKeyRouteTest extends TestCase {
 		unregister_post_type( 'aafm_unexposed' );
 	}
 
+	/**
+	 * Demo #9 (GB-03): the explanation follows the tool's permission gate, not a list of tool names, so the builder
+	 * and revision tools on the post-object gate explain an unexposed type too, a revision through its parent.
+	 */
+	public function test_the_builder_and_revision_tools_explain_an_unexposed_type(): void {
+		register_post_type(
+			'aafm_unexposed',
+			array(
+				'public'   => true,
+				'label'    => 'Unexposed',
+				'supports' => array( 'title', 'editor', 'revisions' ),
+			)
+		);
+		$this->acting_as( 'administrator' );
+		$post_id = self::factory()->post->create( array( 'post_type' => 'aafm_unexposed' ) );
+		wp_update_post(
+			array(
+				'ID'           => $post_id,
+				'post_content' => 'changed',
+			)
+		);
+		$revisions = wp_get_post_revisions( $post_id );
+		$this->assertNotEmpty( $revisions );
+		foreach ( array( 'aafm/avada-update-page-options', 'aafm/avada-get-page-content', 'aafm/avada-update-element', 'aafm/wpbakery-update-element', 'aafm/list-revisions' ) as $name ) {
+			$refusal = aafm_post_type_refusal_error( $name, array( 'post_id' => $post_id ) );
+			$this->assertNotNull( $refusal, $name );
+			$this->assertSame( 'type_not_exposed', $refusal['code'], $name );
+		}
+		$refusal = aafm_post_type_refusal_error( 'aafm/restore-revision', array( 'revision_id' => (int) array_key_first( $revisions ) ) );
+		$this->assertNotNull( $refusal, 'A revision is explained through its parent.' );
+		$this->assertNull( aafm_post_type_refusal_error( 'aafm/get-post', array( 'post_id' => $post_id ) ), 'A tool on another gate is left alone.' );
+		$this->assertStringContainsString( 'content type exposed in the Content sub-tab', aafm_ability_description( 'aafm/avada-update-page-options' ) );
+		unregister_post_type( 'aafm_unexposed' );
+	}
+
 	public function test_add_post_terms_on_a_product_points_at_the_product_tool(): void {
 		$this->force_integration( 'woocommerce' );
 		$this->unlock_high_risk_abilities();

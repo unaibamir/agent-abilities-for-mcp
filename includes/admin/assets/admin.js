@@ -85,6 +85,8 @@
 			this.#bindPauseAll();
 			this.#bindOauthRevoke();
 			this.#bindOauthPagination();
+			this.#focusCardAfterReload();
+			this.#bindStaleTokens();
 			this.#bindClientAgentToggle();
 			this.#bindAllowlist();
 			this.#bindQuickConnect();
@@ -108,7 +110,7 @@
 
 		/**
 		 * Show a dot on the current tab while one of its saved controls differs from what was
-		 * last loaded or saved. Integrations, Other plugins, Settings, Connection and Playbooks only.
+		 * last loaded or saved. Integrations, Plugins' own tools, Settings, Connection and Playbooks only.
 		 * Controls whose value no Save on the tab stores are left out.
 		 */
 		#bindDirtyDots() {
@@ -350,15 +352,16 @@
 			if ( ! cards.length ) {
 				return;
 			}
-			cards.forEach( ( card ) => {
-				card.addEventListener( 'click', () => {
-					cards.forEach( ( c ) => {
+			const list = Array.from( cards );
+			const select = ( card ) => {
+					list.forEach( ( c ) => {
 						const on = c === card;
 						c.classList.toggle( 'on', on );
-						// The cards are toggle buttons; aria-pressed carries the same
+						// The cards are radios in a radiogroup; aria-checked carries the same
 						// selected state to assistive tech that .on carries visually.
-						c.setAttribute( 'aria-pressed', String( on ) );
+						c.setAttribute( 'aria-checked', String( on ) );
 					} );
+					this.#rovingTabindex( list, card );
 
 					const client = card.dataset.client ?? '';
 					// The matching quickstart card carries the ready-made unix snippet.
@@ -392,8 +395,11 @@
 								copy.dataset.copy = next;
 							}
 						} );
-				} );
+			};
+			list.forEach( ( card ) => {
+				card.addEventListener( 'click', () => select( card ) );
 			} );
+			this.#wireTablistKeys( list, select );
 		}
 
 		/**
@@ -409,22 +415,26 @@
 			if ( ! cards.length ) {
 				return;
 			}
-			cards.forEach( ( card ) => {
-				card.addEventListener( 'click', () => {
-					cards.forEach( ( c ) => {
-						const on = c === card;
-						c.classList.toggle( 'on', on );
-						c.setAttribute( 'aria-pressed', String( on ) );
-					} );
-
-					const client = card.dataset.client ?? '';
-					document
-						.querySelectorAll( '.aafm-oauth-panel[data-client]' )
-						.forEach( ( panel ) => {
-							panel.hidden = panel.dataset.client !== client;
-						} );
+			const list = Array.from( cards );
+			const select = ( card ) => {
+				list.forEach( ( c ) => {
+					const on = c === card;
+					c.classList.toggle( 'on', on );
+					c.setAttribute( 'aria-checked', String( on ) );
 				} );
+				this.#rovingTabindex( list, card );
+
+				const client = card.dataset.client ?? '';
+				document
+					.querySelectorAll( '.aafm-oauth-panel[data-client]' )
+					.forEach( ( panel ) => {
+						panel.hidden = panel.dataset.client !== client;
+					} );
+			};
+			list.forEach( ( card ) => {
+				card.addEventListener( 'click', () => select( card ) );
 			} );
+			this.#wireTablistKeys( list, select );
 		}
 
 		/**
@@ -800,7 +810,11 @@
 		 * @return {Promise<Object>} The decoded JSON response.
 		 */
 		async #post( action, data = {} ) {
-			const body = new URLSearchParams( { action, nonce: this.#nonce, ...data } );
+			const body = new URLSearchParams( { action, nonce: this.#nonce } );
+			// An array value goes out as one field per item (name it with [] for PHP to read a list).
+			for ( const [ name, value ] of Object.entries( data ) ) {
+				( Array.isArray( value ) ? value : [ value ] ).forEach( ( item ) => body.append( name, item ) );
+			}
 			return ( await this.#postBody( body ) ) ?? {
 				success: false,
 				data: { message: this.#t( 'requestFailed', 'Request failed.' ) },
@@ -909,7 +923,7 @@
 						return;
 					}
 					const boxes = scope.querySelectorAll(
-						'.aafm-ability-row[data-risk="write"]:not([data-high-risk]) input[type="checkbox"][name="aafm_abilities[]"]:not([disabled])'
+						'.aafm-ability-row[data-risk="write"]:not([data-high-risk]):not([data-own-switch]) input[type="checkbox"][name="aafm_abilities[]"]:not([disabled])'
 					);
 					boxes.forEach( ( b ) => {
 						b.checked = true;
@@ -940,7 +954,10 @@
 					const boxes = panel.querySelectorAll(
 						'input[type="checkbox"][name="aafm_abilities[]"]'
 					);
-					const enabling = Array.from( boxes ).some( ( b ) => ! b.checked );
+					// A row that needs its own tick never makes this an enable click on its own.
+					const enabling = Array.from( boxes ).some(
+						( b ) => ! b.checked && ! b.closest( '.aafm-ability-row' )?.hasAttribute( 'data-own-switch' )
+					);
 					if ( enabling && btn.dataset.hasDestructive === '1' ) {
 						const msg = this.#t(
 							'sectionToggleConfirm',
@@ -951,6 +968,10 @@
 						}
 					}
 					boxes.forEach( ( b ) => {
+						// The Studio import needs its own tick; Disable all still clears it.
+						if ( enabling && b.closest( '.aafm-ability-row' )?.hasAttribute( 'data-own-switch' ) ) {
+							return;
+						}
 						b.checked = enabling;
 					} );
 					// Setting .checked fires no event, so tell the unsaved-changes dot directly.
@@ -980,8 +1001,9 @@
 					const boxes = card.querySelectorAll(
 						'input[type="checkbox"][name="aafm_abilities[]"]'
 					);
+					// A row that needs its own tick never makes this an enable click on its own.
 					const enabling = Array.from( boxes ).some(
-						( b ) => ! b.checked
+						( b ) => ! b.checked && ! b.closest( '.aafm-ability-row' )?.hasAttribute( 'data-own-switch' )
 					);
 					if ( enabling && btn.dataset.hasSensitive === '1' ) {
 						const msg = this.#t(
@@ -993,6 +1015,10 @@
 						}
 					}
 					boxes.forEach( ( b ) => {
+						// The Studio import needs its own tick; Disable all still clears it.
+						if ( enabling && b.closest( '.aafm-ability-row' )?.hasAttribute( 'data-own-switch' ) ) {
+							return;
+						}
 						b.checked = enabling;
 					} );
 					// Setting .checked fires no event, so tell the unsaved-changes dot directly.
@@ -1176,7 +1202,7 @@
 		}
 
 		/**
-		 * Save the "Other plugins" toggles. Posts to its OWN action
+		 * Save the "Plugins' own tools" toggles. Posts to its OWN action
 		 * (aafm_save_bridged_abilities) with its own bridged_abilities[] field, so it never
 		 * touches the native enabled-abilities option.
 		 */
@@ -1378,7 +1404,7 @@
 		}
 
 		/**
-		 * Mark as reviewed and Mark all as reviewed on the Other plugins review card. They record what
+		 * Mark as reviewed and Mark all as reviewed on the Plugins' own tools review card. They record what
 		 * the owner has seen and touch no form control, so no saved baseline changes.
 		 */
 		#bindBridgeReview() {
@@ -1392,9 +1418,13 @@
 					const key = btn.dataset.bridgePlugin ?? '';
 					const name = btn.dataset.bridgeName ?? '';
 					const tools = card.querySelectorAll( `.aafm-bridge-review-block[data-bridge-plugin="${ CSS.escape( key ) }"] li` ).length;
+					// The slugs this card listed: the server marks only these, so a tool added since the page
+					// loaded stays new.
+					const blocks = 'AAFM-ALL:' === key ? '.aafm-bridge-review-block' : `.aafm-bridge-review-block[data-bridge-plugin="${ CSS.escape( key ) }"]`;
+					const slugs = Array.from( card.querySelectorAll( `${ blocks } li > code` ), ( code ) => code.textContent );
 					status.textContent = this.#t( 'bridgeWorking', 'Working…' );
 					btn.disabled = true;
-					const json = await this.#post( 'aafm_bridge_mark_reviewed', { plugin: key } );
+					const json = await this.#post( 'aafm_bridge_mark_reviewed', { plugin: key, 'slugs[]': slugs } );
 					btn.disabled = false;
 					if ( ! json?.success ) {
 						status.textContent = json?.data?.message ?? this.#t( 'errorSaving', 'Error saving' );
@@ -1445,7 +1475,10 @@
 					const unavailable = Number( groupCard.dataset.bridgeUnavailable ?? 0 );
 					status.textContent = this.#t( 'bridgeWorking', 'Working…' );
 					btn.disabled = true;
-					const json = await this.#post( 'aafm_bridge_read_only_starter', { plugin: key } );
+					// The tools this card shows, locked rows included (they have no input); the server acts on
+					// these only and leaves later arrivals alone.
+					const slugs = Array.from( groupCard.querySelectorAll( '.aafm-ability-row[data-slug]' ), ( row ) => row.dataset.slug );
+					const json = await this.#post( 'aafm_bridge_read_only_starter', { plugin: key, 'slugs[]': slugs } );
 					btn.disabled = false;
 					if ( ! json?.success ) {
 						status.textContent = json?.data?.message ?? this.#t( 'errorSaving', 'Error saving' );
@@ -2377,7 +2410,7 @@
 			const whoLabel = {
 				you: this.#t( 'doctorWhoYou', 'You can fix this' ),
 				host: this.#t( 'doctorWhoHost', 'Your host can fix this' ),
-				plugin: this.#t( 'doctorWhoPlugin', 'A security plugin may be the cause' ),
+				plugin: this.#t( 'doctorWhoPlugin', 'A security or membership plugin may be the cause' ),
 			};
 
 			const applyFilter = () => {
@@ -2998,7 +3031,10 @@
 					return td;
 				};
 
-				tr.append( cell( row.time ) );
+				// The title carries the site-local time, preformatted by the server: no date maths here.
+				const timeTd = cell( row.time );
+				timeTd.title = row.time_title ?? timeTd.textContent;
+				tr.append( timeTd );
 				tr.append( cell( row.principal ) );
 				tr.append( cell( row.connection ) );
 				tr.append( cell( row.ability ) );
@@ -3389,10 +3425,9 @@
 		 * Wire the OAuth management tables' Revoke buttons (Registered clients +
 		 * Active grants). Clicks are delegated off the .aafm-oauth-manage container so
 		 * a single listener covers both tables. Each revoke confirms first, then POSTs
-		 * the nonce-checked AJAX action; on success the row is updated in place - the
-		 * client's Status pill flips to Revoked and its button is removed, and a grant
-		 * row is removed entirely. Every DOM change is textContent / class / attribute
-		 * only, never innerHTML, so the response is never an HTML sink.
+		 * the nonce-checked AJAX action; on success the page reloads, so both cards and
+		 * the grants count come from the server. On failure the button comes back with
+		 * focus and the server's message.
 		 */
 		#bindOauthRevoke() {
 			const root = document.querySelector( '.aafm-oauth-manage' );
@@ -3417,7 +3452,14 @@
 							'revokeClientConfirm',
 							'Revoke this client? It is turned off and its active sessions end right away.'
 					  );
-				if ( ! window.confirm( confirmMsg ) ) {
+				// Success reloads the page. Unsaved edits elsewhere on this tab (a grant row, the
+				// lifetimes card) would go with it, so the same confirm says so first; the tab's
+				// unsaved dot (#bindDirtyDots) is the record of them.
+				const unsaved = false === document.querySelector( '.nav-tab[data-tab="connection"] .aafm-dirty-dot' )?.hidden;
+				const prompt = unsaved
+					? `${ confirmMsg } ${ this.#t( 'revokeReloadLosesEdits', 'The page reloads afterwards, and your unsaved changes on this tab will be lost.' ) }`
+					: confirmMsg;
+				if ( ! window.confirm( prompt ) ) {
 					return;
 				}
 
@@ -3446,56 +3488,29 @@
 					return;
 				}
 
-				const row = btn.closest( 'tr' );
-				if ( ! row ) {
-					return;
+				// Both revokes reload. Active grants is paged on the server, so its count and rows
+				// come from the server (an emptied last page clamps to the new last page there), and
+				// a revoked client's people leave it, whether or not any of them are on this page.
+				// Focus cannot be set from the departing document, so a one-use marker asks the next
+				// load to put it on the card the revoke came from (#focusCardAfterReload).
+				try {
+					window.sessionStorage.setItem( 'aafmFocusCard', isGrant ? 'aafm-card-grants' : 'aafm-card-clients' );
+				} catch {
+					// Storage blocked: the page still reloads, focus starts at the top.
 				}
-				const revoked = Number( json?.data?.revoked_tokens ) || 0;
-				if ( isGrant ) {
-					// The grant is gone: drop its row, and lower the owning client's active-token
-					// count by the tokens we just revoked so it does not read stale.
-					this.#adjustClientTokens( root, clientId, -revoked );
-					this.#removeRowKeepingFocus( row, '.aafm-revoke-grant', root.querySelector( '#aafm-card-grants' ) );
-					const title = root.querySelector( '#aafm-card-grants .aafm-card-head-title' );
-					if ( title ) {
-						const left = root.querySelectorAll( '#aafm-card-grants tr[data-grant-row]' ).length;
-						title.textContent = `${ title.textContent.replace( /\s*\([^)]*\)$/, '' ) }${ left ? ` (${ left.toLocaleString() })` : '' }`;
-					}
-				} else {
-					// The client and all its tokens are revoked: its active-token count is now 0.
-					const tokensCell = row.querySelector( '.aafm-client-tokens' );
-					if ( tokensCell ) {
-						tokensCell.textContent = '0';
-					}
-					// Flip the Status pill to Revoked and replace the button with plain text.
-					const pill = row.querySelector( '.aafm-status-cell .aafm-pill' );
-					if ( pill ) {
-						pill.classList.remove( 'aafm-pill-success' );
-						pill.classList.add( 'aafm-pill-neutral' );
-						pill.textContent = this.#t( 'statusRevoked', 'Revoked' );
-					}
-					const cell = btn.parentElement;
-					btn.remove();
-					if ( cell ) {
-						const note = document.createElement( 'span' );
-						note.className = 'aafm-muted';
-						note.textContent = this.#t( 'statusRevoked', 'Revoked' );
-						cell.append( note );
-					}
-				}
+				window.location.reload();
 			} );
 		}
 
 		/**
-		 * Client-side pager for one OAuth management table (Registered clients or Active
-		 * grants). Both queries already run with no LIMIT and every row is already in the
-		 * DOM (aafm_oauth_list_clients()/aafm_oauth_list_grants()), so this only toggles
-		 * `hidden` on a rows-per-page slice - no second query, no AJAX round trip.
+		 * Client-side pager for an OAuth management table whose rows are all in the DOM
+		 * (Registered clients, from aafm_oauth_list_clients()). Active grants is paged on the
+		 * server instead (aafm_oauth_grants_page(), aafm_oauth_get_grant() for one row), so
+		 * #bindOauthPagination() skips it. This only toggles `hidden` on a rows-per-page slice
+		 * - no second query, no AJAX round trip.
 		 *
 		 * A MutationObserver on the <tbody> re-derives the page count whenever a row is
-		 * removed, rather than the click handlers being the only thing that can trigger a
-		 * recompute: #bindOauthRevoke() calls row.remove() for a revoked grant with no
-		 * knowledge of pagination at all, and the observer means it does not need any. If
+		 * removed, so any code that removes a row needs no knowledge of pagination. If
 		 * removing a row empties the current page (the last row on the last page), the
 		 * observer steps the page back and re-renders, so the pager never goes on showing a
 		 * page number or a Prev/Next state the live row set no longer has.
@@ -3588,20 +3603,70 @@
 		}
 
 		/**
-		 * Paginate the Connection tab's two OAuth tables, ten rows per page. Two
-		 * independent pagers over two unrelated datasets - Registered clients never
-		 * shares a page count with Active grants.
+		 * Paginate the Connection tab's OAuth tables, ten rows per page, each with its own
+		 * pager. A table marked data-aafm-server-paged (Active grants) is paged on the server
+		 * with plain links, so it is skipped here and the two pagers never stack.
 		 */
 		#bindOauthPagination() {
 			const PER_PAGE = 10;
-			const clientsTable = document.querySelector( '.aafm-clients-table' );
-			const grantsTable = document.querySelector( '.aafm-grants-table' );
-			if ( clientsTable ) {
-				this.#paginateTable( clientsTable, PER_PAGE );
+			document.querySelectorAll( '.aafm-clients-table, .aafm-grants-table' ).forEach( ( table ) => {
+				if ( ! table.hasAttribute( 'data-aafm-server-paged' ) ) {
+					this.#paginateTable( table, PER_PAGE );
+				}
+			} );
+		}
+
+		/**
+		 * After a Revoke reloads the page, put focus on the heading of the card the revoke came
+		 * from (Registered clients or Active grants). The marker is one-use: it is removed before
+		 * anything else, so a later reload of the same tab does not move focus again. Only the two
+		 * known card ids are used as a selector.
+		 */
+		#focusCardAfterReload() {
+			let card = null;
+			try {
+				card = window.sessionStorage.getItem( 'aafmFocusCard' );
+				window.sessionStorage.removeItem( 'aafmFocusCard' );
+			} catch {
+				return;
 			}
-			if ( grantsTable ) {
-				this.#paginateTable( grantsTable, PER_PAGE );
+			const heading = [ 'aafm-card-grants', 'aafm-card-clients' ].includes( card ) ? document.querySelector( `#${ card } .aafm-card-head-title` ) : null;
+			if ( heading ) {
+				heading.setAttribute( 'tabindex', '-1' );
+				heading.focus();
 			}
+		}
+
+		/**
+		 * The "End old tokens" button on the Active grants card: confirm, deactivate the tokens
+		 * issued for an old site address, and say how many were ended. On failure the button
+		 * comes back with focus and the server's message.
+		 */
+		#bindStaleTokens() {
+			const btn = document.querySelector( '.aafm-revoke-stale-tokens' );
+			const status = document.querySelector( '.aafm-stale-tokens-status' );
+			if ( ! btn || ! status ) {
+				return;
+			}
+			btn.addEventListener( 'click', async () => {
+				if ( ! window.confirm( this.#t( 'staleTokensConfirm', 'End every token issued for an old address of this site? Approvals stay, but each app has to be removed and added again with the new address.' ) ) ) {
+					return;
+				}
+				btn.disabled = true;
+				status.textContent = this.#t( 'bridgeWorking', 'Working…' );
+				const json = await this.#post( 'aafm_revoke_stale_tokens', {} );
+				if ( ! json?.success ) {
+					btn.disabled = false;
+					btn.focus();
+					status.textContent = json?.data?.message ?? this.#t( 'revokeFailed', 'Could not revoke. Please try again.' );
+					return;
+				}
+				// The tokens are gone, so the warning about them goes too; the status line stays.
+				btn.closest( '.aafm-stale-tokens' )?.querySelector( '.aafm-notice' )?.remove();
+				btn.remove();
+				status.textContent = json.data?.message ?? '';
+				status.focus();
+			} );
 		}
 
 		/**
@@ -4144,24 +4209,6 @@
 			} );
 		}
 
-		// Adjust a client's "Active tokens" cell in place after a revoke, so the count stays
-		// truthful without a page reload. Matches the row by dataset (no selector injection).
-		#adjustClientTokens( root, clientId, delta ) {
-			if ( ! clientId || ! delta ) {
-				return;
-			}
-			const clientRow = Array.from(
-				root.querySelectorAll( '[data-client-row]' )
-			).find( ( el ) => el.dataset.clientRow === clientId );
-			const cell = clientRow?.querySelector( '.aafm-client-tokens' );
-			if ( ! cell ) {
-				return;
-			}
-			const current =
-				parseInt( ( cell.textContent || '' ).replace( /[^0-9]/g, '' ), 10 ) || 0;
-			cell.textContent = String( Math.max( 0, current + delta ) );
-		}
-
 		#bindResetPlugin() {
 			const btn = document.querySelector( '#aafm-reset-plugin' );
 			if ( ! btn ) {
@@ -4550,7 +4597,7 @@
 			};
 			const segs = Array.from( root.querySelectorAll( '[data-qc-seg]' ) );
 			const stepNow = root.querySelector( '[data-qc-stepnow]' );
-			const pct = root.querySelector( '[data-qc-pct]' );
+			const meter = root.querySelector( '.aafm-qc-meter' );
 
 			const setTag = ( job, kind, text ) => {
 				const tag = job.querySelector( '[data-qc-tag]' );
@@ -4571,6 +4618,10 @@
 					// Driven as an attribute, not the property, so the markup and the focus
 					// trap's [inert] filter agree even on an engine that does not implement it.
 					job.querySelector( '.aafm-qc-job-body' )?.toggleAttribute( 'inert', i !== state.step );
+					const head = job.querySelector( '.aafm-qc-job-head' );
+					head?.setAttribute( 'aria-expanded', String( i === state.step ) );
+					// Only a done step's head reopens it (the click handler below); the rest cannot act.
+					head?.setAttribute( 'aria-disabled', String( i >= state.step ) );
 					job.classList.remove( 'is-current', 'is-done', 'is-todo' );
 					if ( i < state.step ) {
 						job.classList.add( 'is-done' );
@@ -4594,9 +4645,9 @@
 				} );
 				if ( stepNow ) {
 					stepNow.textContent = String( state.step );
-				}
-				if ( pct ) {
-					pct.textContent = Math.round( ( ( state.step - 1 ) / 3 ) * 100 ) + '%';
+					// The meter is a progressbar; its announced value follows the visible step.
+					meter?.setAttribute( 'aria-valuenow', String( state.step ) );
+					meter?.setAttribute( 'aria-valuetext', this.#format( this.#t( 'qcStepOf', 'Step %1$s of 3' ), String( state.step ) ) );
 				}
 				const active = jobs[ state.step ];
 				if ( active ) {
@@ -4606,14 +4657,10 @@
 
 			// Advancing collapses the step the user was standing in, and the control they just
 			// pressed goes inert with it, which would drop focus on <body> and strand the
-			// keyboard outside the dialog. Move focus to the new step's title instead: it
-			// names where they have landed, and there is nothing there to fire by accident.
+			// keyboard outside the dialog. Move focus to the new step's header button instead: it
+			// names where they have landed, and on the current step it does nothing when pressed.
 			const focusStep = () => {
-				const heading = jobs[ state.step ]?.querySelector( '.aafm-qc-job-titles .jt' );
-				if ( heading ) {
-					heading.setAttribute( 'tabindex', '-1' );
-					heading.focus();
-				}
+				jobs[ state.step ]?.querySelector( '.aafm-qc-job-head' )?.focus();
 			};
 
 			const goStep = ( n ) => {

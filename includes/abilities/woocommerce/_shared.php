@@ -131,7 +131,7 @@ function aafm_wc_redacted_fields_schema(): array {
 			'type'  => 'array',
 			'items' => array( 'type' => 'string' ),
 		),
-		'description' => 'Which values inside `settings` were withheld as credentials. Each entry is a path given as an ARRAY OF KEY SEGMENTS from the root of `settings` - ["advanced","live","passcode"] means settings.advanced.live.passcode. Segments rather than a joined string because a settings key may itself contain any character, so a joined path could not be parsed back to the exact key. This list is authoritative: a value inside `settings` may itself read "[redacted]" without having been withheld, so check membership here rather than comparing values.',
+		'description' => 'Which values inside `settings` were withheld as credentials. Each entry is a path given as an ARRAY OF KEY SEGMENTS from the root of `settings`: ["advanced","live","passcode"] means settings.advanced.live.passcode. Segments rather than a joined string because a settings key may itself contain any character, so a joined path could not be parsed back to the exact key. This list is authoritative: a value inside `settings` may itself read "[redacted]" without having been withheld, so check membership here rather than comparing values.',
 	);
 }
 

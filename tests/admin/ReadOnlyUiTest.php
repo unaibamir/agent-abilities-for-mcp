@@ -590,7 +590,7 @@ final class ReadOnlyUiTest extends TestCase {
 
 		$this->assertStringContainsString( "querySelectorAll( '.aafm-enable-writes' )", $js );
 		$this->assertStringContainsString(
-			'.aafm-ability-row[data-risk="write"]:not([data-high-risk]) input[type="checkbox"][name="aafm_abilities[]"]:not([disabled])',
+			'.aafm-ability-row[data-risk="write"]:not([data-high-risk]):not([data-own-switch]) input[type="checkbox"][name="aafm_abilities[]"]:not([disabled])',
 			$js,
 			'The write sweep must scope to non-destructive, non-high-risk writes through the attributes the renderer emits.'
 		);
@@ -905,5 +905,14 @@ final class ReadOnlyUiTest extends TestCase {
 		$html   = $this->render_settings_tab();
 		remove_filter( 'option_aafm_read_only_mode', $filter );
 		$this->assertSame( $checked, $this->read_only_switch_checked( $html ) );
+	}
+
+	public function test_posture_pill_has_a_title_and_matching_screen_reader_text(): void {
+		$html = $this->render_admin_page();
+		$this->assertSame( 1, preg_match( '/<span class="aafm-status-pill aafm-pill aafm-pill-[a-z]+" data-posture="(?!paused)[a-z_]+" title="([^"]+)">([^<]+)<span class="screen-reader-text"> ([^<]+)<\/span><\/span>/', $html, $m ) );
+		$this->assertSame( $m[1], $m[3], 'The title and the screen-reader text say the same thing.' );
+		$this->assertSame( 'Read + write', $m[2], 'The label is unchanged.' );
+		$this->assertStringContainsString( 'what your settings allow', $m[1] );
+		$this->assertStringContainsString( 'switched on', $m[1] );
 	}
 }

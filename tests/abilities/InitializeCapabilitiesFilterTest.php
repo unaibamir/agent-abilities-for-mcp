@@ -177,4 +177,40 @@ final class InitializeCapabilitiesFilterTest extends TestCase {
 			$source
 		);
 	}
+
+	public function test_discover_and_initialize_advertise_the_same_capabilities(): void {
+		$schema     = Schemas::create()->forVersion( '2025-11-25' );
+		$initialize = json_decode( (string) wp_json_encode( aafm_filter_initialize_capabilities( $schema->fromArray( InitializeResult::class, self::default_result() ), null, $schema ) ), true );
+
+		$request = new \WP_REST_Request( 'POST', aafm_mcp_rest_route() );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body(
+			(string) wp_json_encode(
+				array(
+					'jsonrpc' => '2.0',
+					'id'      => 1,
+					'method'  => 'server/discover',
+				)
+			)
+		);
+		$body     = (object) array(
+			'jsonrpc' => '2.0',
+			'id'      => 1,
+			'result'  => (object) array(
+				'supportedVersions' => array( '2026-07-28' ),
+				'capabilities'      => (object) array(
+					'prompts'   => (object) array( 'listChanged' => false ),
+					'resources' => (object) array( 'listChanged' => false ),
+					'tools'     => (object) array( 'listChanged' => false ),
+				),
+				'instructions'      => 'Use the tools.',
+			),
+		);
+		$response = aafm_mcp_add_discover_instructions( new \WP_REST_Response( $body, 200 ), null, $request );
+		$discover = json_decode( (string) wp_json_encode( $response->get_data() ), true );
+
+		$this->assertSame( array_keys( $initialize['capabilities'] ), array_keys( $discover['result']['capabilities'] ) );
+		$this->assertSame( array( 'tools' ), array_keys( $discover['result']['capabilities'] ) );
+		$this->assertSame( array( '2026-07-28' ), $discover['result']['supportedVersions'], 'Everything else survives.' );
+	}
 }

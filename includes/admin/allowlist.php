@@ -266,7 +266,7 @@ function aafm_render_allowlist_section(): void {
 	$roles         = wp_roles()->get_names();
 	$registry_full = aafm_get_abilities_registry_full();
 
-	echo '<details class="aafm-card aafm-section aafm-section--collapsible aafm-allowlist-card" open>';
+	echo '<details class="aafm-card aafm-section aafm-section--collapsible aafm-allowlist-card" id="aafm-card-allowlist" open>';
 	echo '<summary class="aafm-card-head">' . wp_kses( aafm_card_head_html( 'lock', __( 'Ability allowlist', 'agent-abilities-for-mcp' ) ), aafm_admin_allowed_html() ) . '</summary>';
 
 	echo '<div class="aafm-section-body">';

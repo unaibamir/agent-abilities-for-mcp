@@ -255,6 +255,7 @@ final class BridgeReviewScreenTest extends TestCase {
 		$_POST['nonce']    = $nonce;
 		$_REQUEST['nonce'] = $nonce;
 		$_POST['plugin']   = aafm_bridge_review_all_key();
+		$_POST['slugs']    = aafm_bridge_foreign_slugs();
 		$json              = $this->run_handler( 'aafm_ajax_bridge_mark_reviewed' );
 
 		$this->assertTrue( $json['success'] );

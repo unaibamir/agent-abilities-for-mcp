@@ -512,8 +512,9 @@ function aafm_bridge_display_label( string $ns ): string {
  * @return void
  */
 function aafm_render_bridge_group( string $ns, array $group, array $enabled, bool $disabled, int $unavailable = 0 ): void {
-	$rows  = isset( $group['abilities'] ) && is_array( $group['abilities'] ) ? $group['abilities'] : array();
-	$label = aafm_bridge_display_label( (string) ( $group['label'] ?? $ns ) );
+	$rows = isset( $group['abilities'] ) && is_array( $group['abilities'] ) ? $group['abilities'] : array();
+	// The orphan group's label is a translated heading already; only a namespace needs turning into one.
+	$label = $disabled ? (string) ( $group['label'] ?? $ns ) : aafm_bridge_display_label( (string) ( $group['label'] ?? $ns ) );
 
 	// Tallied the same way aafm_integration_manifest() tallies a native integration's rows, so the
 	// header goes through aafm_integration_count_breakdown() below instead of a second read/write
@@ -797,12 +798,13 @@ function aafm_render_bridge_ability_row( array $ability, array $enabled, bool $d
 	// A locked row has no switch, so this is how the starter's confirm counts a stored tool it would turn off.
 	$high_risk = aafm_ability_is_high_risk( $slug );
 	printf(
-		'<div class="aafm-ability-row%1$s" data-risk="%2$s"%3$s%4$s%5$s>',
+		'<div class="aafm-ability-row%1$s" data-risk="%2$s"%3$s%4$s%5$s data-slug="%6$s">',
 		$destructive ? ' is-destructive' : '',
 		esc_attr( $risk ),
 		null !== $lock_reason && in_array( $slug, $enabled, true ) ? ' data-aafm-stored-on="1"' : '',
 		$disabled ? ' aria-disabled="true"' : '',
-		$high_risk ? ' data-high-risk="1"' : ''
+		$high_risk ? ' data-high-risk="1"' : '',
+		esc_attr( $slug )
 	);
 
 	// Read-only mode reaches bridged abilities too, classified by the foreign ability's own
@@ -987,8 +989,8 @@ function aafm_ajax_save_bridged_abilities(): void {
 }
 
 /**
- * AJAX: set one plugin's tools to its reads. Nonce + manage_options gated; the group key is checked
- * against the computed groups inside aafm_bridge_apply_read_only_starter().
+ * AJAX: set one plugin's tools to its reads. Nonce + manage_options gated; the group key and the shown
+ * slugs are checked against the computed groups inside aafm_bridge_apply_read_only_starter().
  *
  * @return void
  */
@@ -999,8 +1001,11 @@ function aafm_ajax_bridge_read_only_starter(): void {
 	}
 
 	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-	$key    = isset( $_POST['plugin'] ) ? sanitize_text_field( wp_unslash( $_POST['plugin'] ) ) : '';
-	$result = aafm_bridge_apply_read_only_starter( (string) $key );
+	$key = isset( $_POST['plugin'] ) ? sanitize_text_field( wp_unslash( $_POST['plugin'] ) ) : '';
+	// The slugs the screen showed; intersected with the group's registered slugs, never stored as given.
+	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+	$shown  = isset( $_POST['slugs'] ) ? array_map( 'sanitize_text_field', wp_unslash( (array) $_POST['slugs'] ) ) : array();
+	$result = aafm_bridge_apply_read_only_starter( (string) $key, $shown );
 	if ( ! $result['ok'] ) {
 		wp_send_json_error( array( 'message' => $result['message'] ) );
 	}
@@ -1009,8 +1014,9 @@ function aafm_ajax_bridge_read_only_starter(): void {
 }
 
 /**
- * AJAX: mark one plugin's tools, or every new tool, as reviewed. Enables nothing. Nonce +
- * manage_options gated; the group key is checked against the computed groups.
+ * AJAX: mark the tools the owner was shown, for one plugin or every new tool, as reviewed. Enables
+ * nothing. Nonce + manage_options gated; the group key and the shown slugs are checked against the
+ * computed groups.
  *
  * @return void
  */
@@ -1021,13 +1027,15 @@ function aafm_ajax_bridge_mark_reviewed(): void {
 	}
 
 	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-	$key    = isset( $_POST['plugin'] ) ? sanitize_text_field( wp_unslash( $_POST['plugin'] ) ) : '';
+	$key = isset( $_POST['plugin'] ) ? sanitize_text_field( wp_unslash( $_POST['plugin'] ) ) : '';
+	// The slugs the screen showed. Only those that are registered now, and in the named group, are
+	// marked, so a tool added after the page loaded stays new.
+	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+	$shown  = isset( $_POST['slugs'] ) ? array_map( 'sanitize_text_field', wp_unslash( (array) $_POST['slugs'] ) ) : array();
 	$groups = aafm_bridge_group_slugs( aafm_bridge_foreign_slugs() );
-	if ( aafm_bridge_review_all_key() === $key ) {
-		$slugs = aafm_bridge_foreign_slugs();
-	} elseif ( isset( $groups[ $key ] ) ) {
-		$slugs = $groups[ $key ];
-	} else {
+	$scope  = aafm_bridge_review_all_key() === $key ? aafm_bridge_foreign_slugs() : ( $groups[ $key ] ?? array() );
+	$slugs  = array_values( array_intersect( $scope, $shown ) );
+	if ( array() === $slugs ) {
 		wp_send_json_error( array( 'message' => __( 'That plugin has no tools registered right now.', 'agent-abilities-for-mcp' ) ) );
 	}
 

@@ -115,7 +115,7 @@ final class UsersWriteTest extends TestCase {
 		$new = get_user_by( 'login', 'content_user' );
 		$this->assertInstanceOf( \WP_User::class, $new );
 		$this->assertSame( '', (string) get_user_meta( (int) $new->ID, aafm_agent_user_marker_meta_key(), true ) );
-		$this->assertFalse( aafm_has_created_agent_user() );
+		$this->assertSame( array(), aafm_created_agent_users() );
 	}
 
 	public function test_create_user_is_destructive_and_closed_schema(): void {

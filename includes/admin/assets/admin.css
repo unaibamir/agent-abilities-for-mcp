@@ -23,6 +23,8 @@
   --aafm-text-muted:#50575e; --aafm-text-subtle:#646970;
   --aafm-border:#dcdcde; --aafm-border-strong:#c3c4c7;
   --aafm-accent:#2271b1; --aafm-accent-hover:#135e96; --aafm-accent-tint:#f0f6fc;
+  /* Accent text and icons, the pressed state, and the accent as rgb parts for translucent rings. */
+  --aafm-accent-text:var(--aafm-accent); --aafm-accent-active:#0a4b78; --aafm-accent-rgb:34, 113, 177;
   --aafm-green:#00a32a; --aafm-green-text:#007017; --aafm-green-tint:#edfaef;
   --aafm-amber:#dba617; --aafm-amber-text:#815f00; --aafm-amber-tint:#fcf9e8;
   --aafm-red:#d63638; --aafm-red-text:#b32d2e; --aafm-red-tint:#fcf0f1;
@@ -45,6 +47,20 @@
 
   /* Control geometry, so a form control and a button can never disagree again. */
   --aafm-control-h:34px;
+}
+
+/* Admin colour schemes. The seven schemes a user picks on purpose carry their colour into the
+   plugin accent; fresh, modern and any scheme another plugin adds keep the plugin blue. Core sets
+   these variables on body.admin-color-* (base-styles/admin-schemes.css), so the rule sits on body
+   and the .aafm-wrap re-point of core's variables below reads the result without a cycle. Accent
+   text and icons use core's darker-10, which keeps 4.5:1 on the quiet surface and the tint. */
+body:is(.admin-color-light, .admin-color-blue, .admin-color-coffee, .admin-color-ectoplasm, .admin-color-midnight, .admin-color-ocean, .admin-color-sunrise) {
+  --aafm-accent: var(--wp-admin-theme-color, #2271b1);
+  --aafm-accent-hover: var(--wp-admin-theme-color-darker-10, #135e96);
+  --aafm-accent-tint: rgba( var(--wp-admin-theme-color--rgb, 34, 113, 177), 0.08 );
+  --aafm-accent-text: var(--wp-admin-theme-color-darker-10, #135e96);
+  --aafm-accent-active: var(--wp-admin-theme-color-darker-20, #0a4b78);
+  --aafm-accent-rgb: var(--wp-admin-theme-color--rgb, 34, 113, 177);
 }
 
 /* Shared disclosure chevron: the solid-triangle affordance every <details>/<summary>
@@ -89,7 +105,7 @@
 	   plugin accent so they match the toggles and buttons beside them. */
 	--wp-admin-theme-color: var(--aafm-accent);
 	--wp-admin-theme-color-darker-10: var(--aafm-accent-hover);
-	--wp-admin-theme-color-darker-20: #0a4b78;
+	--wp-admin-theme-color-darker-20: var(--aafm-accent-active);
 
 	/* Base size for every inline SVG icon. Specific contexts (pills, card-heads,
 	   stat cards, client cards, buttons) override this with their own dimensions;
@@ -100,9 +116,10 @@
 		flex: 0 0 auto;
 	}
 
-	/* ---------- Page head (title + lede left, status pill right) ----------
-	   Ported from app.css .page-head. The status pill moves out of <h1> to the
-	   right edge of this flex row. */
+	/* ---------- Page head (title + lede left; pills and support links right) ----------
+	   The support links sit under the pills, so the tab strip below holds only the tabs. The
+	   title takes the spare width; when the row runs short the links wrap before the title
+	   does, because the side column shrinks first and its link row wraps. */
 	.aafm-page-head {
 		display: flex;
 		align-items: flex-start;
@@ -110,7 +127,7 @@
 		margin-block-end: 4px;
 
 		.title-wrap {
-			flex: 1;
+			flex: 1 1 20rem;
 			min-inline-size: 0;
 		}
 
@@ -132,6 +149,15 @@
 			flex: 0 0 auto;
 		}
 
+		.aafm-page-head-side {
+			display: flex;
+			flex-direction: column;
+			align-items: flex-end;
+			gap: var(--aafm-space-2);
+			flex: 0 1 auto;
+			min-inline-size: 0;
+		}
+
 		/* Posture pill + endpoint pill share the right edge. Their own tighter gap, so the
 		   pair reads as one status group rather than two unrelated head items. */
 		.aafm-page-head-pills {
@@ -141,6 +167,48 @@
 			flex: 0 0 auto;
 			flex-wrap: wrap;
 			gap: 8px;
+		}
+
+		/* Website / Review / Get Help / Watch the demo: quiet links, never a second tab row.
+		   A long translated label wraps inside its link rather than widening the page. */
+		.aafm-nav-ext-group {
+			display: flex;
+			flex-wrap: wrap;
+			justify-content: flex-end;
+			gap: var(--aafm-space-1) var(--aafm-space-3);
+			max-inline-size: 100%;
+		}
+
+		.aafm-nav-ext {
+			display: inline-flex;
+			align-items: center;
+			gap: 6px;
+			max-inline-size: 100%;
+			padding-block: var(--aafm-space-1);
+			color: var(--aafm-text-muted);
+			text-decoration: none;
+			font-weight: 500;
+			font-size: var(--aafm-fs-base);
+			line-height: 1.4;
+			transition: color 0.15s ease;
+
+			svg {
+				flex: 0 0 auto;
+				inline-size: 16px;
+				block-size: 16px;
+				opacity: 0.85;
+			}
+
+			&:hover,
+			&:focus {
+				color: var(--aafm-accent-text);
+			}
+
+			&:focus-visible {
+				box-shadow: var(--aafm-ring);
+				border-radius: var(--aafm-radius-sm);
+				outline: none;
+			}
 		}
 	}
 
@@ -186,18 +254,18 @@
 			color: #fff;
 		}
 
-		&:active { background: #0a4b78; }
+		&:active { background: var(--aafm-accent-active); }
 	}
 
 	.aafm-btn-secondary {
 		background: var(--aafm-surface);
-		color: var(--aafm-accent);
+		color: var(--aafm-accent-text);
 		border-color: var(--aafm-border-strong);
 
 		&:hover {
 			background: var(--aafm-accent-tint);
 			border-color: var(--aafm-accent);
-			color: var(--aafm-accent);
+			color: var(--aafm-accent-text);
 		}
 	}
 
@@ -587,6 +655,20 @@
 		font-family: var(--aafm-mono);
 	}
 
+	/* A copyable one-line code snippet: the Help tab's commands and the old-token notice's address. */
+	.aafm-help-copy-line {
+		display: flex;
+		gap: 8px;
+		align-items: center;
+		margin-block: 6px;
+
+		code {
+			flex: 1 1 auto;
+			overflow-x: auto;
+			white-space: nowrap;
+		}
+	}
+
 	.aafm-field-mono {
 		display: flex;
 		align-items: center;
@@ -666,7 +748,7 @@
 			flex: 0 0 auto;
 			margin-block-start: 1px;
 			display: flex;
-			color: var(--aafm-accent);
+			color: var(--aafm-accent-text);
 
 			.aafm-icon {
 				inline-size: 17px;
@@ -685,7 +767,7 @@
 			background: var(--aafm-accent-tint);
 			color: #0a4b78;
 
-			& .aafm-notice-ic { color: var(--aafm-accent); }
+			& .aafm-notice-ic { color: var(--aafm-accent-text); }
 		}
 
 		&.aafm-notice-warning {
@@ -737,20 +819,33 @@
 		}
 	}
 
-	/* ---------- Tabs (top nav - restyle core .nav-tab to underline-active) ---------- */
+	/* ---------- Tabs (top nav - restyle core .nav-tab to underline-active) ----------
+	   One row at every width. When the tabs do not fit (a narrow window, a long translation)
+	   the strip scrolls sideways inside itself and #revealActiveNavTab() brings the current tab
+	   into view; it never wraps onto a second row and never scrolls the page. The bottom rule is
+	   an inset shadow, not a border: overflow clips anything outside the padding box, so a tab
+	   pulled over a border with a negative margin would lose its active underline. */
 	.nav-tab-wrapper {
 		display: flex;
-		flex-wrap: wrap;
+		flex-wrap: nowrap;
+		overflow-x: auto;
+		overflow-y: hidden;
+		scrollbar-width: thin;
+		/* Contains the tabs' absolutely positioned screen-reader text, which would otherwise
+		   escape the scroller and widen the page. */
+		position: relative;
 		gap: 2px;
-		border-block-end: 1px solid var(--aafm-border-strong);
+		border-block-end: 0;
+		box-shadow: inset 0 -1px 0 var(--aafm-border-strong);
 		margin: 18px 0 22px;
 		padding: 0;
 
 		.nav-tab {
 			display: inline-flex;
+			flex: 0 0 auto;
 			align-items: center;
 			gap: 7px;
-			margin: 0 0 -1px;
+			margin: 0;
 			padding: 10px 14px;
 			border: 0;
 			border-block-end: 2px solid transparent;
@@ -773,14 +868,15 @@
 
 			&:hover,
 			&:focus {
-				color: var(--aafm-accent);
+				color: var(--aafm-accent-text);
 				background: transparent;
 			}
 
 			/* A keyboard focus ring that is visibly distinct from the hover tint, so a
-			   keyboard user can tell which tab actually holds focus. */
+			   keyboard user can tell which tab actually holds focus. Inset: the strip scrolls,
+			   so it clips anything drawn outside a tab, which would cut the outer ring. */
 			&:focus-visible {
-				box-shadow: var(--aafm-ring);
+				box-shadow: inset 0 0 0 2px var(--aafm-accent);
 				border-radius: var(--aafm-radius-sm);
 				outline: none;
 			}
@@ -800,53 +896,10 @@
 		.nav-tab-active,
 		.nav-tab-active:hover,
 		.nav-tab-active:focus {
-			color: var(--aafm-accent);
+			color: var(--aafm-accent-text);
 			border-block-end-color: var(--aafm-accent);
 			font-weight: 600;
 			background: transparent;
-		}
-
-		/* Right-aligned external links (Review / Get Help), styled like muted tabs
-		   without the active underline; pushed to the right edge of the flex nav. */
-		.aafm-nav-ext-group {
-			margin-inline-start: auto;
-			display: inline-flex;
-			flex-wrap: wrap;
-			align-items: center;
-			gap: 2px;
-		}
-
-		.aafm-nav-ext {
-			display: inline-flex;
-			align-items: center;
-			gap: 6px;
-			margin: 0 0 -1px;
-			padding: 10px 12px;
-			border-block-end: 2px solid transparent;
-			color: var(--aafm-text-muted);
-			text-decoration: none;
-			font-weight: 500;
-			font-size: 13.5px;
-			line-height: 1.4;
-			transition: color 0.15s ease;
-
-			svg {
-				inline-size: 16px;
-				block-size: 16px;
-				opacity: 0.85;
-			}
-
-			&:hover,
-			&:focus {
-				color: var(--aafm-accent);
-				background: transparent;
-			}
-
-			&:focus-visible {
-				box-shadow: var(--aafm-ring);
-				border-radius: var(--aafm-radius-sm);
-				outline: none;
-			}
 		}
 	}
 
@@ -883,7 +936,7 @@
 
 			&:hover {
 				border-color: var(--aafm-accent);
-				color: var(--aafm-accent);
+				color: var(--aafm-accent-text);
 			}
 
 			&:focus-visible {
@@ -1010,6 +1063,9 @@
 
 		input:checked + .aafm-switch-track { background: var(--aafm-accent); }
 		input:checked + .aafm-switch-track::before { transform: translateX(16px); }
+		/* The thumb starts at the logical start edge, so in RTL it slides the other way. The
+		   wizard's large switch pins a physical left offset of its own and keeps its rule. */
+		[dir="rtl"] &:not(.aafm-switch--lg) input:checked + .aafm-switch-track::before { transform: translateX(-16px); }
 		input:focus-visible + .aafm-switch-track { box-shadow: var(--aafm-ring); }
 
 		/* An inactive integration and an orphaned bridge row both render their checkbox
@@ -1434,7 +1490,8 @@
 				   interaction, rather than muting each control. The header (summary) stays at
 				   full strength so the plugin name, status, and counts read clearly, while
 				   everything the plugin would unlock stays legible underneath. */
-				.aafm-pill { opacity: 0.7; }
+				/* Head pills only: a pill in the body is already under the body's 0.5. */
+				> summary .aafm-pill { opacity: 0.7; }
 
 				.aafm-integration-body {
 					opacity: 0.5;
@@ -1567,7 +1624,7 @@
 			user-select: none;
 			font-size: 12.5px;
 			font-weight: 600;
-			color: var(--aafm-accent);
+			color: var(--aafm-accent-text);
 
 			&::marker,
 			&::-webkit-details-marker { display: none; }
@@ -1920,7 +1977,7 @@
 		#aafm-log-live.is-active {
 			background: var(--aafm-accent-tint);
 			border-color: var(--aafm-accent);
-			color: var(--aafm-accent);
+			color: var(--aafm-accent-text);
 		}
 
 		.aafm-log-live-note {
@@ -2010,6 +2067,13 @@
 		   distinct groups rather than one long line. */
 		.aafm-oauth-pager-count {
 			margin-inline-end: auto;
+		}
+
+		/* Active grants is paged on the server: the count leads, Previous and Next are links. */
+		&.aafm-grants-pager {
+			.aafm-pager-status { margin-inline-end: auto; }
+
+			a.aafm-btn { text-decoration: none; }
 		}
 
 		.aafm-btn[disabled] {
@@ -2102,6 +2166,20 @@
 			border-color: var(--aafm-accent);
 			background: var(--aafm-accent-tint);
 			box-shadow: inset 0 0 0 1px var(--aafm-accent);
+		}
+
+		/* OAuth picker only: the name, then how the client connects, inside the radio's name. */
+		.aafm-client-text {
+			display: flex;
+			flex-direction: column;
+			gap: 2px;
+			min-inline-size: 0;
+		}
+
+		.aafm-client-method {
+			font-size: var(--aafm-fs-xs);
+			font-weight: 400;
+			color: var(--aafm-text-muted);
 		}
 
 		.ci {
@@ -2331,7 +2409,7 @@
 
 				/* The leading question glyph carries the accent, like the mockup's .qic. */
 				.aafm-icon {
-					color: var(--aafm-accent);
+					color: var(--aafm-accent-text);
 				}
 
 				/* Hide the browser-default disclosure triangle; the chevron
@@ -2343,7 +2421,7 @@
 				}
 
 				&:hover {
-					color: var(--aafm-accent);
+					color: var(--aafm-accent-text);
 				}
 
 				/* Right-aligned chevron affordance: shape and rotate-on-open come from the
@@ -2391,18 +2469,6 @@
 			}
 		}
 
-		.aafm-help-copy-line {
-			display: flex;
-			gap: 8px;
-			align-items: center;
-			margin-block: 6px;
-
-			code {
-				flex: 1 1 auto;
-				overflow-x: auto;
-				white-space: nowrap;
-			}
-		}
 	}
 
 	/* ---------- Detected meta-key chips ---------- */
@@ -2432,7 +2498,7 @@
 			&:hover {
 				background: #f0f0f1;
 				border-color: var(--aafm-accent);
-				color: var(--aafm-accent);
+				color: var(--aafm-accent-text);
 			}
 
 			&:focus-visible {
@@ -2525,12 +2591,18 @@
 			gap: 10px;
 		}
 
-		/* Phones: the status pills go under the title instead of squeezing it, and the tab strip
-		   stays one row that scrolls sideways inside itself. */
+		/* Phones: the head becomes a column (title, pills, links), so the pills and links go
+		   under the title instead of squeezing it. The tab strip needs nothing here: it is one
+		   scrolling row at every width. */
 		.aafm-page-head {
 			flex-direction: column;
 
-			.aafm-page-head-pills { justify-content: flex-start; }
+			.title-wrap { flex-basis: auto; }
+
+			.aafm-page-head-side { align-items: flex-start; }
+
+			.aafm-page-head-pills,
+			.aafm-nav-ext-group { justify-content: flex-start; }
 		}
 
 		/* Integration and Other plugins cards: the ability count drops under the title so the
@@ -2545,20 +2617,6 @@
 				flex-basis: 100%;
 				margin-inline-start: 0;
 			}
-		}
-
-		.nav-tab-wrapper {
-			flex-wrap: nowrap;
-			overflow-x: auto;
-			overflow-y: hidden;
-			scrollbar-width: thin;
-			/* Contains the tabs' absolutely positioned screen-reader text, which would otherwise
-			   escape the scroller and widen the page. */
-			position: relative;
-
-			.nav-tab { flex: 0 0 auto; }
-
-			.aafm-nav-ext-group { flex-wrap: nowrap; }
 		}
 
 		.aafm-stat-grid {
@@ -3041,6 +3099,11 @@
 			color: var(--aafm-text);
 		}
 
+		/* One-click install link for clients with a documented link format */
+		.aafm-oauth-install {
+			margin-block: 0 10px;
+		}
+
 		/* Local-cert advisory inside an OAuth panel */
 		.aafm-oauth-local-note {
 			margin-block: 0 10px;
@@ -3062,7 +3125,7 @@
 				gap: 6px;
 				cursor: pointer;
 				font-size: 12px;
-				color: var(--aafm-accent);
+				color: var(--aafm-accent-text);
 				list-style: none;
 				padding-block: 2px;
 
@@ -3118,8 +3181,8 @@
    ============================================================================ */
 .aafm-qc-overlay {
 	--qc-ease: cubic-bezier(0.22, 1, 0.36, 1);
-	--qc-accent-tint: #f0f6fc;
-	--qc-accent-ring: rgba(34, 113, 177, 0.25);
+	--qc-accent-tint: var(--aafm-accent-tint);
+	--qc-accent-ring: rgba(var(--aafm-accent-rgb), 0.25);
 	--qc-amber-line: #c99a00;
 	--qc-amber-tint: #fcf9e8;
 	--qc-surface-3: #fbfbfc;
@@ -3182,7 +3245,7 @@
 		border: 1px solid #cfe0f2;
 		display: grid;
 		place-items: center;
-		color: var(--aafm-accent);
+		color: var(--aafm-accent-text);
 	}
 	& .aafm-qc-brandmark svg { width: 21px; height: 21px; display: block; }
 	& .aafm-qc-brandtext {
@@ -3240,8 +3303,7 @@
 		margin-block-end: 7px;
 	}
 	& .aafm-qc-count { font-size: 12px; font-weight: 600; color: var(--aafm-text-muted); }
-	& .aafm-qc-count b { color: var(--aafm-accent); font-variant-numeric: tabular-nums; }
-	& .aafm-qc-pct { font-size: 11.5px; color: var(--aafm-text-subtle); font-variant-numeric: tabular-nums; }
+	& .aafm-qc-count b { color: var(--aafm-accent-text); font-variant-numeric: tabular-nums; }
 	& .aafm-qc-meter-track { display: flex; gap: 5px; }
 	& .aafm-qc-seg {
 		flex: 1;
@@ -3285,6 +3347,23 @@
 		gap: 12px;
 		padding: 14px 16px;
 	}
+	/* The step header is a real button inside an h3: reset both so they look as the div did. */
+	& .aafm-qc-job-heading { margin: 0; font: inherit; }
+	& button.aafm-qc-job-head {
+		inline-size: 100%;
+		margin: 0;
+		border: 0;
+		background: none;
+		color: inherit;
+		font: inherit;
+		text-align: start;
+		cursor: default;
+
+		/* Inset: the job card clips an outer ring (overflow: hidden). */
+		&:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--aafm-accent); }
+	}
+	& .aafm-qc-job-titles .jt,
+	& .aafm-qc-job-titles .js { display: block; }
 	& .aafm-qc-job.is-done .aafm-qc-job-head { cursor: pointer; }
 	& .aafm-qc-marker {
 		width: 26px;
@@ -3301,7 +3380,7 @@
 		background: var(--aafm-surface);
 		transition: all 0.3s var(--qc-ease);
 	}
-	& .aafm-qc-job.is-current .aafm-qc-marker { border-color: var(--aafm-accent); color: var(--aafm-accent); box-shadow: 0 0 0 4px var(--qc-accent-ring); }
+	& .aafm-qc-job.is-current .aafm-qc-marker { border-color: var(--aafm-accent); color: var(--aafm-accent-text); box-shadow: 0 0 0 4px var(--qc-accent-ring); }
 	& .aafm-qc-job.is-done .aafm-qc-marker { border-color: var(--aafm-green); background: var(--aafm-green); color: #fff; }
 	& .aafm-qc-marker svg { width: 15px; height: 15px; }
 	& .aafm-qc-marker .check { display: none; }
@@ -3365,7 +3444,7 @@
 		line-height: 1.45;
 		color: var(--aafm-text-subtle);
 	}
-	& .aafm-qc-byline svg { width: 13px; height: 13px; flex: 0 0 auto; margin-top: 1px; color: var(--aafm-accent); opacity: 0.8; }
+	& .aafm-qc-byline svg { width: 13px; height: 13px; flex: 0 0 auto; margin-top: 1px; color: var(--aafm-accent-text); opacity: 0.8; }
 
 /* ---- Endpoint URL field ---- */
 	& .aafm-qc-urlwrap { margin-top: 12px; }
@@ -3411,7 +3490,7 @@
 		gap: 6px;
 		transition: color 0.2s ease, background 0.15s ease;
 	}
-	& .aafm-qc-urlfield.is-live .aafm-qc-ucopy { color: var(--aafm-accent); cursor: pointer; }
+	& .aafm-qc-urlfield.is-live .aafm-qc-ucopy { color: var(--aafm-accent-text); cursor: pointer; }
 	& .aafm-qc-urlfield.is-live .aafm-qc-ucopy:hover { background: var(--qc-accent-tint); }
 	& .aafm-qc-ucopy svg { width: 14px; height: 14px; }
 
@@ -3424,7 +3503,7 @@
 		color: var(--aafm-text-muted);
 		transition: opacity 0.3s ease, color 0.3s ease;
 	}
-	& .aafm-qc-nextline svg { width: 15px; height: 15px; flex: 0 0 auto; margin-top: 1px; color: var(--aafm-accent); }
+	& .aafm-qc-nextline svg { width: 15px; height: 15px; flex: 0 0 auto; margin-top: 1px; color: var(--aafm-accent-text); }
 	& .aafm-qc-nextline b { color: var(--aafm-text); font-weight: 600; }
 	& .aafm-qc-nextline.is-hidden { display: none; }
 	& .aafm-qc-nextline.is-locked { color: var(--aafm-text-subtle); }
@@ -3483,7 +3562,7 @@
 		border-radius: 4px;
 		border: 1px solid var(--aafm-border);
 	}
-	& .aafm-qc-substep .sd a { color: var(--aafm-accent); }
+	& .aafm-qc-substep .sd a { color: var(--aafm-accent-text); }
 
 	& .aafm-qc-userrow { display: flex; align-items: center; gap: 9px; margin-top: 9px; flex-wrap: wrap; }
 	& .aafm-qc-uinput {
@@ -3498,7 +3577,7 @@
 	}
 	& .aafm-qc-userstatus { font-size: 12px; color: var(--aafm-text-muted); }
 	& .aafm-qc-userstatus.is-ok { color: var(--aafm-green-text); font-weight: 600; }
-	& .aafm-qc-userstatus a { color: var(--aafm-accent); }
+	& .aafm-qc-userstatus a { color: var(--aafm-accent-text); }
 	& .aafm-qc-substep .sc > .aafm-codeblock { margin-block-start: 10px; }
 
 /* ---- Content access extras ---- */
@@ -3545,7 +3624,7 @@
 		font-size: 12.5px;
 		color: var(--aafm-text-subtle);
 	}
-	& .aafm-qc-settingslink a { color: var(--aafm-accent); text-decoration: none; font-weight: 500; }
+	& .aafm-qc-settingslink a { color: var(--aafm-accent-text); text-decoration: none; font-weight: 500; }
 	& .aafm-qc-settingslink a:hover { color: var(--aafm-accent-hover); text-decoration: underline; }
 	& .aafm-qc-settingslink svg { width: 14px; height: 14px; color: var(--aafm-text-subtle); flex: 0 0 auto; }
 
@@ -3682,6 +3761,13 @@
 	.aafm-qc-overlay :focus-visible {
 		outline: 2px solid Highlight !important;
 		outline-offset: 2px;
+	}
+
+	/* Inside a clipping scroller (the tab strip) or an overflow: hidden card (a wizard step), an
+	   outer ring is cut off; draw it inside the element instead. */
+	.aafm-wrap .nav-tab-wrapper .nav-tab:focus-visible,
+	.aafm-qc-overlay .aafm-qc-job-head:focus-visible {
+		outline-offset: -2px;
 	}
 
 	.aafm-wrap .aafm-client.on,

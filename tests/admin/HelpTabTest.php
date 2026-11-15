@@ -137,11 +137,14 @@ final class HelpTabTest extends TestCase {
 		$this->assertStringContainsString( 'Claude:', $html );
 		$this->assertStringContainsString( 'Cursor:', $html );
 		$this->assertStringContainsString( 'Windsurf:', $html );
-		// ChatGPT now connects via its developer-mode custom connector.
-		$this->assertStringContainsString( 'Developer mode', $html );
-		// Only the hosted Gemini app is still called out as unable to connect; Gemini CLI works
-		// as a proxy client (accurate to this release).
-		$this->assertStringContainsString( 'hosted Gemini app cannot connect', $html );
+		// ChatGPT and Claude follow the readme's paths; ChatGPT needs no Developer mode toggle.
+		$this->assertStringContainsString( 'Add custom MCP server', $html );
+		$this->assertStringNotContainsString( 'turn on Developer mode', $html );
+		$this->assertStringContainsString( 'Customize, then Connectors', $html );
+		// The Gemini app line states only what was checked: no way found to add a custom MCP server.
+		// It never blames the transport, which is the same one ChatGPT and Claude use.
+		$this->assertStringContainsString( 'We have not found a way to add a custom MCP server in the Gemini app', $html );
+		$this->assertStringNotContainsString( 'streamable HTTP', $html );
 		$this->assertStringContainsString( 'Gemini CLI', $html );
 	}
 
@@ -253,5 +256,37 @@ final class HelpTabTest extends TestCase {
 		// Unknown tab routes to the Dashboard tab, not Help.
 		$this->assertStringContainsString( 'aafm-dashboard', $html );
 		$this->assertStringNotContainsString( 'aafm-help-entry', $html );
+	}
+
+	/**
+	 * Settings holds more guardrails than the four the Help entry once listed, so the entry names
+	 * no count.
+	 */
+	public function test_help_guardrails_sentence_does_not_say_four(): void {
+		ob_start();
+		aafm_render_help_tab();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'Optional extra guardrails.', $html );
+		$this->assertStringNotContainsString( 'All four', $html );
+		$this->assertStringNotContainsString( 'four guardrails', $html );
+	}
+
+	public function test_help_401_line_names_membership_lockdown(): void {
+		$this->acting_as( 'administrator' );
+
+		ob_start();
+		aafm_render_help_tab();
+		$html = (string) ob_get_clean();
+
+		$start = strpos( $html, 'reached WordPress but auth failed' );
+		$this->assertNotFalse( $start );
+		$line = substr( $html, (int) $start, (int) strpos( $html, '</li>', (int) $start ) - (int) $start );
+		$this->assertStringContainsString( 'wrong or expired Application Password', $line );
+		$this->assertStringContainsString( 'membership', $line );
+		$this->assertStringContainsString( 'stops OAuth sign-in, not a correct Application Password', $line, 'Same as the Connection tab and the Doctor: a signed-in request gets through.' );
+		$this->assertStringContainsString( 'Connection Doctor', $line );
+		$this->assertStringContainsString( 'names the plugins it recognises', $line, 'No promise to name a plugin the Doctor does not know.' );
+		$this->assertStringNotContainsString( 'to see which plugin', $line );
 	}
 }

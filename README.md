@@ -9,10 +9,10 @@ WordPress MCP server for Claude and ChatGPT with limited access, a pause switch,
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.1 |
 | **Requires PHP** | 7.4 |
-| **Stable tag** | 1.11.2 |
+| **Stable tag** | 1.12.0 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
-Agent Abilities for MCP is a free WordPress MCP server plugin. It adds an MCP endpoint to a site and exposes WordPress abilities to AI agents, so Claude, ChatGPT, Cursor and other MCP clients can work on it as a WordPress user you choose, with that user's role and no more. It ships 186 abilities (92 core, 94 for plugins such as WooCommerce, ACF and Yoast SEO) and every one starts switched off.
+Agent Abilities for MCP is a free WordPress MCP server plugin. It adds an MCP endpoint to a site and exposes WordPress abilities to AI agents, so Claude, ChatGPT, Cursor and other MCP clients can work on it as a WordPress user you choose, with that user's role and no more. It ships 216 abilities (94 core, 122 for plugins such as WooCommerce, ACF and Yoast SEO) and every one starts switched off.
 
 This is the GitHub home of the plugin. The listing for site owners lives on [WordPress.org](https://wordpress.org/plugins/agent-abilities-for-mcp/), and this page is for anyone who wants to read the code, wire the plugin into their own stack or send a patch.
 
@@ -32,7 +32,7 @@ The admin screen has a switch for each ability, plus read-only mode, per-role an
 
 The Changes tab keeps 30 days of what agents changed with 25 of the plugin's tools and reverts a change if the item hasn't been edited since. It shows field names, never contents, though the earlier values are stored in a table in the site's database, which uninstall always drops. Two optional tools, `aafm/list-changes` and `aafm/undo-change`, let an agent undo what its own connection changed in the last 24 hours. Both start off, and the Read only, Content editor and Shop manager presets leave `aafm/undo-change` out.
 
-Playbooks are step-by-step instructions the owner writes, and agents read the Active ones through two read tools, `aafm/list-playbooks` and `aafm/get-playbook`. Writes through the general content tools to pages owned by Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks or WPBakery are refused. An edit that only sets the excerpt goes through and leaves the stored content as it was, unless the plugin can't tell which builder owns the post. Avada's two dedicated tools are a second exception: they can change text and refuse changes to its shortcodes.
+Playbooks are step-by-step instructions the owner writes, and agents read the Active ones through two read tools, `aafm/list-playbooks` and `aafm/get-playbook`. Writes through the plugin's general content tools to pages owned by Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks or WPBakery are refused, except Restore revision on Avada and WPBakery pages. An edit that only sets the excerpt goes through and leaves the stored content as it was, unless the plugin can't tell which builder owns the post. Avada and WPBakery pages have their own tools instead: they read a page as an outline, change an element's settings or text, add, move and remove elements, and refuse any save that would change something else on the page.
 
 Minimum versions: WooCommerce 9.1, All in One SEO 4.9.8, The Events Calendar 6.17.3.1 and Event Tickets 5.29.3.1. Below these, their tools stay hidden and the Integrations tab says why. A plugin that doesn't declare its reads as read-only has them treated as writes, so read-only mode unloads them. A tool whose own permission check needs an item id is listed for anyone who can edit posts, and the plugin's own check refuses the call if their role can't run it.
 
@@ -141,7 +141,15 @@ Patches are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first and keep each
 
 ## Outbound requests
 
-The plugin calls no AI provider and sends no telemetry. It makes two kinds of request itself: the Connection tab's checks against your own site's address and, only if you enable the off-by-default upload-media-from-url ability, a fetch of the HTTPS URL an agent supplies, which refuses private and reserved addresses, follows no redirects and carries none of your content or credentials. The bridges above run on your own machine and are not bundled.
+The plugin calls no AI provider and sends no telemetry. It makes two kinds of request itself: the Connection tab's checks against your own site's address and, only if you enable the off-by-default upload-media-from-url ability, a fetch of the HTTPS URL an agent supplies, which refuses private and reserved addresses, follows no redirects and carries none of your content or credentials. When an agent calls Avada Studio tools, Avada downloads content from avada.studio under your Avada registration; this plugin sends nothing. Avada's [terms](https://avada.com/terms-and-conditions/) and [privacy policy](https://avada.com/privacy-policy/) apply. The bridges above run on your own machine and are not bundled.
+
+## FAQ
+
+### Why do I see "Another version of MCP Adapter is already loaded"?
+
+That notice comes from a copy of the MCP Adapter that runs its own loader and finds the adapter already loaded by a different copy. This plugin bundles adapter 0.7.1 and loads it without that loader, so its own copy never prints the notice. When the standalone MCP Adapter plugin is active too, this plugin asks it to step aside quietly, unless your site already sets the WP_MCP_AUTOLOAD constant.
+
+If the notice still shows, another plugin ships its own copy of the adapter. The Connection Doctor report on the Connection tab shows which copy is running. If it says bundled, this plugin's copy is in use and the notice comes from the other plugin's copy, so update or remove the plugin that bundles its own MCP Adapter.
 
 ## More documentation
 
@@ -157,6 +165,15 @@ The plugin calls no AI provider and sends no telemetry. It makes two kinds of re
 The Model Context Protocol is an open specification that Anthropic originally developed. Claude, ChatGPT, Cursor, VS Code, Gemini and other product names belong to their owners, and Agent Abilities for MCP is a third-party plugin that isn't affiliated with, endorsed by or sponsored by any of them.
 
 ## Changelog
+### 1.12.0
+
+* **Feature:** Agents can edit WPBakery Page Builder and Avada pages element by element with tools such as avada-update-element and wpbakery-insert-template. Restore revision works there too. [See every tool](https://agentabilitieswp.com/abilities/?utm_source=github&utm_medium=readme&utm_campaign=plugin-repo).
+* **Feature:** Users who can manage options can change WPBakery settings, Avada Global Options, layouts and Slider settings, and import Avada Studio items. Page CSS and page options can be set per page.
+* **Feature:** list-navigations and update-navigation read and replace block-theme menus, pages take a parent and a template, update-site-settings sets the static homepage, and wc-update-product can remove an attribute.
+* **Feature:** Connection adds Add to Cursor and Add to VS Code links and can end tokens issued for an old site address. Other plugins is now Plugins' own tools, and the accent follows your Admin Color Scheme.
+* **Fix:** update-page, update-post and replace-in-post overwrote Divi page layouts and now refuse them, and avada-replace-text refuses a save that would strip other content.
+* **Fix:** Expired or revoked OAuth tokens now get error="invalid_token", and alert emails go through WP-Cron on hosts that can't finish the page before sending.
+
 ### 1.11.2
 
 * **Feature:** A new Changes tab keeps 30 days of what agents changed with 25 tools and reverts a change if the item hasn't been edited since, and a site-wide find and replace reverts as one group. Every write tool now reports whether its change can be undone, with a reason when it can't (permanent deletes, orders, refunds).

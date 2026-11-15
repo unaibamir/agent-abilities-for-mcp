@@ -77,6 +77,17 @@ class AuthorizeTest extends TestCase {
 	/**
 	 * Missing code_challenge is rejected: PKCE is mandatory.
 	 */
+	/**
+	 * The consent screen counts each preset's reach from the abilities registry. On init:10 a plugin
+	 * that registers its abilities from a later init callback (Yoast's read tools) is not in it yet,
+	 * so the screen showed fewer than the grant row and tools/list. wp_loaded runs after every init
+	 * callback.
+	 */
+	public function test_authorize_runs_after_every_init_callback(): void {
+		$this->assertFalse( has_action( 'init', 'aafm_oauth_handle_authorize' ), 'Not on init, where the registry can still be incomplete.' );
+		$this->assertNotFalse( has_action( 'wp_loaded', 'aafm_oauth_handle_authorize' ) );
+	}
+
 	public function test_missing_code_challenge_is_error(): void {
 		$client = $this->register_client();
 		$params = $this->valid_params( $client );

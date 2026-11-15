@@ -23,7 +23,7 @@ defined( 'ABSPATH' ) || exit;
  * Whether a given integration's host plugin is active (so its abilities should
  * register / discover).
  *
- * @param string $slug One of 'yoast' | 'rankmath' | 'aioseo' | 'acf' | 'woocommerce' | 'slim_seo' | 'tec' | 'event_tickets' | 'avada' | 'geodirectory'.
+ * @param string $slug One of 'yoast' | 'rankmath' | 'aioseo' | 'acf' | 'woocommerce' | 'slim_seo' | 'tec' | 'event_tickets' | 'avada' | 'wpbakery' | 'geodirectory'.
  * @return bool
  */
 function aafm_integration_active( string $slug ): bool {
@@ -54,6 +54,9 @@ function aafm_integration_active( string $slug ): bool {
 			break;
 		case 'avada':
 			$active = aafm_avada_active();
+			break;
+		case 'wpbakery':
+			$active = aafm_wpbakery_active();
 			break;
 		case 'geodirectory':
 			$active = aafm_geodirectory_active();
@@ -327,6 +330,23 @@ function aafm_avada_active(): bool {
 	 * @param bool $active Detected active state.
 	 */
 	return (bool) apply_filters( 'aafm_avada_active', $active );
+}
+
+/**
+ * Whether WPBakery Page Builder (plugin folder js_composer) is active: it defines
+ * WPB_VC_VERSION as soon as it loads. No version floor is imposed; 9.1 is the tested version.
+ *
+ * @return bool
+ */
+function aafm_wpbakery_active(): bool {
+	$active = defined( 'WPB_VC_VERSION' );
+
+	/**
+	 * Filters whether WPBakery Page Builder is reported active.
+	 *
+	 * @param bool $active Detected active state.
+	 */
+	return (bool) apply_filters( 'aafm_wpbakery_active', $active );
 }
 
 /**

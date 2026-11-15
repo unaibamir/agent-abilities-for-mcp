@@ -237,7 +237,8 @@ function aafm_page_builder_markers(): array {
 function aafm_page_builder_default_markers(): array {
 	return array(
 		'_elementor_data'          => 'elementor',
-		'et_pb_use_builder'        => 'divi',
+		'_et_pb_use_builder'       => 'divi', // What Divi writes (Divi 4.27.8 includes/builder/core.php:5049).
+		'et_pb_use_builder'        => 'divi', // Only Divi's form field name; kept so a site that set it still refuses.
 		'_fl_builder_data'         => 'beaver-builder',
 		'fusion_builder_status'    => 'avada',
 		'fusion_builder_converted' => 'avada',

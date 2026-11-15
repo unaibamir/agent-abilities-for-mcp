@@ -38,6 +38,11 @@ final class BlockMarkupSanitizerSweepTest extends TestCase {
 	private const EXCLUDED = array(
 		'acf-integration.php'        => array( '$as_string' => 'An ACF wysiwyg field value, not post content.' ),
 		'avada.php'                  => array( '$replace' => 'Inserted text, text-only by design.' ),
+		'avada-elements.php'         => array(
+			'$decoded' => 'Avada body text (an element\'s inner content) at its one choke point, aafm_avada_body_text(): entities decoded to the editor\'s form, brackets, encoded brackets and data-* refused without unfiltered_html, and the structure check after it.',
+			'$text'    => 'A textarea setting stored as a shortcode attribute, not post content; the attribute rule refuses quotes and brackets after it.',
+		),
+		'avada-site.php'             => array( '$text' => 'aafm_avada_filtered_text(): a check, not a filter, for the Avada footer_text Global Option and the text and text area page options Avada prints without escaping; not post content, and a value kses would change is refused.' ),
 		'comments.php'               => array( "(string) \$input['content']" => 'Comment content (create and update).' ),
 		'media.php'                  => array(
 			'$sideloaded_content'             => 'Attachment description.',
@@ -45,6 +50,7 @@ final class BlockMarkupSanitizerSweepTest extends TestCase {
 		),
 		'posts.php'                  => array( '$replace' => 'replace-in-post and replace-sitewide inserted text, text-only by design.' ),
 		'terms.php'                  => array( "(string) \$input['description']" => 'Term description (create and update).' ),
+		'wpbakery.php'               => array( '$decoded' => 'WPBakery body text (an element\'s inner content or a replace-text replacement) at its one choke point, aafm_wpbakery_body_text(): entities decoded to the editor\'s form, brackets refused without unfiltered_html, and the structure check after it.' ),
 		'woocommerce/products.php'   => array( "(string) \$input['short_description']" => 'Stored as post_excerpt, not block markup.' ),
 		'woocommerce/variations.php' => array( "(string) \$input['description']" => 'Stored in variation meta, not block markup.' ),
 	);
@@ -164,7 +170,7 @@ final class BlockMarkupSanitizerSweepTest extends TestCase {
 		}
 		sort( $expected );
 
-		$this->assertCount( 12, $expected, 'Fixture: twelve excluded calls.' );
+		$this->assertCount( 16, $expected, 'Fixture: sixteen excluded calls.' );
 		$this->assertSame( $expected, self::calls_to( 'wp_kses_post' ), 'A wp_kses_post( call in includes/abilities/ is neither routed through aafm_kses_block_markup() nor on the exclusion list.' );
 	}
 

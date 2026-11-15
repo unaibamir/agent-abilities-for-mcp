@@ -3,7 +3,7 @@
  * Plugin Name:       Agent Abilities for MCP - Connect Claude and ChatGPT with Permission Controls and Audit Log
  * Plugin URI:        https://agentabilitieswp.com
  * Description:       WordPress MCP server for Claude and ChatGPT with limited access, a pause switch, read-only mode, drafts you approve, playbooks and an audit log.
- * Version:           1.11.2
+ * Version:           1.12.0
  * Requires at least: 6.9
  * Requires PHP:      7.4
  * Author:            Unaib Amir
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AAFM_VERSION', '1.11.2' );
+define( 'AAFM_VERSION', '1.12.0' );
 define( 'AAFM_PLUGIN_FILE', __FILE__ );
 define( 'AAFM_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AAFM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -338,10 +338,12 @@ add_filter( 'rest_request_before_callbacks', 'aafm_oauth_confine_bearer_to_mcp_h
 // OAuth consent page (rendered on the front end, before aafm_bootstrap()).
 require_once AAFM_PLUGIN_DIR . 'includes/admin/kses.php';
 
-// Authorization endpoint + consent screen: served off init at ?aafm_oauth=authorize.
+// Authorization endpoint + consent screen: served at ?aafm_oauth=authorize on wp_loaded, after every
+// init callback, so the consent screen counts preset reach from the complete abilities registry (a
+// plugin can register abilities from a later init callback, as Yoast's read tools are).
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/authorize.php';
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/consent-template.php';
-add_action( 'init', 'aafm_oauth_handle_authorize' );
+add_action( 'wp_loaded', 'aafm_oauth_handle_authorize' );
 
 /**
  * Bootstraps the plugin once all plugins are loaded.
@@ -452,7 +454,13 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/tec/venues.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/tec/organizers.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/tec/tickets.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/builder-shortcodes.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/avada.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/avada-elements.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/avada-site.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/wpbakery.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/wpbakery-elements.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/wpbakery-site.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/geodirectory.php';
 
 	add_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
@@ -530,6 +538,7 @@ function aafm_bootstrap() {
 		add_action( 'wp_ajax_aafm_oauth_revoke_grant', 'aafm_ajax_oauth_revoke_grant' );
 		add_action( 'wp_ajax_aafm_save_oauth_lifetimes', 'aafm_ajax_save_oauth_lifetimes' );
 		add_action( 'wp_ajax_aafm_oauth_update_grant', 'aafm_ajax_oauth_update_grant' );
+		add_action( 'wp_ajax_aafm_revoke_stale_tokens', 'aafm_ajax_revoke_stale_tokens' );
 		add_action( 'wp_ajax_aafm_revoke_app_password', 'aafm_ajax_revoke_app_password' );
 		add_action( 'wp_ajax_aafm_set_pause_all', 'aafm_ajax_set_pause_all' );
 		add_action( 'wp_ajax_aafm_set_client_agent_identity', 'aafm_ajax_set_client_agent_identity' );

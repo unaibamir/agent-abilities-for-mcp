@@ -166,7 +166,7 @@ final class ConnectionTest extends TestCase {
 
 		$this->assertSame( '1', (string) get_user_meta( $uid, aafm_agent_user_marker_meta_key(), true ) );
 		$this->assertNotEmpty( get_user_meta( $uid, 'aafm_agent_user_created', true ) );
-		$this->assertTrue( aafm_has_created_agent_user() );
+		$this->assertNotSame( array(), aafm_created_agent_users() );
 		$this->assertContains( $uid, aafm_created_agent_users() );
 	}
 
@@ -245,7 +245,7 @@ final class ConnectionTest extends TestCase {
 		aafm_backfill_agent_user_marker();
 
 		$this->assertSame( '', (string) get_user_meta( $impostor, aafm_agent_user_marker_meta_key(), true ) );
-		$this->assertFalse( aafm_has_created_agent_user() );
+		$this->assertSame( array(), aafm_created_agent_users() );
 	}
 
 	/**
@@ -269,7 +269,7 @@ final class ConnectionTest extends TestCase {
 		aafm_backfill_agent_user_marker();
 
 		$this->assertSame( '', (string) get_user_meta( $multi, aafm_agent_user_marker_meta_key(), true ), 'A subscriber+editor account must not be backfilled as the agent user.' );
-		$this->assertFalse( aafm_has_created_agent_user() );
+		$this->assertSame( array(), aafm_created_agent_users() );
 	}
 
 	/**
@@ -357,7 +357,7 @@ final class ConnectionTest extends TestCase {
 		// ...but the marker is now healed onto the existing account.
 		$this->assertSame( '1', (string) get_user_meta( $existing, aafm_agent_user_marker_meta_key(), true ) );
 		$this->assertContains( $existing, aafm_created_agent_users() );
-		$this->assertTrue( aafm_has_created_agent_user() );
+		$this->assertNotSame( array(), aafm_created_agent_users() );
 	}
 
 	/**
@@ -664,7 +664,11 @@ final class ConnectionTest extends TestCase {
 
 		// The panel offers the endpoint URL to paste...
 		$this->assertStringContainsString( esc_html( aafm_endpoint_url() ), $panel );
-		$this->assertStringContainsString( 'Developer mode', $panel );
+		// The same path as the readme: Plugins, then Add custom MCP server, with no Developer mode toggle.
+		$this->assertStringContainsString( 'Add custom MCP server', $panel );
+		$this->assertStringNotContainsString( 'Turn on Developer mode', $panel );
+		$claude = substr( $html, (int) $next, (int) strpos( $html, 'aafm-oauth-panel" data-client=', (int) $next + 1 ) - (int) $next );
+		$this->assertStringContainsString( 'Customize, then Connectors', $claude, 'Claude matches the readme path too.' );
 		// ...and never an mcp-remote stdio config (a hosted web app cannot run one).
 		$this->assertStringNotContainsString( 'mcp-remote', $panel );
 		$this->assertStringNotContainsString( 'npx', $panel );
@@ -999,5 +1003,174 @@ final class ConnectionTest extends TestCase {
 
 		$this->assertSame( '', (string) get_user_meta( $uid, aafm_agent_user_marker_meta_key(), true ) );
 		$this->assertSame( '1', get_option( 'aafm_agent_user_marker_backfilled' ) );
+	}
+
+	/**
+	 * The client buttons of one picker grid, keyed by data-client, each with its full markup.
+	 *
+	 * @param string $html    Rendered tab.
+	 * @param string $grid_id Grid id.
+	 * @return array<string,string>
+	 */
+	private function picker_cards( string $html, string $grid_id ): array {
+		$start = strpos( $html, 'id="' . $grid_id . '"' );
+		$this->assertNotFalse( $start, $grid_id . ' not rendered.' );
+		$grid = substr( $html, (int) $start, (int) strpos( $html, '</div>', (int) $start ) - (int) $start );
+		preg_match_all( '/<button type="button" class="aafm-client[^"]*" data-client="([^"]+)".*?<\/button>/s', $grid, $m, PREG_SET_ORDER );
+		$cards = array();
+		foreach ( $m as $card ) {
+			$cards[ $card[1] ] = $card[0];
+		}
+		return $cards;
+	}
+
+	/**
+	 * One OAuth panel's markup.
+	 *
+	 * @param string $html   Rendered tab.
+	 * @param string $client Client slug.
+	 * @return string
+	 */
+	private function oauth_panel( string $html, string $client ): string {
+		$start = strpos( $html, 'aafm-oauth-panel" data-client="' . $client . '"' );
+		$this->assertNotFalse( $start, $client . ' panel not found.' );
+		$next = strpos( $html, 'aafm-oauth-panel" data-client=', (int) $start + 1 );
+		$end  = false === $next ? strpos( $html, 'aafm-oauth-panels', (int) $start ) : $next;
+		return substr( $html, (int) $start, (int) ( false === $end ? strlen( $html ) : $end ) - (int) $start );
+	}
+
+	public function test_every_oauth_picker_card_has_a_method_label(): void {
+		$cards = $this->picker_cards( $this->render_connection_tab(), 'aafm-oauth-clients' );
+		$this->assertCount( 9, $cards );
+		foreach ( $cards as $slug => $card ) {
+			$this->assertMatchesRegularExpression( '/<span class="aafm-client-method">[^<]+<\/span>/', $card, $slug );
+		}
+	}
+
+	public function test_hosted_clients_say_connector_and_the_other_six_say_config_then_sign_in(): void {
+		$cards  = $this->picker_cards( $this->render_connection_tab(), 'aafm-oauth-clients' );
+		$hosted = 0;
+		foreach ( $cards as $slug => $card ) {
+			if ( aafm_client_is_hosted_web_app( $slug ) ) {
+				++$hosted;
+				$this->assertStringContainsString( 'Added as a connector inside the app', $card, $slug );
+			} else {
+				$this->assertStringContainsString( 'Paste a config, then sign in', $card, $slug );
+			}
+		}
+		$this->assertSame( 3, $hosted );
+	}
+
+	public function test_method_label_is_inside_the_radios_accessible_name(): void {
+		foreach ( $this->picker_cards( $this->render_connection_tab(), 'aafm-oauth-clients' ) as $slug => $card ) {
+			// The radio is named by its content, so the label must sit inside the button and carry no aria-hidden.
+			$this->assertStringNotContainsString( 'aria-label', $card, $slug );
+			$this->assertDoesNotMatchRegularExpression( '/aafm-client-method"[^>]*aria-hidden/', $card, $slug );
+			$this->assertStringContainsString( 'role="radio"', $card );
+		}
+	}
+
+	public function test_app_password_picker_has_no_method_line(): void {
+		$cards = $this->picker_cards( $this->render_connection_tab(), 'aafm-clients' );
+		$this->assertNotEmpty( $cards );
+		foreach ( $cards as $slug => $card ) {
+			$this->assertStringNotContainsString( 'aafm-client-method', $card, $slug );
+		}
+	}
+
+	public function test_install_link_exists_only_for_documented_clients_and_holds_the_endpoint(): void {
+		foreach ( array_keys( aafm_quickstart_clients() ) as $slug ) {
+			$link = aafm_client_install_link( $slug );
+			if ( in_array( $slug, array( 'cursor', 'vscode' ), true ) ) {
+				$this->assertSame( aafm_endpoint_url(), $this->install_link_url( $link ), $slug );
+			} else {
+				$this->assertSame( '', $link, $slug );
+			}
+		}
+		$html = $this->render_connection_tab();
+		$this->assertStringContainsString( '>Add to Cursor</a>', $this->oauth_panel( $html, 'cursor' ) );
+		$this->assertStringContainsString( '>Add to VS Code</a>', $this->oauth_panel( $html, 'vscode' ) );
+		$this->assertStringNotContainsString( 'aafm-oauth-install', $this->oauth_panel( $html, 'windsurf' ) );
+	}
+
+	public function test_install_link_holds_no_password_or_token(): void {
+		foreach ( array( 'cursor', 'vscode' ) as $slug ) {
+			$config = $this->install_link_config( aafm_client_install_link( $slug ) );
+			$this->assertSame( array( 'url' ), array_values( array_diff( array_keys( $config ), array( 'name', 'type' ) ) ), $slug );
+			$raw = (string) wp_json_encode( $config );
+			foreach ( array( 'Authorization', 'Basic', 'Bearer', 'password', 'token', 'headers', 'env' ) as $secret ) {
+				$this->assertStringNotContainsStringIgnoringCase( $secret, $raw, $slug );
+			}
+		}
+	}
+
+	public function test_app_password_path_has_no_install_link(): void {
+		$html  = $this->render_connection_tab();
+		$start = strpos( $html, 'aafm-app-password-fallback' );
+		$this->assertNotFalse( $start );
+		$region = substr( $html, (int) $start );
+		$this->assertStringNotContainsString( 'cursor://', $region );
+		$this->assertStringNotContainsString( 'vscode:', $region );
+		$this->assertStringNotContainsString( 'aafm-oauth-install', $region );
+	}
+
+	public function test_install_link_keeps_its_protocol_after_kses(): void {
+		$html = $this->render_connection_tab();
+		$this->assertMatchesRegularExpression( '/<a class="aafm-btn aafm-btn-secondary" href="cursor:\/\/anysphere\.cursor-deeplink\/mcp\/install\?name=agent-abilities&(?:#038|amp);config=[^"]+">/', $this->oauth_panel( $html, 'cursor' ) );
+		$this->assertMatchesRegularExpression( '/<a class="aafm-btn aafm-btn-secondary" href="vscode:mcp\/install\?%7B[^"]+">/', $this->oauth_panel( $html, 'vscode' ) );
+	}
+
+	public function test_install_link_round_trips_a_plain_permalink_endpoint(): void {
+		add_filter(
+			'rest_url',
+			static function ( string $url, string $path ): string {
+				return 'https://example.com/sub/?rest_route=/' . ltrim( $path, '/' );
+			},
+			10,
+			2
+		);
+		$this->assertStringContainsString( '?rest_route=', aafm_endpoint_url() );
+		foreach ( array( 'cursor', 'vscode' ) as $slug ) {
+			$this->assertSame( aafm_endpoint_url(), $this->install_link_url( aafm_client_install_link( $slug ) ), $slug );
+		}
+		$this->assertStringContainsString( 'href="cursor://', $this->oauth_panel( $this->render_connection_tab(), 'cursor' ) );
+	}
+
+	/**
+	 * The server config an install link carries, decoded the way each client decodes it.
+	 *
+	 * @param string $link Install link.
+	 * @return array<string,mixed>
+	 */
+	private function install_link_config( string $link ): array {
+		if ( 0 === strpos( $link, 'cursor://anysphere.cursor-deeplink/mcp/install?' ) ) {
+			parse_str( (string) wp_parse_url( $link, PHP_URL_QUERY ), $query );
+			$this->assertSame( 'agent-abilities', $query['name'] ?? null );
+			$config = json_decode( (string) base64_decode( (string) ( $query['config'] ?? '' ), true ), true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decoding the link under test.
+		} else {
+			$this->assertStringStartsWith( 'vscode:mcp/install?', $link );
+			$config = json_decode( rawurldecode( substr( $link, strlen( 'vscode:mcp/install?' ) ) ), true );
+			$this->assertSame( 'agent-abilities', $config['name'] ?? null );
+			$this->assertSame( 'http', $config['type'] ?? null );
+		}
+		$this->assertIsArray( $config );
+		return $config;
+	}
+
+	/**
+	 * The endpoint an install link points at.
+	 *
+	 * @param string $link Install link.
+	 * @return string
+	 */
+	private function install_link_url( string $link ): string {
+		return (string) ( $this->install_link_config( $link )['url'] ?? '' );
+	}
+
+	public function test_allowlist_card_has_the_anchor_id(): void {
+		ob_start();
+		aafm_render_allowlist_section();
+		$html = (string) ob_get_clean();
+		$this->assertStringContainsString( '<details class="aafm-card aafm-section aafm-section--collapsible aafm-allowlist-card" id="aafm-card-allowlist"', $html );
 	}
 }

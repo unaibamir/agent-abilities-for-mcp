@@ -1000,6 +1000,14 @@ function aafm_recoverable_delete_abilities(): array {
 		'aafm/trash-page',
 		'aafm/delete-block',
 		'aafm/tec-delete-event',
+		// Refuses unless the post keeps at least two revisions (type support, wp_revisions_enabled() and a limit other
+		// than 1, which core would prune the restore point to), so a saved removal always has the revision
+		// restore-revision brings back; a Grid Builder template keeps none and is refused.
+		'aafm/wpbakery-remove-element',
+		// The same rule for Avada: refuses before writing unless the post type keeps revisions, revisions are on and the
+		// limit is not 1, so a form or an off canvas panel (no revisions) is refused and a saved removal always has the
+		// revision restore-revision brings back.
+		'aafm/avada-remove-element',
 		// Undoing a create moves the post to the Trash, and it refuses when the Trash is off.
 		'aafm/undo-change',
 	);
@@ -1039,6 +1047,12 @@ function aafm_non_removal_destructive_abilities(): array {
 	$slugs = array(
 		'aafm/create-user',
 		'aafm/update-site-settings',
+		// Overwrites WPBakery's site-wide settings in place; previous is the way back, nothing is removed.
+		'aafm/wpbakery-update-settings',
+		// Overwrites Avada's Global Options array in place; previous is the way back, nothing is removed.
+		'aafm/avada-update-global-options',
+		// Overwrites one Avada layout's sections and conditions in place; previous is the way back, nothing is removed.
+		'aafm/avada-update-layout',
 	);
 
 	/**
@@ -1450,10 +1464,13 @@ function aafm_user_meta_deny_has_star(): bool {
  * filter cannot widen the list to ANY option outside the base - not just the takeover-class
  * keys the old array_diff() stripped, but template, active_plugins, or anything else.
  *
+ * The last three (1.12.0) set the static homepage. The write validates them as one state; see
+ * aafm_static_homepage_checked().
+ *
  * @return list<string>
  */
 function aafm_allowed_site_settings(): array {
-	$base = array( 'blogname', 'blogdescription', 'timezone_string', 'date_format', 'time_format', 'start_of_week', 'posts_per_page' );
+	$base = array( 'blogname', 'blogdescription', 'timezone_string', 'date_format', 'time_format', 'start_of_week', 'posts_per_page', 'show_on_front', 'page_on_front', 'page_for_posts' );
 
 	/**
 	 * Filters the site settings exposed to AI agents. The set can only be NARROWED - the
@@ -2187,6 +2204,11 @@ function aafm_redact_post( WP_Post $post ): array {
 		'modified_gmt' => aafm_post_gmt_date( $post->post_modified_gmt, $post->post_modified ),
 	);
 
+	if ( 'page' === $post->post_type ) {
+		$shape['parent_id'] = (int) $post->post_parent;
+		$shape['template']  = aafm_page_template_value( $post );
+	}
+
 	$lang = aafm_wpml_post_language( (int) $post->ID );
 	if ( null !== $lang ) {
 		$shape['lang'] = $lang;
@@ -2249,6 +2271,14 @@ function aafm_rich_post_output_properties(): array {
 			'description' => __( 'WPML language code of this item. Present only when WPML is active.', 'agent-abilities-for-mcp' ),
 		),
 		'link'            => array( 'type' => 'string' ),
+		'parent_id'       => array(
+			'type'        => 'integer',
+			'description' => __( 'Pages only: the parent page id, 0 for none.', 'agent-abilities-for-mcp' ),
+		),
+		'template'        => array(
+			'type'        => 'string',
+			'description' => __( 'Pages only: the page template (a file name on a classic theme, a template slug on a block theme), or "default".', 'agent-abilities-for-mcp' ),
+		),
 		'author_id'       => array( 'type' => 'integer' ),
 		'author'          => array(
 			'type'       => array( 'object', 'null' ),

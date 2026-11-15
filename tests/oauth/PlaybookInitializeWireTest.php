@@ -66,5 +66,6 @@ final class PlaybookInitializeWireTest extends TestCase {
 		$body = json_decode( (string) $server->sent_body, true );
 		$this->assertSame( 200, $server->status, (string) $server->sent_body );
 		$this->assertStringContainsString( 'playbook-1', (string) ( $body['result']['instructions'] ?? '' ) );
+		$this->assertStringContainsString( 'Connection Doctor', (string) ( $body['result']['instructions'] ?? '' ), 'initialize carries the what-to-do-on-failure sentence.' );
 	}
 }

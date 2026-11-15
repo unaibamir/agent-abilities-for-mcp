@@ -910,7 +910,8 @@ class WC_Product {
 	// Test-only: stand in for what a woocommerce_product_get_attributes filter would present.
 	// There is no such setter on the real class; a filter is how a real site does this.
 	public function set_attributes_view( $v ) { $this->data['attributes_view'] = (array) $v; }
-	public function get_children() { return (array) ( $this->data['children'] ?? array() ); }
+	// Like WooCommerce's read_children(): published and private variations only, never a draft or pending one.
+	public function get_children() { return array_values( array_filter( (array) ( $this->data['children'] ?? array() ), static fn( $id ) => in_array( \AAFM\Tests\WcStubStore::get( (int) $id )['status'] ?? 'publish', array( 'publish', 'private' ), true ) ) ); }
 	private function aafm_stub_merge_attributes( $existing, $v ) {
 		// Mirror WC_Product::set_attributes(): pre-null every existing key, then keep ONLY
 		// WC_Product_Attribute instances (re-keyed by sanitize_title of the name). Plain arrays are

@@ -79,6 +79,11 @@ function aafm_integration_cards(): array {
 			// (Task 21 Step 7: active/not_installed only, no installed_inactive for this card).
 			'plugins' => array(),
 		),
+		'wpbakery'      => array(
+			'label'   => __( 'WPBakery Page Builder', 'agent-abilities-for-mcp' ),
+			'icon'    => 'integrations',
+			'plugins' => array( 'js_composer/js_composer.php' ),
+		),
 		'geodirectory'  => array(
 			'label'   => __( 'GeoDirectory', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
@@ -259,6 +264,22 @@ function aafm_integration_count_breakdown( array $counts ): string {
 }
 
 /**
+ * The tools of one integration card that the stored allowlist holds: the checked read of the saved
+ * option (aafm_get_stored_enabled_abilities_raw()) intersected with that card's static tool list.
+ * While the host plugin is inactive these are saved but not usable; registration and access still
+ * come only from aafm_get_enabled_abilities(). The card's saved count and its per-row state both
+ * read this one list.
+ *
+ * @param string $integration Integration card slug.
+ * @return list<string> Ability names, in the card's own order.
+ */
+function aafm_integration_saved_slugs( string $integration ): array {
+	$saved = aafm_get_stored_enabled_abilities_raw();
+	$names = array_column( aafm_integration_ability_manifest()[ $integration ] ?? array(), 'name' );
+	return array_values( array_intersect( array_map( 'strval', $names ), $saved ) );
+}
+
+/**
  * Render the Integrations tab: the disclaimer header, then one card per integration.
  *
  * @return void
@@ -348,6 +369,9 @@ function aafm_render_integrations_tab(): void {
 			}
 			$counts['enabled'] = $enabled_in_card;
 		}
+		// An inactive host has nothing usable, but its saved selections are still in the option.
+		// Count those as "saved" and mark each row, so "0 / N" never hides tools the owner chose.
+		$saved = $disabled ? aafm_integration_saved_slugs( $slug ) : array();
 
 		// The <summary> IS the card head: icon + label + status pill + count. A real <summary>
 		// toggles on click and on Enter/Space natively, so the accordion stays keyboard-accessible.
@@ -359,7 +383,22 @@ function aafm_render_integrations_tab(): void {
 		echo wp_kses( aafm_integration_status_pill( $status ), aafm_admin_allowed_html() );
 
 		echo '<span class="abilities-count">';
-		if ( null !== $counts ) {
+		if ( null !== $counts && $disabled ) {
+			// No .aafm-enabled-num span here: admin.js patches that span with the usable count after
+			// a save, which for an inactive host is always 0 and would overwrite the saved count.
+			printf(
+				'<p class="aafm-integration-count">%s</p>',
+				esc_html(
+					sprintf(
+						/* translators: 1: tools saved for this integration, 2: total abilities, 3: read/write/destructive breakdown. */
+						__( '%1$d saved / %2$d · %3$s', 'agent-abilities-for-mcp' ),
+						count( $saved ),
+						(int) $counts['total'],
+						aafm_integration_count_breakdown( $counts )
+					)
+				)
+			);
+		} elseif ( null !== $counts ) {
 			// The enabled figure is wrapped in its own span so admin.js can patch just that
 			// number after a save, instead of the whole card header reading stale ("0 / 52")
 			// until the next full page load. wp_kses (not esc_html) because the composed
@@ -388,10 +427,14 @@ function aafm_render_integrations_tab(): void {
 		echo '<p class="aafm-card-desc">' . esc_html__( 'Maintained by Agent Abilities.', 'agent-abilities-for-mcp' ) . '</p>';
 
 		echo '<p class="aafm-integration-note">' . esc_html( aafm_integration_status_note( $slug, $status ) ) . '</p>';
+		$addon = 'active' === $status ? aafm_integration_addon_note( $slug ) : '';
+		if ( '' !== $addon ) {
+			echo '<p class="aafm-integration-note">' . esc_html( $addon ) . '</p>';
+		}
 
 		aafm_render_integration_filter( $slug );
 
-		aafm_render_integration_abilities( $slug, $rows, $enabled, $disclosures, $disabled );
+		aafm_render_integration_abilities( $slug, $rows, $enabled, $disclosures, $disabled, $saved );
 
 		echo '</div>';
 
@@ -425,6 +468,27 @@ function aafm_integration_status_pill( string $status ): string {
 		esc_attr( $class ),
 		esc_html( $label )
 	);
+}
+
+/**
+ * The second note of an active builder card (EV-L2): whether the add-on some of its tools need is active, Avada Core
+ * for the Avada Slider tool and Templatera for Templatera templates. Empty for every other card.
+ *
+ * @param string $slug Integration slug.
+ * @return string Plain text (escaped by the caller).
+ */
+function aafm_integration_addon_note( string $slug ): string {
+	switch ( $slug ) {
+		case 'avada':
+			return aafm_avada_core_active()
+				? __( 'Avada Core: active.', 'agent-abilities-for-mcp' )
+				: __( 'Avada Core: not active. The Avada Slider settings tool needs it.', 'agent-abilities-for-mcp' );
+		case 'wpbakery':
+			return aafm_templatera_active()
+				? __( 'Templatera: active.', 'agent-abilities-for-mcp' )
+				: __( 'Templatera: not active. Templatera templates and references need it.', 'agent-abilities-for-mcp' );
+	}
+	return '';
 }
 
 /**
@@ -510,9 +574,11 @@ function aafm_render_integration_filter( string $slug ): void {
  * @param array<string,string>           $disclosures Disclosure map.
  * @param bool                           $disabled    True when the host is inactive - rows render
  *                                                    read-only and never submit.
+ * @param array<int,string>              $saved       Saved but currently unavailable names
+ *                                                    (aafm_integration_saved_slugs()).
  * @return void
  */
-function aafm_render_integration_abilities( string $slug, array $rows, array $enabled, array $disclosures, bool $disabled = false ): void {
+function aafm_render_integration_abilities( string $slug, array $rows, array $enabled, array $disclosures, bool $disabled = false, array $saved = array() ): void {
 	$has_sensitive = false;
 	foreach ( $rows as $row ) {
 		if ( 'destructive' === (string) ( $row['risk'] ?? '' ) ) {
@@ -536,7 +602,7 @@ function aafm_render_integration_abilities( string $slug, array $rows, array $en
 	// Each per-plugin card renders a flat ability list directly in the accordion body.
 	echo '<div class="aafm-card aafm-ability-list">';
 	foreach ( $rows as $ability ) {
-		aafm_render_integration_ability_row( $ability, $enabled, $disclosures, $disabled );
+		aafm_render_integration_ability_row( $ability, $enabled, $disclosures, $disabled, in_array( (string) $ability['name'], $saved, true ) );
 	}
 	echo '</div>';
 }
@@ -556,9 +622,12 @@ function aafm_render_integration_abilities( string $slug, array $rows, array $en
  * @param bool                 $disabled    True when the host is inactive - the checkbox renders
  *                                          disabled (so it never submits) and the row carries
  *                                          aria-disabled, while staying fully readable.
+ * @param bool                 $saved       True when the stored allowlist holds this ability while
+ *                                          its host is inactive: the row says so, the control
+ *                                          stays disabled.
  * @return void
  */
-function aafm_render_integration_ability_row( array $ability, array $enabled, array $disclosures, bool $disabled = false ): void {
+function aafm_render_integration_ability_row( array $ability, array $enabled, array $disclosures, bool $disabled = false, bool $saved = false ): void {
 	$name = (string) $ability['name'];
 	$risk = (string) ( $ability['risk'] ?? 'read' );
 	$hint = (string) ( $disclosures[ $name ] ?? ( $ability['description'] ?? '' ) );
@@ -572,12 +641,14 @@ function aafm_render_integration_ability_row( array $ability, array $enabled, ar
 	// here: all ten native built-in high-risk abilities are WooCommerce writes and render on this
 	// tab, so this is the attribute that keeps a write-scoped bulk control off refunds, orders,
 	// coupons and tax rates once the operator unlocks the category. See the fuller note in
-	// aafm_render_ability_row(). Held bridge rows carry the same attribute on the Other plugins tab.
+	// aafm_render_ability_row(). Held bridge rows carry the same attribute on the Plugins' own tools tab.
 	printf(
-		'<div class="aafm-ability-row" data-risk="%1$s"%2$s%3$s>',
+		'<div class="aafm-ability-row" data-risk="%1$s"%2$s%3$s%4$s>',
 		esc_attr( $risk ),
 		aafm_ability_is_high_risk( $name ) ? ' data-high-risk="1"' : '',
-		$disabled ? ' aria-disabled="true"' : ''
+		$disabled ? ' aria-disabled="true"' : '',
+		// The Studio import is never ticked by a bulk control (aafm_ability_needs_own_switch()).
+		aafm_ability_needs_own_switch( $name ) ? ' data-own-switch="1"' : ''
 	);
 
 	// An inactive host has nothing enabled, so a disabled row never renders checked; it also
@@ -585,7 +656,8 @@ function aafm_render_integration_ability_row( array $ability, array $enabled, ar
 	// locked ability - high-risk, or a write while read-only mode is on - gets the same lock
 	// treatment as the Abilities tab instead of a checkbox, see aafm_render_ability_toggle_control().
 	// The two are independent: a row can be host-disabled, lock-disabled, both, or neither.
-	$lock_reason = aafm_render_ability_toggle_control( $name, $title_id, $enabled, $disabled );
+	// The saved pill renders after the control, so its id is derived from the title id, not looked up.
+	$lock_reason = aafm_render_ability_toggle_control( $name, $title_id, $enabled, $disabled, $saved ? $title_id . '-saved' : '' );
 
 	echo '<div class="aafm-ability-main"><div class="aafm-ability-title">';
 	printf(
@@ -602,6 +674,10 @@ function aafm_render_integration_ability_row( array $ability, array $enabled, ar
 	// badge stays on an unlocked, enabled row too - mirrors aafm_render_ability_row().
 	if ( aafm_ability_is_high_risk( $name ) ) {
 		echo ' <span class="aafm-badge aafm-badge-high-risk">' . esc_html__( 'high-risk', 'agent-abilities-for-mcp' ) . '</span>';
+	}
+
+	if ( $saved ) {
+		echo ' <span class="aafm-pill aafm-pill-neutral" id="' . esc_attr( $title_id . '-saved' ) . '">' . esc_html__( 'Saved, currently unavailable', 'agent-abilities-for-mcp' ) . '</span>';
 	}
 
 	printf(

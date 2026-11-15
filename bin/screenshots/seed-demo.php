@@ -18,6 +18,8 @@ mt_srand( 1909 );
 
 update_option( 'blogname', 'Agent Abilities Demo' );
 update_option( 'blogdescription', 'A demo site' );
+// The 1.11.2 "Change history is now on" notice is not part of any listing frame.
+update_option( 'aafm_undo_notice_dismissed', '1' );
 wp_update_user( array( 'ID' => 1, 'display_name' => 'Demo Owner' ) );
 
 // Keep WooCommerce's own onboarding out of the frames. Option names are from WooCommerce, not from this

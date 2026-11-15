@@ -415,6 +415,120 @@ function aafm_integration_ability_order(): array {
 				'name' => 'aafm/avada-replace-text',
 				'risk' => 'write',
 			),
+			array(
+				'name' => 'aafm/avada-list-layouts',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/avada-get-global-options',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/avada-list-library',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/avada-list-elements',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/avada-update-element',
+				'risk' => 'write',
+			),
+			array(
+				'name' => 'aafm/avada-insert-element',
+				'risk' => 'write',
+			),
+			array(
+				'name' => 'aafm/avada-move-element',
+				'risk' => 'write',
+			),
+			array(
+				'name' => 'aafm/avada-remove-element',
+				'risk' => 'destructive',
+			),
+			array(
+				'name' => 'aafm/avada-insert-library-item',
+				'risk' => 'write',
+			),
+			array(
+				'name' => 'aafm/avada-update-page-css',
+				'risk' => 'write',
+			),
+			array(
+				'name' => 'aafm/avada-update-page-options',
+				'risk' => 'write',
+			),
+			array(
+				'name' => 'aafm/avada-update-global-options',
+				'risk' => 'destructive',
+			),
+			array(
+				'name' => 'aafm/avada-update-layout',
+				'risk' => 'destructive',
+			),
+			array(
+				'name' => 'aafm/avada-list-studio-items',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/avada-import-studio-item',
+				'risk' => 'write',
+			),
+			array(
+				'name' => 'aafm/avada-update-slider-settings',
+				'risk' => 'write',
+			),
+		),
+		'wpbakery'      => array(
+			array(
+				'name' => 'aafm/wpbakery-get-page-content',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/wpbakery-replace-text',
+				'risk' => 'write',
+			),
+			array(
+				'name' => 'aafm/wpbakery-list-elements',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/wpbakery-update-element',
+				'risk' => 'write',
+			),
+			array(
+				'name' => 'aafm/wpbakery-insert-element',
+				'risk' => 'write',
+			),
+			array(
+				'name' => 'aafm/wpbakery-move-element',
+				'risk' => 'write',
+			),
+			array(
+				'name' => 'aafm/wpbakery-remove-element',
+				'risk' => 'destructive',
+			),
+			array(
+				'name' => 'aafm/wpbakery-list-templates',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/wpbakery-insert-template',
+				'risk' => 'write',
+			),
+			array(
+				'name' => 'aafm/wpbakery-update-page-code',
+				'risk' => 'write',
+			),
+			array(
+				'name' => 'aafm/wpbakery-get-settings',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/wpbakery-update-settings',
+				'risk' => 'destructive',
+			),
 		),
 		'geodirectory'  => array(
 			array(

@@ -36,30 +36,62 @@ function aafm_connection_clients_data(): array {
 }
 
 /**
- * Data for the "Active grants" card. Each row is an aafm_oauth_list_grants() row plus its status.
+ * Data for the "Active grants" card: one server page of aafm_oauth_grants_page() rows, each plus
+ * its status, and the total that page was counted against. The page comes from the read-only
+ * grants_page query argument, read as an integer the way PHP casts it (so "2junk" opens page 2); a
+ * value with no leading positive whole number clamps to the first page and a number past the end
+ * clamps to the last.
  *
- * @return array{title:string,rule:string,count:int,rows:list<array<string,mixed>>,empty:array{title:string,hint:string}}
+ * @return array{title:string,rule:string,count:int,rows:list<array<string,mixed>>,page:int,pages:int,per_page:int,stale_tokens:int,empty:array{title:string,hint:string}}
  */
 function aafm_connection_grants_data(): array {
-	$rows = array_values(
-		array_map(
-			static function ( array $row ): array {
-				$row['status'] = $row['expired'] ? 'expired' : ( $row['paused'] ? 'paused' : 'active' );
-				return $row;
-			},
-			aafm_oauth_list_grants()
-		)
-	);
+	// phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- read-only paging input, cast to an int and clamped by aafm_oauth_grants_page().
+	$requested = isset( $_GET['grants_page'] ) && is_scalar( $_GET['grants_page'] ) ? (int) wp_unslash( $_GET['grants_page'] ) : 1;
+	$per_page  = 50;
+	$page      = aafm_oauth_grants_page( $requested, $per_page );
+	$rows      = array_map( 'aafm_connection_grant_with_status', $page['rows'] );
 	return array(
-		'title' => __( 'Active grants', 'agent-abilities-for-mcp' ),
-		'rule'  => __( 'Each row is one person who approved one app. Revoking signs that app out for that person at once.', 'agent-abilities-for-mcp' ),
-		'count' => count( $rows ),
-		'rows'  => $rows,
-		'empty' => array(
+		'title'        => __( 'Active grants', 'agent-abilities-for-mcp' ),
+		'rule'         => __( 'Each row is one person who approved one app. Revoking signs that app out for that person at once.', 'agent-abilities-for-mcp' ),
+		'count'        => $page['total'],
+		'rows'         => $rows,
+		'page'         => $page['page'],
+		'pages'        => $page['pages'],
+		'per_page'     => $per_page,
+		'stale_tokens' => aafm_oauth_stale_token_count(),
+		'empty'        => array(
 			'title' => __( 'No active grants yet', 'agent-abilities-for-mcp' ),
 			'hint'  => __( 'When someone approves an AI app, the approval shows up here.', 'agent-abilities-for-mcp' ),
 		),
 	);
+}
+
+/**
+ * A grant row plus the status the card and the grant AJAX answer show.
+ *
+ * @param array<string,mixed> $row Grant row.
+ * @return array<string,mixed>
+ */
+function aafm_connection_grant_with_status( array $row ): array {
+	$row['status'] = $row['expired'] ? 'expired' : ( $row['paused'] ? 'paused' : 'active' );
+	return $row;
+}
+
+/**
+ * The Active grants card's own address for one page, ending at the card.
+ *
+ * @param int $page Page number.
+ * @return string Unescaped URL.
+ */
+function aafm_connection_grants_page_url( int $page ): string {
+	return add_query_arg(
+		array(
+			'page'        => 'agent-abilities-for-mcp',
+			'tab'         => 'connection',
+			'grants_page' => $page,
+		),
+		admin_url( 'admin.php' )
+	) . '#aafm-card-grants';
 }
 
 /**
@@ -99,18 +131,18 @@ function aafm_render_clients_card( array $data ): void {
 	} else {
 		echo '<div class="aafm-table-wrap">';
 		echo '<table class="widefat striped aafm-oauth-table aafm-clients-table"><thead><tr>';
-		echo '<th>' . esc_html__( 'Client', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Client ID', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Redirect URIs', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Created', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Active tokens', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Status', 'agent-abilities-for-mcp' ) . '</th>';
+		echo '<th scope="col">' . esc_html__( 'Client', 'agent-abilities-for-mcp' ) . '</th>';
+		echo '<th scope="col">' . esc_html__( 'Client ID', 'agent-abilities-for-mcp' ) . '</th>';
+		echo '<th scope="col">' . esc_html__( 'Redirect URIs', 'agent-abilities-for-mcp' ) . '</th>';
+		echo '<th scope="col">' . esc_html__( 'Created', 'agent-abilities-for-mcp' ) . '</th>';
+		echo '<th scope="col">' . esc_html__( 'Active tokens', 'agent-abilities-for-mcp' ) . '</th>';
+		echo '<th scope="col">' . esc_html__( 'Status', 'agent-abilities-for-mcp' ) . '</th>';
 		printf(
-			'<th><span title="%1$s">%2$s</span></th>',
+			'<th scope="col"><span title="%1$s">%2$s</span></th>',
 			esc_attr__( 'Marks this client as an AI agent connection rather than an ordinary human client, surfaced on the activity log.', 'agent-abilities-for-mcp' ),
 			esc_html__( 'Agent', 'agent-abilities-for-mcp' )
 		);
-		echo '<th>' . esc_html__( 'Action', 'agent-abilities-for-mcp' ) . '</th>';
+		echo '<th scope="col">' . esc_html__( 'Action', 'agent-abilities-for-mcp' ) . '</th>';
 		echo '</tr></thead><tbody>';
 
 		foreach ( $data['rows'] as $client ) {
@@ -213,14 +245,36 @@ function aafm_connection_grant_pill( string $status ): string {
 /**
  * Render the "Active grants" card.
  *
- * The "Current role" column reads each identity's LIVE role (aafm_oauth_list_grants()), never a
+ * The "Current role" column reads each identity's LIVE role (aafm_oauth_grants_page()), never a
  * value captured at approval: a token acts with whatever the identity can do right now.
  *
- * @param array{title:string,rule:string,count:int,rows:list<array<string,mixed>>,empty:array{title:string,hint:string}} $data aafm_connection_grants_data().
+ * @param array{title:string,rule:string,count:int,rows:list<array<string,mixed>>,page:int,pages:int,per_page:int,stale_tokens:int,empty:array{title:string,hint:string}} $data aafm_connection_grants_data().
  * @return void
  */
 function aafm_render_grants_card( array $data ): void {
 	ob_start();
+	if ( $data['stale_tokens'] > 0 ) {
+		echo '<div class="aafm-stale-tokens">';
+		aafm_render_notice(
+			'warning',
+			sprintf(
+				/* translators: %s: number of token rows. */
+				_n(
+					'%s token was issued for an old address of this site, so it can no longer connect. To connect again, each person who approved that app has to remove the connector and add it again with the address below. Ending old tokens removes no one\'s approval.',
+					'%s tokens were issued for an old address of this site, so they can no longer connect. To connect again, each person who approved those apps has to remove the connector and add it again with the address below. Ending old tokens removes no one\'s approval.',
+					$data['stale_tokens'],
+					'agent-abilities-for-mcp'
+				),
+				number_format_i18n( $data['stale_tokens'] )
+			)
+		);
+		echo wp_kses( aafm_help_copy_line( aafm_endpoint_url() ), aafm_admin_allowed_html() );
+		printf(
+			'<p><button type="button" class="aafm-btn aafm-btn-secondary aafm-revoke-stale-tokens">%1$s</button> <span class="aafm-stale-tokens-status" role="status" tabindex="-1"></span></p>',
+			esc_html__( 'End old tokens', 'agent-abilities-for-mcp' )
+		);
+		echo '</div>';
+	}
 	if ( array() === $data['rows'] ) {
 		echo aafm_connection_empty_state( $data['empty'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by the helper.
 	} else {
@@ -239,16 +293,57 @@ function aafm_render_grants_card( array $data ): void {
 			);
 		}
 
+		// The same pager above and below the table, so a keyboard user reaches Next before the rows.
+		$pager = static function ( string $label ) use ( $data ): string {
+			if ( $data['pages'] <= 1 ) {
+				return '';
+			}
+			$first = ( $data['page'] - 1 ) * $data['per_page'] + 1;
+			$html  = '<nav class="aafm-pager aafm-grants-pager" aria-label="' . esc_attr( $label ) . '">';
+			$html .= sprintf(
+				'<span class="aafm-pager-status">%s</span>',
+				esc_html(
+					sprintf(
+						/* translators: 1: first row shown, 2: last row shown, 3: total grants. */
+						__( 'Showing %1$s to %2$s of %3$s', 'agent-abilities-for-mcp' ),
+						number_format_i18n( $first ),
+						number_format_i18n( $first + count( $data['rows'] ) - 1 ),
+						number_format_i18n( $data['count'] )
+					)
+				)
+			);
+			if ( $data['page'] > 1 ) {
+				$html .= sprintf(
+					'<a class="aafm-btn aafm-btn-secondary aafm-btn-sm" href="%1$s" aria-label="%3$s">%2$s</a>',
+					esc_url( aafm_connection_grants_page_url( $data['page'] - 1 ) ),
+					esc_html__( 'Previous', 'agent-abilities-for-mcp' ),
+					/* translators: 1: target page number, 2: total pages. Starts with the visible word "Previous". */
+					esc_attr( sprintf( __( 'Previous page, %1$s of %2$s', 'agent-abilities-for-mcp' ), number_format_i18n( $data['page'] - 1 ), number_format_i18n( $data['pages'] ) ) )
+				);
+			}
+			if ( $data['page'] < $data['pages'] ) {
+				$html .= sprintf(
+					'<a class="aafm-btn aafm-btn-secondary aafm-btn-sm" href="%1$s" aria-label="%3$s">%2$s</a>',
+					esc_url( aafm_connection_grants_page_url( $data['page'] + 1 ) ),
+					esc_html__( 'Next', 'agent-abilities-for-mcp' ),
+					/* translators: 1: target page number, 2: total pages. Starts with the visible word "Next". */
+					esc_attr( sprintf( __( 'Next page, %1$s of %2$s', 'agent-abilities-for-mcp' ), number_format_i18n( $data['page'] + 1 ), number_format_i18n( $data['pages'] ) ) )
+				);
+			}
+			return $html . '</nav>';
+		};
+		echo $pager( __( 'Active grants pages', 'agent-abilities-for-mcp' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built from escaped parts above.
 		echo '<div class="aafm-table-wrap">';
-		echo '<table class="widefat striped aafm-oauth-table aafm-grants-table"><thead><tr>';
-		echo '<th>' . esc_html__( 'User', 'agent-abilities-for-mcp' ) . '</th>';
+		// Paged on the server: admin.js leaves a data-aafm-server-paged table to the page links.
+		echo '<table class="widefat striped aafm-oauth-table aafm-grants-table" data-aafm-server-paged="1"><thead><tr>';
+		echo '<th scope="col">' . esc_html__( 'User', 'agent-abilities-for-mcp' ) . '</th>';
 		printf(
-			'<th><span title="%1$s">%2$s</span></th>',
+			'<th scope="col"><span title="%1$s">%2$s</span></th>',
 			esc_attr__( "The user's role right now, not necessarily what it was when they approved this connection. A token always acts with whatever this identity can currently do.", 'agent-abilities-for-mcp' ),
 			esc_html__( 'Current role', 'agent-abilities-for-mcp' )
 		);
 		foreach ( array( __( 'App', 'agent-abilities-for-mcp' ), __( 'Access', 'agent-abilities-for-mcp' ), __( 'Last used', 'agent-abilities-for-mcp' ), __( 'Ends', 'agent-abilities-for-mcp' ), __( 'Limit', 'agent-abilities-for-mcp' ), __( 'Status', 'agent-abilities-for-mcp' ), __( 'Actions', 'agent-abilities-for-mcp' ) ) as $heading ) {
-			echo '<th>' . esc_html( $heading ) . '</th>';
+			echo '<th scope="col">' . esc_html( $heading ) . '</th>';
 		}
 		echo '</tr></thead><tbody>';
 
@@ -360,6 +455,7 @@ function aafm_render_grants_card( array $data ): void {
 		echo '</div>';
 		// One message line for the whole table: a refused save names its app here, so no row grows taller.
 		echo '<p class="aafm-grants-msg" role="status" aria-live="polite" hidden></p>';
+		echo $pager( __( 'Active grants pages, below the table', 'agent-abilities-for-mcp' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built from escaped parts above.
 		echo '<p class="aafm-card-desc">' . esc_html__( 'Access presets only narrow what you have switched on under Abilities. They never add anything.', 'agent-abilities-for-mcp' );
 		if ( $site_limit > 0 ) {
 			/* translators: %d: the site-wide calls-a-minute limit. */
@@ -618,19 +714,46 @@ function aafm_ajax_save_oauth_lifetimes(): void {
 }
 
 /**
- * One grant row of aafm_connection_grants_data(), or null when the grant is not listed.
+ * One grant row as the Active grants card shows it, from any page, or null when there is no such
+ * grant on an active client.
  *
  * @param int    $user_id   Approving user.
  * @param string $client_id OAuth client id.
  * @return array<string,mixed>|null
  */
 function aafm_connection_grant_row( int $user_id, string $client_id ): ?array {
-	foreach ( aafm_connection_grants_data()['rows'] as $row ) {
-		if ( $user_id === $row['user_id'] && $client_id === $row['client_id'] ) {
-			return $row;
-		}
+	$row = aafm_oauth_get_grant( $client_id, $user_id );
+	return null === $row ? null : aafm_connection_grant_with_status( $row );
+}
+
+/**
+ * AJAX: deactivate every token issued for an old address of this site (owner click only). The
+ * answer states how many token rows were deactivated. Consent rows are never touched.
+ *
+ * @return void
+ */
+function aafm_ajax_revoke_stale_tokens(): void {
+	check_ajax_referer( 'aafm_admin', 'nonce' );
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
-	return null;
+	$ended = aafm_oauth_revoke_stale_tokens();
+	if ( $ended < 0 ) {
+		aafm_log_setting_change( 'aafm/oauth-stale-tokens', __( 'Could not end the tokens issued for an old site address', 'agent-abilities-for-mcp' ), false );
+		wp_send_json_error( array( 'message' => __( 'Could not end the old tokens. Please try again.', 'agent-abilities-for-mcp' ) ) );
+	}
+	/* translators: %d: number of token rows. */
+	aafm_log_setting_change( 'aafm/oauth-stale-tokens', sprintf( _n( 'Ended %d token issued for an old site address', 'Ended %d tokens issued for an old site address', $ended, 'agent-abilities-for-mcp' ), $ended ) );
+	wp_send_json_success(
+		array(
+			'deactivated' => $ended,
+			'message'     => sprintf(
+				/* translators: %s: number of token rows. */
+				_n( 'Ended %s token issued for an old address of this site.', 'Ended %s tokens issued for an old address of this site.', $ended, 'agent-abilities-for-mcp' ),
+				number_format_i18n( $ended )
+			) . ( $ended > 0 ? ' ' . __( 'Reload the page to update the Active tokens counts.', 'agent-abilities-for-mcp' ) : '' ),
+		)
+	);
 }
 
 /**
@@ -654,7 +777,9 @@ function aafm_ajax_oauth_update_grant(): void {
 	// phpcs:enable
 	$user_id = is_string( $field( 'user_id' ) ) ? absint( $field( 'user_id' ) ) : 0;
 	$client  = is_string( $field( 'client_id' ) ) ? sanitize_text_field( $field( 'client_id' ) ) : '';
-	if ( $user_id <= 0 || '' === $client || ! aafm_oauth_has_consent( $user_id, $client ) ) {
+	// The grant must be one the Active grants card lists (an active client, an existing user), so
+	// nothing is written to a consent whose client was revoked and the answer always carries the row.
+	if ( $user_id <= 0 || '' === $client || null === aafm_connection_grant_row( $user_id, $client ) ) {
 		wp_send_json_error( array( 'message' => __( 'Missing grant.', 'agent-abilities-for-mcp' ) ) );
 	}
 	$refuse  = __( 'That value is not allowed.', 'agent-abilities-for-mcp' );

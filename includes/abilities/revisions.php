@@ -25,7 +25,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_revisions_definitions' );
 function aafm_register_revisions_definitions( array $registry ): array {
 	$registry['aafm/list-revisions']   = array(
 		'label'        => __( 'List revisions', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'List the revisions of a post the agent can edit (metadata only - no body content).', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'List the revisions of a post the agent can edit (metadata only, without the body content).', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',
@@ -43,7 +43,7 @@ function aafm_register_revisions_definitions( array $registry ): array {
 		'label'        => __( 'Restore revision', 'agent-abilities-for-mcp' ),
 		'description'  => sprintf(
 			/* translators: %s: page builder names, for example Elementor and Divi. */
-			__( 'Restore a post to one of its revisions. The current state is first saved as a fresh revision, so the restore is reversible. Refused when revisions are disabled for the post, since the current state could not be preserved and the restore would be irreversible, or when the post is owned by a foreign page builder (%s), since the restore would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
+			__( 'Restore a post to one of its revisions. The current state is first saved as a fresh revision, so the restore is reversible. Refused when revisions are disabled for the post, since the current state could not be preserved and the restore would be irreversible. Also refused when the post is owned by a page builder (%s), since the restore would either have no visible effect or corrupt the builder\'s stored markup, except an Avada or WPBakery page while that builder is active: those keep the whole layout in the post content. An Avada or WPBakery restore, including one of a builder\'s own content types, is refused when saving the revision as this user would change it or the current page, for example by removing an element or an embed the user may not keep. So is a revision made with the other builder, for example a WPBakery revision of a page Avada owns now. After a WPBakery restore the page\'s generated CSS is rebuilt; if that fails the tool says the CSS may be stale.', 'agent-abilities-for-mcp' ),
 			aafm_page_builder_names()
 		),
 		'group'        => 'writes',
@@ -63,15 +63,15 @@ function aafm_register_revisions_definitions( array $registry ): array {
 }
 
 /**
- * Shared gate: the parent post must be editable by the agent (Unit 1 resolver).
+ * Shared gate: the parent post must be editable by the agent. The same check as the page builder
+ * tools (aafm_perm_avada_post_object()), so the revision tools reach a builder's own types that keep
+ * revisions, such as an Avada layout section for a user with manage_options.
  *
  * @param array<string,mixed> $input Ability input.
  * @return bool
  */
 function aafm_revision_parent_editable( array $input ): bool {
-	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	$post = $id ? aafm_exact_object( 'post', $id ) : null;
-	return $post instanceof WP_Post && aafm_can_edit_post_object( $post );
+	return aafm_perm_avada_post_object( $input );
 }
 
 /**
@@ -345,11 +345,15 @@ function aafm_exec_restore_revision( array $input ) {
 	}
 	// Restoring a revision rewrites title/content/excerpt exactly like aafm/update-post, so it
 	// is a page-builder write too: a builder-owned post's rendered output is driven by the
-	// builder's own meta (_elementor_data, et_pb_use_builder, _fl_builder_data), not post_content,
+	// builder's own meta (_elementor_data, _et_pb_use_builder, _fl_builder_data), not post_content,
 	// so a "successful" restore here would silently do nothing visible while still reporting
 	// success.
+	//
+	// The exceptions (design 325 section 8): Avada and WPBakery keep the whole layout in post_content,
+	// which is what a revision holds, so their pages restore while that builder is active, through the
+	// builder checks below.
 	$owning_builder = aafm_post_has_foreign_builder_ownership( $post_id );
-	if ( false !== $owning_builder ) {
+	if ( false !== $owning_builder && ! ( in_array( $owning_builder, array( 'avada', 'wpbakery' ), true ) && aafm_integration_active( $owning_builder ) ) ) {
 		return aafm_page_builder_owned_error( $owning_builder );
 	}
 	// Reversibility guard: the fresh pre-restore snapshot is taken by core's
@@ -367,7 +371,14 @@ function aafm_exec_restore_revision( array $input ) {
 		);
 	}
 	$revision = aafm_exact_object( 'post', $revision_id );
-	$old      = array();
+	$builder  = $revision instanceof WP_Post ? aafm_restore_builder( $owning_builder, $parent, $revision ) : null;
+	if ( null !== $builder ) {
+		$checked = aafm_restore_builder_check( $builder, $parent, (string) $revision->post_content );
+		if ( is_wp_error( $checked ) ) {
+			return $checked;
+		}
+	}
+	$old = array();
 	foreach ( array( 'post_title', 'post_content', 'post_excerpt' ) as $field ) {
 		$old[ $field ] = (string) $parent->$field;
 	}
@@ -386,11 +397,92 @@ function aafm_exec_restore_revision( array $input ) {
 			);
 		}
 	}
+	if ( 'wpbakery' === $builder && ! aafm_wpbakery_rebuild_css( $post_id ) ) {
+		return new WP_Error(
+			'aafm_wpbakery_css_stale',
+			__( 'The revision was restored, but WPBakery could not rebuild the page\'s generated CSS, so the page may look out of date until it is saved again in WPBakery.', 'agent-abilities-for-mcp' )
+		);
+	}
 	return array(
 		'restored'    => true,
 		'post_id'     => $post_id,
 		'revision_id' => $revision_id,
 	);
+}
+
+/**
+ * Which builder a restore belongs to, if any (Ruling B8): the guard names it; or the guard finds no
+ * builder and the post is one of the builder's own types, or the revision's or the current content
+ * matches the builder's pattern. Only while that builder's integration is active.
+ *
+ * @param string|false $owning   The guard's answer for the post.
+ * @param WP_Post      $post     Post being restored.
+ * @param WP_Post      $revision Revision being restored.
+ * @return string|null avada, wpbakery or null.
+ */
+function aafm_restore_builder( $owning, WP_Post $post, WP_Post $revision ): ?string {
+	foreach ( aafm_restore_builder_patterns() as $builder => $pattern ) {
+		if ( ! aafm_integration_active( $builder ) ) {
+			continue;
+		}
+		if ( $owning === $builder ) {
+			return $builder;
+		}
+		if ( false === $owning && (
+			in_array( $post->post_type, aafm_builder_own_post_types( $builder ), true )
+			|| 1 === preg_match( $pattern, (string) $revision->post_content )
+			|| 1 === preg_match( $pattern, (string) $post->post_content )
+		) ) {
+			return $builder;
+		}
+	}
+	return null;
+}
+
+/**
+ * The content pattern of each builder a restore can belong to: a Fusion container for Avada, the
+ * guard's root row or section for WPBakery.
+ *
+ * @return array<string,string> Builder => regular expression.
+ */
+function aafm_restore_builder_patterns(): array {
+	return array(
+		'avada'    => '/\[fusion_builder_container\b/',
+		'wpbakery' => aafm_page_builder_content_pattern(),
+	);
+}
+
+/**
+ * The builder checks a restore runs before wp_restore_post_revision() (design 325 section 8): the
+ * revision must not be the other builder's, the revision's content must parse, saving the current page as this user must leave it as it is, and the
+ * revision's content replayed through the same save must keep its outline and equal itself byte for
+ * byte, so an embed the user may not keep is not stripped on the way back.
+ *
+ * @param string  $builder avada or wpbakery.
+ * @param WP_Post $post  Post being restored.
+ * @param string  $target  The revision's content.
+ * @return true|WP_Error
+ */
+function aafm_restore_builder_check( string $builder, WP_Post $post, string $target ) {
+	// A revision made by the other builder (a page rebuilt from WPBakery in Avada, or back) would be
+	// checked with the wrong tag list, pass on two empty outlines, and leave content the page's
+	// owner cannot read.
+	foreach ( aafm_restore_builder_patterns() as $other => $pattern ) {
+		if ( $other !== $builder && 1 === preg_match( $pattern, $target ) ) {
+			return new WP_Error(
+				'aafm_restore_other_builder',
+				__( 'This revision was made with a different page builder than the one that owns the page now, so restoring it would leave content the current builder cannot edit. Nothing was changed.', 'agent-abilities-for-mcp' ),
+				array( 'status' => 409 )
+			);
+		}
+	}
+	$current = (string) $post->post_content;
+	$tags    = 'wpbakery' === $builder ? aafm_wpbakery_shortcode_tags( $current, $target ) : aafm_fusion_shortcode_tags();
+	$walk    = null === $tags ? null : aafm_builder_walk( $target, $tags );
+	if ( null === $tags || null === $walk ) {
+		return aafm_builder_error( 'aafm_builder_unparseable' );
+	}
+	return aafm_builder_replay_check( $builder, (int) $post->ID, $current, $target, $tags, $walk, true );
 }
 
 /**

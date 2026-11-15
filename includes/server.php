@@ -386,6 +386,14 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// ability falls through to its real permission_callback with empty input, which is the
 		// correct discovery answer for reads and writes alike.
 
+		// Block-theme navigation: update-navigation gates per object on edit_post for a wp_navigation
+		// post (aafm_perm_navigation_object), which is false with empty input at discovery. Core maps
+		// every wp_navigation primitive capability to edit_theme_options (create_initial_post_types()),
+		// so that is the floor, the same cap the menu tools above use. list-navigations gates on
+		// edit_theme_options directly and needs no case. Proven in NavigationTest.
+		case 'aafm/update-navigation':
+			return static fn(): bool => current_user_can( 'edit_theme_options' );
+
 		// The FSE family (get-active-theme, list-themes, list-templates, get-template,
 		// get-global-styles, and update-template) gates on the same object-independent
 		// edit_theme_options capability, so none needs a server.php case either. WordPress has no
@@ -482,13 +490,53 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/tec-get-organizer':
 			return static fn(): bool => current_user_can( 'read' );
 
-		// Avada (added 1.7.4): both abilities gate per-object on aafm_can_edit_post_object() via
-		// aafm_perm_avada_post_object() (includes/abilities/avada.php) - false with empty input,
-		// the same shape as update-post/replace-in-post, so both need the identical
-		// aafm_can_edit_post_family() floor.
+		// Avada (added 1.7.4) and WPBakery (1.12.0): these gate per-object on
+		// aafm_can_edit_post_object() via aafm_perm_avada_post_object() (includes/abilities/avada.php),
+		// which resolves the post type's own edit cap, so a post OR a page the caller can edit
+		// passes. The floor is therefore the post family OR the page floor update-page already
+		// derives from the page post type object (reused, not copied), so a role holding
+		// edit_pages without edit_posts still sees the tools it can call.
+		// The Studio list gates on manage_options, and runs only while the Studio import is switched on (operator
+		// decision B), so discovery checks both: an administrator never sees a list that only answers 403 (review F4).
+		case 'aafm/avada-list-studio-items':
+			return static fn(): bool => current_user_can( 'manage_options' ) && aafm_avada_studio_approved();
+
 		case 'aafm/avada-get-page-content':
 		case 'aafm/avada-replace-text':
-			return static fn(): bool => aafm_can_edit_post_family();
+		case 'aafm/avada-update-element':
+		case 'aafm/avada-insert-element':
+		case 'aafm/avada-move-element':
+		case 'aafm/avada-remove-element':
+		case 'aafm/avada-insert-library-item':
+		case 'aafm/avada-update-page-options':
+		case 'aafm/wpbakery-get-page-content':
+		case 'aafm/wpbakery-replace-text':
+		case 'aafm/wpbakery-update-element':
+		case 'aafm/wpbakery-insert-element':
+		case 'aafm/wpbakery-move-element':
+		case 'aafm/wpbakery-remove-element':
+		case 'aafm/wpbakery-insert-template':
+			return static function (): bool {
+				if ( aafm_can_edit_post_family() ) {
+					return true;
+				}
+				$page_floor = aafm_ability_list_permission( 'aafm/update-page' );
+				return null !== $page_floor && (bool) $page_floor();
+			};
+		// The same floor, plus unfiltered_html, which aafm_perm_wpbakery_page_code() requires for every field and
+		// aafm_perm_avada_page_css() requires for page CSS.
+		case 'aafm/wpbakery-update-page-code':
+		case 'aafm/avada-update-page-css':
+			return static function (): bool {
+				if ( ! current_user_can( 'unfiltered_html' ) ) {
+					return false;
+				}
+				if ( aafm_can_edit_post_family() ) {
+					return true;
+				}
+				$page_floor = aafm_ability_list_permission( 'aafm/update-page' );
+				return null !== $page_floor && (bool) $page_floor();
+			};
 
 		// GeoDirectory (added 1.7.4, default-off): gd_place registers with the literal
 		// 'capability_type' => 'post', so its mapped caps are the SAME primitive names as the
@@ -1930,10 +1978,12 @@ function aafm_mcp_explain_transport_refusal( $response, $server, $request ) {
 }
 
 /**
- * Give the server/discover response the same instructions addendum initialize carries.
+ * Give the server/discover response the same capabilities and instructions addendum initialize carries.
  *
  * Clients such as claude.ai and ChatGPT open with server/discover, and the adapter answers it
- * without running the initialize filter, so the playbook index would never reach them. The adapter has no discover filter, so this rewrites the response after dispatch:
+ * without running the initialize filter, so the playbook index would never reach them and the
+ * resources and prompts capabilities aafm_filter_initialize_capabilities() strips would still be
+ * advertised. The adapter has no discover filter, so this rewrites the response after dispatch:
  * our MCP route only, a single server/discover request, a successful result.
  *
  * @param mixed $response The response.
@@ -1959,12 +2009,15 @@ function aafm_mcp_add_discover_instructions( $response, $server, $request ) {
 	if ( ! $data instanceof \stdClass || ! isset( $data->result ) || ! $data->result instanceof \stdClass ) {
 		return $response;
 	}
-	$addendum = aafm_server_instructions_addendum();
-	if ( '' === $addendum ) {
-		return $response;
+	// Only tools are served, as initialize says.
+	if ( isset( $data->result->capabilities ) && $data->result->capabilities instanceof \stdClass ) {
+		unset( $data->result->capabilities->resources, $data->result->capabilities->prompts );
 	}
-	$instructions               = isset( $data->result->instructions ) && is_string( $data->result->instructions ) ? $data->result->instructions : '';
-	$data->result->instructions = '' !== $instructions ? $instructions . "\n\n" . $addendum : $addendum;
+	$addendum = aafm_server_instructions_addendum();
+	if ( '' !== $addendum ) {
+		$instructions               = isset( $data->result->instructions ) && is_string( $data->result->instructions ) ? $data->result->instructions : '';
+		$data->result->instructions = '' !== $instructions ? $instructions . "\n\n" . $addendum : $addendum;
+	}
 	$response->set_data( $data );
 	return $response;
 }

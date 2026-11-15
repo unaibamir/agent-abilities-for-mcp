@@ -1,0 +1,319 @@
+<?php
+/**
+ * Wire-level proof that aafm-wpbakery-get-page-content and aafm-wpbakery-replace-text round-trip
+ * over a real tools/call, with the exact wire body asserted.
+ *
+ * @package AgentAbilitiesForMCP
+ */
+
+declare( strict_types=1 );
+
+namespace AAFM\Tests;
+
+final class WpbakeryWireTest extends TestCase {
+
+	public function set_up(): void {
+		parent::set_up();
+		add_filter( 'aafm_integration_active_wpbakery', '__return_true' );
+		aafm_flush_registry_cache();
+	}
+
+	public function tear_down(): void {
+		remove_filter( 'aafm_integration_active_wpbakery', '__return_true' );
+		aafm_flush_registry_cache();
+		parent::tear_down();
+	}
+
+	/**
+	 * Builds a throwaway MCP server carrying only the two WPBakery abilities.
+	 *
+	 * @param \WP\MCP\Core\McpAdapter $adapter Adapter instance.
+	 * @return \WP\MCP\Core\McpServer
+	 * @throws \RuntimeException When the adapter refuses to build the test-only server.
+	 */
+	private function build_wpbakery_server( \WP\MCP\Core\McpAdapter $adapter ): \WP\MCP\Core\McpServer {
+		static $counter = 0;
+		++$counter;
+		$server_id = 'aafm-server-wpbakery-wire-test-' . $counter;
+
+		$tools = aafm_build_server_tools(
+			aafm_preflight_bound_server_tools_cached( array( 'aafm/wpbakery-get-page-content', 'aafm/wpbakery-replace-text' ) )
+		);
+
+		$this->in_action(
+			'mcp_adapter_init',
+			static function () use ( $adapter, $server_id, $tools ): void {
+				$adapter->create_server(
+					$server_id,
+					AAFM_MCP_NAMESPACE,
+					AAFM_MCP_ROUTE_SEGMENT,
+					'Agent Abilities for MCP (WPBakery wire test)',
+					'Test-only server carrying only the WPBakery abilities.',
+					AAFM_VERSION,
+					array( \WP\MCP\Transport\HttpTransport::class ),
+					\WP\MCP\Infrastructure\ErrorHandling\ErrorLogMcpErrorHandler::class,
+					\WP\MCP\Infrastructure\Observability\NullMcpObservabilityHandler::class,
+					$tools,
+					array(),
+					array(),
+					'aafm_transport_permission_callback'
+				);
+			}
+		);
+
+		$server = $adapter->get_server( $server_id );
+		if ( ! $server instanceof \WP\MCP\Core\McpServer ) {
+			throw new \RuntimeException( 'Failed to build the test-only WPBakery wire server.' );
+		}
+		return $server;
+	}
+
+	public const PAGE = '[vc_row][vc_column][vc_column_text]<p>Hello world</p>[/vc_column_text][vc_custom_heading text="Heading bravo"][/vc_column][/vc_row]';
+
+	private const COLUMN = '[vc_column][vc_column_text]<p>Hello world</p>[/vc_column_text][vc_custom_heading text="Heading bravo"][/vc_column]';
+
+	private const TEXT = '[vc_column_text]<p>Hello world</p>[/vc_column_text]';
+
+	private const HEADING = '[vc_custom_heading text="Heading bravo"]';
+
+	/**
+	 * A fingerprint worked out here, independent of the engine: the first 16 hex characters of SHA-256.
+	 *
+	 * @param string $source Element source.
+	 * @return string
+	 */
+	private static function fp( string $source ): string {
+		return substr( hash( 'sha256', $source ), 0, 16 );
+	}
+
+	/**
+	 * A server, a handler and a WPBakery page the editor can edit.
+	 *
+	 * @return array{0:\AAFM\Tests\Support\McpToolsHandlerShim,1:int}
+	 */
+	private function wired(): array {
+		$id = self::factory()->post->create(
+			array(
+				'post_type'    => 'page',
+				'post_content' => self::PAGE,
+			)
+		);
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		$this->register_enabled( array( 'aafm/wpbakery-get-page-content', 'aafm/wpbakery-replace-text' ) );
+		$this->acting_as( 'editor' );
+		$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $this->build_wpbakery_server( \WP\MCP\Core\McpAdapter::instance() ) );
+		return array( $handler, $id );
+	}
+
+	/**
+	 * The structured content of a tool result, decoded the way a client sees it.
+	 *
+	 * @param mixed $result Tool result.
+	 * @return array<string,mixed>
+	 */
+	private function wire( $result ): array {
+		$this->assertNotInstanceOf( \AAFM\Tests\Support\McpProtocolError::class, $result );
+		return json_decode( (string) $result->getContent()[0]->getText(), true );
+	}
+
+	public function test_wpbakery_read_round_trips_over_a_real_tools_call(): void {
+		list( $handler, $id ) = $this->wired();
+
+		$plain = $this->wire(
+			$handler->call_tool(
+				array(
+					'name'      => aafm_mcp_tool_name( 'aafm/wpbakery-get-page-content' ),
+					'arguments' => array( 'post_id' => $id ),
+				),
+				'req-wpb-get-1'
+			)
+		);
+		$this->assertSame(
+			array(
+				'post_id'           => $id,
+				'content'           => self::PAGE,
+				'is_wpbakery_owned' => true,
+			),
+			$plain
+		);
+
+		$outline = $this->wire(
+			$handler->call_tool(
+				array(
+					'name'      => aafm_mcp_tool_name( 'aafm/wpbakery-get-page-content' ),
+					'arguments' => array(
+						'post_id'           => $id,
+						'include_structure' => true,
+					),
+				),
+				'req-wpb-get-2'
+			)
+		);
+		$this->assertSame(
+			array(
+				'post_id'           => $id,
+				'content'           => self::PAGE,
+				'is_wpbakery_owned' => true,
+				'structure_status'  => 'ok',
+				'structure'         => array(
+					array(
+						'index'        => 0,
+						'depth'        => 0,
+						'tag'          => 'vc_row',
+						'self_closing' => false,
+						'has_closer'   => true,
+						'atts'         => array(),
+						'fingerprint'  => self::fp( self::PAGE ),
+						'atts_decoded' => array(),
+					),
+					array(
+						'index'        => 1,
+						'depth'        => 1,
+						'tag'          => 'vc_column',
+						'self_closing' => false,
+						'has_closer'   => true,
+						'atts'         => array(),
+						'fingerprint'  => self::fp( self::COLUMN ),
+						'atts_decoded' => array(),
+					),
+					array(
+						'index'        => 2,
+						'depth'        => 2,
+						'tag'          => 'vc_column_text',
+						'self_closing' => false,
+						'has_closer'   => true,
+						'atts'         => array(),
+						'fingerprint'  => self::fp( self::TEXT ),
+						'atts_decoded' => array(),
+						'text'         => '<p>Hello world</p>',
+					),
+					array(
+						'index'        => 3,
+						'depth'        => 2,
+						'tag'          => 'vc_custom_heading',
+						'self_closing' => false,
+						'has_closer'   => false,
+						'atts'         => array( 'text' => 'Heading bravo' ),
+						'fingerprint'  => self::fp( self::HEADING ),
+						'atts_decoded' => array( 'text' => 'Heading bravo' ),
+						'text'         => '',
+					),
+				),
+				'page_fingerprint'  => self::fp( self::PAGE ),
+			),
+			$outline
+		);
+	}
+
+	public function test_wpbakery_replace_round_trips_over_a_real_tools_call(): void {
+		list( $handler, $id ) = $this->wired();
+
+		$done = $this->wire(
+			$handler->call_tool(
+				array(
+					'name'      => aafm_mcp_tool_name( 'aafm/wpbakery-replace-text' ),
+					'arguments' => array(
+						'post_id' => $id,
+						'search'  => 'Hello world',
+						'replace' => 'Greetings world',
+					),
+				),
+				'req-wpb-replace-1'
+			)
+		);
+		$this->assertSame( array( 'post', 'replacements', 'undo' ), array_keys( $done ) );
+		$this->assertSame(
+			array(
+				'undoable'   => false,
+				'change_ids' => array(),
+				'reason'     => 'not_covered',
+			),
+			$done['undo']
+		);
+		$this->assertSame( 1, $done['replacements'] );
+		$this->assertSame( $id, $done['post']['id'] ?? $done['post']['ID'] ?? null );
+		$this->assertSame( str_replace( 'Hello world', 'Greetings world', self::PAGE ), get_post_field( 'post_content', $id, 'raw' ) );
+
+		$refused = $handler->call_tool(
+			array(
+				'name'      => aafm_mcp_tool_name( 'aafm/wpbakery-replace-text' ),
+				'arguments' => array(
+					'post_id' => $id,
+					'search'  => 'Heading bravo',
+					'replace' => 'Heading changed',
+				),
+			),
+			'req-wpb-replace-2'
+		);
+		$this->assertNotInstanceOf( \AAFM\Tests\Support\McpProtocolError::class, $refused );
+		$this->assertTrue( $refused->getIsError() );
+		$this->assertSame(
+			aafm_exec_wpbakery_replace_text(
+				array(
+					'post_id' => $id,
+					'search'  => 'Heading bravo',
+					'replace' => 'Heading changed',
+				)
+			)->get_error_message(),
+			$refused->getContent()[0]->getText()
+		);
+		$this->assertStringContainsString( 'Heading bravo', get_post_field( 'post_content', $id, 'raw' ) );
+	}
+	public function test_wpbakery_read_with_page_settings_round_trips_over_a_real_tools_call(): void {
+		list( $handler, $id ) = $this->wired();
+		update_post_meta( $id, '_wpb_post_custom_css', '.wire { color: #010203; }' );
+		update_post_meta( $id, '_wpb_vc_js_status', 'true' );
+		update_post_meta( $id, '_wpb_post_custom_js_header', 'window.wireHeader = 1;' );
+
+		$both = $this->wire(
+			$handler->call_tool(
+				array(
+					'name'      => aafm_mcp_tool_name( 'aafm/wpbakery-get-page-content' ),
+					'arguments' => array(
+						'post_id'               => $id,
+						'include_structure'     => true,
+						'include_page_settings' => true,
+					),
+				),
+				'req-wpb-get-3'
+			)
+		);
+		$this->assertSame(
+			array( 'post_id', 'content', 'is_wpbakery_owned', 'structure_status', 'structure', 'page_fingerprint', 'page_settings' ),
+			array_keys( $both )
+		);
+		$this->assertSame( self::fp( self::PAGE ), $both['page_fingerprint'] );
+		$this->assertCount( 4, $both['structure'] );
+		// The wire user is an editor, who holds unfiltered_html on a single site, so the JS keys are present.
+		$this->assertSame(
+			array(
+				'custom_css'       => '.wire { color: #010203; }',
+				'editor_status'    => 'true',
+				'custom_js_header' => 'window.wireHeader = 1;',
+				'custom_js_footer' => '',
+			),
+			$both['page_settings']
+		);
+
+		$off = $this->wire(
+			$handler->call_tool(
+				array(
+					'name'      => aafm_mcp_tool_name( 'aafm/wpbakery-get-page-content' ),
+					'arguments' => array(
+						'post_id'               => $id,
+						'include_page_settings' => false,
+					),
+				),
+				'req-wpb-get-4'
+			)
+		);
+		$this->assertSame(
+			array(
+				'post_id'           => $id,
+				'content'           => self::PAGE,
+				'is_wpbakery_owned' => true,
+			),
+			$off
+		);
+	}
+}

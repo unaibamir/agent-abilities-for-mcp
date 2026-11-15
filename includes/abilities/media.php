@@ -77,7 +77,7 @@ function aafm_register_media_definitions( array $registry ): array {
 	);
 	$registry['aafm/delete-media']          = array(
 		'label'        => __( 'Delete media', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Permanently delete an attachment - the file and library entry are removed and cannot be recovered.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Permanently delete an attachment: the file and library entry are removed and cannot be recovered.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'media',
@@ -448,13 +448,17 @@ function aafm_exec_count_media( array $input ) {
 	$author_id = aafm_media_scope_author_id();
 
 	if ( aafm_wpml_active() ) {
-		$build_counts = static function () use ( $author_id ): array {
+		$build_counts = static function () use ( $author_id ) {
 			return aafm_query_attachment_counts_by_mime( $author_id );
 		};
 		if ( 'all' === $lang ) {
 			$counts = array();
 			foreach ( aafm_wpml_all_language_codes_for_iteration() as $code ) {
-				foreach ( aafm_with_language( $code, $build_counts ) as $mime => $n ) {
+				$by_language = aafm_with_language( $code, $build_counts );
+				if ( is_wp_error( $by_language ) ) {
+					return $by_language;
+				}
+				foreach ( $by_language as $mime => $n ) {
 					$counts[ $mime ] = ( $counts[ $mime ] ?? 0 ) + (int) $n;
 				}
 			}
@@ -467,6 +471,9 @@ function aafm_exec_count_media( array $input ) {
 		$counts = aafm_query_attachment_counts_by_mime( $author_id );
 	} else {
 		$counts = (array) wp_count_attachments();
+	}
+	if ( is_wp_error( $counts ) ) {
+		return $counts;
 	}
 
 	$by_mime = array();
@@ -503,38 +510,86 @@ function aafm_exec_count_media( array $input ) {
  * wp_count_attachments()'s key shape but via WP_Query so WPML's language filters
  * apply. Called from inside aafm_with_language() and directly - see aafm_exec_count_media().
  *
+ * No attachment row is loaded. The WP_Query fetches ids only, 500 at a time, with suppress_filters
+ * false and the author argument, so WPML's language filter and the own-uploads scope apply exactly
+ * as they do to the media list. Each batch of ids is then counted by its stored post_mime_type in
+ * one grouped query, so every type is counted as stored. Two queries per 500 attachments.
+ *
+ * Batches page by id (each one starts after the last id the previous one returned), so a large
+ * library is not rescanned from the start for every batch, and the loop ends only on an empty
+ * batch, so a filter that caps posts_per_page cannot cut the count short. The id order is forced
+ * last on posts_orderby, because a plugin that sorts attachments by menu_order (Post Types Order)
+ * would otherwise make the next batch skip lower ids. A batch whose ids do not all rise past the
+ * last one seen (a hook dropped the id clause or the order) is refused rather than looped on.
+ *
  * @param int|null $author_id Restrict to this author's attachments, or null for the
  *                            unscoped full library (aafm_media_scope_author_id()).
- * @return array<string,int> Mime type => count.
+ * @return array<string,int>|WP_Error Mime type => count, or an error when a count query fails.
  */
-function aafm_query_attachment_counts_by_mime( ?int $author_id = null ): array {
-	$args = array(
-		'post_type'              => 'attachment',
-		'post_status'            => 'inherit',
-		'posts_per_page'         => -1,
-		'no_found_rows'          => true,
-		'suppress_filters'       => false,
-		// The loop reads only post_mime_type, a wp_posts column already on the hydrated
-		// WP_Post. Leaving these at WP_Query's defaults (both true) would fire a large
-		// postmeta and term IN-scan per invocation that nothing here ever reads, which on a
-		// big library is the dominant cost. suppress_filters stays false so WPML's language
-		// filter still applies and the tally is byte-identical.
-		'update_post_meta_cache' => false,
-		'update_post_term_cache' => false,
-	);
-	if ( null !== $author_id ) {
-		$args['author'] = $author_id;
-	}
-	$query = new WP_Query( $args );
+function aafm_query_attachment_counts_by_mime( ?int $author_id = null ) {
+	global $wpdb;
 
-	$counts = array();
-	foreach ( $query->posts as $post ) {
-		if ( ! $post instanceof WP_Post ) {
-			continue;
+	$batch   = 500;
+	$counts  = array();
+	$last_id = 0;
+	$after   = static function ( string $where, WP_Query $query ) use ( $wpdb ): string {
+		$from = (int) $query->get( 'aafm_after_id' );
+		return $from > 0 ? $where . $wpdb->prepare( " AND {$wpdb->posts}.ID > %d", $from ) : $where;
+	};
+	$by_id   = static function ( string $orderby, WP_Query $query ) use ( $wpdb ): string {
+		return null === $query->get( 'aafm_after_id', null ) ? $orderby : "{$wpdb->posts}.ID ASC";
+	};
+	$done    = static function () use ( $after, $by_id ): void {
+		remove_filter( 'posts_where', $after, 10 );
+		remove_filter( 'posts_orderby', $by_id, PHP_INT_MAX );
+	};
+	add_filter( 'posts_where', $after, 10, 2 );
+	add_filter( 'posts_orderby', $by_id, PHP_INT_MAX, 2 );
+	while ( true ) {
+		$args = array(
+			'post_type'              => 'attachment',
+			'post_status'            => 'inherit',
+			'fields'                 => 'ids',
+			'posts_per_page'         => $batch,
+			'aafm_after_id'          => $last_id,
+			'orderby'                => 'ID',
+			'order'                  => 'ASC',
+			'no_found_rows'          => true,
+			'suppress_filters'       => false,
+			'update_post_meta_cache' => false,
+			'update_post_term_cache' => false,
+		);
+		if ( null !== $author_id ) {
+			$args['author'] = $author_id;
 		}
-		$mime            = (string) $post->post_mime_type;
-		$counts[ $mime ] = ( $counts[ $mime ] ?? 0 ) + 1;
+		$ids = array();
+		foreach ( ( new WP_Query( $args ) )->posts as $id ) {
+			$ids[] = $id instanceof WP_Post ? (int) $id->ID : (int) $id;
+		}
+		if ( array() === $ids ) {
+			break;
+		}
+		foreach ( $ids as $id ) {
+			if ( $id <= $last_id ) {
+				$done();
+				return aafm_generic_error();
+			}
+			$last_id = $id;
+		}
+		$sql = 'SELECT post_mime_type, COUNT(*) AS n FROM %i WHERE ID IN (' . implode( ', ', array_fill( 0, count( $ids ), '%d' ) ) . ') GROUP BY post_mime_type';
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- placeholders are generated from the id list.
+		$rows = aafm_wpdb_results( $wpdb->prepare( $sql, array_merge( array( $wpdb->posts ), $ids ) ) );
+		if ( ! $rows['ok'] ) {
+			$done();
+			return aafm_generic_error();
+		}
+		foreach ( (array) $rows['value'] as $row ) {
+			$mime            = (string) ( $row['post_mime_type'] ?? '' );
+			$counts[ $mime ] = ( $counts[ $mime ] ?? 0 ) + (int) ( $row['n'] ?? 0 );
+		}
 	}
+	$done();
+
 	return $counts;
 }
 

@@ -65,6 +65,18 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 			),
 			'reason' => 'The list-blocks search term. It becomes WP_Query\'s `s` argument and is never written back, so nothing about it reaches storage.',
 		),
+		'includes/abilities/avada-site.php::aafm_avada_validate_global_option::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( $entry[\'label\'] )',
+			),
+			'reason' => 'Plan 326 S13-2: a check, not a transform. An Avada colour palette label is refused unless sanitize_text_field() leaves it unchanged, and the caller\'s own string is stored, so nothing altered reaches the Global Options.',
+		),
+		'includes/abilities/avada.php::aafm_exec_avada_list_library::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( (string) $input[\'search\'] )',
+			),
+			'reason' => 'The avada-list-library search term. It becomes WP_Query\'s `s` argument and is never written back, so nothing about it reaches storage.',
+		),
 		'includes/abilities/blocks.php::aafm_exec_list_block_types::sanitize_text_field' => array(
 			'calls'  => array(
 				'sanitize_text_field( (string) $input[\'namespace\'] )',
@@ -194,14 +206,16 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 		'includes/admin/bridge-directory.php::aafm_ajax_bridge_read_only_starter::sanitize_text_field' => array(
 			'calls'  => array(
 				'sanitize_text_field( wp_unslash( $_POST[\'plugin\'] ) )',
+				'array_map( \'sanitize_text_field\', wp_unslash( (array) $_POST[\'slugs\'] ) )',
 			),
-			'reason' => 'A group key, only ever looked up in the computed plugin groups inside aafm_bridge_apply_read_only_starter(). An unknown key is refused and the value is never stored.',
+			'reason' => 'A group key, only ever looked up in the computed plugin groups inside aafm_bridge_apply_read_only_starter(). An unknown key is refused and the value is never stored. The shown slugs are intersected with the group\'s, or all, registered foreign slugs; never stored as given.',
 		),
 		'includes/admin/bridge-directory.php::aafm_ajax_bridge_mark_reviewed::sanitize_text_field' => array(
 			'calls'  => array(
 				'sanitize_text_field( wp_unslash( $_POST[\'plugin\'] ) )',
+				'array_map( \'sanitize_text_field\', wp_unslash( (array) $_POST[\'slugs\'] ) )',
 			),
-			'reason' => 'A group key, compared with the reserved all-tools key and looked up in the computed plugin groups. An unknown key is refused and the value is never stored.',
+			'reason' => 'A group key, compared with the reserved all-tools key and looked up in the computed plugin groups. An unknown key is refused and the value is never stored. The shown slugs are intersected with the group\'s, or all, registered foreign slugs; never stored as given.',
 		),
 		'includes/admin/connection.php::aafm_ajax_oauth_revoke_client::sanitize_text_field' => array(
 			'calls'  => array(
@@ -526,6 +540,28 @@ PHP;
 		$this->assertSame( 'aafm_probe_two', $records[1]['function'] );
 		$this->assertSame( 'sanitize_textarea_field', $records[1]['sanitizer'] );
 		$this->assertSame( 'call', $records[1]['form'] );
+	}
+
+	/**
+	 * Carried item 23 (CR-8): a call on either side of a ternary, inside an argument or after ?: and ??, is seen and
+	 * attributed to its function, the shape an S10 draft once wrote.
+	 */
+	public function test_the_scanner_finds_a_call_inside_a_ternary(): void {
+		$source = <<<'PHP'
+<?php
+function aafm_probe_ternary( $o, $t ) {
+	$a = $o ? sanitize_text_field( $t ) : sanitize_textarea_field( $t );
+	$b = g( $o ? sanitize_text_field( $o ) : '' );
+	$c = $o ?: sanitize_text_field( $t . 'x' );
+	return $o ?? sanitize_text_field( $t . 'y' );
+}
+PHP;
+
+		$records = StoredTextSanitizerScanner::scan_source( $source, 'probe.php' );
+
+		$this->assertCount( 5, $records );
+		$this->assertSame( array( 'aafm_probe_ternary' ), array_values( array_unique( array_column( $records, 'function' ) ) ) );
+		$this->assertSame( 'sanitize_textarea_field', $records[1]['sanitizer'] );
 	}
 
 	/**

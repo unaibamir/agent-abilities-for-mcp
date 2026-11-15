@@ -63,6 +63,7 @@ final class CatalogFixture {
 		'aafm/list-menus',
 		'aafm/get-menu',
 		'aafm/list-menu-items',
+		'aafm/list-navigations',
 		'aafm/get-active-theme',
 		'aafm/list-themes',
 		'aafm/list-templates',
@@ -117,6 +118,15 @@ final class CatalogFixture {
 		'aafm/tec-get-ticket',
 		'aafm/tec-get-attendees',
 		'aafm/avada-get-page-content',
+		'aafm/avada-list-layouts',
+		'aafm/avada-get-global-options',
+		'aafm/avada-list-library',
+		'aafm/avada-list-elements',
+		'aafm/wpbakery-get-page-content',
+		'aafm/wpbakery-list-elements',
+		'aafm/wpbakery-list-templates',
+		'aafm/wpbakery-get-settings',
+		'aafm/avada-list-studio-items',
 		'aafm/geodirectory-get-listings',
 		'aafm/geodirectory-get-listing',
 	);
@@ -173,6 +183,7 @@ final class CatalogFixture {
 		'aafm/create-menu-item',
 		'aafm/update-menu-item',
 		'aafm/delete-menu-item',
+		'aafm/update-navigation',
 		'aafm/update-template',
 		'aafm/yoast-update-post',
 		'aafm/rankmath-update-post',
@@ -217,6 +228,25 @@ final class CatalogFixture {
 		'aafm/tec-update-organizer',
 		'aafm/upload-media-from-url',
 		'aafm/avada-replace-text',
+		'aafm/wpbakery-replace-text',
+		'aafm/wpbakery-update-element',
+		'aafm/avada-update-element',
+		'aafm/wpbakery-insert-element',
+		'aafm/wpbakery-move-element',
+		'aafm/wpbakery-remove-element',
+		'aafm/avada-insert-element',
+		'aafm/avada-move-element',
+		'aafm/avada-remove-element',
+		'aafm/wpbakery-insert-template',
+		'aafm/wpbakery-update-page-code',
+		'aafm/avada-insert-library-item',
+		'aafm/avada-update-page-css',
+		'aafm/avada-update-page-options',
+		'aafm/wpbakery-update-settings',
+		'aafm/avada-update-global-options',
+		'aafm/avada-update-layout',
+		'aafm/avada-import-studio-item',
+		'aafm/avada-update-slider-settings',
 		'aafm/geodirectory-create-listing',
 		'aafm/geodirectory-update-listing',
 	);
@@ -243,6 +273,9 @@ final class CatalogFixture {
 	 * delete-menu and delete-menu-item are permanent: navigation menus and their items have no
 	 * Trash, so removing a menu (and every item inside it) or a single item cannot be undone, and
 	 * the agent is told so.
+	 *
+	 * wpbakery-update-settings, avada-update-global-options and avada-update-layout are destructive on the same basis as
+	 * update-site-settings (Ruling R-S13-1): each overwrites site-wide settings with no per-setting undo, and returns previous.
 	 *
 	 * wc-delete-product is permanent: it removes a WooCommerce product through the WC data store
 	 * (bypassing the Trash), so the agent is told the removal cannot be undone. wc-delete-product-
@@ -273,5 +306,10 @@ final class CatalogFixture {
 		'aafm/wc-delete-product-variation',
 		'aafm/tec-delete-event',
 		'aafm/undo-change',
+		'aafm/wpbakery-remove-element',
+		'aafm/avada-remove-element',
+		'aafm/wpbakery-update-settings',
+		'aafm/avada-update-global-options',
+		'aafm/avada-update-layout',
 	);
 }

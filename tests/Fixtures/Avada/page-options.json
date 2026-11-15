@@ -1,0 +1,24 @@
+{
+    "bg_full": "no",
+    "display_header": "yes",
+    "header_bg_full": "no",
+    "slider_visibility": "small-visibility,medium-visibility,large-visibility",
+    "show_first_featured_image": "yes",
+    "main_padding": {
+        "top": "",
+        "bottom": ""
+    },
+    "content_bg_full": "no",
+    "seo_index": "auto",
+    "seo_follow": "auto",
+    "bg_repeat": "default",
+    "container_hundred_percent_animation": "",
+    "header_bg_repeat": "repeat",
+    "displayed_menu": "default",
+    "slider_type": "no",
+    "page_title_bar": "no",
+    "content_bg_repeat": "default",
+    "pages_sidebar": "Footer Widget Area 1",
+    "pages_sidebar_2": "default_sidebar",
+    "sidebar_sticky": "default"
+}

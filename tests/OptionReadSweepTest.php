@@ -26,10 +26,19 @@ final class OptionReadSweepTest extends TestCase {
 	 * @var array<string,string>
 	 */
 	private const GET_OPTION = array(
+		'includes/abilities/avada-elements.php|aafm_avada_encode_raw|1' => 'N',
+		'includes/abilities/avada-elements.php|aafm_avada_insert_tree|1' => 'N',
+		'includes/abilities/avada.php|aafm_exec_avada_list_layouts|1' => 'N',
+		'includes/abilities/avada.php|aafm_exec_avada_list_layouts|2' => 'N',
+		'includes/abilities/avada.php|aafm_exec_avada_get_global_options|1' => 'N',
+		'includes/abilities/avada-site.php|aafm_exec_avada_update_global_options|1' => 'N',
+		'includes/abilities/avada-site.php|aafm_exec_avada_update_layout|1' => 'N',
 		'includes/abilities/settings.php|aafm_exec_get_site_settings|1' => 'N',
 		'includes/abilities/settings.php|aafm_exec_update_site_settings|1' => 'N',
 		'includes/abilities/settings.php|aafm_exec_update_site_settings|2' => 'N',
 		'includes/abilities/users.php|aafm_exec_create_user|1' => 'G',
+		'includes/abilities/wpbakery-site.php|aafm_wpbakery_saved_templates|1' => 'N',
+		'includes/abilities/wpbakery-site.php|aafm_wpbakery_stored_settings|1' => 'N',
 		'includes/adapter-loader.php|aafm_maybe_disable_standalone_adapter_autoload|1' => 'N',
 		'includes/admin/changes.php|aafm_render_undo_notice|1' => 'N',
 		'includes/admin/connection.php|aafm_endpoint_url|1' => 'N',
@@ -65,12 +74,14 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/block-guard.php|aafm_block_guard_is_strict|1' => 'G',
 		'includes/bridge-labels.php|aafm_bridge_active_plugin_name|1' => 'N',
 		'includes/bridge.php|aafm_get_stored_bridged_abilities_raw|1' => 'G',
+		'includes/builder-shortcodes.php|aafm_builder_serialize|1' => 'N',
 		'includes/default-server.php|aafm_default_server_mode|1' => 'G',
 		'includes/helpers.php|aafm_allowed_post_types|1'   => 'G',
 		'includes/helpers.php|aafm_scoped_allowed_meta_keys|1' => 'G',
 		'includes/helpers.php|aafm_scoped_deny_option_raw|1' => 'G',
 		'includes/helpers.php|aafm_scoped_meta_has_star|1' => 'G',
 		'includes/oauth/discovery.php|aafm_oauth_option_is_on|1' => 'G',
+		'includes/oauth/tokens.php|aafm_oauth_accepted_audiences|1' => 'N',
 		'includes/oauth/tokens.php|aafm_oauth_mint_tokens|1' => 'G',
 		'includes/option-cache.php|aafm_persist_operator_switch|1' => 'N',
 		'includes/option-cache.php|aafm_update_option_verified|1' => 'N',
@@ -120,6 +131,7 @@ final class OptionReadSweepTest extends TestCase {
 	 * @var list<string>
 	 */
 	private const GET_TRANSIENT = array(
+		'includes/abilities/avada-site.php|aafm_exec_avada_list_studio_items|1',
 		'includes/admin/doctor.php|aafm_doctor_handle_probe|1',
 		'includes/admin/doctor.php|aafm_doctor_last_header_result|1',
 		'includes/admin/page.php|aafm_detected_meta_keys|1',
@@ -127,6 +139,7 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/audit/log-query.php|aafm_activity_summary|1',
 		'includes/audit/log.php|aafm_activity_log_schema_admin_notice|1',
 		'includes/audit/log.php|aafm_denial_log_within_cap|1',
+		'includes/audit/notifications.php|aafm_notify_send_overdue|1',
 		'includes/helpers.php|aafm_transient_count|1',
 		'includes/oauth/schema.php|aafm_oauth_engine_admin_notice|1',
 		'includes/oauth/schema.php|aafm_oauth_schema_admin_notice|1',
@@ -356,7 +369,7 @@ final class OptionReadSweepTest extends TestCase {
 			array(
 				'G' => 21,
 				'L' => 3,
-				'N' => 33,
+				'N' => 44,
 			),
 			array(
 				'G' => count( array_keys( self::GET_OPTION, 'G', true ) ),
@@ -394,7 +407,7 @@ final class OptionReadSweepTest extends TestCase {
 	public function test_every_get_transient_call_is_listed_exactly_once(): void {
 		$found = $this->plugin_calls();
 
-		$this->assertCount( 11, $found['get_transient'] );
+		$this->assertCount( 13, $found['get_transient'] );
 		$this->assertSame( $this->sorted( self::GET_TRANSIENT ), $this->keys_of( $found, 'get_transient' ) );
 	}
 

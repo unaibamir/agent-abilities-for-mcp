@@ -245,10 +245,10 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'doctorSkip'               => __( 'Could not test', 'agent-abilities-for-mcp' ),
 				'doctorWhoYou'             => __( 'You can fix this', 'agent-abilities-for-mcp' ),
 				'doctorWhoHost'            => __( 'Your host can fix this', 'agent-abilities-for-mcp' ),
-				'doctorWhoPlugin'          => __( 'A security plugin may be the cause', 'agent-abilities-for-mcp' ),
+				'doctorWhoPlugin'          => __( 'A security or membership plugin may be the cause', 'agent-abilities-for-mcp' ),
 				'doctorCopySnippet'        => __( 'Copy snippet', 'agent-abilities-for-mcp' ),
 				'doctorError'              => __( 'The check could not run. Reload the page and try again.', 'agent-abilities-for-mcp' ),
-				// Other plugins: review card and read-only starter.
+				// Plugins' own tools: review card and read-only starter.
 				'bridgeWorking'            => __( 'Working…', 'agent-abilities-for-mcp' ),
 				/* translators: 1: how many read tools, 2: plugin name. */
 				'bridgeStarterOn'          => __( 'This turns on %1$s read tools from %2$s.', 'agent-abilities-for-mcp' ),
@@ -313,7 +313,8 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'revokeClientConfirm'      => __( 'Revoke this client? It is turned off and its active sessions end right away.', 'agent-abilities-for-mcp' ),
 				'revokeGrantConfirm'       => __( 'Revoke this grant? The user will have to approve again to reconnect.', 'agent-abilities-for-mcp' ),
 				'revokeFailed'             => __( 'Could not revoke. Please try again.', 'agent-abilities-for-mcp' ),
-				'statusRevoked'            => __( 'Revoked', 'agent-abilities-for-mcp' ),
+				'revokeReloadLosesEdits'   => __( 'The page reloads afterwards, and your unsaved changes on this tab will be lost.', 'agent-abilities-for-mcp' ),
+				'staleTokensConfirm'       => __( 'End every token issued for an old address of this site? Approvals stay, but each app has to be removed and added again with the new address.', 'agent-abilities-for-mcp' ),
 				'agentToggleFailed'        => __( 'Could not save. Please try again.', 'agent-abilities-for-mcp' ),
 				/* translators: %s: number of abilities matching the current search. */
 				'abilitiesSearchCount'     => __( '%s abilities match.', 'agent-abilities-for-mcp' ),
@@ -338,6 +339,8 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				// Quick Connect wizard.
 				'qcInProgress'             => __( 'In progress', 'agent-abilities-for-mcp' ),
 				'qcNotStarted'             => __( 'Not started', 'agent-abilities-for-mcp' ),
+				/* translators: %1$s: current setup step number. */
+				'qcStepOf'                 => __( 'Step %1$s of 3', 'agent-abilities-for-mcp' ),
 				'qcOauthOn'                => __( 'OAuth is on. Copy the URL, then continue.', 'agent-abilities-for-mcp' ),
 				'qcOauthOff'               => __( 'OAuth is off. Use the application-password path below, or turn OAuth on.', 'agent-abilities-for-mcp' ),
 				'qcUserCreated'            => __( 'mcp-agent created (subscriber)', 'agent-abilities-for-mcp' ),
@@ -1618,15 +1621,33 @@ function aafm_activity_log_headers(): array {
  * a short key-shaped string, never its message, so there is no free text to strip beyond that.
  *
  * @param array<int,array<string,mixed>> $rows Rows from aafm_query_activity().
- * @return array<int,array{id:int,time:string,principal:string,connection:string,ability:string,detail:string,detail_link:?array<string,mixed>,status:string,variant:string,duration:string,ip:string,arg_keys:string}>
+ * @return array<int,array{id:int,time:string,time_title:string,principal:string,connection:string,ability:string,detail:string,detail_link:?array<string,mixed>,status:string,variant:string,duration:string,ip:string,arg_keys:string}>
  */
 function aafm_activity_rows_data( array $rows ): array {
 	$names = aafm_activity_connection_names( array_column( $rows, 'client_id' ) );
 	$out   = array();
 	foreach ( $rows as $row ) {
-		$out[] = aafm_activity_row_view( $row, $names );
+		$view               = aafm_activity_row_view( $row, $names );
+		$view['time_title'] = aafm_activity_time_title( $view['time'] );
+		$out[]              = $view;
 	}
 	return $out;
+}
+
+/**
+ * The log time cell's title: the stored UTC time plus the same moment in the site's timezone, so
+ * the PHP rows and the script-built rows (paging, Live) show one preformatted value.
+ *
+ * @param string $utc Stored UTC datetime.
+ * @return string '' for an empty value; the value alone when it cannot be read as a date.
+ */
+function aafm_activity_time_title( string $utc ): string {
+	$local = aafm_format_admin_datetime( $utc );
+	if ( '' === $local || $local === $utc ) {
+		return $utc;
+	}
+	/* translators: 1: stored UTC date and time, 2: the same moment in the site's timezone. */
+	return sprintf( __( '%1$s UTC, %2$s site time', 'agent-abilities-for-mcp' ), $utc, $local );
 }
 
 /**
@@ -1641,11 +1662,10 @@ function aafm_admin_tabs(): array {
 		'abilities'    => __( 'Abilities', 'agent-abilities-for-mcp' ),
 		'playbooks'    => __( 'Playbooks', 'agent-abilities-for-mcp' ),
 		'integrations' => __( 'Integrations', 'agent-abilities-for-mcp' ),
-		// Short on purpose. This label renders twice, in the on-page tab strip and in the wp-admin
-		// submenu, and every other entry is one or two words. The page lede carries the explanation
-		// that these are abilities the other plugins registered themselves, rather than ones we
-		// ship for them, which is what separates this tab from Integrations.
-		'bridge'       => __( 'Other plugins', 'agent-abilities-for-mcp' ),
+		// Says who made these tools: the other plugins registered them themselves, while the
+		// Integrations tab holds tools this plugin ships for them. The label renders twice, in the
+		// on-page tab strip and in the wp-admin submenu, so it stays short.
+		'bridge'       => __( 'Plugins\' own tools', 'agent-abilities-for-mcp' ),
 		'settings'     => __( 'Settings', 'agent-abilities-for-mcp' ),
 		'activity'     => __( 'Activity Log', 'agent-abilities-for-mcp' ),
 		'changes'      => __( 'Changes', 'agent-abilities-for-mcp' ),
@@ -1681,7 +1701,7 @@ function aafm_render_admin_page(): void {
 
 	echo '<div class="wrap aafm-wrap">';
 
-	// Header: title + lede on the left, the status pill on the right (moved out of the h1).
+	// Header: title + lede on the left; the status pills and the support links on the right.
 	echo '<div class="aafm-page-head"><div class="title-wrap">';
 	echo '<h1>' . esc_html__( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ) . '</h1>';
 	echo '<p class="aafm-page-lede">' . esc_html__( 'Give an AI agent scoped, audited access to this site. Nothing is exposed until you turn it on, and every call is logged.', 'agent-abilities-for-mcp' ) . '</p>';
@@ -1694,17 +1714,23 @@ function aafm_render_admin_page(): void {
 	// scoped to that list, which is the exact mismatch that produced the 1.5.0 lock bug. This band
 	// is the one element on the page whose scope is unambiguously everything.
 	$posture = aafm_exposure_posture();
+	echo '<div class="aafm-page-head-side">';
 	echo '<span class="aafm-page-head-pills">';
 	printf(
 		'<span class="aafm-status-pill aafm-pill aafm-pill-warn" data-posture="paused"%1$s>%2$s</span>',
 		aafm_pause_all() ? '' : ' hidden',
 		esc_html__( 'Access paused', 'agent-abilities-for-mcp' )
 	);
+	// The label stays short (a listing caption quotes it); the title and the screen-reader text say
+	// what it means, since "Read + write" alone reads as if everything were exposed.
+	$posture_note = __( 'Shows what your settings allow. Only abilities you switched on are exposed.', 'agent-abilities-for-mcp' );
 	printf(
-		'<span class="aafm-status-pill aafm-pill aafm-pill-%1$s" data-posture="%2$s">%3$s</span>',
+		'<span class="aafm-status-pill aafm-pill aafm-pill-%1$s" data-posture="%2$s" title="%4$s">%3$s<span class="screen-reader-text"> %5$s</span></span>',
 		esc_attr( $posture['variant'] ),
 		esc_attr( $posture['state'] ),
-		esc_html( $posture['label'] )
+		esc_html( $posture['label'] ),
+		esc_attr( $posture_note ),
+		esc_html( $posture_note )
 	);
 	printf(
 		'<span class="aafm-status-pill %1$s">%2$s</span>',
@@ -1712,39 +1738,9 @@ function aafm_render_admin_page(): void {
 		esc_html( $pill_label )
 	);
 	echo '</span>';
-	echo '</div>';
 
-	// Anchor for core's admin-notice relocation: the <h1> now sits inside
-	// .aafm-page-head, so mark where WordPress should drop notices.
-	echo '<hr class="wp-header-end">';
-
-	aafm_render_undo_notice();
-
-	echo '<nav class="nav-tab-wrapper">';
-	foreach ( $tabs as $slug => $label ) {
-		echo wp_kses(
-			sprintf(
-				'<a href="%s" class="nav-tab %s" data-tab="%s">%s %s<span class="aafm-dirty-dot" hidden aria-hidden="true"></span><span class="screen-reader-text aafm-dirty-sr" hidden>%s</span></a>',
-				esc_url(
-					add_query_arg(
-						array(
-							'page' => 'agent-abilities-for-mcp',
-							'tab'  => $slug,
-						),
-						admin_url( 'admin.php' )
-					)
-				),
-				esc_attr( $active === $slug ? 'nav-tab-active' : '' ),
-				esc_attr( $slug ),
-				aafm_icon( $slug ),
-				esc_html( $label ),
-				esc_html__( 'Unsaved changes', 'agent-abilities-for-mcp' )
-			),
-			aafm_admin_allowed_html()
-		);
-	}
-
-	// Right-aligned support links: quiet and permanent, no admin-wide nag. Website is the
+	// Support links: quiet and permanent, no admin-wide nag. They sit in the page head under the
+	// pills, so the ten tabs below get the whole row (option A, 2026-11-13). Website is the
 	// plugin's own home and leads, which keeps the two wordpress.org destinations next to each
 	// other rather than split by it. A review helps the plugin's wordpress.org standing; Get Help
 	// routes to the support forum. All three open in a new tab.
@@ -1773,7 +1769,7 @@ function aafm_render_admin_page(): void {
 			'label' => __( 'Watch the demo', 'agent-abilities-for-mcp' ),
 		),
 	);
-	echo '<span class="aafm-nav-ext-group">';
+	echo '<div class="aafm-nav-ext-group">';
 	foreach ( $ext_links as $ext ) {
 		echo wp_kses(
 			sprintf(
@@ -1786,7 +1782,40 @@ function aafm_render_admin_page(): void {
 			aafm_admin_allowed_html()
 		);
 	}
-	echo '</span>';
+	echo '</div>';
+	echo '</div>'; // .aafm-page-head-side
+	echo '</div>'; // .aafm-page-head
+
+	// Anchor for core's admin-notice relocation: the <h1> now sits inside
+	// .aafm-page-head, so mark where WordPress should drop notices.
+	echo '<hr class="wp-header-end">';
+
+	aafm_render_undo_notice();
+
+	echo '<nav class="nav-tab-wrapper" aria-label="' . esc_attr__( 'Plugin sections', 'agent-abilities-for-mcp' ) . '">';
+	foreach ( $tabs as $slug => $label ) {
+		echo wp_kses(
+			sprintf(
+				'<a href="%s" class="nav-tab %s" data-tab="%s"%s>%s %s<span class="aafm-dirty-dot" hidden aria-hidden="true"></span><span class="screen-reader-text aafm-dirty-sr" hidden>%s</span></a>',
+				esc_url(
+					add_query_arg(
+						array(
+							'page' => 'agent-abilities-for-mcp',
+							'tab'  => $slug,
+						),
+						admin_url( 'admin.php' )
+					)
+				),
+				esc_attr( $active === $slug ? 'nav-tab-active' : '' ),
+				esc_attr( $slug ),
+				$active === $slug ? ' aria-current="page"' : '',
+				aafm_icon( $slug ),
+				esc_html( $label ),
+				esc_html__( 'Unsaved changes', 'agent-abilities-for-mcp' )
+			),
+			aafm_admin_allowed_html()
+		);
+	}
 	echo '</nav>';
 
 	switch ( $active ) {
@@ -1918,10 +1947,12 @@ function aafm_site_subgroups(): array {
 				'aafm/create-menu-item',
 				'aafm/update-menu-item',
 				'aafm/delete-menu-item',
+				'aafm/list-navigations',
+				'aafm/update-navigation',
 			),
 		),
 		'search'        => array(
-			'label'     => __( 'Search', 'agent-abilities-for-mcp' ),
+			'label'     => __( 'Site search', 'agent-abilities-for-mcp' ),
 			'abilities' => array(
 				'aafm/search-content',
 			),
@@ -2246,7 +2277,7 @@ function aafm_render_abilities_bulk_toolbar( string $slug, array $tab_rows ): vo
 function aafm_enable_writes_button_html( string $slug, array $rows ): string {
 	foreach ( $rows as $ability ) {
 		$write_name = (string) ( $ability['name'] ?? '' );
-		if ( 'write' !== (string) ( $ability['risk'] ?? '' ) || aafm_ability_is_high_risk( $write_name ) || null !== aafm_ability_lock_reason( $write_name ) ) {
+		if ( 'write' !== (string) ( $ability['risk'] ?? '' ) || aafm_ability_is_high_risk( $write_name ) || aafm_ability_needs_own_switch( $write_name ) || null !== aafm_ability_lock_reason( $write_name ) ) {
 			continue;
 		}
 		// The note is not decoration: "writes" on its own reads as "everything that changes the
@@ -2296,9 +2327,11 @@ function aafm_render_ability_row( array $ability, array $enabled, array $disclos
 	// this attribute covers the unlocked window, which is a supported configuration. Emitted as a
 	// server-rendered fact for the same reason data-risk is, rather than guessed from the badge.
 	printf(
-		'<div class="aafm-ability-row" data-risk="%1$s"%2$s>',
+		'<div class="aafm-ability-row" data-risk="%1$s"%2$s%3$s>',
 		esc_attr( $risk ),
-		aafm_ability_is_high_risk( $name ) ? ' data-high-risk="1"' : ''
+		aafm_ability_is_high_risk( $name ) ? ' data-high-risk="1"' : '',
+		// The Studio import is never ticked by a bulk control (aafm_ability_needs_own_switch()).
+		aafm_ability_needs_own_switch( $name ) ? ' data-own-switch="1"' : ''
 	);
 
 	// Presentation only. The security boundary is the subtraction in aafm_get_enabled_abilities();
@@ -2817,7 +2850,7 @@ function aafm_render_activity_tab(): void {
 		esc_url( $export_url ),
 		esc_html__( 'Export CSV', 'agent-abilities-for-mcp' )
 	);
-	echo '<button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-clear-log">' . esc_html__( 'Clear log', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-clear-status" aria-live="polite"></span>';
+	echo '<button type="button" class="aafm-btn aafm-btn-danger" id="aafm-clear-log">' . esc_html__( 'Clear log', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-clear-status" aria-live="polite"></span>';
 	echo '<button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-log-live" aria-pressed="false">' . esc_html__( 'Live', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-log-live-note" aria-live="polite"></span>';
 	echo '</div>';
 
@@ -3094,7 +3127,7 @@ function aafm_activity_rows_html( array $rows, bool $filtered = false ): string 
 		$v     = aafm_activity_row_view( $row, $names );
 		$html .= sprintf(
 			// The short columns clip with an ellipsis, so each carries its full text as a title.
-			'<tr><td>%1$s</td><td title="%2$s">%2$s</td><td title="%3$s">%3$s</td><td title="%4$s">%4$s</td><td class="aafm-log-detail%12$s" title="%13$s"><span class="aafm-log-detail-text">%5$s</span></td><td><span class="aafm-pill aafm-pill-%6$s aafm-status aafm-status-%7$s">%8$s</span></td><td>%9$s</td><td title="%10$s">%10$s</td><td title="%11$s">%11$s</td></tr>',
+			'<tr><td title="%14$s">%1$s</td><td title="%2$s">%2$s</td><td title="%3$s">%3$s</td><td title="%4$s">%4$s</td><td class="aafm-log-detail%12$s" title="%13$s"><span class="aafm-log-detail-text">%5$s</span></td><td><span class="aafm-pill aafm-pill-%6$s aafm-status aafm-status-%7$s">%8$s</span></td><td>%9$s</td><td title="%10$s">%10$s</td><td title="%11$s">%11$s</td></tr>',
 			esc_html( $v['time'] ),
 			esc_html( $v['principal'] ),
 			esc_html( $v['connection'] ),
@@ -3107,7 +3140,8 @@ function aafm_activity_rows_html( array $rows, bool $filtered = false ): string 
 			esc_html( $v['ip'] ),
 			esc_html( $v['arg_keys'] ),
 			1 === preg_match( '/^\s*[\[{]/', (string) $v['detail'] ) ? ' is-json' : '',
-			esc_attr( (string) $v['detail'] )
+			esc_attr( (string) $v['detail'] ),
+			esc_attr( aafm_activity_time_title( $v['time'] ) )
 		);
 	}
 	return $html;
@@ -3349,7 +3383,7 @@ function aafm_render_help_tab(): void {
 				. '<p><strong>' . esc_html__( 'How to read the result (the HTTP status on the first line):', 'agent-abilities-for-mcp' ) . '</strong></p>'
 				. '<ul>'
 				. '<li><strong>' . esc_html__( '200', 'agent-abilities-for-mcp' ) . '</strong> - ' . esc_html__( 'reachable and authenticated; the body is a JSON-RPC result. Everything is working - if the AI client still fails, the block is on its side (see the 403/406/429 entry above).', 'agent-abilities-for-mcp' ) . '</li>'
-				. '<li><strong>' . esc_html__( '401', 'agent-abilities-for-mcp' ) . '</strong> - ' . esc_html__( 'reached WordPress but auth failed: wrong or expired Application Password, or the Authorization header is being stripped (see the Authentication section).', 'agent-abilities-for-mcp' ) . '</li>'
+				. '<li><strong>' . esc_html__( '401', 'agent-abilities-for-mcp' ) . '</strong> - ' . esc_html__( 'reached WordPress but auth failed: wrong or expired Application Password, or the Authorization header is being stripped (see the Authentication section). A membership or security plugin that keeps the REST API to signed-in members stops OAuth sign-in, not a correct Application Password; the Connection Doctor on the Connection tab names the plugins it recognises.', 'agent-abilities-for-mcp' ) . '</li>'
 				. '<li><strong>' . esc_html__( '403 / 406 / 429', 'agent-abilities-for-mcp' ) . '</strong> - ' . esc_html__( 'a WAF, CDN, or host security rule is blocking the request before WordPress (see the 403/406/429 entry above).', 'agent-abilities-for-mcp' ) . '</li>'
 				. '<li><strong>' . esc_html__( '404', 'agent-abilities-for-mcp' ) . '</strong> - ' . esc_html__( 'the route is not registered for this URL: flush permalinks (Settings → Permalinks → Save) and confirm you copied the endpoint exactly from the Connection tab.', 'agent-abilities-for-mcp' ) . '</li>'
 				. '<li><strong>' . esc_html__( '5xx', 'agent-abilities-for-mcp' ) . '</strong> - ' . esc_html__( 'a server-side error: check your PHP error log and the host status.', 'agent-abilities-for-mcp' ) . '</li>'
@@ -3510,10 +3544,10 @@ function aafm_render_help_tab(): void {
 	aafm_render_help_entry(
 		__( 'Which AI clients work, and how do I set each one up?', 'agent-abilities-for-mcp' ),
 		wp_kses(
-			'<p>' . esc_html__( 'Clients connect in one of two ways. Browser and hosted apps (ChatGPT, Claude, and Manus) connect over OAuth: you paste the site\'s MCP endpoint URL into the app as a custom connector and approve the sign-in, with no config file to edit. Editors and command-line clients (Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI) connect through the @automattic/mcp-wordpress-remote proxy, the package the Connection tab puts in the generated config. The proxy reads your endpoint URL and the agent user\'s Application Password and builds the auth itself.', 'agent-abilities-for-mcp' ) . '</p>'
+			'<p>' . esc_html__( 'Clients connect in one of two ways. Browser and hosted apps (ChatGPT, Claude, and Manus) connect over OAuth: you paste the site\'s MCP endpoint URL into the app (a custom MCP server in ChatGPT, a custom connector in Claude) and approve the sign-in, with no config file to edit. Editors and command-line clients (Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI) connect through the @automattic/mcp-wordpress-remote proxy, the package the Connection tab puts in the generated config. The proxy reads your endpoint URL and the agent user\'s Application Password and builds the auth itself.', 'agent-abilities-for-mcp' ) . '</p>'
 			. '<ul>'
-			. '<li><strong>' . esc_html__( 'ChatGPT:', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'turn on Developer mode (it needs a paid plan), add a custom connector, paste the endpoint URL, and approve the sign-in. ChatGPT calls this a connector rather than MCP.', 'agent-abilities-for-mcp' ) . '</li>'
-			. '<li><strong>' . esc_html__( 'Claude:', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'in Settings → Connectors, add a custom connector, paste the endpoint URL, and approve the sign-in. The claude.ai web app and Claude Desktop use the same flow.', 'agent-abilities-for-mcp' ) . '</li>'
+			. '<li><strong>' . esc_html__( 'ChatGPT:', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'on ChatGPT web, open Plugins, select the plus button, then Add custom MCP server, paste the endpoint URL under Connection, choose OAuth, and approve the sign-in. You don\'t need to turn on Developer Mode first.', 'agent-abilities-for-mcp' ) . '</li>'
+			. '<li><strong>' . esc_html__( 'Claude:', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'open Customize, then Connectors, choose + Add, then Add custom connector, paste the endpoint URL, and approve the sign-in. The claude.ai web app and Claude Desktop use the same flow.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'Claude Code:', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'add the server to its MCP config (claude mcp add, or the .mcp.json in your project).', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'Cursor:', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'add the block to its MCP config (~/.cursor/mcp.json, or Settings → MCP) and reload.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'VS Code:', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'save it as .vscode/mcp.json in your workspace (the key is "servers", not "mcpServers").', 'agent-abilities-for-mcp' ) . '</li>'
@@ -3521,7 +3555,7 @@ function aafm_render_help_tab(): void {
 			. '<li><strong>' . esc_html__( 'Gemini CLI:', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'add it to the mcpServers block in your settings.json.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '</ul>'
 			. '<p>' . esc_html__( 'For the proxy clients, copy the config straight from Connection → Step 2 - do not hand-build it. On Windows, use that tab\'s "Windows" view (it wraps the launcher in cmd /c); for a local or staging site, it adds the certificate handling. Both are covered in the Connecting section above.', 'agent-abilities-for-mcp' ) . '</p>'
-			. '<p><strong>' . esc_html__( 'The hosted Gemini app cannot connect in this release.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'Its web connector expects a native streamable HTTP/SSE MCP transport, which the bundled adapter does not serve yet. Gemini CLI is the exception: it runs as a proxy client, like Claude Code, so it works today, and the Connection tab has a ready-made quickstart for it.', 'agent-abilities-for-mcp' ) . '</p>',
+			. '<p><strong>' . esc_html__( 'The Gemini app:', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'We have not found a way to add a custom MCP server in the Gemini app, so there are no steps for it here. Gemini CLI can connect: it runs as a proxy client, like Claude Code, and the Connection tab has a ready-made quickstart for it.', 'agent-abilities-for-mcp' ) . '</p>',
 			$inline
 		)
 	);
@@ -3537,7 +3571,7 @@ function aafm_render_help_tab(): void {
 			. '<li><strong>' . esc_html__( 'Two locks on every ability.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'An ability works only if you explicitly enabled it on the Abilities tab AND the agent user\'s capabilities allow it. The default is nothing enabled - the agent starts with zero abilities until you turn them on.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'Trash and permanent delete are different abilities.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'Trash abilities (trash a post or page) move content to the Trash, where you can restore it, and the Changes tab lets you revert what agents edited in the last 30 days. Delete abilities erase for good and cannot be undone: deleting a post or page outright, and every media or user deletion, is permanent.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'Everything is logged, free text is not.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'Every call - including denied ones - is recorded on the Activity Log tab. The arguments column holds the argument KEYS only, never the values, and a separate short identifier-only note holds something like an object id or an error code. When another plugin\'s bridged ability fails, its error code is recorded behind a "foreign:" prefix, kept only when it is a short key-shaped string of letters, digits, underscore and hyphen, and never its message or error data. A plugin that builds that code from its own input can put a short fragment of that input there. You can see what was attempted without the log keeping free-text content.', 'agent-abilities-for-mcp' ) . '</li>'
-			. '<li><strong>' . esc_html__( 'Optional extra guardrails.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'The Settings tab adds a per-minute rate limit, an IP allowlist, a force-to-draft switch, and a maximum title length. All four are off by default, so you turn on only the ones you want.', 'agent-abilities-for-mcp' ) . '</li>'
+			. '<li><strong>' . esc_html__( 'Optional extra guardrails.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'The Settings tab adds limits you can turn on, such as a per-minute rate limit, an IP allowlist, a force-to-draft switch and a maximum title length. They are off by default, so you turn on only the ones you want.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '</ul>',
 			$inline
 		)

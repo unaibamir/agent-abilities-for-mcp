@@ -353,6 +353,42 @@ function aafm_open_pending_invocation_row( string $ability_name, $input ): void 
 	);
 
 	aafm_tag_current_invocation_row( $ability_name, $row_id );
+	aafm_mark_first_call_recorded( $row_id );
+}
+
+/**
+ * Latch the durable "first agent call happened" flag once a qualifying call row is recorded.
+ *
+ * Called by every insert in this file that writes a tool-call row: the pending row opened for each
+ * call (including a call that short-circuits before finalization), the aborted-call row and the
+ * two denial rows (a denied call counts, see aafm_agent_call_count()). The row must exist and match
+ * aafm_agent_call_clause(), checked by id in one query, so an admin-only event, a front-door
+ * refusal or a failed insert latches nothing. The flag goes through the verified option writer and
+ * the Dashboard's third setup step reads it (aafm_first_call_recorded()), so retention pruning
+ * cannot un-tick the step. Once the flag is set, each later call costs one options-row read.
+ *
+ * @param int $row_id Row id aafm_log_activity() returned; 0 when the insert failed.
+ * @return bool True when the flag is set after this call; false when the row does not qualify or
+ *              the write did not land (the Dashboard then falls back to the live count).
+ */
+function aafm_mark_first_call_recorded( int $row_id ): bool {
+	if ( $row_id <= 0 ) {
+		return false;
+	}
+	$stored = aafm_option_row( 'aafm_first_call_recorded' );
+	if ( $stored['ok'] && $stored['found'] ) {
+		return true;
+	}
+
+	global $wpdb;
+	$clause = aafm_agent_call_clause();
+	// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- the clause holds only fixed text and placeholders; every value is bound here, as one array.
+	$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE id = %d AND ' . $clause['sql'], array_merge( array( aafm_activity_log_table(), $row_id ), $clause['params'] ) ) );
+	if ( ! $view['ok'] || 1 !== (int) $view['value'] ) {
+		return false;
+	}
+
+	return aafm_update_option_verified( 'aafm_first_call_recorded', '1', false );
 }
 
 /**
@@ -562,6 +598,7 @@ function aafm_log_aborted_tool_call( string $ability, WP_Error $error ): void {
 		)
 	);
 
+	aafm_mark_first_call_recorded( $row_id );
 	aafm_announce_ability_resolved( $row_id > 0 ? $row_id : null, 'error', null, $detail );
 }
 
@@ -954,13 +991,23 @@ function aafm_meta_key_refusal_error( string $name, array $input ): ?array {
  * @return array{error:\WP_Error,code:string}|null The refusal and its reason code, or null to leave the call alone.
  */
 function aafm_post_type_refusal_error( string $name, array $input ): ?array {
-	// The writers whose permission gate is aafm_can_edit_post_object(), which is where an unexposed type refuses.
-	$gated = array( 'aafm/add-post-terms', 'aafm/set-featured-image', 'aafm/update-post-meta', 'aafm/yoast-update-post', 'aafm/rankmath-update-post', 'aafm/rankmath-update-schema', 'aafm/aioseo-update-post', 'aafm/slim-seo-update-post' );
-	if ( ! in_array( $name, $gated, true ) || ! aafm_post_type_not_exposed_for_editor( $input ) ) {
+	// Demo #9: driven by the tool's permission gate, not a list of tool names. These gates end in
+	// aafm_can_edit_post_object(), which is where an unexposed type refuses, so a new tool on one of them is covered.
+	$gates = array( 'aafm_perm_add_post_terms', 'aafm_perm_set_featured_image', 'aafm_perm_update_post_meta', 'aafm_perm_seo_post_object', 'aafm_perm_avada_post_object', 'aafm_perm_avada_page_css', 'aafm_perm_wpbakery_page_code', 'aafm_perm_list_revisions', 'aafm_perm_get_revision', 'aafm_perm_restore_revision', 'aafm_perm_delete_revision' );
+	if ( 0 === aafm_post_type_refusal_post_id( $input ) ) {
 		return null;
 	}
-	$post    = aafm_exact_object( 'post', absint( $input['post_id'] ) );
-	$message = __( 'This content type is not exposed to agents, so this tool cannot change it. A site administrator can expose it in the Content sub-tab of the Abilities tab.', 'agent-abilities-for-mcp' );
+	static $gate_of = array();
+	if ( ! array_key_exists( $name, $gate_of ) ) {
+		$builder          = aafm_get_abilities_registry_full()[ $name ]['args_builder'] ?? null;
+		$args             = is_string( $builder ) && function_exists( $builder ) ? $builder() : array();
+		$gate_of[ $name ] = is_array( $args ) && is_string( $args['permission_callback'] ?? null ) ? $args['permission_callback'] : '';
+	}
+	if ( ! in_array( $gate_of[ $name ], $gates, true ) || ! aafm_post_type_not_exposed_for_editor( $input ) ) {
+		return null;
+	}
+	$post    = aafm_exact_object( 'post', aafm_post_type_refusal_post_id( $input ) );
+	$message = __( 'This content type is not exposed to agents, so this tool cannot work on it. A site administrator can expose it in the Content sub-tab of the Abilities tab.', 'agent-abilities-for-mcp' );
 	$own     = $post instanceof WP_Post ? aafm_type_own_tool( $post->post_type, 'update' ) : '';
 	if ( '' !== $own ) {
 		/* translators: %s: the tool that manages this content type. */
@@ -973,15 +1020,32 @@ function aafm_post_type_refusal_error( string $name, array $input ): ?array {
 }
 
 /**
+ * The post a refused call names: its post_id, or the parent of its revision_id.
+ *
+ * @param array<string,mixed> $input Call arguments.
+ * @return int 0 when the call names none.
+ */
+function aafm_post_type_refusal_post_id( array $input ): int {
+	if ( isset( $input['post_id'] ) && is_numeric( $input['post_id'] ) ) {
+		return absint( $input['post_id'] );
+	}
+	$revision = isset( $input['revision_id'] ) && is_numeric( $input['revision_id'] ) ? aafm_exact_object( 'post', absint( $input['revision_id'] ) ) : null;
+	return $revision instanceof WP_Post && 'revision' === $revision->post_type ? (int) $revision->post_parent : 0;
+}
+
+/**
  * Whether a post_id names a post the caller may edit whose content type is not exposed to agents.
  *
  * @param array<string,mixed> $input Call arguments.
  * @return bool
  */
 function aafm_post_type_not_exposed_for_editor( array $input ): bool {
-	$id   = isset( $input['post_id'] ) && is_numeric( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
+	$id   = aafm_post_type_refusal_post_id( $input );
 	$post = $id ? aafm_exact_object_chain( 'post', $id ) : null;
+	// Only a type the Content sub-tab can expose (public, not built in) gets that advice; a private builder type such as
+	// fusion_tb_section keeps the tool's own denial (final Codex pass).
 	return $post instanceof WP_Post
+		&& aafm_post_type_is_eligible( $post->post_type )
 		&& is_wp_error( aafm_validate_post_type( $post->post_type ) )
 		&& aafm_user_can_checked( 'edit_post', $id );
 }
@@ -1113,6 +1177,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 						)
 					)
 				);
+			aafm_mark_first_call_recorded( (int) $rate_row_id );
 			// A refused call is a call that finished, so it announces like any other resolve. A
 			// landed row (inserted or resolved above) announces its real id, and a failed insert
 			// announces null: same treatment as the execute tail, because a denial a monitor cannot
@@ -1181,7 +1246,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		// A meta call whose KEY the site's policy refuses is answered with that reason on the wire as
 		// well (see aafm_meta_key_refusal_error()). Only for a well-formed call that the reserved-key
 		// routes above did not already answer.
-		$key_refusal = array() === $missing && null === $unreachable ? ( aafm_meta_key_refusal_error( $name, $call_args ) ?? aafm_post_type_refusal_error( $name, $call_args ) ) : null;
+		$key_refusal = array() === $missing && null === $unreachable ? aafm_meta_key_refusal_error( $name, $call_args ) : null;
 
 		if ( $paused ) {
 			// A paused connection lists tools but may not call one. The refusal is a tool error, not a
@@ -1236,6 +1301,17 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 				// ours - the leak is closed by construction, not by careful wording.
 				$crash_detail = aafm_build_activity_detail_from_exception( $e );
 				$allowed      = false;
+			}
+		}
+
+		// Codex demo pass HIGH: the "not exposed" explanation is given only after the tool's own permission callback has
+		// refused, so a builder-owned private type its gate admits (fusion_tb_section for an administrator) keeps working.
+		// Core's re-check inside execute() keeps the bare false, because a WP_Error there trips _doing_it_wrong().
+		if ( false === $allowed && null === $reason && null === $crash_detail ) {
+			$type_refusal = aafm_post_type_refusal_error( $name, $call_args );
+			if ( null !== $type_refusal ) {
+				$allowed = null === aafm_executing_ability() ? $type_refusal['error'] : false;
+				$reason  = $type_refusal['code'];
 			}
 		}
 
@@ -1294,6 +1370,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 						)
 					)
 				);
+			aafm_mark_first_call_recorded( (int) $denied_row_id );
 			// Announce, for the same reason the execute side does: a refused call has finished, and
 			// a permission callback that exploded is the failure an operator most wants paged
 			// about - it is the very class of crash the discovery guard in includes/server.php
@@ -1342,6 +1419,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 					)
 				)
 			);
+			aafm_mark_first_call_recorded( (int) $row_id );
 		}
 
 		// Null on a clean call; the crash's class and throw site once the catch below has written it.

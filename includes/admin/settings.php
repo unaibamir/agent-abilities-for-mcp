@@ -696,6 +696,9 @@ function aafm_config_option_names(): array {
 		// rather than orphaning it. The marker USER META is intentionally NOT touched here - uninstall
 		// keeps the agent user, so its marker travels with the account.
 		'aafm_agent_user_marker_backfilled',
+		// The durable "first agent call happened" flag behind the Dashboard's third setup step.
+		// Cleared so a reset returns the checklist to first-run; uninstall-with-delete-data removes it.
+		'aafm_first_call_recorded',
 		// The high-risk unlock switch. Locked is the safe default, so a reset must land the
 		// money-moving abilities back behind the floor rather than leave them reachable because
 		// someone unlocked the category once; uninstall-with-delete-data removes the row outright.
@@ -805,6 +808,8 @@ function aafm_uninstall_site_data(): void {
 	wp_clear_scheduled_hook( 'aafm_prune_activity_log_daily' );
 	wp_clear_scheduled_hook( 'aafm_oauth_cleanup' );
 	wp_clear_scheduled_hook( 'aafm_notifications_digest' );
+	wp_unschedule_hook( 'aafm_notify_send_scheduled' ); // Alert mail handed to cron; every event carries its own arguments.
+	delete_transient( 'aafm_ntf_overdue_seen' ); // The alert-mail self-heal's sighting record.
 
 	// Before-values are content, so change history goes on every uninstall, whatever the flag says.
 	aafm_drop_changes_table();
@@ -1111,8 +1116,9 @@ function aafm_render_settings_tab(): void {
 		$high_risk_checked = $high_risk_checked && $high_risk_row['ok'] && $high_risk_row['found'] && is_scalar( $high_risk_row['value'] ) && (bool) $high_risk_row['value'];
 	}
 	$high_risk_control .= '<label class="aafm-switch"><input type="checkbox" id="aafm-high-risk-unlocked" name="aafm_high_risk_abilities_unlocked" value="1" ' . checked( $high_risk_checked, true, false ) . '><span class="aafm-switch-track"></span></label> ';
-	$high_risk_control .= '<label for="aafm-high-risk-unlocked">' . esc_html__( 'Allow refunds, creating and changing orders, payment gateway settings, coupons, and tax rates to be switched on individually.', 'agent-abilities-for-mcp' ) . '</label>';
-	$high_risk_control .= '<p class="help">' . esc_html__( "While this is off, no agent can issue a refund, create or change an order, change a payment gateway setting, or create or change a coupon or a tax rate through this plugin's own tools. WooCommerce's own order status and order update tools on the Other plugins tab are held too, and so are the Secure Custom Fields tools that can store a callback name. Order notes stay available.", 'agent-abilities-for-mcp' ) . '</p>';
+	$high_risk_control .= '<label for="aafm-high-risk-unlocked">' . esc_html__( 'Allow refunds, creating and changing orders, payment gateway settings, coupons and tax rates to be switched on individually.', 'agent-abilities-for-mcp' ) . '</label>';
+	$high_risk_control .= '<p class="help">' . esc_html__( "While this is off, no agent can issue a refund, create or change an order, change a payment gateway setting, or create or change a coupon or a tax rate through this plugin's own tools. WooCommerce's own order status and order update tools on the Plugins' own tools tab are held too, and so are the Secure Custom Fields tools that can store a callback name. Order notes stay available.", 'agent-abilities-for-mcp' ) . '</p>';
+	$high_risk_control .= '<p class="help">' . esc_html__( 'One switch covers every tool listed here. Turning it on also reopens every high-risk tool you had already switched on.', 'agent-abilities-for-mcp' ) . '</p>';
 	if ( aafm_high_risk_forced() ) {
 		$high_risk_control .= aafm_get_notice_html( 'info', __( 'Your host or a site setting keeps this locked, whatever this switch says.', 'agent-abilities-for-mcp' ), array( 'inline' => true ) );
 	}
@@ -1170,7 +1176,12 @@ function aafm_render_settings_tab(): void {
 				'<textarea id="aafm-ip-allowlist" name="aafm_ip_allowlist" rows="5" class="large-text code" aria-label="%2$s">%1$s</textarea>',
 				esc_textarea( implode( "\n", aafm_ip_allowlist() ) ),
 				esc_attr__( 'IP allowlist, one per line', 'agent-abilities-for-mcp' )
-			) . '<p class="help">' . esc_html__( 'One IP address or CIDR range per line. Leave it empty to allow connections from anywhere. When you save, any line that is not a valid IP or range is dropped. A blocked client is refused before it signs in. Claude shows that as a firewall or sign-in error, and ChatGPT shows the reason.', 'agent-abilities-for-mcp' ) . '</p>' . $ip_notice,
+			) . '<p class="help">' . esc_html__( 'One IP address or CIDR range per line. Leave it empty to allow connections from anywhere. When you save, any line that is not a valid IP or range is dropped. A blocked client is refused before it signs in. Claude shows that as a firewall or sign-in error, and ChatGPT shows the reason.', 'agent-abilities-for-mcp' ) . '</p>'
+				. '<p class="help">' . sprintf(
+					/* translators: %s: link to the Ability allowlist card on the Connection tab. */
+					esc_html__( 'To limit which abilities a role or a connection can use, see the %s on the Connection tab.', 'agent-abilities-for-mcp' ),
+					'<a href="' . esc_url( admin_url( 'admin.php?page=agent-abilities-for-mcp&tab=connection' ) . '#aafm-card-allowlist' ) . '">' . esc_html__( 'Ability allowlist', 'agent-abilities-for-mcp' ) . '</a>'
+				) . '</p>' . $ip_notice,
 		)
 	);
 

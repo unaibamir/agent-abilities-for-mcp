@@ -142,7 +142,8 @@ function aafm_bridge_review_baseline_slugs(): array {
  * Record slugs as reviewed. Enables nothing.
  *
  * With no row yet everything already listed counts as reviewed too, or the first mark would turn it
- * into "new".
+ * into "new". Once nothing new is left, the "Other plugins added new tools" admin notice is cleared
+ * too; a partial review leaves it in place.
  *
  * @param array<int,string> $slugs Slugs to mark.
  * @return bool Whether the state now says so. False when the row cannot be read or written.
@@ -157,7 +158,15 @@ function aafm_bridge_mark_reviewed( array $slugs ): bool {
 	if ( ! $state['baselined'] ) {
 		$reviewed = array_merge( $reviewed, aafm_bridge_review_baseline_slugs() );
 	}
-	return aafm_bridge_review_store( array_values( array_unique( $reviewed ) ), array_values( array_diff( $state['notified'], $slugs ) ) );
+	if ( ! aafm_bridge_review_store( array_values( array_unique( $reviewed ) ), array_values( array_diff( $state['notified'], $slugs ) ) ) ) {
+		return false;
+	}
+	// The notice stores a count, not slugs, so it can only go once every tool is reviewed. The
+	// activity log already leaves aafm_notify_pending writes out, so this is not logged as an agent write.
+	if ( array() === aafm_bridge_new_tools() && ! aafm_notify_pending_forget( 'new_tools' ) ) {
+		aafm_notify_log_failure( __( 'The new tools notice could not be cleared', 'agent-abilities-for-mcp' ) );
+	}
+	return true;
 }
 
 /**
@@ -227,10 +236,15 @@ function aafm_bridge_review_sync(): void {
  * accessor intersects with the cache copy, which is right for a read and would drop another plugin's
  * selections from this write.
  *
- * @param string $group_key A key of aafm_bridge_group_slugs().
+ * Only the tools the owner saw count: $shown_slugs is what the screen listed, intersected here with
+ * the group's slugs registered right now. A tool registered after the page loaded is neither switched
+ * on nor marked reviewed, and a posted slug of another plugin refuses the whole request.
+ *
+ * @param string            $group_key   A key of aafm_bridge_group_slugs().
+ * @param array<int,string> $shown_slugs The slugs the owner was shown for this plugin.
  * @return array{ok:bool,enabled:list<string>,disabled:list<string>,reads:int,reviewed:bool,message:string}
  */
-function aafm_bridge_apply_read_only_starter( string $group_key ): array {
+function aafm_bridge_apply_read_only_starter( string $group_key, array $shown_slugs ): array {
 	$result = array(
 		'ok'       => false,
 		'enabled'  => array(),
@@ -241,7 +255,14 @@ function aafm_bridge_apply_read_only_starter( string $group_key ): array {
 	);
 
 	$groups = aafm_bridge_group_slugs( aafm_bridge_foreign_slugs() );
-	if ( ! isset( $groups[ $group_key ] ) ) {
+	foreach ( $groups as $key => $slugs ) {
+		if ( (string) $key !== $group_key && array() !== array_intersect( $slugs, $shown_slugs ) ) {
+			$result['message'] = __( 'Some of these tools belong to another plugin. Reload the page and try again.', 'agent-abilities-for-mcp' );
+			return $result;
+		}
+	}
+	$shown = array_values( array_intersect( $groups[ $group_key ] ?? array(), $shown_slugs ) );
+	if ( array() === $shown ) {
 		$result['message'] = __( 'That plugin has no tools registered right now.', 'agent-abilities-for-mcp' );
 		return $result;
 	}
@@ -254,16 +275,19 @@ function aafm_bridge_apply_read_only_starter( string $group_key ): array {
 	}
 
 	$stored = aafm_bridge_normalize_stored_slugs( $row['value'] );
-	$owned  = aafm_bridge_group_slugs( $stored )[ $group_key ] ?? array();
-	$reads  = array_values(
+	// ponytail: every stored tool of the group is switched off unless it is a shown read, including one
+	// whose plugin registered it again after the page loaded. That is the safe direction ("its other
+	// tools are off"), and it is what removes the group's Unavailable selections too.
+	$owned = aafm_bridge_group_slugs( $stored )[ $group_key ] ?? array();
+	$reads = array_values(
 		array_filter(
-			$groups[ $group_key ],
+			$shown,
 			static function ( string $slug ): bool {
 				return aafm_preset_permits( 'read_only', $slug );
 			}
 		)
 	);
-	$new    = array_values( array_unique( array_merge( array_diff( $stored, $owned ), $reads ) ) );
+	$new   = array_values( array_unique( array_merge( array_diff( $stored, $owned ), $reads ) ) );
 
 	if ( ! aafm_update_option_verified( 'aafm_enabled_bridged_abilities', $new ) ) {
 		aafm_log_ability_persist_failure( 'aafm_enabled_bridged_abilities', $label );
@@ -284,7 +308,7 @@ function aafm_bridge_apply_read_only_starter( string $group_key ): array {
 			count( $reads )
 		);
 
-	$result['reviewed'] = aafm_bridge_mark_reviewed( $groups[ $group_key ] );
+	$result['reviewed'] = aafm_bridge_mark_reviewed( $shown );
 	if ( ! $result['reviewed'] ) {
 		aafm_bridge_review_log_failure();
 		$result['message'] .= ' ' . __( 'These tools could not be marked as reviewed.', 'agent-abilities-for-mcp' );

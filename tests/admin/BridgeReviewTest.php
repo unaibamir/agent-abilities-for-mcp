@@ -383,4 +383,174 @@ final class BridgeReviewTest extends TestCase {
 		$main = (string) file_get_contents( AAFM_PLUGIN_DIR . 'agent-abilities-for-mcp.php' );
 		$this->assertStringContainsString( "add_action( 'admin_init', 'aafm_bridge_review_sync', 20 );", $main );
 	}
+
+	/**
+	 * Seed a real new-tools notice: a baseline, then one tool from a new plugin.
+	 *
+	 * @return void
+	 */
+	private function seed_new_tools_notice(): void {
+		aafm_bridge_review_sync();
+		$this->notify_on();
+		$this->register_foreign_abilities(
+			'demo',
+			array(
+				'one' => array(),
+				'two' => array(),
+			)
+		);
+		aafm_bridge_review_sync();
+		$this->assertSame( 1, $this->announcements(), 'The notice is there to clear.' );
+	}
+
+	public function test_marking_reviewed_clears_the_pending_notice(): void {
+		// The suite detaches the write-outcome observer; attach it, with its table, as a real request has it.
+		aafm_install_activity_log();
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->seed_new_tools_notice();
+
+		$this->assertTrue( aafm_bridge_mark_reviewed( array( 'demo/one', 'demo/two' ) ) );
+
+		$this->assertSame( 0, $this->announcements() );
+		$this->assertFalse( aafm_option_row( 'aafm_notify_pending' )['found'], 'With nothing else pending, the row is gone.' );
+		$outcomes = wp_list_pluck( aafm_query_activity( array( 'ability' => 'aafm/write-outcome' ) ), 'detail' );
+		$this->assertNotSame( array(), $outcomes, 'Precondition: the review-state write is logged, so the observer is attached.' );
+		foreach ( $outcomes as $detail ) {
+			$this->assertStringNotContainsString( 'aafm_notify_pending', (string) $detail, 'Clearing the notice is not logged as an agent write.' );
+		}
+	}
+
+	public function test_partial_review_keeps_the_notice(): void {
+		$this->seed_new_tools_notice();
+		$before = aafm_notify_pending_list();
+
+		$this->assertTrue( aafm_bridge_mark_reviewed( array( 'demo/one' ) ) );
+
+		$this->assertSame( $before, aafm_notify_pending_list() );
+	}
+
+	public function test_clearing_new_tools_keeps_other_pending_alerts(): void {
+		aafm_bridge_review_sync();
+		update_option(
+			'aafm_notifications',
+			array(
+				'mode'     => 'notice',
+				'email'    => '',
+				'triggers' => array(
+					'new_tools'   => true,
+					'switch_flip' => true,
+				),
+			)
+		);
+		delete_option( 'aafm_notify_pending' );
+		aafm_notify_event( 'switch_flip', 'read_only_on' );
+		$this->register_foreign_abilities( 'demo', array( 'one' => array() ) );
+		aafm_bridge_review_sync();
+		$this->assertCount( 2, aafm_notify_pending_list() );
+
+		$this->assertTrue( aafm_bridge_mark_reviewed( array( 'demo/one' ) ) );
+
+		$left = aafm_notify_pending_list();
+		$this->assertCount( 1, $left );
+		$this->assertSame( 'switch_flip', $left[0]['trigger'] );
+		$this->assertSame( array( 'read_only_on' ), wp_list_pluck( aafm_option_row( 'aafm_notify_pending' )['value'], 'subtype' ), 'The database row keeps the switch flip.' );
+	}
+
+	public function test_two_batches_within_throttle_window_are_both_counted_in_email(): void {
+		aafm_bridge_review_sync();
+		update_option(
+			'aafm_notifications',
+			array(
+				'mode'     => 'digest',
+				'email'    => 'owner@example.com',
+				'triggers' => array( 'new_tools' => true ),
+			)
+		);
+		delete_option( 'aafm_notify_pending' );
+		delete_option( 'aafm_notify_queue' );
+		$this->register_foreign_abilities( 'demo', array( 'one' => array() ) );
+		aafm_bridge_review_sync();
+		$this->register_foreign_abilities(
+			'other',
+			array(
+				'two'   => array(),
+				'three' => array(),
+			)
+		);
+		aafm_bridge_review_sync();
+
+		$message = aafm_notify_build_message( aafm_notify_queue_list(), true );
+		$this->assertStringContainsString(
+			aafm_notify_event_label(
+				array(
+					'trigger' => 'new_tools',
+					'subtype' => 'detected',
+				)
+			) . ': 3',
+			$message['body']
+		);
+	}
+
+	public function test_a_stale_cache_cannot_make_the_notice_clear_drop_another_alert(): void {
+		$flip  = array(
+			'id'      => 'flip',
+			'trigger' => 'switch_flip',
+			'subtype' => 'read_only_on',
+			'time'    => time(),
+		);
+		$tools = array(
+			'id'      => 'tools',
+			'trigger' => 'new_tools',
+			'subtype' => 'detected',
+			'time'    => time(),
+			'count'   => 1,
+		);
+		$this->assertTrue( aafm_update_option_verified( 'aafm_notify_pending', array( $tools, $flip ), false ) );
+		// A cache copy that missed the switch flip, in both places core could read it.
+		wp_cache_set( 'aafm_notify_pending', array( $tools ), 'options' );
+		$all                        = wp_load_alloptions( true );
+		$all['aafm_notify_pending'] = maybe_serialize( array( $tools ) );
+		wp_cache_set( 'alloptions', $all, 'options' );
+		$this->assertSame( array( $tools ), aafm_notify_pending_list(), 'Precondition: the stale copy is what get_option() sees.' );
+
+		$this->assertTrue( aafm_notify_pending_forget( 'new_tools' ) );
+
+		$row = aafm_option_row( 'aafm_notify_pending' );
+		$this->assertTrue( $row['found'], 'The row with the switch flip was not deleted.' );
+		$this->assertSame( array( $flip ), $row['value'] );
+		$this->assertSame( array( $flip ), aafm_notify_pending_list(), 'The cache now agrees with the row.' );
+		wp_cache_delete( 'alloptions', 'options' );
+	}
+
+	public function test_the_notice_clear_refuses_an_unreadable_row(): void {
+		$this->assertTrue( aafm_update_option_verified( 'aafm_notify_pending', array( array( 'trigger' => 'new_tools' ) ), false ) );
+
+		$result = QueryFaultInjector::fail_query( 'aafm_notify_pending', static fn() => aafm_notify_pending_forget( 'new_tools' ) );
+
+		$this->assertFalse( $result );
+		$this->assertTrue( aafm_option_row( 'aafm_notify_pending' )['found'], 'Nothing was deleted.' );
+	}
+
+	public function test_a_cache_that_already_lost_the_trigger_does_not_leave_it_in_the_row(): void {
+		$flip  = array(
+			'id'      => 'flip',
+			'trigger' => 'switch_flip',
+			'subtype' => 'read_only_on',
+		);
+		$tools = array(
+			'id'      => 'tools',
+			'trigger' => 'new_tools',
+			'subtype' => 'detected',
+		);
+		$this->assertTrue( aafm_update_option_verified( 'aafm_notify_pending', array( $tools, $flip ), false ) );
+		wp_cache_set( 'aafm_notify_pending', array( $flip ), 'options' );
+		$all                        = wp_load_alloptions( true );
+		$all['aafm_notify_pending'] = maybe_serialize( array( $flip ) );
+		wp_cache_set( 'alloptions', $all, 'options' );
+
+		$this->assertTrue( aafm_notify_pending_forget( 'new_tools' ) );
+
+		$this->assertSame( array( $flip ), aafm_option_row( 'aafm_notify_pending' )['value'], 'The row loses the new-tools entry too.' );
+		wp_cache_delete( 'alloptions', 'options' );
+	}
 }

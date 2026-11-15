@@ -30,6 +30,7 @@ final class AbilitiesDisclosureTest extends TestCase {
 		add_filter( 'aafm_integration_active_tec', '__return_true' );
 		add_filter( 'aafm_integration_active_event_tickets', '__return_true' );
 		add_filter( 'aafm_integration_active_avada', '__return_true' );
+		add_filter( 'aafm_integration_active_wpbakery', '__return_true' );
 		add_filter( 'aafm_integration_active_geodirectory', '__return_true' );
 		aafm_flush_registry_cache();
 	}
@@ -150,5 +151,14 @@ final class AbilitiesDisclosureTest extends TestCase {
 			$html,
 			'Content subject count badge must show enabled/total (1 / ' . $content_total . ').'
 		);
+	}
+
+	public function test_meta_write_description_warns_line_breaks_are_collapsed(): void {
+		$value = aafm_args_update_post_meta()['input_schema']['properties']['value']['description'];
+
+		foreach ( array( aafm_ability_description( 'aafm/update-post-meta' ), aafm_ability_disclosures()['aafm/update-post-meta'], $value ) as $text ) {
+			$this->assertStringContainsStringIgnoringCase( 'line breaks', $text );
+		}
+		$this->assertSame( 'one two three', aafm_sanitize_plain_text( "one\ntwo\r\n\tthree" ), 'The description matches what the sanitizer does.' );
 	}
 }

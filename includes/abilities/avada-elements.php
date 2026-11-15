@@ -1600,8 +1600,8 @@ function aafm_avada_inside_global_error( int $item_id ): WP_Error {
 
 /**
  * The trusted-path text check (Ruling R-S11-1 applied to Avada): for a user who may not post unfiltered HTML, stored
- * text that carries a script kind is refused, and so is the inner text of every leaf that the body-text choke point
- * refuses or would change.
+ * text that carries a script kind is refused, and so is every run of text outside the shortcodes (a leaf's inner text,
+ * the text between children, the text outside the roots) that the body-text choke point refuses or would change.
  *
  * @param string        $text Stored shortcode text.
  * @param array<string> $tags Tags to read.
@@ -1618,25 +1618,43 @@ function aafm_avada_trusted_text_allowed( string $text, array $tags ) {
 	if ( null === $elements ) {
 		return aafm_builder_error( 'aafm_builder_unparseable' );
 	}
-	$parents = array_column( $elements, 'parent' );
-	foreach ( $elements as $element ) {
-		if ( in_array( (int) $element['index'], $parents, true ) ) {
-			continue;
+	// Every run of text is checked: a leaf's inner text, the text between a container's children, and, through the
+	// whole text as one more container, the text before, between and after the roots, which Avada prints too.
+	$containers = array_merge(
+		array(
+			array(
+				'index'     => null,
+				'open_end'  => 0,
+				'inner_end' => strlen( $text ),
+			),
+		),
+		$elements
+	);
+	foreach ( $containers as $element ) {
+		$from     = (int) $element['open_end'];
+		$segments = array();
+		foreach ( $elements as $child ) {
+			if ( $child['parent'] === $element['index'] ) {
+				$segments[] = substr( $text, $from, (int) $child['start'] - $from );
+				$from       = (int) $child['end'];
+			}
 		}
-		$inner = substr( $text, (int) $element['open_end'], (int) $element['inner_end'] - (int) $element['open_end'] );
-		if ( '' === $inner ) {
-			continue;
-		}
-		$clean = aafm_avada_body_text( $inner );
-		if ( is_wp_error( $clean ) ) {
-			return $clean;
-		}
-		if ( $clean !== $inner ) {
-			return new WP_Error(
-				'aafm_avada_stored_text_needs_unfiltered_html',
-				__( 'This stored content holds HTML that would be filtered out for this user, so it needs a user who may post unfiltered HTML. Nothing was changed.', 'agent-abilities-for-mcp' ),
-				array( 'status' => 400 )
-			);
+		$segments[] = substr( $text, $from, max( 0, (int) $element['inner_end'] - $from ) );
+		foreach ( $segments as $segment ) {
+			if ( '' === trim( $segment ) ) {
+				continue;
+			}
+			$clean = aafm_avada_body_text( $segment );
+			if ( is_wp_error( $clean ) ) {
+				return $clean;
+			}
+			if ( $clean !== $segment ) {
+				return new WP_Error(
+					'aafm_avada_stored_text_needs_unfiltered_html',
+					__( 'This stored content holds HTML that would be filtered out for this user, so it needs a user who may post unfiltered HTML. Nothing was changed.', 'agent-abilities-for-mcp' ),
+					array( 'status' => 400 )
+				);
+			}
 		}
 	}
 	return true;

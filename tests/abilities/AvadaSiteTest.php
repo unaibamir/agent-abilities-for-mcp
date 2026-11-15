@@ -360,14 +360,16 @@ final class AvadaSiteTest extends TestCase {
 	public static function refused_text(): array {
 		$wrap = static fn( string $inner ): string => '[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1"]' . $inner . '[/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]';
 		return array(
-			'code block'      => array( $wrap( '[fusion_code]eA==[/fusion_code]' ), 'aafm_builder_needs_unfiltered_html' ),
-			'script element'  => array( $wrap( '[fusion_text]<script>x()</script>[/fusion_text]' ), 'aafm_avada_stored_text_needs_unfiltered_html' ),
-			'onclick setting' => array( $wrap( '[fusion_button link_attributes="onclick=x"]B[/fusion_button]' ), 'aafm_builder_needs_unfiltered_html' ),
-			'onclick in html' => array( $wrap( '[fusion_text]<p onclick="x">a</p>[/fusion_text]' ), 'aafm_avada_stored_text_needs_unfiltered_html' ),
-			'data attribute'  => array( $wrap( '[fusion_text]<p data-x="1">a</p>[/fusion_text]' ), 'aafm_avada_data_attributes_need_unfiltered_html' ),
-			'percent bracket' => array( $wrap( '[fusion_text]a %5Bb%5D[/fusion_text]' ), 'aafm_avada_encoded_brackets_need_unfiltered_html' ),
-			'entity bracket'  => array( $wrap( '[fusion_text]a &#91;b&#93;[/fusion_text]' ), 'aafm_avada_brackets_need_unfiltered_html' ),
-			'unfinished tag'  => array( $wrap( '[fusion_text]a <p class="x[/fusion_text]' ), 'aafm_avada_incomplete_html_needs_unfiltered_html' ),
+			'code block'       => array( $wrap( '[fusion_code]eA==[/fusion_code]' ), 'aafm_builder_needs_unfiltered_html' ),
+			'script element'   => array( $wrap( '[fusion_text]<script>x()</script>[/fusion_text]' ), 'aafm_avada_stored_text_needs_unfiltered_html' ),
+			'onclick setting'  => array( $wrap( '[fusion_button link_attributes="onclick=x"]B[/fusion_button]' ), 'aafm_builder_needs_unfiltered_html' ),
+			'onclick in html'  => array( $wrap( '[fusion_text]<p onclick="x">a</p>[/fusion_text]' ), 'aafm_avada_stored_text_needs_unfiltered_html' ),
+			'data attribute'   => array( $wrap( '[fusion_text]<p data-x="1">a</p>[/fusion_text]' ), 'aafm_avada_data_attributes_need_unfiltered_html' ),
+			'percent bracket'  => array( $wrap( '[fusion_text]a %5Bb%5D[/fusion_text]' ), 'aafm_avada_encoded_brackets_need_unfiltered_html' ),
+			'entity bracket'   => array( $wrap( '[fusion_text]a &#91;b&#93;[/fusion_text]' ), 'aafm_avada_brackets_need_unfiltered_html' ),
+			'unfinished tag'   => array( $wrap( '[fusion_text]a <p class="x[/fusion_text]' ), 'aafm_avada_incomplete_html_needs_unfiltered_html' ),
+			// CX-FZ-1: Avada prints the text between a container's children too.
+			'between children' => array( $wrap( '[fusion_text]a[/fusion_text]<p onclick="x">a</p>[fusion_text]b[/fusion_text]' ), 'aafm_avada_stored_text_needs_unfiltered_html' ),
 		);
 	}
 
@@ -402,6 +404,50 @@ final class AvadaSiteTest extends TestCase {
 			$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
 			$this->assertStringEndsWith( $global ? '[fusion_global id="' . $item . '"]' : $source, (string) get_post( $id )->post_content );
 		}
+	}
+
+	/**
+	 * CX-FZ-1: a global reference prints the whole item, so HTML before, between or after its roots is refused for a
+	 * restricted editor, page unchanged. A copy places the roots alone, so that HTML never reaches the page. An
+	 * administrator places the reference.
+	 */
+	public function test_html_outside_the_roots_of_an_item_is_refused_as_a_reference_and_never_copied(): void {
+		$wrap    = static fn( string $inner ): string => '[fusion_builder_container][fusion_builder_row][fusion_builder_column type="1_1"][fusion_text]' . $inner . '[/fusion_text][/fusion_builder_column][/fusion_builder_row][/fusion_builder_container]';
+		$sources = array(
+			'before root' => '<p onclick="x">a</p>' . $wrap( 'a' ),
+			'after root'  => $wrap( 'a' ) . '<script>x()</script>',
+		);
+		$editor  = $this->act_as_restricted_editor();
+		foreach ( $sources as $label => $source ) {
+			$this->act_as_admin();
+			$global = $this->item( $source, 'sections', true, $editor );
+			$plain  = $this->item( $source, 'sections', false, $editor );
+			$id     = $this->avada_post( self::PAGE, $editor );
+			wp_set_current_user( $editor );
+			$out = aafm_exec_avada_insert_library_item( $this->input( $id, $global ) );
+			$this->assertInstanceOf( WP_Error::class, $out, $label );
+			$this->assertSame( 'aafm_avada_stored_text_needs_unfiltered_html', $out->get_error_code(), $label );
+			clean_post_cache( $id );
+			$this->assertSame( self::PAGE, get_post( $id )->post_content, $label . ': page byte-identical.' );
+
+			$copy = aafm_exec_avada_insert_library_item( $this->input( $id, $plain ) );
+			$this->assertIsArray( $copy, $label . ( is_wp_error( $copy ) ? ': ' . $copy->get_error_message() : '' ) );
+			clean_post_cache( $id );
+			$page = (string) get_post( $id )->post_content;
+			$this->assertStringNotContainsString( 'onclick', $page, $label );
+			$this->assertStringNotContainsString( '<script', $page, $label );
+
+			$this->act_as_admin();
+			$ok = aafm_exec_avada_insert_library_item( $this->input( $this->avada_post(), $global ) );
+			$this->assertIsArray( $ok, $label . ( is_wp_error( $ok ) ? ': ' . $ok->get_error_message() : '' ) );
+		}
+
+		// An item with two roots is refused as unparseable before this check; the gate itself covers the text between.
+		wp_set_current_user( $editor );
+		$gate = aafm_avada_trusted_text_allowed( $wrap( 'a' ) . '<script>x()</script>' . $wrap( 'b' ), aafm_fusion_shortcode_tags() );
+		$this->assertInstanceOf( WP_Error::class, $gate );
+		$this->assertSame( 'aafm_avada_stored_text_needs_unfiltered_html', $gate->get_error_code() );
+		$this->assertTrue( aafm_avada_trusted_text_allowed( $wrap( 'a' ) . "\n" . $wrap( 'b' ), aafm_fusion_shortcode_tags() ), 'Whitespace between roots passes.' );
 	}
 
 	/**

@@ -37,8 +37,8 @@ final class MetadataTest extends TestCase {
 	}
 
 	/**
-	 * The website session's approved Avada Studio lines (2026-11-15) are in place word for word. The Changelog and
-	 * Upgrade Notice wording about the unlock belongs to the release-prep batch.
+	 * The website session's approved Avada Studio lines (2026-11-15) are in place word for word, and no readme line
+	 * about Avada Studio still says it waits for the high-risk unlock.
 	 */
 	public function test_readme_carries_the_approved_studio_lines(): void {
 		$lines = array(
@@ -55,6 +55,11 @@ final class MetadataTest extends TestCase {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading the plugin's own readme.
 			$text = (string) file_get_contents( AAFM_PLUGIN_DIR . $file );
 			$this->assertStringNotContainsString( 'import unlocked and on', $text, $file );
+			foreach ( explode( "\n", $text ) as $i => $row ) {
+				if ( false !== stripos( $row, 'Studio' ) ) {
+					$this->assertDoesNotMatchRegularExpression( '/high-risk/i', $row, "$file:" . ( $i + 1 ) . ' ties Avada Studio to the high-risk unlock' );
+				}
+			}
 		}
 	}
 

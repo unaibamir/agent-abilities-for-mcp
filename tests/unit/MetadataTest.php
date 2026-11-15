@@ -44,7 +44,7 @@ final class MetadataTest extends TestCase {
 		$lines = array(
 			array( 'readme.txt', 136, 'e389b5b81c7a5a6b0eb3fc6ea2e2f5c86d39d18cfe98689c51e89d991633dffc' ),
 			array( 'README.md', 144, 'e3d24f907d2ffd6252f9bdf4dd43d9fbac7bf75ec7f994c140902f8e736c00a3' ),
-			array( 'readme.txt', 262, 'c7ef0cab5a13b935c5a8aa820e524eb3a99c2967dbcd37ef5ff68f61e30828f7' ),
+			array( 'readme.txt', 262, '38c3cb281414de5247b8938f9de82b3ae24bc8f7b8719cc4b761e1ea8c3bc77d' ),
 		);
 		foreach ( $lines as list( $file, $line, $sha ) ) {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading the plugin's own readme.
@@ -278,7 +278,7 @@ final class MetadataTest extends TestCase {
 		$this->assertSame( 1, preg_match( '/^== Description ==\n(.+?)(?=^== )/ms', $readme, $description ) );
 		$this->assertSame( 1, preg_match( '/^== External Services ==\n(.+?)(?=^== )/ms', $readme, $external ) );
 		$words = count( preg_split( '/\s+/', trim( $description[1] . ' ' . $external[1] ) ) );
-		$this->assertLessThanOrEqual( 2450, $words, 'Description plus External Services is over the wordpress.org cap margin.' );
+		$this->assertLessThanOrEqual( 2449, $words, 'Description plus External Services is over the wordpress.org cap margin.' );
 	}
 
 	public function test_readme_ability_counts_are_not_drifted(): void {

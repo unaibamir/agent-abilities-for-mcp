@@ -223,8 +223,8 @@ function aafm_deny_crashed_permission_check( string $ability_name, \Throwable $e
 		// inside mcp_adapter_init, which on a web request is hooked on rest_api_init priority 15
 		// (McpAdapter::instance(), vendor/wordpress/mcp-adapter/includes/Core/McpAdapter.php:59-64;
 		// the init priority 20 branch is WP-CLI only). So on a WP_DEBUG site a throwing cap filter
-		// fatals every REST request that arrives with a logged-in user, block editor traffic
-		// included, rather than only the MCP endpoint. aafm_build_server_tools() walks the
+		// fatals the request that builds the tools, which is a request to the MCP route (or
+		// WP-CLI), not other REST traffic. aafm_build_server_tools() walks the
 		// permission callbacks behind an is_user_logged_in() gate, so ordinary page loads and
 		// anonymous REST requests never reach it and tools/list is the rest. That was true before
 		// this guard existed too - the bare `$permission( $input )` propagated identically - but the
@@ -253,7 +253,7 @@ function aafm_deny_crashed_permission_check( string $ability_name, \Throwable $e
 	// whatever crashed - would hide which abilities a partially broken cap filter takes out, and
 	// that is the diagnostic the row exists to carry. What the callers must not do is write a row
 	// per CHECK: they run over every enabled ability, and aafm_build_server_tools() does that on
-	// every REST request carrying a logged-in user, block editor traffic included, so the
+	// every request that builds the tool set (MCP route requests and WP-CLI), so the
 	// un-deduped shape was rows-per-ability times passes-per-request with nothing to bound it
 	// (the pruner is retention-day based, not size based).
 	//
@@ -1564,8 +1564,8 @@ function aafm_preflight_cache_key( array $tools ): string {
  * Cached front end to aafm_preflight_bound_server_tools() for the live registration path.
  *
  * The preflight walks every enabled+bridged ability's input AND output schema and json-encodes the
- * pair to measure it. aafm_register_mcp_server() runs on mcp_adapter_init, which fires on
- * rest_api_init for EVERY REST request the site serves - so on a large install that per-request walk
+ * pair to measure it. aafm_register_mcp_server() runs on mcp_adapter_init and walks them on every
+ * request that builds the tool set (every MCP request), so on a large install that per-request walk
  * is real, repeated, wasted work whenever the enabled set has not changed. This memoises the decision
  * (the kept list and the omitted map) keyed by aafm_preflight_cache_key(), so the expensive walk runs
  * only on a cache miss - i.e. only when the enabled set (or the plugin version) actually changes.
@@ -1781,7 +1781,7 @@ function aafm_request_needs_server_tools( ?string $sapi = null ): bool {
 	 * Filters whether the MCP tool set is built on this request.
 	 *
 	 * Return true to build the tools on every request, as versions before 1.13.0 did. Code that calls
-	 * rest_do_request() for the MCP route from another kind of request must do that before the first
+	 * rest_do_request() for the MCP route from another kind of request must add this filter before the first
 	 * rest_get_server() call.
 	 *
 	 * @param bool $needs Whether the request needs the tools.

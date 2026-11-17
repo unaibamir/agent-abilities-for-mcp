@@ -2761,4 +2761,14 @@ final class WpbakeryElementsTest extends TestCase {
 		}
 		$this->assertNull( aafm_wpbakery_encode_image( '999999999', false ), 'Still has to be an existing image.' );
 	}
+
+	/**
+	 * S9b R1-5: the insert tool refuses text that would add an element even for a user who may post
+	 * unfiltered HTML, and its description has to say so, as the update description does.
+	 */
+	public function test_insert_description_says_text_adding_an_element_is_refused(): void {
+		$description = aafm_ability_description( 'aafm/wpbakery-insert-element' );
+		$this->assertStringContainsString( 'in body text, and even then text that would add an element is refused.', $description );
+		$this->assertStringNotContainsString( ' - ', $description );
+	}
 }

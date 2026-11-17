@@ -102,6 +102,12 @@ final class ServerToolsRequestGateTest extends TestCase {
 			$this->parsed_as( aafm_mcp_rest_route() . '/' );
 			$this->assertTrue( aafm_request_needs_server_tools( $sapi ), $sapi . ': a trailing slash is the same route.' );
 		}
+
+		// A plugin that sets an admin screen during a REST request must not hide the route.
+		$this->parsed_as( aafm_mcp_rest_route() );
+		set_current_screen( 'dashboard' );
+		$this->assertTrue( is_admin() );
+		$this->assertTrue( aafm_request_needs_server_tools( 'fpm-fcgi' ) );
 	}
 
 	public function test_tools_are_skipped_for_another_rest_route(): void {
@@ -144,7 +150,7 @@ final class ServerToolsRequestGateTest extends TestCase {
 		remove_filter( 'aafm_build_server_tools_for_request', '__return_false' );
 	}
 
-	public function test_a_skipped_request_registers_the_route_with_no_tools(): void {
+	public function test_a_skipped_request_still_creates_the_server_with_no_tools(): void {
 		global $aafm_policy_state;
 		unset( $aafm_policy_state['server_registered_abilities'] );
 		$this->register_enabled( array( 'aafm/get-post' ) );

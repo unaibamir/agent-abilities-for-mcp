@@ -712,7 +712,36 @@ WPB;
 		remove_filter( 'wp_revisions_to_keep', $keep );
 		$this->assertIsArray( $out );
 		$this->assertArrayNotHasKey( 'restore_revision_id', $out );
-		$this->assertStringContainsString( 'keeps no revisions', $out['reversible_reason'] );
+		$this->assertSame( aafm_builder_revisions_off_reason(), $out['reversible_reason'] );
+	}
+
+	/**
+	 * With one revision kept, core prunes the restore point during the save; the id must not be returned.
+	 */
+	public function test_replace_never_returns_a_restore_point_the_save_pruned(): void {
+		$content = self::PAGE;
+		$search  = 'Opening paragraph alpha.';
+		$replace = 'Opening paragraph changed.';
+
+		$id = $this->make_page( $content );
+		$this->acting_as( 'editor' );
+		$keep = static fn(): int => 1;
+		add_filter( 'wp_revisions_to_keep', $keep );
+
+		$out    = aafm_exec_wpbakery_replace_text(
+			array(
+				'post_id' => $id,
+				'search'  => $search,
+				'replace' => $replace,
+			)
+		);
+		$reason = aafm_builder_pruned_reason( get_post( $id ) );
+		remove_filter( 'wp_revisions_to_keep', $keep );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( 1, $out['replacements'] );
+		$this->assertArrayNotHasKey( 'restore_revision_id', $out );
+		$this->assertSame( $reason, $out['reversible_reason'] );
 	}
 
 	public function test_replace_with_no_match_creates_no_revision(): void {

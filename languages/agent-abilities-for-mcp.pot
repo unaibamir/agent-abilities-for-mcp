@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-16T02:57:05+05:00\n"
+"POT-Creation-Date: 2026-11-17T21:20:16+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -7037,7 +7037,7 @@ msgid "Enable the abilities you want"
 msgstr ""
 
 #: includes/admin/dashboard.php:280
-msgid "Nothing is exposed until you turn it on. Pick the abilities the agent should have on the Abilities tab."
+msgid "Nothing from this plugin is exposed until you turn it on. Pick the abilities the agent should have on the Abilities tab."
 msgstr ""
 
 #: includes/admin/dashboard.php:285
@@ -9356,7 +9356,7 @@ msgid "Adapter not loaded"
 msgstr ""
 
 #: includes/admin/page.php:1707
-msgid "Give an AI agent scoped, audited access to this site. Nothing is exposed until you turn it on, and every call is logged."
+msgid "Give an AI agent scoped, audited access to this site. Nothing from this plugin is exposed until you turn it on, and every call is logged."
 msgstr ""
 
 #: includes/admin/page.php:1722

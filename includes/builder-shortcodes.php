@@ -510,8 +510,8 @@ function aafm_builder_vendor_rows(): array {
 			'target'   => 'vc_editor_post_types',
 			'requires' => 'vc_editor_post_types',
 		),
-		// WPBakery's access chain (vc_user_access()), for the one Role Manager check this plugin makes: the custom JS
-		// fields, which WPBakery's own save skips for a user whose unfiltered_html part is off (W11).
+		// WPBakery's access chain (vc_user_access()), for the Role Manager check on the custom JS
+		// fields (the editor post types seam above is the other WPBakery setting checked), which WPBakery's own save skips for a user whose unfiltered_html part is off (W11).
 		'wpbakery_user_access'       => array(
 			'target'   => 'vc_user_access',
 			'requires' => 'vc_user_access',

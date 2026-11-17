@@ -1704,7 +1704,7 @@ function aafm_render_admin_page(): void {
 	// Header: title + lede on the left; the status pills and the support links on the right.
 	echo '<div class="aafm-page-head"><div class="title-wrap">';
 	echo '<h1>' . esc_html__( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ) . '</h1>';
-	echo '<p class="aafm-page-lede">' . esc_html__( 'Give an AI agent scoped, audited access to this site. Nothing is exposed until you turn it on, and every call is logged.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="aafm-page-lede">' . esc_html__( 'Give an AI agent scoped, audited access to this site. Nothing from this plugin is exposed until you turn it on, and every call is logged.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div>';
 
 	// Two pills, side by side: the site's exposure posture, then the endpoint state. The posture

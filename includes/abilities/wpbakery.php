@@ -65,7 +65,7 @@ function aafm_wpbakery_registry_definitions(): array {
 		),
 		'aafm/wpbakery-replace-text'     => array(
 			'label'        => __( 'Replace text in a WPBakery page', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Replaces literal text within a WPBakery page while requiring the shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee). Text that WPBakery keeps in an element\'s settings, such as a heading or a button label, cannot be changed here and is refused, as is any replacement that would add, remove or alter an element. Only a user who may post unfiltered HTML can put square brackets, percent-encoded brackets or data-* attributes in body text, and even then text that would add an element is refused. If saving the page as this user would remove or change elements, or change other content on the page, the call is refused and nothing is saved. Not undoable from this plugin\'s change history; WordPress keeps a revision when revisions are on. Requires edit access to the post; WPBakery\'s Role Manager settings are not applied. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Replaces literal text within a WPBakery page while requiring the shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee). Text that WPBakery keeps in an element\'s settings, such as a heading or a button label, cannot be changed here and is refused, as is any replacement that would add, remove or alter an element. Only a user who may post unfiltered HTML can put square brackets, percent-encoded brackets or data-* attributes in body text, and even then text that would add an element is refused. If saving the page as this user would remove or change elements, or change other content on the page, the call is refused and nothing is saved. Not undoable from this plugin\'s change history; when the site keeps revisions and the revision saved before the change survives the save, restore_revision_id names it and restore-revision brings the page back, and otherwise reversible_reason says why there is no restore point. Requires edit access to the post; WPBakery\'s Role Manager settings are not applied. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'wpbakery',
@@ -586,8 +586,16 @@ function aafm_args_wpbakery_replace_text(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'post'         => array( 'type' => 'object' ),
-				'replacements' => array( 'type' => 'integer' ),
+				'post'                => array( 'type' => 'object' ),
+				'replacements'        => array( 'type' => 'integer' ),
+				'restore_revision_id' => array(
+					'type'        => 'integer',
+					'description' => __( 'The revision holding the page before this change; restore-revision brings it back. Absent when there is no restore point.', 'agent-abilities-for-mcp' ),
+				),
+				'reversible_reason'   => array(
+					'type'        => 'string',
+					'description' => __( 'Present only when there is no restore point: the site or the content type keeps no revisions, WordPress saved none before the change, or the one saved was deleted during the save by the revision limit or another plugin. Says why there is no way back.', 'agent-abilities-for-mcp' ),
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_wpbakery_replace_text',
@@ -612,7 +620,7 @@ function aafm_args_wpbakery_replace_text(): array {
  * unchanged (step 7), and the new content must keep its structure through it (step 8).
  *
  * @param array<string,mixed> $input Validated input.
- * @return array{post:array<string,mixed>,replacements:int}|WP_Error
+ * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_wpbakery_replace_text( array $input ) {
 	$id   = absint( $input['post_id'] );
@@ -686,6 +694,20 @@ function aafm_exec_wpbakery_replace_text( array $input ) {
 		);
 	}
 
+	// Keep the page before the change as a revision, the way avada-replace-text and the element tools do, so
+	// restore-revision can bring it back.
+	$supports = post_type_supports( $post->post_type, 'revisions' );
+	$enabled  = $supports && wp_revisions_enabled( $post );
+	$restore  = $enabled ? aafm_builder_restore_point( $id, $content ) : null;
+	$reason   = null;
+	if ( ! $supports ) {
+		$reason = aafm_builder_type_no_revisions_reason();
+	} elseif ( ! $enabled ) {
+		$reason = aafm_builder_revisions_off_reason();
+	} elseif ( null === $restore ) {
+		$reason = aafm_builder_snapshot_failed_reason();
+	}
+
 	$updated = wp_update_post(
 		wp_slash(
 			array(
@@ -699,6 +721,12 @@ function aafm_exec_wpbakery_replace_text( array $input ) {
 		return aafm_generic_error();
 	}
 
+	// The site's revision limit can prune it during the save; never report a restore point that is gone.
+	if ( null !== $restore && ! aafm_exact_object( 'post', $restore ) instanceof WP_Post ) {
+		$restore = null;
+		$reason  = aafm_builder_pruned_reason( $post );
+	}
+
 	$fresh = aafm_exact_object( 'post', $id );
 	if ( ! $fresh instanceof WP_Post || ! aafm_post_field_confirm_logged( $id, 'post_content', $new, $content ) ) {
 		return new WP_Error(
@@ -707,9 +735,14 @@ function aafm_exec_wpbakery_replace_text( array $input ) {
 		);
 	}
 
-	return array(
-		'post'         => aafm_redact_post( $fresh ),
-		'replacements' => $replacements,
+	return array_filter(
+		array(
+			'post'                => aafm_redact_post( $fresh ),
+			'replacements'        => $replacements,
+			'restore_revision_id' => $restore,
+			'reversible_reason'   => $reason,
+		),
+		static fn( $value ): bool => null !== $value
 	);
 }
 

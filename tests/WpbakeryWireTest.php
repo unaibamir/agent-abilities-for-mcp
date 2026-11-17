@@ -221,7 +221,8 @@ final class WpbakeryWireTest extends TestCase {
 				'req-wpb-replace-1'
 			)
 		);
-		$this->assertSame( array( 'post', 'replacements', 'undo' ), array_keys( $done ) );
+		$this->assertSame( array( 'post', 'replacements', 'restore_revision_id', 'undo' ), array_keys( $done ) );
+		$this->assertIsInt( $done['restore_revision_id'] );
 		$this->assertSame(
 			array(
 				'undoable'   => false,

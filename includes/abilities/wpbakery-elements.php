@@ -256,7 +256,12 @@ function aafm_wpbakery_param_type( string $tag, string $name ): ?string {
 	if ( null === $row || '' === $name ) {
 		return null;
 	}
-	$type = $row( $tag, $name );
+	try {
+		$type = $row( $tag, $name );
+	} catch ( \Throwable $e ) {
+		// An add-on's map row can throw; an unknown type is not writable, so this fails closed.
+		return null;
+	}
 	return is_string( $type ) ? $type : null;
 }
 

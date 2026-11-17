@@ -419,6 +419,31 @@ final class WpbakeryElementsTest extends TestCase {
 		$this->assertFalse( $kind['writable'], 'Without the param type row the setting is not writable.' );
 	}
 
+	/**
+	 * S8a R2-3: an add-on can register a map row whose lookup throws. The type is then unknown, which
+	 * every caller already treats as "not writable", so the page still reads.
+	 */
+	public function test_a_param_type_lookup_that_throws_reads_as_unknown(): void {
+		$throwing = static function ( $resolved, string $entry ) {
+			if ( 'wpbakery_param_type' !== $entry ) {
+				return $resolved;
+			}
+			return static function ( string $tag, string $name ): ?string {
+				unset( $tag, $name );
+				throw new \RuntimeException( 'add-on map failed' );
+			};
+		};
+		add_filter( 'aafm_builder_vendor', $throwing, 99, 2 );
+
+		$this->assertNull( aafm_wpbakery_param_type( 'wpb_btn', 'title' ) );
+		$this->assertFalse( aafm_wpbakery_param_kind( 'wpb_btn', $this->param( 'wpb_btn', 'title' ) )['writable'] );
+		$decoded = aafm_wpbakery_decode_atts( 'wpb_btn', array( 'title' => 'Hello' ) );
+		$this->assertIsArray( $decoded );
+		$this->assertArrayHasKey( 'title', $decoded );
+
+		remove_filter( 'aafm_builder_vendor', $throwing, 99 );
+	}
+
 	public function test_text_escapes_quotes_and_brackets_the_way_the_editor_stores_them(): void {
 		$stored  = $this->stored( 'vc_custom_heading', 'text' );
 		$decoded = aafm_wpbakery_decode_atts( 'vc_custom_heading', array( 'text' => $stored ) )['text'];

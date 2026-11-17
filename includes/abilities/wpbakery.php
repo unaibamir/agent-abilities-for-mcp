@@ -295,7 +295,15 @@ function aafm_wpbakery_decode_atts( string $tag, array $atts ): array {
 			$decoded[ $name ] = $value;
 			continue;
 		}
-		$type             = null === $param_type ? null : $param_type( $tag, (string) $name );
+		$type = null;
+		if ( null !== $param_type ) {
+			try {
+				$type = $param_type( $tag, (string) $name );
+			} catch ( \Throwable $e ) {
+				// An add-on's map row can throw; an unknown type is not writable, so this fails closed.
+				$type = null;
+			}
+		}
 		$decoded[ $name ] = aafm_wpbakery_decode_value( $value, is_string( $type ) ? $type : null );
 	}
 	return $decoded;

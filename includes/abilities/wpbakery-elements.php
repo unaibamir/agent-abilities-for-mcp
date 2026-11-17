@@ -690,7 +690,12 @@ function aafm_wpbakery_encode_image( $value, bool $many ): ?string {
 	if ( ! is_array( $ids ) || array() === $ids || array_values( $ids ) !== $ids ) {
 		return null;
 	}
+	$clean = array();
 	foreach ( $ids as $id ) {
+		// A decoded param group row carries the id as a digit string; take that form too, as the number kind does.
+		if ( is_string( $id ) && '' !== $id && ctype_digit( $id ) ) {
+			$id = (int) $id;
+		}
 		if ( ! is_int( $id ) || $id < 1 ) {
 			return null;
 		}
@@ -698,8 +703,9 @@ function aafm_wpbakery_encode_image( $value, bool $many ): ?string {
 		if ( ! $attachment instanceof WP_Post || 'attachment' !== $attachment->post_type || ! wp_attachment_is_image( $id ) ) {
 			return null;
 		}
+		$clean[] = $id;
 	}
-	return implode( ',', $ids );
+	return implode( ',', $clean );
 }
 
 /**

@@ -2743,4 +2743,22 @@ final class WpbakeryElementsTest extends TestCase {
 		$this->assertStringContainsString( 'WPBakery\'s own setting', $registry['aafm/wpbakery-insert-element']['description'] );
 		$this->assertStringContainsString( 'unfiltered HTML', $registry['aafm/wpbakery-insert-element']['description'] );
 	}
+
+	/**
+	 * S9a R1-2: a decoded param group row carries an image id as a digit string, so sending the read value
+	 * back must work, as it already does for the number kind.
+	 */
+	public function test_an_image_id_sent_as_a_digit_string_is_accepted(): void {
+		$image = self::factory()->attachment->create_upload_object( DIR_TESTDATA . '/images/canola.jpg' );
+		$this->assertIsInt( $image );
+
+		$this->assertSame( (string) $image, aafm_wpbakery_encode_image( (string) $image, false ) );
+		$this->assertSame( $image . ',' . $image, aafm_wpbakery_encode_image( array( (string) $image, $image ), true ) );
+		$this->assertSame( (string) $image, aafm_wpbakery_encode_image( $image, false ), 'An integer still works.' );
+
+		foreach ( array( '0', '-3', '1.5', '12abc', '', ' 7', true, null, array() ) as $bad ) {
+			$this->assertNull( aafm_wpbakery_encode_image( $bad, false ) );
+		}
+		$this->assertNull( aafm_wpbakery_encode_image( '999999999', false ), 'Still has to be an existing image.' );
+	}
 }

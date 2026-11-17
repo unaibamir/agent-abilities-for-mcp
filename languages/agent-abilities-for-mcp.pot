@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-17T21:20:16+05:00\n"
+"POT-Creation-Date: 2026-11-17T22:06:59+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -232,7 +232,7 @@ msgstr ""
 #: includes/abilities/tec/venues.php:207
 #: includes/abilities/terms.php:115
 #: includes/abilities/users.php:113
-#: includes/abilities/wpbakery-elements.php:977
+#: includes/abilities/wpbakery-elements.php:988
 #: includes/abilities/wpbakery-site.php:231
 msgid "1-based page number for pagination. Defaults to 1."
 msgstr ""
@@ -390,7 +390,7 @@ msgid "A data-* attribute in this text needs a user who may post unfiltered HTML
 msgstr ""
 
 #: includes/abilities/avada-elements.php:383
-#: includes/abilities/wpbakery.php:494
+#: includes/abilities/wpbakery.php:502
 msgid "This text ends inside an unfinished HTML tag, which needs a user who may post unfiltered HTML because the tag cannot be checked. Finish or remove the tag, or ask such a user to make the edit. Nothing was changed."
 msgstr ""
 
@@ -411,12 +411,12 @@ msgid "One element's shortcode tag, such as fusion_button. Returns that element 
 msgstr ""
 
 #: includes/abilities/avada-elements.php:710
-#: includes/abilities/wpbakery-elements.php:971
+#: includes/abilities/wpbakery-elements.php:982
 msgid "Only elements whose name or tag contains this text."
 msgstr ""
 
 #: includes/abilities/avada-elements.php:715
-#: includes/abilities/wpbakery-elements.php:976
+#: includes/abilities/wpbakery-elements.php:987
 msgid "Number of elements per page, clamped to the 1-50 range. Defaults to 20 when omitted."
 msgstr ""
 
@@ -433,16 +433,17 @@ msgid "Settings left out because the map gave them no setting name."
 msgstr ""
 
 #: includes/abilities/avada-elements.php:879
-#: includes/abilities/wpbakery-elements.php:1237
+#: includes/abilities/wpbakery-elements.php:1248
 msgid "Pass to restore-revision to put the page back as it was. Null when nothing was saved or no revision is kept."
 msgstr ""
 
 #: includes/abilities/avada-elements.php:884
 #: includes/abilities/avada.php:984
-#: includes/abilities/wpbakery-elements.php:1242
-#: includes/abilities/wpbakery-elements.php:2192
-#: includes/abilities/wpbakery-elements.php:2279
-#: includes/abilities/wpbakery-elements.php:2421
+#: includes/abilities/wpbakery-elements.php:1253
+#: includes/abilities/wpbakery-elements.php:2203
+#: includes/abilities/wpbakery-elements.php:2290
+#: includes/abilities/wpbakery-elements.php:2432
+#: includes/abilities/wpbakery.php:605
 msgid "Present only when there is no restore point: the site or the content type keeps no revisions, WordPress saved none before the change, or the one saved was deleted during the save by the revision limit or another plugin. Says why there is no way back."
 msgstr ""
 
@@ -451,7 +452,7 @@ msgid "The element's index in the outline from avada-get-page-content with inclu
 msgstr ""
 
 #: includes/abilities/avada-elements.php:914
-#: includes/abilities/wpbakery-elements.php:1204
+#: includes/abilities/wpbakery-elements.php:1215
 msgid "The tag and fingerprint the outline returned for that index. A page that changed since is refused."
 msgstr ""
 
@@ -473,7 +474,7 @@ msgid "New inner content for an element with no child elements, such as a text b
 msgstr ""
 
 #: includes/abilities/avada-elements.php:966
-#: includes/abilities/wpbakery-elements.php:1233
+#: includes/abilities/wpbakery-elements.php:1244
 msgid "Settings whose stored value changed, and text when the inner content did. Empty when nothing was saved."
 msgstr ""
 
@@ -488,7 +489,7 @@ msgid "Dynamic data drives the setting %s on this element, so a stored value wou
 msgstr ""
 
 #: includes/abilities/avada-elements.php:1055
-#: includes/abilities/wpbakery-elements.php:1322
+#: includes/abilities/wpbakery-elements.php:1333
 msgid "Give at least one of set_atts, remove_atts or text. Nothing was changed."
 msgstr ""
 
@@ -499,20 +500,20 @@ msgid "This element shows the global library item %1$d, which every page that sh
 msgstr ""
 
 #: includes/abilities/avada-elements.php:1238
-#: includes/abilities/wpbakery-elements.php:1612
+#: includes/abilities/wpbakery-elements.php:1623
 msgid "One insert may add at most 50 elements, nested at most 6 deep. Split the change into smaller inserts. Nothing was changed."
 msgstr ""
 
 #. translators: 1: the refusal, 2: the parent tag or "top level", 3: the child tag.
 #: includes/abilities/avada-elements.php:1310
-#: includes/abilities/wpbakery-elements.php:1563
+#: includes/abilities/wpbakery-elements.php:1574
 #, php-format
 msgid "%1$s Parent: %2$s. Child: %3$s."
 msgstr ""
 
 #. translators: 1: the refusal, 2: the parent tag or "top level", 3: the child tag.
 #: includes/abilities/avada-elements.php:1310
-#: includes/abilities/wpbakery-elements.php:1563
+#: includes/abilities/wpbakery-elements.php:1574
 msgid "top level"
 msgstr ""
 
@@ -521,8 +522,8 @@ msgid "A column needs type set to its width, a fraction such as 1_2 or a percent
 msgstr ""
 
 #: includes/abilities/avada-elements.php:1590
-#: includes/abilities/wpbakery-elements.php:1929
-#: includes/abilities/wpbakery-elements.php:1956
+#: includes/abilities/wpbakery-elements.php:1940
+#: includes/abilities/wpbakery-elements.php:1967
 msgid "Give anchor_index, anchor_expect and placement together. Only an empty post takes an insert without them. Nothing was changed."
 msgstr ""
 
@@ -541,7 +542,7 @@ msgid "The page fingerprint from the last avada-get-page-content read or the las
 msgstr ""
 
 #: includes/abilities/avada-elements.php:1927
-#: includes/abilities/wpbakery-elements.php:2116
+#: includes/abilities/wpbakery-elements.php:2127
 msgid "Index of the element the new place is named against, from the same outline."
 msgstr ""
 
@@ -550,7 +551,7 @@ msgid "The tag and fingerprint the outline returned for anchor_index."
 msgstr ""
 
 #: includes/abilities/avada-elements.php:1932
-#: includes/abilities/wpbakery-elements.php:2135
+#: includes/abilities/wpbakery-elements.php:2146
 msgid "Where, relative to the anchor element: before or after it, or as its first or last child."
 msgstr ""
 
@@ -563,12 +564,12 @@ msgid "Inner content for an element with no children, such as a text block, a ti
 msgstr ""
 
 #: includes/abilities/avada-elements.php:1966
-#: includes/abilities/wpbakery-elements.php:2169
+#: includes/abilities/wpbakery-elements.php:2180
 msgid "Child elements, each with the same keys: tag, atts, text, children."
 msgstr ""
 
 #: includes/abilities/avada-elements.php:1971
-#: includes/abilities/wpbakery-elements.php:2174
+#: includes/abilities/wpbakery-elements.php:2185
 msgid "The element to add, with its children. At most 50 elements, nested at most 6 deep."
 msgstr ""
 
@@ -982,23 +983,24 @@ msgstr ""
 
 #: includes/abilities/avada.php:958
 #: includes/abilities/posts.php:1472
-#: includes/abilities/wpbakery.php:571
+#: includes/abilities/wpbakery.php:579
 msgid "ID of the post to edit."
 msgstr ""
 
 #: includes/abilities/avada.php:963
 #: includes/abilities/posts.php:1477
-#: includes/abilities/wpbakery.php:576
+#: includes/abilities/wpbakery.php:584
 msgid "Literal text to find in the post content. Matched as-is, not as a regular expression."
 msgstr ""
 
 #: includes/abilities/avada.php:967
 #: includes/abilities/posts.php:1481
-#: includes/abilities/wpbakery.php:580
+#: includes/abilities/wpbakery.php:588
 msgid "Literal text to substitute for every match of search. Sanitized the same way as a full content update."
 msgstr ""
 
 #: includes/abilities/avada.php:980
+#: includes/abilities/wpbakery.php:601
 msgid "The revision holding the page before this change; restore-revision brings it back. Absent when there is no restore point."
 msgstr ""
 
@@ -1008,7 +1010,7 @@ msgstr ""
 
 #: includes/abilities/avada.php:1296
 #: includes/abilities/posts.php:1852
-#: includes/abilities/wpbakery.php:706
+#: includes/abilities/wpbakery.php:742
 msgid "The replacement could not be confirmed as saved."
 msgstr ""
 
@@ -4953,7 +4955,7 @@ msgid "Insert a WPBakery element"
 msgstr ""
 
 #: includes/abilities/wpbakery-elements.php:72
-msgid "Adds an element with its children to a WPBakery page or Grid Builder template, before or after an element from the outline of wpbakery-get-page-content or as its first or last child; element takes tag, atts in the input form of each kind from wpbakery-list-elements, text and children. WPBakery's own nesting rules apply: the top level takes rows and sections, a row takes columns, a column takes content elements or an inner row. At most 50 elements, nested at most 6 deep. On an empty post with no builder, leave out the anchor to start the page; this one check follows WPBakery's own setting for which post types its editor is on for. Raw HTML, raw JS, maps, custom onclick settings and Design Options need a user who may post unfiltered HTML, and only such a user can put square brackets, percent-encoded brackets or data-* attributes in body text. Requires page_fingerprint from the last read or write and returns the new one; a changed page is refused and nothing is saved. Other indexes may move, so read the outline again before the next structural change. When a revision is kept, restore_revision_id brings the page back through restore-revision. The page's generated CSS is rebuilt. Not undoable from this plugin's change history. Requires edit access to the post; WPBakery's Role Manager settings are not applied, though its own save filter still runs. Only while WPBakery Page Builder is active."
+msgid "Adds an element with its children to a WPBakery page or Grid Builder template, before or after an element from the outline of wpbakery-get-page-content or as its first or last child; element takes tag, atts in the input form of each kind from wpbakery-list-elements, text and children. WPBakery's own nesting rules apply: the top level takes rows and sections, a row takes columns, a column takes content elements or an inner row. At most 50 elements, nested at most 6 deep. On an empty post with no builder, leave out the anchor to start the page; this one check follows WPBakery's own setting for which post types its editor is on for. Raw HTML, raw JS, maps, custom onclick settings and Design Options need a user who may post unfiltered HTML, and only such a user can put square brackets, percent-encoded brackets or data-* attributes in body text, and even then text that would add an element is refused. Requires page_fingerprint from the last read or write and returns the new one; a changed page is refused and nothing is saved. Other indexes may move, so read the outline again before the next structural change. When a revision is kept, restore_revision_id brings the page back through restore-revision. The page's generated CSS is rebuilt. Not undoable from this plugin's change history. Requires edit access to the post; WPBakery's Role Manager settings are not applied, though its own save filter still runs. Only while WPBakery Page Builder is active."
 msgstr ""
 
 #: includes/abilities/wpbakery-elements.php:79
@@ -4981,98 +4983,98 @@ msgid "WPBakery does not register its flexbox and grid containers on this site, 
 msgstr ""
 
 #. translators: 1: the refusal, 2: the setting name.
-#: includes/abilities/wpbakery-elements.php:344
+#: includes/abilities/wpbakery-elements.php:349
 #, php-format
 msgid "%1$s Setting: %2$s."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:963
+#: includes/abilities/wpbakery-elements.php:974
 msgid "page for the elements of a page (the default), grid to include the Grid Builder's elements for a grid template."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:967
+#: includes/abilities/wpbakery-elements.php:978
 msgid "One element's shortcode tag, such as vc_custom_heading. Returns that element with its settings."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:996
+#: includes/abilities/wpbakery-elements.php:1007
 msgid "From the map: only, the elements allowed inside, and except, the ones refused. Both empty when the map sets no rule."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:1000
+#: includes/abilities/wpbakery-elements.php:1011
 msgid "From the map: only, the elements it may sit in, and except, the ones it may not. Both empty when the map sets no rule."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:1005
+#: includes/abilities/wpbakery-elements.php:1016
 msgid "Only with tag. kind is how wpbakery-update-element takes the value; writable says whether it can; needs is unfiltered_html for Design Options and for settings that can carry script or raw HTML."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:1013
+#: includes/abilities/wpbakery-elements.php:1024
 msgid "Map entries and settings left out because the map could not resolve them or they had no setting name."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:1186
-#: includes/abilities/wpbakery-elements.php:2103
+#: includes/abilities/wpbakery-elements.php:1197
+#: includes/abilities/wpbakery-elements.php:2114
 msgid "ID of the page, post or Grid Builder template."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:1191
-#: includes/abilities/wpbakery-elements.php:2115
+#: includes/abilities/wpbakery-elements.php:1202
+#: includes/abilities/wpbakery-elements.php:2126
 msgid "The element's index in the outline from wpbakery-get-page-content with include_structure."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:1208
+#: includes/abilities/wpbakery-elements.php:1219
 msgid "Setting name to value, each value in the input form of its kind from wpbakery-list-elements."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:1213
+#: includes/abilities/wpbakery-elements.php:1224
 msgid "Setting names to remove, which returns them to the element's default."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:1217
+#: includes/abilities/wpbakery-elements.php:1228
 msgid "New inner content for an element with a content setting and no child elements, such as a text block. HTML is filtered as in a post; the code of a raw HTML or raw JS element needs unfiltered HTML."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:1311
-#: includes/abilities/wpbakery-elements.php:2074
+#: includes/abilities/wpbakery-elements.php:1322
+#: includes/abilities/wpbakery-elements.php:2085
 #: includes/abilities/wpbakery-site.php:599
 msgid "This post is not a WPBakery page. Edit a page built with another builder in that builder. Nothing was changed."
 msgstr ""
 
 #. translators: 1: the parent tag, 2: the child tag.
-#: includes/abilities/wpbakery-elements.php:1545
+#: includes/abilities/wpbakery-elements.php:1556
 #, php-format
 msgid "WPBakery's element map on this site does not list %1$s, so its nesting rule cannot be read and nothing can be placed inside it with this tool. Use WPBakery's editor for this container. Nothing was changed. Child: %2$s."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:1625
+#: includes/abilities/wpbakery-elements.php:1636
 msgid "A row must keep at least one column, so this change would break the layout. Remove or move the whole row instead. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:1835
+#: includes/abilities/wpbakery-elements.php:1846
 msgid "Text in this template holds HTML that WordPress removes for a user who may not post unfiltered HTML, such as a script, an event attribute or a link protocol it does not allow. Remove it from the template, or ask such a user to insert it. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:1942
+#: includes/abilities/wpbakery-elements.php:1953
 msgid "WPBakery's editor is not switched on for this post type for this user, so a WPBakery page cannot be started here. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:2108
+#: includes/abilities/wpbakery-elements.php:2119
 msgid "The page fingerprint from the last wpbakery-get-page-content read or the last write's response. A page that changed since is refused."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:2129
+#: includes/abilities/wpbakery-elements.php:2140
 msgid "The tag and fingerprint the outline returned for that index."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:2160
+#: includes/abilities/wpbakery-elements.php:2171
 msgid "Setting name to value, each in the input form of its kind from wpbakery-list-elements."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:2164
+#: includes/abilities/wpbakery-elements.php:2175
 msgid "Inner content for an element with a content setting and no children, such as a text block."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:2456
+#: includes/abilities/wpbakery-elements.php:2467
 msgid "This site keeps only 1 revision per post (WP_POST_REVISIONS or the wp_revisions_to_keep filter), so WordPress would delete the revision that brings the removed element back during the same save. Raise the limit to 2 or more, or remove the element in WPBakery's editor. Nothing was changed."
 msgstr ""
 
@@ -5215,7 +5217,7 @@ msgid "Replace text in a WPBakery page"
 msgstr ""
 
 #: includes/abilities/wpbakery.php:68
-msgid "Replaces literal text within a WPBakery page while requiring the shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee). Text that WPBakery keeps in an element's settings, such as a heading or a button label, cannot be changed here and is refused, as is any replacement that would add, remove or alter an element. Only a user who may post unfiltered HTML can put square brackets, percent-encoded brackets or data-* attributes in body text, and even then text that would add an element is refused. If saving the page as this user would remove or change elements, or change other content on the page, the call is refused and nothing is saved. Not undoable from this plugin's change history; WordPress keeps a revision when revisions are on. Requires edit access to the post; WPBakery's Role Manager settings are not applied. Only while WPBakery Page Builder is active."
+msgid "Replaces literal text within a WPBakery page while requiring the shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee). Text that WPBakery keeps in an element's settings, such as a heading or a button label, cannot be changed here and is refused, as is any replacement that would add, remove or alter an element. Only a user who may post unfiltered HTML can put square brackets, percent-encoded brackets or data-* attributes in body text, and even then text that would add an element is refused. If saving the page as this user would remove or change elements, or change other content on the page, the call is refused and nothing is saved. Not undoable from this plugin's change history; when the site keeps revisions and the revision saved before the change survives the save, restore_revision_id names it and restore-revision brings the page back, and otherwise reversible_reason says why there is no restore point. Requires edit access to the post; WPBakery's Role Manager settings are not applied. Only while WPBakery Page Builder is active."
 msgstr ""
 
 #: includes/abilities/wpbakery.php:93
@@ -5250,35 +5252,35 @@ msgstr ""
 msgid "Only with include_page_settings. custom_js_header and custom_js_footer are present only for a user who may post unfiltered HTML."
 msgstr ""
 
-#: includes/abilities/wpbakery.php:466
+#: includes/abilities/wpbakery.php:474
 msgid "Square brackets in this text need a user who may post unfiltered HTML, because WPBakery can turn them into an element the next time the page is saved in its editor. Remove the brackets, or ask such a user to make the edit. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/wpbakery.php:474
+#: includes/abilities/wpbakery.php:482
 msgid "A percent-encoded square bracket in this text needs a user who may post unfiltered HTML, because WordPress's editor can decode it into an element the next time the page is saved in WPBakery. Remove it, or ask such a user to make the edit. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/wpbakery.php:485
+#: includes/abilities/wpbakery.php:493
 msgid "A data-* attribute in this text needs a user who may post unfiltered HTML, because WordPress's editor can turn one into page text the next time the page is saved in WPBakery. Remove the attribute, or ask such a user to make the edit. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/wpbakery.php:629
+#: includes/abilities/wpbakery.php:645
 msgid "This post is not a WPBakery page. Use replace-in-post for an ordinary post, and edit a page built with another builder in that builder."
 msgstr ""
 
-#: includes/abilities/wpbakery.php:658
+#: includes/abilities/wpbakery.php:674
 msgid "This page uses more distinct shortcode names than can be checked safely, so its text cannot be replaced here. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/wpbakery.php:666
+#: includes/abilities/wpbakery.php:682
 msgid "That replacement would change a WPBakery element rather than the text between elements. WPBakery keeps heading text, button labels and other element settings inside the element itself, so change that text in WPBakery. Choose a search term that appears only in plain text, such as a text block. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/wpbakery.php:674
+#: includes/abilities/wpbakery.php:690
 msgid "Saving this page as the current user would change content outside the requested text, for example by removing embedded HTML or WPBakery elements this user is not allowed to keep. Ask a user with fuller rights to make the edit, or make it in WPBakery. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/wpbakery.php:684
+#: includes/abilities/wpbakery.php:700
 msgid "Saving the new text would remove or change WPBakery elements on this page, so the replacement was not saved. Nothing was changed."
 msgstr ""
 
@@ -7912,7 +7914,7 @@ msgid "Reads the raw content of a WPBakery page or Grid Builder template, unchan
 msgstr ""
 
 #: includes/admin/disclosures.php:265
-msgid "Replaces literal text between the elements of a WPBakery page. Heading text, button labels and other text kept in element settings are refused, as is any change to an element or attribute, or a save that would change other content on the page for this user. Not undoable here; WordPress keeps a revision when revisions are on. Requires edit access to the post; WPBakery's Role Manager is not applied."
+msgid "Replaces literal text between the elements of a WPBakery page. Heading text, button labels and other text kept in element settings are refused, as is any change to an element or attribute, or a save that would change other content on the page for this user. Not undoable here; when a restore point survives the save, restore_revision_id names the revision that restore-revision brings back; otherwise reversible_reason says why there is no restore point. Requires edit access to the post; WPBakery's Role Manager is not applied."
 msgstr ""
 
 #: includes/admin/disclosures.php:266
@@ -8515,7 +8517,7 @@ msgstr ""
 #: includes/admin/quickconnect.php:439
 #: includes/catalog.php:105
 #: includes/oauth/consent-template.php:237
-#: includes/server.php:1835
+#: includes/server.php:1886
 msgid "Agent Abilities for MCP"
 msgstr ""
 
@@ -12517,16 +12519,16 @@ msgstr[1] ""
 msgid "The page builder cannot rebuild this page's generated CSS right now, so the change was not saved. Nothing was changed."
 msgstr ""
 
-#: includes/builder-shortcodes.php:1057
+#: includes/builder-shortcodes.php:1056
 msgid "The change could not be confirmed as saved. Read the page to check its current state."
 msgstr ""
 
-#: includes/builder-shortcodes.php:1067
+#: includes/builder-shortcodes.php:1066
 msgid "The content was saved, but the page builder could not rebuild the page's generated CSS, so the page may look out of date until it is saved again in the builder."
 msgstr ""
 
 #. translators: %d: revision id.
-#: includes/builder-shortcodes.php:1069
+#: includes/builder-shortcodes.php:1068
 #, php-format
 msgid "The content was saved, but the page builder could not rebuild the page's generated CSS, so the page may look out of date until it is saved again in the builder. Revision %d restores the content as it was before."
 msgstr ""
@@ -13581,11 +13583,11 @@ msgstr ""
 msgid "it exceeded a safety limit"
 msgstr ""
 
-#: includes/server.php:1964
+#: includes/server.php:2015
 msgid "Your network address is not allowed to use this endpoint."
 msgstr ""
 
-#: includes/server.php:2216
+#: includes/server.php:2267
 msgid "Session could not be persisted; please retry."
 msgstr ""
 

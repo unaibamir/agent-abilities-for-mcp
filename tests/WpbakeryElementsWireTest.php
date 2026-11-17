@@ -309,7 +309,14 @@ final class WpbakeryElementsWireTest extends TestCase {
 		$this->assertTrue( $done['moved'] );
 		$this->assertIsInt( $done['restore_revision_id'] );
 		$this->assertTrue( $done['reversible'] );
-		$this->assertSame( 'not_covered', $done['undo']['reason'] );
+		$this->assertSame(
+			array(
+				'undoable'   => false,
+				'change_ids' => array(),
+				'reason'     => 'not_covered',
+			),
+			$done['undo']
+		);
 	}
 
 	public function test_remove_round_trips_over_a_real_tools_call(): void {
@@ -337,7 +344,14 @@ final class WpbakeryElementsWireTest extends TestCase {
 		$this->assertSame( 1, $done['removed'] );
 		$this->assertSame( self::fp( $stored ), $done['page_fingerprint'] );
 		$this->assertSame( self::PAGE, get_post( $done['restore_revision_id'] )->post_content );
-		$this->assertSame( 'not_covered', $done['undo']['reason'] );
+		$this->assertSame(
+			array(
+				'undoable'   => false,
+				'change_ids' => array(),
+				'reason'     => 'not_covered',
+			),
+			$done['undo']
+		);
 	}
 
 	public function test_reversible_reason_is_on_the_wire_only_when_the_restore_point_is_gone(): void {

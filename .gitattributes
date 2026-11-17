@@ -57,3 +57,7 @@ composer.lock   export-ignore
 # adds one is caught the same way, not by adding its exact path here after the fact.
 vendor/**/readme.txt   export-ignore
 vendor/**/CHANGELOG.md export-ignore
+
+# Builder fixtures are byte copies of what the real plugins stored, CRLF included.
+/tests/Fixtures/Wpbakery/*.txt -text
+/tests/Fixtures/Avada/*.txt    -text

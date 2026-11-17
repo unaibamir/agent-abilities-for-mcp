@@ -284,7 +284,53 @@ final class WpbakeryWireTest extends TestCase {
 			array_keys( $both )
 		);
 		$this->assertSame( self::fp( self::PAGE ), $both['page_fingerprint'] );
-		$this->assertCount( 4, $both['structure'] );
+		$this->assertSame(
+			array(
+				array(
+					'index'        => 0,
+					'depth'        => 0,
+					'tag'          => 'vc_row',
+					'self_closing' => false,
+					'has_closer'   => true,
+					'atts'         => array(),
+					'fingerprint'  => self::fp( self::PAGE ),
+					'atts_decoded' => array(),
+				),
+				array(
+					'index'        => 1,
+					'depth'        => 1,
+					'tag'          => 'vc_column',
+					'self_closing' => false,
+					'has_closer'   => true,
+					'atts'         => array(),
+					'fingerprint'  => self::fp( self::COLUMN ),
+					'atts_decoded' => array(),
+				),
+				array(
+					'index'        => 2,
+					'depth'        => 2,
+					'tag'          => 'vc_column_text',
+					'self_closing' => false,
+					'has_closer'   => true,
+					'atts'         => array(),
+					'fingerprint'  => self::fp( self::TEXT ),
+					'atts_decoded' => array(),
+					'text'         => '<p>Hello world</p>',
+				),
+				array(
+					'index'        => 3,
+					'depth'        => 2,
+					'tag'          => 'vc_custom_heading',
+					'self_closing' => false,
+					'has_closer'   => false,
+					'atts'         => array( 'text' => 'Heading bravo' ),
+					'fingerprint'  => self::fp( self::HEADING ),
+					'atts_decoded' => array( 'text' => 'Heading bravo' ),
+					'text'         => '',
+				),
+			),
+			$both['structure']
+		);
 		// The wire user is an editor, who holds unfiltered_html on a single site, so the JS keys are present.
 		$this->assertSame(
 			array(

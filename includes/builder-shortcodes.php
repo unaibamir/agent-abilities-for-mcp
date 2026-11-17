@@ -1046,7 +1046,6 @@ function aafm_builder_commit( WP_Post $post, string $old, string $new, array $ta
 	if ( null !== $restore_revision_id && ! aafm_exact_object( 'post', $restore_revision_id ) instanceof WP_Post ) {
 		$restore_revision_id = null;
 		$reversible          = false;
-		$keep                = wp_revisions_to_keep( $post );
 		$reversible_reason   = aafm_builder_pruned_reason( $post );
 	}
 

@@ -17,7 +17,7 @@ if ( ! defined( 'AAFM_PLUGIN_URL' ) ) {
 	define( 'AAFM_PLUGIN_URL', 'https://example.com/wp-content/plugins/agent-abilities-for-mcp/' );
 }
 if ( ! defined( 'AAFM_PLUGIN_DIR' ) ) {
-	define( 'AAFM_PLUGIN_DIR', '/var/www/html/wp-content/plugins/agent-abilities-for-mcp/' );
+	define( 'AAFM_PLUGIN_DIR', dirname( __DIR__ ) . '/' ); // The repository root, wherever the analysis runs.
 }
 if ( ! defined( 'AAFM_PLUGIN_BASENAME' ) ) {
 	define( 'AAFM_PLUGIN_BASENAME', 'agent-abilities-for-mcp/agent-abilities-for-mcp.php' );

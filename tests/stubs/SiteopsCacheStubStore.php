@@ -509,3 +509,20 @@ function aafm_siteops_stub_wp_optimize_activate(): void {
 		Aafm_Siteops_Vendor_Stub::hit( 'wpo_cache_flush' );
 	}
 }
+
+/**
+ * Cache Enabler: its two constants and its three purge actions.
+ */
+function aafm_siteops_stub_cache_enabler_activate(): void {
+	if ( ! defined( 'CACHE_ENABLER_VERSION' ) ) {
+		define( 'CACHE_ENABLER_VERSION', '1.8.17' );
+	}
+	if ( ! defined( 'CACHE_ENABLER_CACHE_DIR' ) ) {
+		define( 'CACHE_ENABLER_CACHE_DIR', Aafm_Siteops_Vendor_Stub::root() . '/ce' );
+	}
+	Aafm_Siteops_Vendor_Stub::listen( 'cache_enabler_clear_page_cache_by_post' );
+	Aafm_Siteops_Vendor_Stub::listen( 'cache_enabler_clear_page_cache_by_url' );
+	Aafm_Siteops_Vendor_Stub::listen( 'cache_enabler_clear_site_cache', 0 );
+	// Never fired by the adapter. Listened to so a test can prove it.
+	Aafm_Siteops_Vendor_Stub::listen( 'cache_enabler_clear_complete_cache', 0 );
+}

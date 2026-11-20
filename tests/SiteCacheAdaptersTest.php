@@ -684,4 +684,127 @@ final class SiteCacheAdaptersTest extends TestCase {
 		$this->assertResult( 'purged', '', true, $this->call( 'aafm_cache_wp_optimize_purge_all' ) );
 		$this->assertSame( array( 'purge' ), Stub::names(), 'Never wpo_cache_flush(), which also flushes the object cache.' );
 	}
+
+	private function ce_ready(): void {
+		aafm_siteops_stub_cache_enabler_activate();
+		$this->load( 'cache_enabler' );
+		$this->cleanup[] = $this->put( WP_CONTENT_DIR . '/advanced-cache.php' );
+	}
+
+	private function ce_clears_the_spelling_given(): callable {
+		// A stand-in for the real purge: it clears only the directory of the spelling it is given.
+		return static function ( $url ): void {
+			Stub::rrmdir( Stub::root() . '/ce/example.org/' . trim( (string) wp_parse_url( $url, PHP_URL_PATH ), '/' ) );
+		};
+	}
+
+	public function test_cache_enabler_registry_row_and_detection(): void {
+		$row = $this->assertRegistryRow(
+			'cache_enabler',
+			'cache-enabler/cache-enabler.php',
+			array( array( 'constant', 'CACHE_ENABLER_VERSION' ) ),
+			'file',
+			array(
+				'cli'           => true,
+				'vendor_http'   => false,
+				'recursive_url' => false,
+				'rewarms'       => false,
+			)
+		);
+		aafm_siteops_stub_cache_enabler_activate();
+		$this->assertTrue( aafm_site_cache_detected( $row ) );
+		$row['detect'][] = array( 'constant', 'AAFM_NO_SUCH_VENDOR_CONSTANT' );
+		$this->assertFalse( aafm_site_cache_detected( $row ) );
+	}
+
+	public function test_cache_enabler_serving_is_false_while_wp_cache_is_off(): void {
+		// Every other condition is met: the cache directory constant and the drop-in exist.
+		$this->ce_ready();
+		$this->assertFalse( defined( 'WP_CACHE' ) && WP_CACHE, 'The WordPress test suite always runs with WP_CACHE false.' );
+		$this->assertFalse( $this->call( 'aafm_cache_cache_enabler_serving' ) );
+		// The true case needs a real site: acceptance case P1. The off switch: case N7.
+	}
+
+	public function test_cache_enabler_ascii_url_is_one_vendor_call(): void {
+		$this->ce_ready();
+		$this->put( Stub::root() . '/ce/example.org/acc-a/http-index.html' );
+		Stub::$on['cache_enabler_clear_page_cache_by_url'] = $this->ce_clears_the_spelling_given();
+		$url    = $this->url( '/acc-a/' );
+		$result = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_cache_enabler_purge_url( $url );
+			}
+		);
+		$this->assertResult( 'purged', '', true, $result );
+		$this->assertSame( array( array( 'cache_enabler_clear_page_cache_by_url', array( 'http://example.org/acc-a/' ) ) ), Stub::$calls );
+	}
+
+	public function test_cache_enabler_non_ascii_url_is_two_vendor_calls_and_both_spellings_are_checked(): void {
+		$this->ce_ready();
+		$this->put( Stub::root() . '/ce/example.org/' . self::LO . '/http-index.html' );
+		$this->put( Stub::root() . '/ce/example.org/' . self::UP . '/https-index-mobile.html.gz' );
+		Stub::$on['cache_enabler_clear_page_cache_by_url'] = $this->ce_clears_the_spelling_given();
+		$url    = $this->url( '/' . self::LO . '/' );
+		$result = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_cache_enabler_purge_url( $url );
+			}
+		);
+		$this->assertResult( 'purged', '', true, $result );
+		$this->assertSame(
+			array(
+				array( 'cache_enabler_clear_page_cache_by_url', array( 'http://example.org/' . self::LO . '/' ) ),
+				array( 'cache_enabler_clear_page_cache_by_url', array( 'http://example.org/' . self::UP . '/' ) ),
+			),
+			Stub::$calls
+		);
+	}
+
+	public function test_cache_enabler_copy_under_the_other_spelling_that_survives_is_a_variant_failure(): void {
+		$this->ce_ready();
+		$this->put( Stub::root() . '/ce/example.org/' . self::LO . '/http-index.html' );
+		$this->put( Stub::root() . '/ce/example.org/' . self::UP . '/http-index.html' );
+		// A vendor that clears the lower-case copy and ignores the second call.
+		Stub::$on['cache_enabler_clear_page_cache_by_url'] = static function ( $url ): void {
+			if ( false !== strpos( $url, '%c3' ) ) {
+				Stub::rrmdir( Stub::root() . '/ce/example.org/' . self::LO );
+			}
+		};
+		$url    = $this->url( '/' . self::LO . '/' );
+		$result = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_cache_enabler_purge_url( $url );
+			}
+		);
+		$this->assertResult( 'failed', 'variant_still_cached', true, $result );
+	}
+
+	public function test_cache_enabler_post_purge_fires_the_post_action_then_the_upper_case_url(): void {
+		$this->ce_ready();
+		wp_mkdir_p( Stub::root() . '/ce/example.org' );
+		$url    = $this->url( '/' . self::LO . '/' );
+		$result = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_cache_enabler_purge_post( 41, $url );
+			}
+		);
+		$this->assertResult( 'requested', 'not_found_in_cache', false, $result );
+		$this->assertSame(
+			array(
+				array( 'cache_enabler_clear_page_cache_by_post', array( 41 ) ),
+				array( 'cache_enabler_clear_page_cache_by_url', array( 'http://example.org/' . self::UP . '/' ) ),
+			),
+			Stub::$calls
+		);
+	}
+
+	public function test_cache_enabler_site_purge_fires_the_site_action_never_the_network_one(): void {
+		$this->ce_ready();
+		$this->put( Stub::root() . '/ce/example.org/acc-a/http-index.html' );
+		Stub::$on['cache_enabler_clear_site_cache'] = static function (): void {
+			Stub::rrmdir( Stub::root() . '/ce/example.org/acc-a' );
+		};
+		$this->assertResult( 'purged', '', true, $this->call( 'aafm_cache_cache_enabler_purge_all' ) );
+		$this->assertSame( array( 'cache_enabler_clear_site_cache' ), Stub::names() );
+	}
 }

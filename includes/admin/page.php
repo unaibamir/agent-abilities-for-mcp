@@ -248,6 +248,7 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'doctorWhoYou'             => __( 'You can fix this', 'agent-abilities-for-mcp' ),
 				'doctorWhoHost'            => __( 'Your host can fix this', 'agent-abilities-for-mcp' ),
 				'doctorWhoPlugin'          => __( 'A security or membership plugin may be the cause', 'agent-abilities-for-mcp' ),
+				'doctorWhoOther'           => __( 'Another plugin on this site may be the cause', 'agent-abilities-for-mcp' ),
 				'doctorCopySnippet'        => __( 'Copy snippet', 'agent-abilities-for-mcp' ),
 				'doctorError'              => __( 'The check could not run. Reload the page and try again.', 'agent-abilities-for-mcp' ),
 				// Plugins' own tools: review card and read-only starter.

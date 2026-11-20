@@ -45,7 +45,7 @@ const AAFM_DOCTOR_SCHEME       = 'AAFM-Doctor';
  * @param string $id     Stable row id.
  * @param string $label  Row title.
  * @param string $status pass|warn|fail|skip ("Could not test").
- * @param string $who    you|host|plugin, or '' when nothing needs fixing.
+ * @param string $who    you|host|plugin|other, or '' when nothing needs fixing.
  * @param string $detail One or two plain sentences.
  * @param string $fix    A snippet to copy, shown never applied.
  * @param int    $http   HTTP status the row is about, 0 when none.
@@ -866,10 +866,10 @@ function aafm_doctor_check_vendor_mcp(): ?array {
 
 	$label = __( 'Other MCP servers', 'agent-abilities-for-mcp' );
 	if ( aafm_oauth_enabled() ) {
-		return aafm_doctor_row( 'vendor_mcp', $label, 'warn', 'plugin', __( "WP Rocket also runs an MCP server on this site. Both plugins use the same two discovery addresses and this plugin answers them first, so an AI client that tries to connect to WP Rocket's server can be sent to this one and may refuse to connect. This plugin has not switched anything off.", 'agent-abilities-for-mcp' ) );
+		return aafm_doctor_row( 'vendor_mcp', $label, 'warn', 'other', __( "WP Rocket also runs an MCP server on this site. Both plugins use the same two discovery addresses and this plugin answers them first, so an AI client that tries to connect to WP Rocket's server can be sent to this one and may refuse to connect. This plugin has not switched anything off.", 'agent-abilities-for-mcp' ) );
 	}
 
-	return aafm_doctor_row( 'vendor_mcp', $label, 'pass', 'plugin', __( 'WP Rocket also runs an MCP server on this site. It answers its own discovery addresses.', 'agent-abilities-for-mcp' ) );
+	return aafm_doctor_row( 'vendor_mcp', $label, 'pass', 'other', __( 'WP Rocket also runs an MCP server on this site. It answers its own discovery addresses.', 'agent-abilities-for-mcp' ) );
 }
 
 /**

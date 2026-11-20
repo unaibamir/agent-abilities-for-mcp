@@ -2424,6 +2424,7 @@
 				you: this.#t( 'doctorWhoYou', 'You can fix this' ),
 				host: this.#t( 'doctorWhoHost', 'Your host can fix this' ),
 				plugin: this.#t( 'doctorWhoPlugin', 'A security or membership plugin may be the cause' ),
+				other: this.#t( 'doctorWhoOther', 'Another plugin on this site may be the cause' ),
 			};
 
 			const applyFilter = () => {

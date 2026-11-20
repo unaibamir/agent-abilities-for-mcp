@@ -44,7 +44,7 @@ final class VendorMcpServerTest extends TestCase {
 		$this->assertSame( 'vendor_mcp', $row['id'] );
 		$this->assertSame( 'Other MCP servers', $row['label'] );
 		$this->assertSame( 'warn', $row['status'] );
-		$this->assertSame( 'plugin', $row['who'] );
+		$this->assertSame( 'other', $row['who'], 'Another plugin\'s MCP server is not a security or membership plugin.' );
 		$this->assertStringContainsString( 'this plugin answers them first', $row['detail'] );
 		$this->assertStringContainsString( 'This plugin has not switched anything off.', $row['detail'] );
 		$this->assertStringNotContainsString( 'not affected', $row['detail'], 'No connection was tested, so the row must not promise one.' );
@@ -78,5 +78,14 @@ final class VendorMcpServerTest extends TestCase {
 
 		$ids = array_column( aafm_doctor_run_checks(), 'id' );
 		$this->assertContains( 'vendor_mcp', $ids );
+	}
+
+	public function test_the_other_who_line_names_another_plugin_not_a_security_plugin(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a plugin source file in a test.
+		$js = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a plugin source file in a test.
+		$page = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/page.php' );
+		$this->assertStringContainsString( "other: this.#t( 'doctorWhoOther', 'Another plugin on this site may be the cause' )", $js );
+		$this->assertStringContainsString( "'doctorWhoOther'           => __( 'Another plugin on this site may be the cause'", $page );
 	}
 }

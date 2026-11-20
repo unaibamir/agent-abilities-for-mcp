@@ -1626,4 +1626,116 @@ final class SiteCacheAdaptersTest extends TestCase {
 		$this->assertResult( 'purged', '', true, $this->call( 'aafm_cache_siteground_purge_all' ) );
 		$this->assertSame( array( 'purge_everything', 'purge_everything' ), Stub::names() );
 	}
+
+	/**
+	 * The server software before the test.
+	 *
+	 * @var string|null
+	 */
+	private $server_software = null;
+
+	private function ls_ready( string $software ): void {
+		aafm_siteops_stub_litespeed_activate();
+		$this->load( 'litespeed' );
+		$this->server_software      = isset( $_SERVER['SERVER_SOFTWARE'] ) ? sanitize_text_field( wp_unslash( $_SERVER['SERVER_SOFTWARE'] ) ) : null;
+		$_SERVER['SERVER_SOFTWARE'] = $software;
+	}
+
+	private function ls_restore(): void {
+		if ( null === $this->server_software ) {
+			unset( $_SERVER['SERVER_SOFTWARE'] );
+		} else {
+			$_SERVER['SERVER_SOFTWARE'] = $this->server_software;
+		}
+	}
+
+	public function test_litespeed_registry_row_and_detection(): void {
+		$row = $this->assertRegistryRow(
+			'litespeed',
+			'litespeed-cache/litespeed-cache.php',
+			array( array( 'constant', 'LSCWP_V' ) ),
+			'none',
+			array(
+				'cli'           => false,
+				'vendor_http'   => false,
+				'recursive_url' => false,
+				'rewarms'       => false,
+			)
+		);
+		aafm_siteops_stub_litespeed_activate();
+		$this->assertTrue( aafm_site_cache_detected( $row ) );
+		$row['detect'][] = array( 'constant', 'AAFM_NO_SUCH_VENDOR_CONSTANT' );
+		$this->assertFalse( aafm_site_cache_detected( $row ) );
+	}
+
+	public function test_litespeed_serving_needs_a_real_litespeed_server_or_an_exact_true_from_the_filter(): void {
+		$this->ls_ready( 'nginx/1.26' );
+		$this->assertFalse( $this->call( 'aafm_cache_litespeed_serving' ), 'LITESPEED_ON alone can be forged by a request header.' );
+
+		add_filter( 'aafm_site_litespeed_serving', '__return_true' );
+		$this->assertTrue( $this->call( 'aafm_cache_litespeed_serving' ) );
+		remove_filter( 'aafm_site_litespeed_serving', '__return_true' );
+
+		$truthy = static function () {
+			return 1;
+		};
+		add_filter( 'aafm_site_litespeed_serving', $truthy );
+		$this->assertFalse( $this->call( 'aafm_cache_litespeed_serving' ), 'Only exactly true counts.' );
+		remove_filter( 'aafm_site_litespeed_serving', $truthy );
+
+		$_SERVER['SERVER_SOFTWARE'] = 'LiteSpeed';
+		$this->assertTrue( $this->call( 'aafm_cache_litespeed_serving' ) );
+		$this->ls_restore();
+	}
+
+	public function test_litespeed_purges_are_always_requested(): void {
+		$this->ls_ready( 'LiteSpeed' );
+		$url = $this->url( '/acc-a/' );
+
+		$result = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_litespeed_purge_post( 41, $url );
+			}
+		);
+		$this->assertResult( 'requested', 'no_acknowledgement', null, $result );
+		$result = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_litespeed_purge_url( $url );
+			}
+		);
+		$this->assertResult( 'requested', 'no_acknowledgement', null, $result );
+		$this->assertResult( 'requested', 'no_acknowledgement', null, $this->call( 'aafm_cache_litespeed_purge_all' ) );
+
+		$this->assertSame(
+			array(
+				array( 'litespeed_purge_post', array( 41 ) ),
+				array( 'litespeed_purge_url', array( 'http://example.org/acc-a/' ) ),
+				array( 'LiteSpeed\Purge::purge_all_lscache', array() ),
+			),
+			Stub::$calls,
+			'Never the litespeed_purge_all action, which also purges CSS and JS.'
+		);
+		$this->assertTrue( defined( 'LITESPEED_PURGE_SILENT' ), 'The purge notice is switched off before the call.' );
+		$this->ls_restore();
+	}
+
+	public function test_litespeed_purge_without_a_listener_is_a_vendor_error(): void {
+		$this->ls_ready( 'LiteSpeed' );
+		remove_all_actions( 'litespeed_purge_post' );
+		remove_all_actions( 'litespeed_purge_url' );
+		$url    = $this->url( '/acc-a/' );
+		$result = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_litespeed_purge_post( 41, $url );
+			}
+		);
+		$this->assertResult( 'failed', 'vendor_error', null, $result );
+		$result = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_litespeed_purge_url( $url );
+			}
+		);
+		$this->assertResult( 'failed', 'vendor_error', null, $result );
+		$this->ls_restore();
+	}
 }

@@ -713,3 +713,32 @@ function aafm_siteops_stub_siteground_activate(): void {
 		return true;
 	}
 }
+
+/**
+ * LiteSpeed Cache's purge class. Aliased to \LiteSpeed\Purge on activation.
+ */
+final class Aafm_Siteops_Stub_Ls_Purge {
+	public static function purge_all_lscache( $reason = false ) {
+		Aafm_Siteops_Vendor_Stub::hit( 'LiteSpeed\Purge::purge_all_lscache' );
+	}
+}
+
+/**
+ * LiteSpeed Cache: its version constant, LITESPEED_ON, its purge class and its purge actions.
+ * LITESPEED_SERVER_TYPE is left undefined so a test decides the server through SERVER_SOFTWARE.
+ */
+function aafm_siteops_stub_litespeed_activate(): void {
+	if ( ! defined( 'LSCWP_V' ) ) {
+		define( 'LSCWP_V', '7.9.3' );
+	}
+	if ( ! defined( 'LITESPEED_ON' ) ) {
+		define( 'LITESPEED_ON', true );
+	}
+	if ( ! class_exists( 'LiteSpeed\Purge', false ) ) {
+		class_alias( 'Aafm_Siteops_Stub_Ls_Purge', 'LiteSpeed\Purge' );
+	}
+	Aafm_Siteops_Vendor_Stub::listen( 'litespeed_purge_post' );
+	Aafm_Siteops_Vendor_Stub::listen( 'litespeed_purge_url' );
+	// Never fired by the adapter. Listened to so a test can prove it.
+	Aafm_Siteops_Vendor_Stub::listen( 'litespeed_purge_all', 0 );
+}

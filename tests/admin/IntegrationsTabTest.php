@@ -587,4 +587,44 @@ final class IntegrationsTabTest extends TestCase {
 		// auto margin that splits the free space and the pill drifts per row.
 		$this->assertStringContainsString( '> .aafm-pill { margin-inline-start: 0; }', $block );
 	}
+
+	public function test_each_site_ops_card_confirms_with_its_own_text_not_the_personal_data_line(): void {
+		$this->acting_as( 'administrator' );
+		$personal = 'personal data';
+		$expected = array(
+			'site_cache'     => 'page cache',
+			'site_redirects' => 'redirect',
+			'site_backups'   => 'backups',
+		);
+		foreach ( $expected as $slug => $needle ) {
+			$text = aafm_integration_toggle_confirm( $slug );
+			$this->assertNotSame( '', $text, "{$slug} needs its own confirmation text." );
+			$this->assertStringContainsString( $needle, $text );
+			$this->assertStringNotContainsString( $personal, $text );
+			$this->assertStringNotContainsString( 'customer', $text );
+		}
+		$this->assertSame( '', aafm_integration_toggle_confirm( 'woocommerce' ), 'A card with no text of its own keeps the shared personal-data line.' );
+	}
+
+	public function test_the_page_cache_enable_all_button_carries_its_confirmation_text(): void {
+		$this->acting_as( 'administrator' );
+		$rows = aafm_integration_ability_manifest()['site_cache'] ?? array();
+		$this->assertContains( 'destructive', array_column( $rows, 'risk' ), 'The cache card holds the destructive purge, so the confirmation is raised.' );
+
+		ob_start();
+		aafm_render_integration_abilities( 'site_cache', $rows, array(), array(), true );
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'data-has-sensitive="1"', $html );
+		$this->assertStringContainsString( 'data-confirm="' . esc_attr( aafm_integration_toggle_confirm( 'site_cache' ) ) . '"', $html );
+	}
+
+	public function test_the_bulk_script_prefers_the_cards_own_confirmation_text(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Reading a local plugin asset off disk, never a remote URL.
+		$js    = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
+		$start = strpos( $js, '#bindIntegrationToggles() {' );
+		$this->assertNotFalse( $start );
+		$body = substr( $js, (int) $start, (int) strpos( $js, "\n\t\t#", (int) $start + 1 ) - (int) $start );
+		$this->assertStringContainsString( 'btn.dataset.confirm', $body );
+	}
 }

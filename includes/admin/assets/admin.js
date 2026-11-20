@@ -1007,7 +1007,7 @@
 						( b ) => ! b.checked && ! b.closest( '.aafm-ability-row' )?.hasAttribute( 'data-own-switch' )
 					);
 					if ( enabling && btn.dataset.hasSensitive === '1' ) {
-						const msg = this.#t(
+						const msg = btn.dataset.confirm || this.#t(
 							'integrationToggleConfirm',
 							'These abilities can read and change personal data such as customer details and orders. Turn all of them on?'
 						);

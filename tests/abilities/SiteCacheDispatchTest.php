@@ -648,4 +648,45 @@ final class SiteCacheDispatchTest extends TestCase {
 
 		$this->assertSame( $this->result( 'requested', 'no_acknowledgement', null ), $result );
 	}
+
+	public function test_status_only_reports_an_object_cache_drop_in(): void {
+		require_once AAFM_PLUGIN_DIR . 'includes/siteops/cache/status-only.php';
+		$before = wp_using_ext_object_cache();
+
+		wp_using_ext_object_cache( false );
+		$this->assertNotContains( 'object_cache', wp_list_pluck( aafm_site_cache_status_only(), 'kind' ) );
+
+		wp_using_ext_object_cache( true );
+		$rows = wp_list_pluck( aafm_site_cache_status_only(), 'label', 'provider' );
+		// WordPress ignores a null argument, so the flag is put back as a boolean.
+		wp_using_ext_object_cache( (bool) $before );
+
+		$this->assertArrayHasKey( 'object_cache', $rows );
+		$this->assertNotSame( '', $rows['object_cache'] );
+		$this->assertLessThanOrEqual( 60, strlen( $rows['object_cache'] ) );
+		$this->assertLessThanOrEqual( 60, strlen( aafm_site_cache_drop_in_name() ) );
+	}
+
+	public function test_status_only_names_a_page_cache_plugin_these_tools_do_not_cover(): void {
+		require_once AAFM_PLUGIN_DIR . 'includes/siteops/cache/status-only.php';
+		if ( ! defined( 'SWCFPC_PLUGIN_PATH' ) ) {
+			define( 'SWCFPC_PLUGIN_PATH', '/aafm/test/only' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- Super Page Cache's own constant, defined to test its status-only row.
+		}
+		$found = null;
+		foreach ( aafm_site_cache_status_only() as $row ) {
+			$this->assertSame( array( 'provider', 'label', 'kind' ), array_keys( $row ) );
+			if ( 'super_page_cache' === $row['provider'] ) {
+				$found = $row;
+			}
+		}
+		$this->assertSame(
+			array(
+				'provider' => 'super_page_cache',
+				'label'    => 'Super Page Cache',
+				'kind'     => 'page_cache_not_covered',
+			),
+			$found
+		);
+		$this->assertStringNotContainsString( '/aafm/test/only', (string) wp_json_encode( aafm_site_cache_status_only() ) );
+	}
 }

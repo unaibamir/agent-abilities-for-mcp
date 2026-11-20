@@ -129,6 +129,9 @@ final class CatalogFixture {
 		'aafm/avada-list-studio-items',
 		'aafm/geodirectory-get-listings',
 		'aafm/geodirectory-get-listing',
+		'aafm/site-health-status',
+		'aafm/site-list-updates',
+		'aafm/site-cron-status',
 	);
 
 	/**

@@ -279,5 +279,10 @@ function aafm_ability_disclosures(): array {
 		'aafm/geodirectory-get-listing'     => __( 'Reads one GeoDirectory listing by id, including its address and coordinates.', 'agent-abilities-for-mcp' ),
 		'aafm/geodirectory-create-listing'  => __( 'Creates a GeoDirectory business/place listing with a title, content, and optional address/coordinates.', 'agent-abilities-for-mcp' ),
 		'aafm/geodirectory-update-listing'  => __( "Updates an existing GeoDirectory listing's title, content, or address/coordinates. Fields omitted from the call are left untouched.", 'agent-abilities-for-mcp' ),
+
+		// Site health (1.13.0).
+		'aafm/site-health-status'           => __( "Runs WordPress's own Site Health checks that need no network request and returns each check's result, plus whether debug mode, a debug log, recovery mode or a paused plugin or theme is present. Never a log line, a file path or a version number.", 'agent-abilities-for-mcp' ),
+		'aafm/site-list-updates'            => __( 'Lists the core, plugin and theme updates WordPress already knows are waiting, from its last update check. It never starts a check, never returns a download address and updates nothing.', 'agent-abilities-for-mcp' ),
+		'aafm/site-cron-status'             => __( "Summarises WordPress's scheduled tasks: how many are scheduled, due and late, and the 50 due soonest by hook name. It runs nothing and never returns a task's arguments.", 'agent-abilities-for-mcp' ),
 	);
 }

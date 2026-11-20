@@ -1957,6 +1957,14 @@ function aafm_site_subgroups(): array {
 				'aafm/search-content',
 			),
 		),
+		'site_health'   => array(
+			'label'     => __( 'Site health', 'agent-abilities-for-mcp' ),
+			'abilities' => array(
+				'aafm/site-health-status',
+				'aafm/site-list-updates',
+				'aafm/site-cron-status',
+			),
+		),
 	);
 }
 

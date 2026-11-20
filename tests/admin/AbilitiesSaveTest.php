@@ -289,6 +289,7 @@ final class AbilitiesSaveTest extends TestCase {
 			'blocks'        => 'Blocks',
 			'menus'         => 'Menus',
 			'search'        => 'Site search',
+			'site_health'   => 'Site health',
 		);
 		foreach ( $expected as $slug => $label ) {
 			$this->assertStringContainsString( 'data-subject="' . $slug . '"', $bar, "Missing chip for {$slug}." );

@@ -1768,4 +1768,16 @@ if ( ! function_exists( 'breeze_purge_local_cache_for_urls' ) ) {
 		return null;
 	}
 }
+if ( ! function_exists( 'sg_cachepress_purge_cache' ) ) {
+	/**
+	 * Minimal SiteGround Speed Optimizer signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @param string|false $url URL.
+	 * @return mixed
+	 */
+	function sg_cachepress_purge_cache( $url = false ) {
+		return null;
+	}
+}
 // phpcs:enable

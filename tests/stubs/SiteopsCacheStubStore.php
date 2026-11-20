@@ -671,3 +671,45 @@ function aafm_siteops_stub_breeze_activate(): void {
 		Aafm_Siteops_Vendor_Stub::hit( 'breeze_purge_local_cache_for_urls', array( $urls, $cache_base_path ) );
 	}
 }
+
+/**
+ * SiteGround's option reader. Aliased to \SiteGround_Optimizer\Options\Options on activation.
+ */
+final class Aafm_Siteops_Stub_Sg_Options {
+	public static function is_enabled( $key, $is_multisite = false ) {
+		return ! empty( Aafm_Siteops_Vendor_Stub::$state['sg'][ $key ] );
+	}
+}
+
+/**
+ * SiteGround's file cacher. Aliased to \SiteGround_Optimizer\File_Cacher\File_Cacher on activation.
+ */
+final class Aafm_Siteops_Stub_Sg_File_Cacher {
+	public static function get_instance() {
+		return new self();
+	}
+	public function purge_everything() {
+		return Aafm_Siteops_Vendor_Stub::hit( 'purge_everything' );
+	}
+}
+
+/**
+ * SiteGround Speed Optimizer: sg_cachepress_purge_cache() and its two classes.
+ */
+function aafm_siteops_stub_siteground_activate(): void {
+	Aafm_Siteops_Vendor_Stub::$state['sg'] = array( 'siteground_optimizer_file_caching' => true );
+	if ( ! class_exists( 'SiteGround_Optimizer\Options\Options', false ) ) {
+		class_alias( 'Aafm_Siteops_Stub_Sg_Options', 'SiteGround_Optimizer\Options\Options' );
+	}
+	if ( ! class_exists( 'SiteGround_Optimizer\File_Cacher\File_Cacher', false ) ) {
+		class_alias( 'Aafm_Siteops_Stub_Sg_File_Cacher', 'SiteGround_Optimizer\File_Cacher\File_Cacher' );
+	}
+	if ( function_exists( 'sg_cachepress_purge_cache' ) ) {
+		return;
+	}
+	function sg_cachepress_purge_cache( $url = false ) {
+		Aafm_Siteops_Vendor_Stub::hit( 'sg_cachepress_purge_cache', array( $url ) );
+		// The real function returns true for every call, also one that removes nothing (bench4 N3).
+		return true;
+	}
+}

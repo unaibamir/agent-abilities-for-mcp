@@ -1366,4 +1366,264 @@ final class SiteCacheAdaptersTest extends TestCase {
 		$this->assertResult( 'failed', 'still_cached', true, $this->call( 'aafm_cache_breeze_purge_all' ), 'A mobile copy is left.' );
 		$this->assertSame( array( array( 'Breeze_PurgeCache::breeze_cache_flush', array( false, false, true ) ) ), Stub::$calls, 'Never the breeze_clear_all_cache action, which flushes the object cache.' );
 	}
+
+	private const SG_SECRET  = '0123456789abcdef0123456789abcdef';
+	private const SG_SESSION = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+
+	private function sg_dir( string $relative, string $root = '' ): string {
+		// A page directory under the anonymous cache root, or under any root named.
+		$root = '' === $root ? 'example.org-' . self::SG_SECRET : $root;
+		return WP_CONTENT_DIR . '/cache/sgo-cache/' . $root . ( '' === $relative ? '' : '/' . $relative );
+	}
+
+	private function sg_ready(): void {
+		aafm_siteops_stub_siteground_activate();
+		$this->load( 'siteground' );
+		$this->cleanup[] = WP_CONTENT_DIR . '/cache/sgo-cache';
+	}
+
+	private function sg_clears_the_spelling_given(): callable {
+		// A stand-in for the real URL purge: it empties the directory of the spelling it is given in every root.
+		return static function ( $url ): void {
+			$relative = trim( (string) wp_parse_url( $url, PHP_URL_PATH ), '/' );
+			foreach ( (array) glob( WP_CONTENT_DIR . '/cache/sgo-cache/*', GLOB_ONLYDIR ) as $root ) {
+				foreach ( (array) glob( $root . '/' . $relative . '/index*.html' ) as $file ) {
+					unlink( $file );
+				}
+			}
+		};
+	}
+
+	/**
+	 * Run a URL purge of /acc-a/.
+	 *
+	 * @return mixed
+	 */
+	private function sg_purge_acc_a() {
+		$url = $this->url( '/acc-a/' );
+		return $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_siteground_purge_url( $url );
+			}
+		);
+	}
+
+	public function test_siteground_registry_row_and_detection(): void {
+		$row = $this->assertRegistryRow(
+			'siteground',
+			'sg-cachepress/sg-cachepress.php',
+			array( array( 'function', 'sg_cachepress_purge_cache' ) ),
+			'file',
+			array(
+				'cli'           => true,
+				'vendor_http'   => true,
+				'recursive_url' => false,
+				'rewarms'       => true,
+			)
+		);
+		aafm_siteops_stub_siteground_activate();
+		$this->assertTrue( aafm_site_cache_detected( $row ) );
+		$row['detect'][] = array( 'function', 'aafm_no_such_vendor_function' );
+		$this->assertFalse( aafm_site_cache_detected( $row ) );
+	}
+
+	public function test_siteground_serving_is_false_while_wp_cache_is_off(): void {
+		// Every other condition is met: the options class exists and file caching is on.
+		$this->sg_ready();
+		$this->assertFalse( defined( 'WP_CACHE' ) && WP_CACHE, 'The WordPress test suite always runs with WP_CACHE false.' );
+		$this->assertFalse( $this->call( 'aafm_cache_siteground_serving' ) );
+		// The true case needs a real site: acceptance case P1. The off switch: case N7.
+	}
+
+	public function test_siteground_home_url_is_skipped_without_a_vendor_call(): void {
+		$this->sg_ready();
+		$url    = $this->url( '/' );
+		$result = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_siteground_purge_url( $url );
+			}
+		);
+		$this->assertResult( 'skipped', 'unsupported_operation', null, $result );
+		$this->assertSame( array(), Stub::$calls, 'The plugin empties the whole cache for the home URL.' );
+	}
+
+	public function test_siteground_ascii_page_is_one_call_and_purged(): void {
+		$this->sg_ready();
+		$this->put( $this->sg_dir( 'acc-a' ) . '/index-v2.html' );
+		$this->put( $this->sg_dir( 'acc-a' ) . '/index-mobile-v2.html' );
+		Stub::$on['sg_cachepress_purge_cache'] = $this->sg_clears_the_spelling_given();
+		$this->assertResult( 'purged', '', true, $this->sg_purge_acc_a() );
+		$this->assertSame( array( array( 'sg_cachepress_purge_cache', array( 'http://example.org/acc-a/' ) ) ), Stub::$calls );
+	}
+
+	public function test_siteground_post_purge_is_the_same_url_call(): void {
+		$this->sg_ready();
+		wp_mkdir_p( $this->sg_dir( '' ) );
+		$url    = $this->url( '/acc-a/' );
+		$result = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_siteground_purge_post( 41, $url );
+			}
+		);
+		// The stub returns true, as the real function does when it removes nothing.
+		$this->assertResult( 'requested', 'not_found_in_cache', false, $result );
+		$this->assertSame( array( array( 'sg_cachepress_purge_cache', array( 'http://example.org/acc-a/' ) ) ), Stub::$calls );
+	}
+
+	public function test_siteground_no_cache_root_is_no_acknowledgement(): void {
+		$this->sg_ready();
+		$this->assertResult( 'requested', 'no_acknowledgement', null, $this->sg_purge_acc_a() );
+		$this->assertSame( array( 'sg_cachepress_purge_cache' ), Stub::names(), 'The purge is still issued.' );
+	}
+
+	public function test_siteground_non_ascii_page_is_two_calls(): void {
+		$this->sg_ready();
+		$this->put( $this->sg_dir( self::LO ) . '/index-v2.html' );
+		$this->put( $this->sg_dir( self::UP ) . '/index-v2.html' );
+		Stub::$on['sg_cachepress_purge_cache'] = $this->sg_clears_the_spelling_given();
+		$url                                   = $this->url( '/' . self::LO . '/' );
+		$result                                = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_siteground_purge_url( $url );
+			}
+		);
+		$this->assertResult( 'purged', '', true, $result );
+		$this->assertSame(
+			array(
+				array( 'sg_cachepress_purge_cache', array( 'http://example.org/' . self::LO . '/' ) ),
+				array( 'sg_cachepress_purge_cache', array( 'http://example.org/' . self::UP . '/' ) ),
+			),
+			Stub::$calls
+		);
+	}
+
+	public function test_siteground_logged_in_root_is_found_and_another_hosts_root_is_not(): void {
+		$this->sg_ready();
+		$session = 'example.org-' . self::SG_SESSION . '-' . self::SG_SECRET;
+		$this->put( $this->sg_dir( 'acc-a', $session ) . '/index-v2.html' );
+		// A root of another host whose name begins with this host. Its file must not count.
+		$this->put( $this->sg_dir( 'acc-a', 'example.org-old.example.net-' . self::SG_SECRET ) . '/index-v2.html' );
+		$this->assertResult( 'failed', 'still_cached', true, $this->sg_purge_acc_a(), 'A copy the vendor left in a logged-in root.' );
+
+		Stub::$on['sg_cachepress_purge_cache'] = function (): void {
+			unlink( $this->sg_dir( 'acc-a', 'example.org-' . self::SG_SESSION . '-' . self::SG_SECRET ) . '/index-v2.html' );
+		};
+		$this->assertResult( 'purged', '', true, $this->sg_purge_acc_a(), 'Only the other host\'s file is left.' );
+	}
+
+	public function test_siteground_recache_a_new_file_with_the_old_mtime_is_purged_recached(): void {
+		$this->sg_ready();
+		$file = $this->put( $this->sg_dir( 'acc-a' ) . '/index-v2.html' );
+		touch( $file, 1700000000 );
+		// Delete and re-cache inside the purge: a new inode, and the same clock second.
+		Stub::$on['sg_cachepress_purge_cache'] = static function () use ( $file ): void {
+			file_put_contents( $file . '.new', 'recached' );
+			rename( $file . '.new', $file );
+			touch( $file, 1700000000 );
+		};
+		$this->assertResult( 'purged', 'recached', true, $this->sg_purge_acc_a() );
+	}
+
+	public function test_siteground_recache_an_untouched_file_is_still_cached(): void {
+		$this->sg_ready();
+		$this->put( $this->sg_dir( 'acc-a' ) . '/index-v2.html' );
+		// A failed delete: the vendor returns true and the file is as it was (bench5 F1).
+		$this->assertResult( 'failed', 'still_cached', true, $this->sg_purge_acc_a() );
+	}
+
+	public function test_siteground_recache_a_file_that_was_only_touched_is_never_purged(): void {
+		$this->sg_ready();
+		$file = $this->put( $this->sg_dir( 'acc-a' ) . '/index-v2.html' );
+		touch( $file, 1700000000 );
+		Stub::$on['sg_cachepress_purge_cache'] = static function () use ( $file ): void {
+			touch( $file, 1700000050 );
+		};
+		$this->assertResult( 'requested', 'no_acknowledgement', true, $this->sg_purge_acc_a(), 'Same inode, new mtime: not proof of a new copy.' );
+	}
+
+	public function test_siteground_recache_two_roots_one_replaced_one_touched(): void {
+		$this->sg_ready();
+		$session = 'example.org-' . self::SG_SESSION . '-' . self::SG_SECRET;
+		$first   = $this->put( $this->sg_dir( 'acc-a' ) . '/index-v2.html' );
+		$second  = $this->put( $this->sg_dir( 'acc-a', $session ) . '/index-v2.html' );
+		touch( $first, 1700000000 );
+		touch( $second, 1700000000 );
+		Stub::$on['sg_cachepress_purge_cache'] = static function () use ( $first, $second ): void {
+			file_put_contents( $first . '.new', 'recached' );
+			rename( $first . '.new', $first );
+			touch( $second, 1700000050 );
+		};
+		$this->assertResult( 'requested', 'no_acknowledgement', true, $this->sg_purge_acc_a() );
+	}
+
+	public function test_siteground_recache_two_roots_one_replaced_one_untouched_is_failed(): void {
+		$this->sg_ready();
+		$session = 'example.org-' . self::SG_SESSION . '-' . self::SG_SECRET;
+		$first   = $this->put( $this->sg_dir( 'acc-a' ) . '/index-v2.html' );
+		$this->put( $this->sg_dir( 'acc-a', $session ) . '/index-v2.html' );
+		Stub::$on['sg_cachepress_purge_cache'] = static function () use ( $first ): void {
+			file_put_contents( $first . '.new', 'recached' );
+			rename( $first . '.new', $first );
+		};
+		$result                                = $this->sg_purge_acc_a();
+		// An old copy is left in one root. Which of the two failure reasons applies is the
+		// sequence's decision (design 4.5 step 7); what matters here is that it is a failure.
+		$this->assertSame( 'failed', $result['state'] );
+		$this->assertContains( $result['reason'], array( 'still_cached', 'variant_still_cached' ) );
+		$this->assertTrue( $result['was_cached'] );
+	}
+
+	public function test_siteground_recache_a_page_that_was_not_cached_stays_not_found(): void {
+		$this->sg_ready();
+		wp_mkdir_p( $this->sg_dir( '' ) );
+		$file                                  = $this->sg_dir( 'acc-a' ) . '/index-v2.html';
+		Stub::$on['sg_cachepress_purge_cache'] = function () use ( $file ): void {
+			$this->put( $file );
+		};
+		$this->assertResult( 'requested', 'not_found_in_cache', false, $this->sg_purge_acc_a() );
+	}
+
+	public function test_siteground_recache_a_copy_the_second_call_creates_is_a_new_copy(): void {
+		$this->sg_ready();
+		$this->put( $this->sg_dir( self::LO ) . '/index-v2.html' );
+		$lower                                 = $this->sg_dir( self::LO ) . '/index-v2.html';
+		$upper                                 = $this->sg_dir( self::UP ) . '/index-v2.html';
+		Stub::$on['sg_cachepress_purge_cache'] = function ( $url ) use ( $lower, $upper ): void {
+			if ( false !== strpos( $url, '%C3' ) ) {
+				// With preheat on, the vendor fetches the upper-case address and caches it.
+				$this->put( $upper );
+			} elseif ( is_file( $lower ) ) {
+				unlink( $lower );
+			}
+		};
+		$url                                   = $this->url( '/' . self::LO . '/' );
+		$result                                = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_siteground_purge_url( $url );
+			}
+		);
+		$this->assertResult( 'purged', 'recached', true, $result );
+	}
+
+	public function test_siteground_server_cache_on_downgrades_a_purge(): void {
+		$this->sg_ready();
+		Stub::$state['sg']['siteground_optimizer_enable_cache'] = true;
+		$this->put( $this->sg_dir( 'acc-a' ) . '/index-v2.html' );
+		Stub::$on['sg_cachepress_purge_cache'] = $this->sg_clears_the_spelling_given();
+		$this->assertResult( 'requested', 'no_acknowledgement', true, $this->sg_purge_acc_a() );
+	}
+
+	public function test_siteground_site_purge_checks_the_roots_listed_before_the_call(): void {
+		$this->sg_ready();
+		$this->assertResult( 'requested', 'no_acknowledgement', null, $this->call( 'aafm_cache_siteground_purge_all' ), 'No root to look at.' );
+		$this->put( $this->sg_dir( 'acc-a' ) . '/index-v2.html' );
+		$old                          = $this->sg_dir( '' );
+		Stub::$on['purge_everything'] = function () use ( $old ): void {
+			Stub::rrmdir( $old );
+			// The next cache root has a new secret. It is a new cache, not a leftover.
+			$this->put( $this->sg_dir( 'acc-a', 'example.org-' . str_repeat( 'f', 32 ) ) . '/index-v2.html' );
+		};
+		$this->assertResult( 'purged', '', true, $this->call( 'aafm_cache_siteground_purge_all' ) );
+		$this->assertSame( array( 'purge_everything', 'purge_everything' ), Stub::names() );
+	}
 }

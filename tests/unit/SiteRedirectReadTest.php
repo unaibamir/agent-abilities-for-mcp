@@ -568,15 +568,16 @@ final class SiteRedirectReadTest extends TestCase {
 			'The query variables of the matching rule, on request.'
 		);
 
-		// Core's own request filter makes /type/aside/ a post format archive (the rule and the query
-		// variable are the ones core registers on init, which the test site has not run).
+		// Core's own request filter makes /type/aside/ a post format archive, which is a term archive
+		// (the rule and the query variable are the ones core registers on init, which the test site
+		// has not run).
 		global $wp_rewrite, $wp;
 		$public                  = $wp->public_query_vars;
 		$wp->public_query_vars[] = 'post_format';
 		$wp_rewrite->rules       = array( 'type/([^/]+)/?$' => 'index.php?post_format=$matches[1]' ) + $wp_rewrite->rules;
 		set_post_format( $parent, 'aside' );
-		$this->assertSame( array( 'class' => 'other' ), aafm_site_redirect_path_class( '/type/aside/' ) );
-		$this->assertSame( array( 'class' => 'not_found' ), aafm_site_redirect_path_class( '/type/acc-none/' ) );
+		$this->assertSame( array( 'class' => 'term' ), aafm_site_redirect_path_class( '/type/aside/' ) );
+		$this->assertSame( array( 'class' => 'term' ), aafm_site_redirect_path_class( '/type/acc-none/' ), 'A term is never looked up, so a missing one is not called a 404.' );
 		$wp->public_query_vars = $public;
 
 		// The caller is signed in; the answer is what a visitor gets. WP_Query keeps a post a visitor
@@ -603,6 +604,17 @@ final class SiteRedirectReadTest extends TestCase {
 		}
 		$this->assertSame( 'attachment', aafm_site_redirect_path_class( '/acc-parent/acc-img/' )['class'], 'A published parent still counts.' );
 		wp_set_current_user( 0 );
+
+		// A status another plugin registers as public is shown to a visitor, as core shows it.
+		register_post_status( 'acc_public', array( 'public' => true ) );
+		self::factory()->post->create(
+			array(
+				'post_name'   => 'acc-public',
+				'post_status' => 'acc_public',
+			)
+		);
+		$this->assertSame( array( 'class' => 'other' ), aafm_site_redirect_path_class( '/acc-public/' ) );
+		unset( $GLOBALS['wp_post_statuses']['acc_public'] );
 
 		update_option( 'home', 'http://example.org/sub' );
 		$this->assertSame( array( 'class' => 'date' ), aafm_site_redirect_path_class( '/sub/2025/' ), 'The home path is removed first, as WP::parse_request() removes it.' );
@@ -668,6 +680,61 @@ final class SiteRedirectReadTest extends TestCase {
 		$this->assertSame( $hooked, aafm_site_redirect_path_class( '/author/no-such-writer/' ), 'Rank Math maps a custom author slug.' );
 		remove_filter( 'request', 'RankMath\Rewrite::author_request' );
 		$this->assertSame( $hooked, aafm_site_redirect_path_class( '/.well-known/oauth-authorization-server' ), 'This plugin serves its OAuth discovery documents there.' );
+
+		// The actions taken out for the query come back when the query throws.
+		add_action( 'pre_get_posts', $noop );
+		$throw = static function () {
+			throw new \RuntimeException( 'acc' );
+		};
+		add_filter( 'wp_allow_query_attachment_by_filename', $throw );
+		$this->assertSame( array( 'class' => 'unclassified' ), aafm_site_redirect_path_class( '/acc-found/' ) );
+		$this->assertSame( 10, has_action( 'pre_get_posts', $noop ) );
+		remove_filter( 'wp_allow_query_attachment_by_filename', $throw );
+		remove_action( 'pre_get_posts', $noop );
+	}
+
+	public function test_path_class_never_looks_a_term_up_and_reads_a_term_archive_as_term(): void {
+		global $wp_rewrite;
+		$this->set_permalink_structure( '/%postname%/' );
+		// The category and tag rules core adds on init, which the test site has not run.
+		$wp_rewrite->rules = array(
+			'category/(.+?)/page/?([0-9]{1,})/?$' => 'index.php?category_name=$matches[1]&paged=$matches[2]',
+			'category/(.+?)/?$'                   => 'index.php?category_name=$matches[1]',
+			'tag/([^/]+)/?$'                      => 'index.php?tag=$matches[1]',
+		) + $wp_rewrite->rules;
+		$cat               = self::factory()->category->create( array( 'slug' => 'acc-cat' ) );
+		self::factory()->category->create( array( 'slug' => 'acc-empty' ) );
+		self::factory()->tag->create( array( 'slug' => 'acc-tag' ) );
+		self::factory()->post->create(
+			array(
+				'post_name'     => 'acc-in-cat',
+				'post_category' => array( $cat ),
+			)
+		);
+
+		// A term lookup runs a term query, whose actions and filters suppress_filters does not stop.
+		// This callback writes, so it must never run.
+		$ran    = 0;
+		$writer = static function () use ( &$ran ) {
+			++$ran;
+			update_option( 'aafm_test_term_writer_ran', $ran );
+		};
+		add_action( 'pre_get_terms', $writer );
+		$term = array( 'class' => 'term' );
+		$this->assertSame( $term, aafm_site_redirect_path_class( '/category/acc-empty/' ), 'An empty archive: handle_404() would look the term up.' );
+		$this->assertSame( $term, aafm_site_redirect_path_class( '/category/acc-cat/' ) );
+		$this->assertSame( $term, aafm_site_redirect_path_class( '/category/acc-cat/page/2/' ) );
+		$this->assertSame( $term, aafm_site_redirect_path_class( '/category/acc-none/' ), 'A missing term is not looked up either, so it is not called a 404.' );
+		$this->assertSame( $term, aafm_site_redirect_path_class( '/tag/acc-tag/' ) );
+		$wp_rewrite->rules = array( 'acc-dated/([0-9]{4})/?$' => 'index.php?category_name=acc-cat&year=$matches[1]' ) + $wp_rewrite->rules;
+		$this->assertSame( array( 'class' => 'unclassified' ), aafm_site_redirect_path_class( '/acc-dated/2025/' ), 'A term archive that is also a date archive.' );
+		$this->assertSame( array( 'class' => 'other' ), aafm_site_redirect_path_class( '/acc-in-cat/' ), 'The terms of a found post are not loaded.' );
+		// The post rule of /%category%/%postname%/ permalinks: a single post, not a term archive.
+		$wp_rewrite->rules = array( '(.+?)/([^/]+)/?$' => 'index.php?category_name=$matches[1]&name=$matches[2]' ) + $wp_rewrite->rules;
+		$this->assertSame( array( 'class' => 'other' ), aafm_site_redirect_path_class( '/acc-cat/acc-in-cat/' ), 'A post address that names its category is not a term archive.' );
+		$this->assertSame( 0, $ran, 'No term query ran.' );
+		$this->assertFalse( get_option( 'aafm_test_term_writer_ran' ) );
+		remove_action( 'pre_get_terms', $writer );
 	}
 
 	public function test_path_class_is_unclassified_where_it_cannot_decide(): void {

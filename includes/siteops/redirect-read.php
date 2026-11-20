@@ -623,38 +623,58 @@ function aafm_site_redirect_404_hooked( string $path, array $vars ): bool {
  *
  * It copies the first half of url_to_postid() and WP::parse_request(): the same rewrite rule
  * loop, the same check of verbose page rules, the same public query variables, and core's own
- * post format request filter. Then one WP_Query that asks for what a visitor sees (published
- * posts and attachments, nothing whose status a visitor cannot read even when the caller can),
- * then the rules of WP::handle_404(). It runs no plugin code: it never calls
- * WP::parse_request(), whose hooks other plugins use to send headers or redirect, and the query
- * runs with its filters suppressed and with nothing on the actions suppress_filters leaves on, so
- * it writes nothing. A page is classed as WordPress alone would class it.
+ * post format request filter. Then one WP_Query that asks for what a visitor sees (posts and
+ * attachments in a public status, nothing whose status a visitor cannot read even when the caller
+ * can), then the rules of WP::handle_404(). A page is classed as WordPress alone would class it.
+ *
+ * What runs. It never calls WP::parse_request(), whose hooks other plugins use to send headers or
+ * redirect. No plugin callback runs on the query's actions or its posts filters: the query runs
+ * with suppress_filters, and the six actions that flag leaves on are emptied for its length. It
+ * never looks a term up: a term archive is answered 'term' before the query is made, because a
+ * term query fires pre_get_terms, terms_clauses, get_term and other hooks suppress_filters does not
+ * reach, and the found posts' terms are not loaded. The value filters core applies whatever
+ * suppress_filters says still run, as in any read: wp_allow_query_attachment_by_filename,
+ * split_the_query, posts_request_ids, the comment feed filters of a single post's feed, the meta
+ * cache filter of the found posts, get_post_status, get_user_metadata for an author, and wpdb's
+ * query filter. It writes nothing.
  *
  * A 404 carries 'hooked' => true when plugin code that could serve the page is hooked where the
  * real request runs it (aafm_site_redirect_404_hooked()): a redirect of pages not found cannot be
  * told from it, while a setting for another kind of page still does not apply.
  *
+ * Term: a category, tag or other term archive. It is never an attachment page or an author or date
+ * archive, and it may be a page not found, which only a term lookup could tell.
+ *
  * Unclassified: plain permalinks, rewrite rules this request has not built, an index.php/ address,
- * any error, and a page handle_404() would make a 404 while a callback is on pre_handle_404 (the
- * callback can stop the 404, and the reset of the flags that comes with it, so an empty date or
- * author archive would still be one).
+ * any error, a term query that is also a date or author archive, and a page handle_404() would
+ * make a 404 while a callback is on pre_handle_404 (the callback can stop the 404, and the reset of
+ * the flags that comes with it, so an empty date or author archive would still be one).
  *
  * @param string $path      Full canonical decoded path, home path included.
- * @param bool   $with_vars Also return the query variables of the matching rewrite rule, as 'vars'.
+ * @param bool   $with_vars Also return the query variables of the matching rewrite rule, as 'vars':
+ *                          every variable the rule sets, before the public query variable list is
+ *                          applied, because a plugin adds its own to that list only while a
+ *                          request is parsed.
  * @return array<string,mixed> 'class' is attachment (with 'id' and 'parent'), author (with
- *                             'has_posts'), date, not_found (with 'hooked' when true), other or
- *                             unclassified.
+ *                             'has_posts'), date, not_found (with 'hooked' when true), term, other
+ *                             or unclassified.
  */
 function aafm_site_redirect_path_class( string $path, bool $with_vars = false ): array {
 	global $wp_rewrite, $wp, $wp_filter;
 
-	$vars   = array();
-	$answer = static function ( array $result ) use ( &$vars, $path, $with_vars ): array {
+	$vars = array();
+	/**
+	 * The matching rule's query variables; null until a rule matches.
+	 *
+	 * @var array<string,string>|null $perma
+	 */
+	$perma  = null;
+	$answer = static function ( array $result ) use ( &$vars, &$perma, $path, $with_vars ): array {
 		if ( 'not_found' === $result['class'] && aafm_site_redirect_404_hooked( $path, $vars ) ) {
 			$result['hooked'] = true;
 		}
 
-		return $with_vars ? $result + array( 'vars' => $vars ) : $result;
+		return $with_vars ? $result + array( 'vars' => is_array( $perma ) ? $perma : array() ) : $result;
 	};
 
 	try {
@@ -674,7 +694,6 @@ function aafm_site_redirect_path_class( string $path, bool $with_vars = false ):
 			return $answer( array( 'class' => 'unclassified' ) );
 		}
 
-		$perma = null;
 		foreach ( (array) $rules as $match => $query ) {
 			if ( 1 !== preg_match( '#^' . $match . '#', $request, $matches ) ) {
 				continue;
@@ -722,8 +741,21 @@ function aafm_site_redirect_path_class( string $path, bool $with_vars = false ):
 			$vars = _post_format_request( $vars );
 		}
 
+		// What a visitor sees: the public statuses, and an attachment's inherited one.
+		$statuses = array_merge( array_values( get_post_stati( array( 'public' => true ) ) ), array( 'inherit' ) );
+		$args     = array_merge(
+			$vars,
+			array(
+				'post_status'            => $statuses,
+				'no_found_rows'          => true,
+				'update_post_term_cache' => false,
+				'suppress_filters'       => true,
+			)
+		);
+
 		// No plugin code runs in this query: suppress_filters keeps the posts filters out, and the
-		// actions it leaves on are emptied for the length of the query.
+		// actions it leaves on are emptied for the length of the query. A term archive is answered
+		// from the parsed query alone: its query and handle_404() would look the term up.
 		$detached = array();
 		foreach ( array( 'parse_query', 'parse_tax_query', 'pre_get_posts', 'posts_selection', 'posts_pre_query', 'set_404' ) as $hook ) {
 			if ( isset( $wp_filter[ $hook ] ) ) {
@@ -732,22 +764,23 @@ function aafm_site_redirect_path_class( string $path, bool $with_vars = false ):
 			}
 		}
 		try {
-			$query = new WP_Query(
-				array_merge(
-					$vars,
-					array(
-						'post_status'      => array( 'publish', 'inherit' ),
-						'no_found_rows'    => true,
-						'suppress_filters' => true,
-					)
-				)
-			);
+			$query = new WP_Query();
+			$query->parse_query( $args );
+			// A single post's query parses no taxonomy clause, whatever its rule sets.
+			$term = $query->tax_query instanceof WP_Tax_Query && ! empty( $query->tax_query->queries );
+			if ( ! $term ) {
+				// What the constructor does with arguments: reset, parse again, run.
+				$query->query( $args );
+			}
 		} finally {
 			foreach ( $detached as $hook => $object ) {
 				$wp_filter[ $hook ] = $object; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Puts back the hook object taken out above.
 			}
 		}
 
+		if ( $term ) {
+			return $answer( array( 'class' => ( $query->is_date() || $query->is_author() ) ? 'unclassified' : 'term' ) );
+		}
 		if ( $query->is_404() ) {
 			return $answer( array( 'class' => 'not_found' ) );
 		}
@@ -756,9 +789,7 @@ function aafm_site_redirect_path_class( string $path, bool $with_vars = false ):
 		if ( ( $query->is_single() || $query->is_page() ) && isset( $posts[0] ) && $posts[0] instanceof WP_Post ) {
 			// WP_Query keeps a draft, pending, scheduled or private post, and an attachment of one,
 			// for a caller who may read it; a visitor gets a 404.
-			$status = (string) get_post_status( $posts[0] );
-			$object = get_post_status_object( $status );
-			if ( ! in_array( $status, array( 'publish', 'inherit' ), true ) && ( ! $object || ! $object->public ) ) {
+			if ( ! in_array( (string) get_post_status( $posts[0] ), $statuses, true ) ) {
 				$posts = array();
 				$post  = null;
 			}
@@ -780,7 +811,7 @@ function aafm_site_redirect_path_class( string $path, bool $with_vars = false ):
 		} elseif ( ! $query->is_paged() ) {
 			$author  = $query->get( 'author' );
 			$set_404 = ! ( ( $query->is_author() && is_numeric( $author ) && $author > 0 && is_user_member_of_blog( (int) $author ) )
-				|| ( ( $query->is_tag() || $query->is_category() || $query->is_tax() || $query->is_post_type_archive() ) && $query->get_queried_object() )
+				|| ( $query->is_post_type_archive() && $query->get_queried_object() )
 				|| $query->is_home() || $query->is_search() || $query->is_feed() );
 		}
 

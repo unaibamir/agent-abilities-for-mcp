@@ -552,6 +552,55 @@ final class SiteRedirectsTest extends TestCase {
 		);
 	}
 
+	public function test_test_redirect_names_a_setting_and_says_how_to_check_an_unknown_answer(): void {
+		$this->two_fakes();
+		Stub::$fake['fake_a'] = array(
+			'match_return' => array(
+				'state'  => 'unknown',
+				'reason' => 'rank_math_attachment_redirect',
+			),
+		);
+		Stub::$fake['fake_b'] = array(
+			'match_return' => array(
+				'state'   => 'matched',
+				'id'      => '',
+				'target'  => 'https://user:secret@new.example/caf%C3%A9?x=1',
+				'code'    => 301,
+				'setting' => 'redirection_relocate',
+			),
+		);
+
+		$out = aafm_exec_site_test_redirect( array( 'url' => '/café-old' ) );
+
+		$this->assertSame( array( 'provider', 'label', 'result', 'reason', 'verify' ), array_keys( $out['evaluated'][0] ) );
+		$this->assertStringContainsString( 'http://example.org/caf%c3%a9-old', $out['evaluated'][0]['verify'], 'The hint names the address in the form this site serves.' );
+		$this->assertStringContainsString( 'without following redirects', $out['evaluated'][0]['verify'] );
+		$this->assertSame( array( 'provider', 'label', 'result' ), array_keys( $out['evaluated'][1] ), 'Only an unknown answer carries the hint.' );
+		$this->assertNull( $out['first_match'], 'An unknown answer before the match still hides it.' );
+
+		Stub::$fake['fake_a'] = array( 'match_return' => array( 'state' => 'no_match' ) );
+
+		$out = aafm_exec_site_test_redirect( array( 'url' => '/café-old' ) );
+		$this->assertSame(
+			array(
+				'provider' => 'fake_b',
+				'id'       => '',
+				'target'   => 'https://new.example/caf%C3%A9',
+				'code'     => 301,
+				'setting'  => 'redirection_relocate',
+			),
+			$out['first_match']
+		);
+		$this->assertSame( 'redirection_relocate', $out['chain'][0]['setting'] );
+		$this->assertSame( 'https://new.example/caf%C3%A9', $out['chain'][0]['target'] );
+		$this->assertArrayNotHasKey( 'verify', $out['evaluated'][0] );
+
+		$schema = aafm_args_site_test_redirect()['output_schema']['properties'];
+		$this->assertSame( array( 'type' => 'string' ), $schema['first_match']['properties']['setting'] );
+		$this->assertSame( array( 'type' => 'string' ), $schema['chain']['items']['properties']['setting'] );
+		$this->assertSame( 'string', $schema['evaluated']['items']['properties']['verify']['type'] );
+	}
+
 	public function test_each_provider_is_asked_with_its_own_path_form_on_a_subfolder_site(): void {
 		update_option( 'home', 'http://example.org/sub' );
 		update_option( 'siteurl', 'http://example.org/sub' );

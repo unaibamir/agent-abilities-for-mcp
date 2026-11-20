@@ -76,7 +76,7 @@ function aafm_site_redirects_registry_definitions(): array {
 		),
 		'aafm/site-test-redirect'  => array(
 			'label'        => __( 'Test a URL against the redirects', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Works out which stored redirect a URL on this site would hit, without requesting the URL and without changing any hit counter or log, then follows the redirects it can see for up to ten steps and says whether they end, leave the site or form a loop. It checks the supported redirect plugins in the order they were seen to run and reports what each one said. It is a simulation with limits: it does not see server rules, WordPress\'s own redirects, a CDN, or redirect plugins it does not support, which it names when it finds them, so the answer is never complete. A supported plugin\'s site-wide redirect that works per request rather than per rule, such as a 404 fallback, automatic attachment or archive redirects, a www redirect, a site move or a filter another plugin adds, makes that plugin answer unknown with a reason that names it. Conditional and pattern redirects are evaluated by each plugin\'s own matcher where it has one and are otherwise unknown. It changes nothing. Requires the manage-options capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Works out which stored redirect a URL on this site would hit, without requesting the URL and without changing any hit counter or log, then follows the redirects it can see for up to ten steps and says whether they end, leave the site or form a loop. It checks the supported redirect plugins in the order they were seen to run and reports what each one said. It is a simulation with limits: it does not see server rules, WordPress\'s own redirects, a CDN, or redirect plugins it does not support, which it names when it finds them, so the answer is never complete. Some redirects come from a plugin setting rather than a stored rule: a 404 fallback, attachment, author or date archive redirects, a redirect for a changed slug, a www redirect, a site move or a permalink migration. For these the tool uses this site\'s own permalink rules to work out what kind of page the address is. A setting that applies gives a match that names the setting instead of a rule id; a setting that cannot apply is ignored. When the address cannot be classified, or another plugin has hooked the redirect plugin\'s filters, that plugin answers unknown with a reason naming the setting and a hint to request the address without following redirects. That request is the only sure check. Pages that plugin code serves outside WordPress\'s permalink rules are judged as WordPress alone would judge them. Conditional and pattern redirects are evaluated by each plugin\'s own matcher where it has one and are otherwise unknown. It changes nothing. Requires the manage-options capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'site_redirects',
@@ -319,6 +319,7 @@ function aafm_args_site_test_redirect(): array {
 		'id'       => array( 'type' => 'string' ),
 		'target'   => array( 'type' => 'string' ),
 		'code'     => array( 'type' => 'integer' ),
+		'setting'  => array( 'type' => 'string' ),
 	);
 
 	return array(
@@ -358,6 +359,10 @@ function aafm_args_site_test_redirect(): array {
 								'enum' => array( 'matched', 'no_match', 'unknown' ),
 							),
 							'reason'   => array( 'type' => 'string' ),
+							'verify'   => array(
+								'type'        => 'string',
+								'description' => __( 'On an unknown answer only: how to check it with a real request.', 'agent-abilities-for-mcp' ),
+							),
 						),
 					),
 				),
@@ -371,6 +376,7 @@ function aafm_args_site_test_redirect(): array {
 							'from'     => array( 'type' => 'string' ),
 							'target'   => array( 'type' => 'string' ),
 							'code'     => array( 'type' => 'integer' ),
+							'setting'  => array( 'type' => 'string' ),
 						),
 					),
 				),
@@ -679,6 +685,16 @@ function aafm_exec_site_test_redirect( array $input ) {
 	$path   = (string) $url['path'];
 	$result = aafm_site_redirect_chain( $path, aafm_site_redirect_ready_slugs() );
 
+	$evaluated = array();
+	foreach ( $result['evaluated'] as $row ) {
+		if ( 'unknown' === $row['result'] ) {
+			// The only sure check of an unknown answer is a real request.
+			/* translators: %s: the tested address. */
+			$row['verify'] = sprintf( __( 'Request %s without following redirects and read the status code and Location header to see what this plugin does with it.', 'agent-abilities-for-mcp' ), (string) $url['url'] );
+		}
+		$evaluated[] = $row;
+	}
+
 	$first_match = $result['first_match'];
 	if ( is_array( $first_match ) ) {
 		$first_match['target'] = aafm_site_redirect_output_target( (string) $first_match['target'] )[0];
@@ -700,7 +716,7 @@ function aafm_exec_site_test_redirect( array $input ) {
 	return array(
 		'path'                 => $path,
 		'first_match'          => $first_match,
-		'evaluated'            => $result['evaluated'],
+		'evaluated'            => $evaluated,
 		'chain'                => $chain,
 		'chain_ends'           => $result['chain_ends'],
 		'loop_detected'        => $result['loop_detected'],

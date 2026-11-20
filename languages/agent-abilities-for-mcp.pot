@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-21T04:19:47+05:00\n"
+"POT-Creation-Date: 2026-11-21T04:26:21+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -5966,7 +5966,7 @@ msgstr ""
 
 #: includes/admin/backup-gate.php:275
 #: includes/admin/bridge-directory.php:842
-#: includes/admin/integrations.php:727
+#: includes/admin/integrations.php:728
 #: includes/admin/page.php:2373
 msgid "high-risk"
 msgstr ""
@@ -6305,7 +6305,7 @@ msgid "Disable all"
 msgstr ""
 
 #: includes/admin/bridge-directory.php:599
-#: includes/admin/integrations.php:649
+#: includes/admin/integrations.php:650
 #: includes/admin/page.php:2269
 msgid "Enable all reads"
 msgstr ""
@@ -8968,17 +8968,17 @@ msgstr ""
 msgid "These abilities can read the dates and sizes of your backups. Turn all of them on?"
 msgstr ""
 
-#: includes/admin/integrations.php:648
+#: includes/admin/integrations.php:649
 #: includes/admin/page.php:2268
 msgid "Enable all / Disable all"
 msgstr ""
 
-#: includes/admin/integrations.php:721
+#: includes/admin/integrations.php:722
 #: includes/admin/page.php:2366
 msgid "read-only"
 msgstr ""
 
-#: includes/admin/integrations.php:731
+#: includes/admin/integrations.php:732
 msgid "Saved, currently unavailable"
 msgstr ""
 

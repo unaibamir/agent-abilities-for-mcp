@@ -467,6 +467,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/geodirectory.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/site-health.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/site-cache.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/site-redirects.php';
 
 	add_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 	add_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );

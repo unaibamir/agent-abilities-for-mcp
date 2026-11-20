@@ -38,7 +38,7 @@ defined( 'ABSPATH' ) || exit;
  */
 function aafm_integration_ability_order(): array {
 	return array(
-		'yoast'         => array(
+		'yoast'          => array(
 			array(
 				'name' => 'aafm/yoast-get-post',
 				'risk' => 'read',
@@ -52,7 +52,7 @@ function aafm_integration_ability_order(): array {
 				'risk' => 'read',
 			),
 		),
-		'rankmath'      => array(
+		'rankmath'       => array(
 			array(
 				'name' => 'aafm/rankmath-get-post',
 				'risk' => 'read',
@@ -74,7 +74,7 @@ function aafm_integration_ability_order(): array {
 				'risk' => 'read',
 			),
 		),
-		'aioseo'        => array(
+		'aioseo'         => array(
 			array(
 				'name' => 'aafm/aioseo-get-post',
 				'risk' => 'read',
@@ -88,7 +88,7 @@ function aafm_integration_ability_order(): array {
 				'risk' => 'read',
 			),
 		),
-		'acf'           => array(
+		'acf'            => array(
 			array(
 				'name' => 'aafm/acf-list-field-groups',
 				'risk' => 'read',
@@ -118,7 +118,7 @@ function aafm_integration_ability_order(): array {
 				'risk' => 'write',
 			),
 		),
-		'woocommerce'   => array(
+		'woocommerce'    => array(
 			array(
 				'name' => 'aafm/wc-list-products',
 				'risk' => 'read',
@@ -328,7 +328,7 @@ function aafm_integration_ability_order(): array {
 				'risk' => 'write',
 			),
 		),
-		'slim_seo'      => array(
+		'slim_seo'       => array(
 			array(
 				'name' => 'aafm/slim-seo-get-post',
 				'risk' => 'read',
@@ -338,7 +338,7 @@ function aafm_integration_ability_order(): array {
 				'risk' => 'write',
 			),
 		),
-		'tec'           => array(
+		'tec'            => array(
 			array(
 				'name' => 'aafm/tec-get-events',
 				'risk' => 'read',
@@ -392,7 +392,7 @@ function aafm_integration_ability_order(): array {
 				'risk' => 'write',
 			),
 		),
-		'event_tickets' => array(
+		'event_tickets'  => array(
 			array(
 				'name' => 'aafm/tec-get-tickets',
 				'risk' => 'read',
@@ -406,7 +406,7 @@ function aafm_integration_ability_order(): array {
 				'risk' => 'read',
 			),
 		),
-		'avada'         => array(
+		'avada'          => array(
 			array(
 				'name' => 'aafm/avada-get-page-content',
 				'risk' => 'read',
@@ -480,7 +480,7 @@ function aafm_integration_ability_order(): array {
 				'risk' => 'write',
 			),
 		),
-		'wpbakery'      => array(
+		'wpbakery'       => array(
 			array(
 				'name' => 'aafm/wpbakery-get-page-content',
 				'risk' => 'read',
@@ -530,7 +530,7 @@ function aafm_integration_ability_order(): array {
 				'risk' => 'destructive',
 			),
 		),
-		'geodirectory'  => array(
+		'geodirectory'   => array(
 			array(
 				'name' => 'aafm/geodirectory-get-listings',
 				'risk' => 'read',
@@ -548,7 +548,7 @@ function aafm_integration_ability_order(): array {
 				'risk' => 'write',
 			),
 		),
-		'site_cache'    => array(
+		'site_cache'     => array(
 			array(
 				'name' => 'aafm/site-cache-status',
 				'risk' => 'read',
@@ -564,6 +564,24 @@ function aafm_integration_ability_order(): array {
 			array(
 				'name' => 'aafm/site-purge-site-cache',
 				'risk' => 'destructive',
+			),
+		),
+		'site_redirects' => array(
+			array(
+				'name' => 'aafm/site-list-redirects',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/site-get-redirect',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/site-list-404s',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/site-test-redirect',
+				'risk' => 'read',
 			),
 		),
 	);

@@ -30,47 +30,47 @@ function aafm_integration_cards(): array {
 	// integration" - not classify it. Deliberately NOT the 'abilities'/'bolt' glyph, which means
 	// "enabled" elsewhere in this UI; reusing it here would imply a state the icon doesn't track.
 	return array(
-		'yoast'         => array(
+		'yoast'          => array(
 			'label'   => __( 'Yoast SEO', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'wordpress-seo/wp-seo.php' ),
 		),
-		'rankmath'      => array(
+		'rankmath'       => array(
 			'label'   => __( 'Rank Math', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'seo-by-rank-math/rank-math.php' ),
 		),
-		'aioseo'        => array(
+		'aioseo'         => array(
 			'label'   => __( 'All in One SEO', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'all-in-one-seo-pack/all_in_one_seo_pack.php' ),
 		),
-		'acf'           => array(
+		'acf'            => array(
 			'label'   => __( 'ACF', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'advanced-custom-fields/acf.php', 'advanced-custom-fields-pro/acf.php', 'secure-custom-fields/secure-custom-fields.php' ),
 		),
-		'woocommerce'   => array(
+		'woocommerce'    => array(
 			'label'   => __( 'WooCommerce', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'woocommerce/woocommerce.php' ),
 		),
-		'slim_seo'      => array(
+		'slim_seo'       => array(
 			'label'   => __( 'Slim SEO', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'slim-seo/slim-seo.php' ),
 		),
-		'tec'           => array(
+		'tec'            => array(
 			'label'   => __( 'The Events Calendar', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'the-events-calendar/the-events-calendar.php' ),
 		),
-		'event_tickets' => array(
+		'event_tickets'  => array(
 			'label'   => __( 'Event Tickets', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'event-tickets/event-tickets.php' ),
 		),
-		'avada'         => array(
+		'avada'          => array(
 			'label'   => __( 'Avada / Fusion Builder', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			// Avada is a theme, not a plugin - there is no plugin file to probe for an
@@ -79,17 +79,17 @@ function aafm_integration_cards(): array {
 			// (Task 21 Step 7: active/not_installed only, no installed_inactive for this card).
 			'plugins' => array(),
 		),
-		'wpbakery'      => array(
+		'wpbakery'       => array(
 			'label'   => __( 'WPBakery Page Builder', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'js_composer/js_composer.php' ),
 		),
-		'geodirectory'  => array(
+		'geodirectory'   => array(
 			'label'   => __( 'GeoDirectory', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'geodirectory/geodirectory.php' ),
 		),
-		'site_cache'    => array(
+		'site_cache'     => array(
 			'label'   => __( 'Page cache', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array(
@@ -107,6 +107,11 @@ function aafm_integration_cards(): array {
 				'nginx-helper/nginx-helper.php',
 				'varnish-http-purge/varnish-http-purge.php',
 			),
+		),
+		'site_redirects' => array(
+			'label'   => __( 'Redirects', 'agent-abilities-for-mcp' ),
+			'icon'    => 'integrations',
+			'plugins' => array( 'eps-301-redirects/eps-301-redirects.php', 'redirection/redirection.php', 'safe-redirect-manager/safe-redirect-manager.php', 'seo-by-rank-math/rank-math.php', 'slim-seo/slim-seo.php' ),
 		),
 	);
 }

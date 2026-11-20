@@ -133,6 +133,10 @@ final class CatalogFixture {
 		'aafm/site-list-updates',
 		'aafm/site-cron-status',
 		'aafm/site-cache-status',
+		'aafm/site-list-redirects',
+		'aafm/site-get-redirect',
+		'aafm/site-list-404s',
+		'aafm/site-test-redirect',
 	);
 
 	/**

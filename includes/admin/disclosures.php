@@ -290,5 +290,11 @@ function aafm_ability_disclosures(): array {
 		'aafm/site-purge-post-cache'        => __( "Asks every supported cache plugin that is serving cached pages to remove one published post or page from its page cache, through that plugin's own purge, and says for each plugin whether a cached copy was found and removed or the purge was only requested. Counts against a site-wide purge budget.", 'agent-abilities-for-mcp' ),
 		'aafm/site-purge-url-cache'         => __( "Asks every supported cache plugin that is serving cached pages to remove one URL of this site from its page cache, through that plugin's own purge. Addresses on other sites, query strings and wildcards are refused. Counts against a site-wide purge budget.", 'agent-abilities-for-mcp' ),
 		'aafm/site-purge-site-cache'        => __( 'Asks every supported cache plugin that is serving cached pages to empty its whole page cache. No content is removed, but the site is slower until pages are cached again. Allowed once every 15 minutes for the whole site.', 'agent-abilities-for-mcp' ),
+
+		// Redirects (read only).
+		'aafm/site-list-redirects'          => __( 'Lists the redirects stored by Redirection, Rank Math, Safe Redirect Manager, 301 Redirects and Slim SEO, with source, target, status code and whether each is on. Sign-in details and query strings are removed from targets. It changes nothing.', 'agent-abilities-for-mcp' ),
+		'aafm/site-get-redirect'            => __( 'Reads one stored redirect by its id. It changes nothing.', 'agent-abilities-for-mcp' ),
+		'aafm/site-list-404s'               => __( 'Lists the addresses visitors asked for that were not found, as your redirect plugin recorded them, with query strings removed and token-like parts redacted. These addresses can contain personal data a visitor typed into a URL. Never returns an IP address, a browser name or a referring address.', 'agent-abilities-for-mcp' ),
+		'aafm/site-test-redirect'           => __( 'Works out which stored redirect a URL on this site would hit and follows the chain, without requesting the URL or changing any hit counter. It is a simulation: it does not see server rules or redirect plugins it does not support.', 'agent-abilities-for-mcp' ),
 	);
 }

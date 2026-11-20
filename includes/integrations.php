@@ -23,7 +23,7 @@ defined( 'ABSPATH' ) || exit;
  * Whether a given integration's host plugin is active (so its abilities should
  * register / discover).
  *
- * @param string $slug One of 'yoast' | 'rankmath' | 'aioseo' | 'acf' | 'woocommerce' | 'slim_seo' | 'tec' | 'event_tickets' | 'avada' | 'wpbakery' | 'geodirectory' | 'site_cache'.
+ * @param string $slug One of 'yoast' | 'rankmath' | 'aioseo' | 'acf' | 'woocommerce' | 'slim_seo' | 'tec' | 'event_tickets' | 'avada' | 'wpbakery' | 'geodirectory' | 'site_cache' | 'site_redirects'.
  * @return bool
  */
 function aafm_integration_active( string $slug ): bool {
@@ -63,6 +63,9 @@ function aafm_integration_active( string $slug ): bool {
 			break;
 		case 'site_cache':
 			$active = aafm_site_cache_active();
+			break;
+		case 'site_redirects':
+			$active = aafm_site_redirects_active();
 			break;
 		default:
 			return false;
@@ -400,6 +403,32 @@ function aafm_site_cache_active(): bool {
 	 * @param bool $active Detected active state.
 	 */
 	return (bool) apply_filters( 'aafm_site_cache_active', $active );
+}
+
+/**
+ * Whether a supported redirect plugin is detected, behind a filterable seam.
+ *
+ * True when the detect tests of any redirect registry entry pass. Only cheap symbol tests run:
+ * no adapter file is loaded and no vendor code is called. Whether a detected plugin's redirect
+ * feature is on is a separate question, answered per call by the adapter's ready() function.
+ *
+ * @return bool
+ */
+function aafm_site_redirects_active(): bool {
+	$active = false;
+	foreach ( aafm_site_redirect_adapters() as $entry ) {
+		if ( is_array( $entry ) && aafm_site_cache_detected( $entry ) ) {
+			$active = true;
+			break;
+		}
+	}
+
+	/**
+	 * Filters whether a supported redirect plugin is reported active.
+	 *
+	 * @param bool $active Detected active state.
+	 */
+	return (bool) apply_filters( 'aafm_site_redirects_active', $active );
 }
 
 /**

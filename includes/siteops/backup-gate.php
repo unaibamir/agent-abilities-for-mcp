@@ -89,10 +89,23 @@ function aafm_backup_gate_permissive_on( string $option ): bool {
 }
 
 /**
+ * Whether a value is a tool name the gate list can hold: a native name (aafm/...) or another
+ * plugin's own slug. The save path and the read use this one test.
+ *
+ * @param mixed $slug The value.
+ * @return bool
+ */
+function aafm_backup_gate_slug_valid( $slug ): bool {
+	return is_string( $slug ) && 1 === preg_match( '/^[a-z0-9-]+\/[a-z0-9\/_-]+$/', $slug );
+}
+
+/**
  * The tools the owner put behind the gate: native names and foreign slugs.
  *
- * @return list<string>|null Null when the row cannot be read or is not a list: the gate then
- *                           governs every tool that is not a read.
+ * @return list<string>|null Null when the row cannot be read, is not a list, or holds anything that
+ *                           is not a tool name: the gate then governs every tool that is not a
+ *                           read. A malformed member is never dropped, since dropping it could
+ *                           leave an empty list, which governs nothing.
  */
 function aafm_backup_gate_list(): ?array {
 	$row = aafm_policy_row( 'aafm_backup_gate_abilities' );
@@ -102,11 +115,16 @@ function aafm_backup_gate_list(): ?array {
 	if ( ! $row['found'] ) {
 		return array();
 	}
-	if ( ! is_array( $row['value'] ) ) {
+	if ( ! is_array( $row['value'] ) || array_values( $row['value'] ) !== $row['value'] ) {
 		return null;
 	}
+	foreach ( $row['value'] as $slug ) {
+		if ( ! aafm_backup_gate_slug_valid( $slug ) ) {
+			return null;
+		}
+	}
 
-	return array_values( array_map( 'strval', array_filter( $row['value'], 'is_scalar' ) ) );
+	return $row['value'];
 }
 
 /**

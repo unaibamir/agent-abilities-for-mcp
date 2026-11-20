@@ -117,7 +117,7 @@ function aafm_sanitize_backup_gate_input( array $posted ): ?array {
 		}
 		$slug = aafm_sanitize_plain_text( $slug );
 		// A native name (aafm/...) or another plugin's own slug. Stored whether or not it is offered now.
-		if ( 1 === preg_match( '/^[a-z0-9-]+\/[a-z0-9\/_-]+$/', $slug ) ) {
+		if ( aafm_backup_gate_slug_valid( $slug ) ) {
 			$tools[] = $slug;
 		}
 	}

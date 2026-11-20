@@ -450,6 +450,24 @@ final class BackupGateTest extends TestCase {
 		$this->assertSame( 'backup_gate', $answer );
 	}
 
+	public function test_a_malformed_list_governs_every_write(): void {
+		$malformed = array(
+			array( null ),
+			array( self::TOOL, null ),
+			array( self::TOOL, 7 ),
+			array( self::TOOL, 'Not a slug' ),
+			array( self::TOOL, array( 'aafm/update-post' ) ),
+			array( 'tool' => self::TOOL ),
+		);
+		foreach ( $malformed as $list ) {
+			update_option( 'aafm_backup_gate_abilities', $list );
+			$label = (string) wp_json_encode( $list );
+
+			$this->assertNull( aafm_backup_gate_list(), $label );
+			$this->assertSame( 'backup_gate', $this->adapter_fire( 'aafm/update-post' ), $label . ' governs every write.' );
+		}
+	}
+
 	public function test_an_unreadable_verdict_row_leaves_a_large_archive_pending(): void {
 		$this->budget( 1024 );
 		$file = aafm_updraft_stub_add_set( 'aaaaaaaaaaa1', 3600 );

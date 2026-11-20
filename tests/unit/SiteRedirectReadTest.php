@@ -705,10 +705,53 @@ final class SiteRedirectReadTest extends TestCase {
 		$cat               = self::factory()->category->create( array( 'slug' => 'acc-cat' ) );
 		self::factory()->category->create( array( 'slug' => 'acc-empty' ) );
 		self::factory()->tag->create( array( 'slug' => 'acc-tag' ) );
-		self::factory()->post->create(
+		$in_cat = self::factory()->post->create(
 			array(
 				'post_name'     => 'acc-in-cat',
 				'post_category' => array( $cat ),
+			)
+		);
+
+		// For the rules below that set a single page's variable and a taxonomy variable.
+		register_taxonomy(
+			'acc_mix',
+			array( 'post', 'page', 'attachment', 'acc_book' ),
+			array(
+				'public'    => true,
+				'query_var' => 'acc_mix',
+			)
+		);
+		register_post_type(
+			'acc_book',
+			array(
+				'public'    => true,
+				'query_var' => 'acc_book',
+			)
+		);
+		$image = self::factory()->attachment->create_object(
+			array(
+				'file'           => 'acc-mix-img.png',
+				'post_parent'    => $in_cat,
+				'post_name'      => 'acc-mix-img',
+				'post_mime_type' => 'image/png',
+			)
+		);
+		self::factory()->post->create(
+			array(
+				'post_name' => 'acc-mix-page',
+				'post_type' => 'page',
+			)
+		);
+		self::factory()->post->create(
+			array(
+				'post_name' => 'acc-mix-book',
+				'post_type' => 'acc_book',
+			)
+		);
+		self::factory()->user->create(
+			array(
+				'role'          => 'author',
+				'user_nicename' => 'acc-mix-writer',
 			)
 		);
 
@@ -732,6 +775,31 @@ final class SiteRedirectReadTest extends TestCase {
 		// The post rule of /%category%/%postname%/ permalinks: a single post, not a term archive.
 		$wp_rewrite->rules = array( '(.+?)/([^/]+)/?$' => 'index.php?category_name=$matches[1]&name=$matches[2]' ) + $wp_rewrite->rules;
 		$this->assertSame( array( 'class' => 'other' ), aafm_site_redirect_path_class( '/acc-cat/acc-in-cat/' ), 'A post address that names its category is not a term archive.' );
+
+		// A rule that sets a single page's variable and a taxonomy variable is that single page: core's
+		// parse_query() takes its singular branch and never parses the taxonomy clause, and get_posts()
+		// parses one only for a query that is not singular, so a real request ignores the variable.
+		$wp_rewrite->rules = array(
+			'acc-mix-att/([^/]+)/([^/]+)/?$'    => 'index.php?attachment=$matches[1]&acc_mix=$matches[2]',
+			'acc-mix-attcat/([^/]+)/([^/]+)/?$' => 'index.php?attachment=$matches[1]&category_name=$matches[2]',
+			'acc-mix-page/([^/]+)/([^/]+)/?$'   => 'index.php?pagename=$matches[1]&acc_mix=$matches[2]',
+			'acc-mix-post/([^/]+)/([^/]+)/?$'   => 'index.php?name=$matches[1]&acc_mix=$matches[2]',
+			'acc-mix-book/([^/]+)/([^/]+)/?$'   => 'index.php?acc_book=$matches[1]&acc_mix=$matches[2]',
+			'acc-mix-author/([^/]+)/([^/]+)/?$' => 'index.php?author_name=$matches[1]&acc_mix=$matches[2]',
+		) + $wp_rewrite->rules;
+		$attachment        = array(
+			'class'  => 'attachment',
+			'id'     => $image,
+			'parent' => $in_cat,
+		);
+		$this->assertSame( $attachment, aafm_site_redirect_path_class( '/acc-mix-att/acc-mix-img/red/' ), 'An attachment rule that also sets a custom taxonomy variable.' );
+		$this->assertSame( $attachment, aafm_site_redirect_path_class( '/acc-mix-attcat/acc-mix-img/acc-cat/' ), 'An attachment rule that also names a category.' );
+		$this->assertSame( array( 'class' => 'other' ), aafm_site_redirect_path_class( '/acc-mix-page/acc-mix-page/red/' ) );
+		$this->assertSame( array( 'class' => 'other' ), aafm_site_redirect_path_class( '/acc-mix-post/acc-in-cat/red/' ) );
+		$this->assertSame( array( 'class' => 'other' ), aafm_site_redirect_path_class( '/acc-mix-book/acc-mix-book/red/' ) );
+		$this->assertSame( array( 'class' => 'unclassified' ), aafm_site_redirect_path_class( '/acc-mix-author/acc-mix-writer/red/' ), 'A term archive that is also an author archive.' );
+		unregister_post_type( 'acc_book' );
+		unregister_taxonomy( 'acc_mix' );
 		$this->assertSame( 0, $ran, 'No term query ran.' );
 		$this->assertFalse( get_option( 'aafm_test_term_writer_ran' ) );
 		remove_action( 'pre_get_terms', $writer );

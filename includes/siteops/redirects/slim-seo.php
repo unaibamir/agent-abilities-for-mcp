@@ -92,11 +92,49 @@ function aafm_redirect_slim_seo_all(): array {
  * with an empty target: the plugin answers 410 and does not redirect. A relative target is
  * returned as stored; the plugin prefixes the home URL when it redirects.
  *
+ * Before all of it (4.11.6, NoCategoryBase.php:95-113), with the no category base feature on, a
+ * request filter sends any address under the old category base to the same address without it
+ * while WordPress parses the request. That feature is apart from the redirect module, so it is
+ * the only answer while the module is off.
+ *
  * @param string              $path  The path BELOW the home path (the registry's match_path is below_home).
  * @param array<string,mixed> $cache Per-call cache; holds the rule list after the first call.
  * @return array<string,mixed> A match shape.
  */
 function aafm_redirect_slim_seo_match( string $path, array &$cache ): array {
+	global $wp;
+	$full = aafm_site_redirect_home_path() . $path;
+	if ( $wp instanceof WP && in_array( 'category_redirect', (array) $wp->public_query_vars, true ) ) {
+		$base = aafm_site_redirect_path_class( $full, true );
+		if ( 'unclassified' === $base['class'] && array() === $base['vars'] ) {
+			// No rewrite rule could be followed, so the old base cannot be told apart.
+			return array(
+				'state'  => 'unknown',
+				'reason' => 'slim_seo_category_redirect',
+			);
+		}
+		if ( ! empty( $base['vars']['category_redirect'] ) ) {
+			$value = (string) $base['vars']['category_redirect'];
+			if ( implode( '/', array_map( 'rawurlencode', explode( '/', $value ) ) ) !== $value ) {
+				// The escapes of the address a browser sends make the target.
+				return array(
+					'state'  => 'unknown',
+					'reason' => 'slim_seo_category_redirect',
+				);
+			}
+			return array(
+				'state'   => 'matched',
+				'id'      => '',
+				'target'  => trailingslashit( (string) get_option( 'home' ) ) . user_trailingslashit( $value, 'category' ),
+				'code'    => 301,
+				'setting' => 'slim_seo_category_redirect',
+			);
+		}
+	}
+	if ( ! aafm_redirect_slim_seo_ready() ) {
+		return array( 'state' => 'no_match' );
+	}
+
 	if ( ! isset( $cache['rows'] ) ) {
 		$rows          = ( new \SlimSEO\Redirection\Database\Redirects() )->list();
 		$cache['rows'] = is_array( $rows ) ? $rows : array();
@@ -178,11 +216,17 @@ function aafm_redirect_slim_seo_match( string $path, array &$cache ): array {
 	$port   = wp_parse_url( $home, PHP_URL_PORT );
 	$port   = $port ? ':' . $port : '';
 	$scheme = (string) wp_parse_url( $home, PHP_URL_SCHEME );
-	$full   = aafm_site_redirect_home_path() . $path;
 	// The address as a browser sends it, which the plugin reads without decoding.
 	$sent = implode( '/', array_map( 'rawurlencode', explode( '/', $full ) ) );
 	$www  = (string) \SlimSEO\Redirection\Settings::get( 'redirect_www' );
 	if ( ( 'www-to-non' === $www && 0 === strpos( $host, 'www.' ) ) || ( 'non-to-www' === $www && 0 !== strpos( $host, 'www.' ) ) ) {
+		if ( $sent !== $full ) {
+			// A browser may send escapes in either case, and the target keeps them as sent.
+			return array(
+				'state'  => 'unknown',
+				'reason' => 'slim_seo_www_redirect',
+			);
+		}
 		$other = 0 === strpos( $host, 'www.' ) ? substr( $host, 4 ) : 'www.' . $host;
 		return array(
 			'state'   => 'matched',
@@ -224,8 +268,24 @@ function aafm_redirect_slim_seo_match( string $path, array &$cache ): array {
 			? aafm_wpdb_scalar( (string) $wpdb->prepare( 'SELECT post_id FROM %i WHERE meta_key = %s AND meta_value = %s LIMIT 1', $wpdb->postmeta, '_ss_old_permalink', $request ) )
 			: aafm_wpdb_scalar( (string) $wpdb->prepare( 'SELECT post_id FROM %i WHERE meta_key = %s AND LOWER( meta_value ) = LOWER( %s ) LIMIT 1', $wpdb->postmeta, '_ss_old_permalink', $request ) );
 		if ( $found['ok'] && (int) $found['value'] > 0 ) {
+			if ( ! empty( $class['hooked'] ) ) {
+				// Other plugin code could serve the page, and then nothing is redirected.
+				return array(
+					'state'  => 'unknown',
+					'reason' => 'slim_seo_auto_redirection',
+				);
+			}
 			$auto_to = wp_validate_redirect( (string) get_permalink( (int) $found['value'] ), admin_url() );
 		}
+	}
+	// On a page not found WordPress's own canonical redirect runs first (template_redirect priority
+	// 10, registered before the plugin's) and its guess at the page can answer instead.
+	$guess = 'not_found' === $class['class'] ? array( 'approximate' => true ) : array();
+	if ( '' === $auto_to && '' !== $to404 && ! empty( $class['hooked'] ) ) {
+		return array(
+			'state'  => 'unknown',
+			'reason' => 'slim_seo_404_redirect',
+		);
 	}
 	if ( '' !== $auto_to ) {
 		return array(
@@ -234,7 +294,7 @@ function aafm_redirect_slim_seo_match( string $path, array &$cache ): array {
 			'target'  => $auto_to,
 			'code'    => 301,
 			'setting' => 'slim_seo_auto_redirection',
-		);
+		) + $guess;
 	}
 
 	return ( '' !== $to404 && 'not_found' === $class['class'] )
@@ -244,7 +304,7 @@ function aafm_redirect_slim_seo_match( string $path, array &$cache ): array {
 			'target'  => 'custom' === $to404 ? (string) \SlimSEO\Redirection\Settings::get( 'redirect_404_to_url' ) : $home,
 			'code'    => 301,
 			'setting' => 'slim_seo_404_redirect',
-		)
+		) + $guess
 		: array( 'state' => 'no_match' );
 }
 

@@ -449,6 +449,11 @@ final class SiteRedirectAdaptersTest extends TestCase {
 		);
 		$this->assertSame( '1', $this->match( 'redirection', '/old-a' )['id'] ?? null );
 		$this->assertSame( $unknown( 'redirection_permalink_migration' ), $this->match( 'redirection', '/nothing-here' ) );
+		$this->set_permalink_structure( '/%postname%/' );
+		self::factory()->post->create( array( 'post_name' => 'acc-found' ) );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'redirection', '/acc-found/' ), 'A page that is found is never migrated (needs_migrating()).' );
+		$this->assertSame( $unknown( 'redirection_permalink_migration' ), $this->match( 'redirection', '/nothing-here' ) );
+		$this->set_permalink_structure( '' );
 
 		// An alias equal to this site's own host is redirected to the site address, unless a move is set.
 		Stub::$vendor['red_options'] = array(
@@ -860,6 +865,17 @@ final class SiteRedirectAdaptersTest extends TestCase {
 		Stub::$vendor['rm_settings']['general.redirections_custom_url'] = 'https://example.org/gone/';
 		$this->assertSame( $setting( 'https://example.org/gone/', 'rank_math_404_fallback', 302 ), $this->match( 'rankmath', '/nothing-here' ) );
 
+		// Other plugin code where a real request could serve the page: the fallback cannot be told,
+		// and a setting for another kind of page still does not apply.
+		add_action( 'pre_get_posts', '__return_null' );
+		$this->assertSame( $unknown( 'rank_math_404_fallback' ), $this->match( 'rankmath', '/nothing-here' ) );
+		$fallback                    = Stub::$vendor['rm_settings'];
+		Stub::$vendor['rm_settings'] = $settings;
+		Stub::$vendor['rm_settings']['general.attachment_redirect_urls'] = true;
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'rankmath', '/nothing-here' ) );
+		remove_action( 'pre_get_posts', '__return_null' );
+		Stub::$vendor['rm_settings'] = $fallback;
+
 		// Where the page cannot be classified, a setting that depends on it gives unknown.
 		$this->set_permalink_structure( '' );
 		$this->assertSame( $unknown( 'rank_math_404_fallback' ), $this->match( 'rankmath', '/nothing-here' ) );
@@ -879,6 +895,105 @@ final class SiteRedirectAdaptersTest extends TestCase {
 		$this->assertSame( $unknown( 'rank_math_pre_search_filter' ), $this->match( 'rankmath', '/nothing-here' ) );
 		remove_filter( 'rank_math/redirection/pre_search', '__return_null', 20 );
 		remove_filter( 'rank_math/redirection/pre_search', $own );
+	}
+
+	public function test_rankmath_old_category_base_and_core_sitemap_addresses(): void {
+		global $wp, $wp_rewrite;
+		$this->only( array( 'rankmath' ) );
+		$this->set_permalink_structure( '/%postname%/' );
+		self::factory()->category->create( array( 'slug' => 'acc-cat' ) );
+		$public = $wp->public_query_vars;
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'rankmath', '/category/acc-cat/' ), 'With the category base kept, the old address is the archive.' );
+
+		// Strip category base on: the plugin adds a query variable and a rule for the old base, and its
+		// request filter redirects while WordPress parses the request, before the rules and every
+		// other setting, whether or not the category exists.
+		$wp->public_query_vars[] = 'rank_math_category_redirect';
+		$wp_rewrite->rules       = array( 'category/(.+)$' => 'index.php?rank_math_category_redirect=$matches[1]' ) + $wp_rewrite->rules;
+		Stub::$vendor['rm']      = array(
+			aafm_siteops_redirect_stub_rm_row( 3, array( $this->source( 'category/acc-cat' ) ), 'http://example.org/sample-page/' ),
+			aafm_siteops_redirect_stub_rm_row( 5, array( $this->source( 'category' ) ), 'http://example.org/sample-page/' ),
+		);
+		$this->assertSame(
+			array(
+				'state'   => 'matched',
+				'id'      => '',
+				'target'  => 'http://example.org/acc-cat/',
+				'code'    => 301,
+				'setting' => 'rank_math_category_redirect',
+			),
+			$this->match( 'rankmath', '/category/acc-cat/' )
+		);
+		$this->assertSame( 'http://example.org/acc-gone/child/', $this->match( 'rankmath', '/category/acc-gone/child' )['target'] ?? null );
+		$this->assertSame(
+			array(
+				'state'  => 'unknown',
+				'reason' => 'rank_math_category_redirect',
+			),
+			$this->match( 'rankmath', '/category/café/' ),
+			'The escapes of the address a browser sends make the target; they cannot be recovered.'
+		);
+		$this->assertSame( '5', $this->match( 'rankmath', '/category' )['id'] ?? null, 'The old base alone is not under the rule.' );
+
+		// The sitemap module sends WordPress's own sitemap addresses and /sitemap.xml to its own
+		// sitemaps on template_redirect, after the rules and the fallback.
+		Stub::$vendor['rm']           = array();
+		Stub::$vendor['rm_modules'][] = 'sitemap';
+		foreach ( array( '/wp-sitemap.xml', '/wp-sitemap-posts-post-1.xml', '/sitemap.xml' ) as $path ) {
+			$this->assertSame(
+				array(
+					'state'  => 'unknown',
+					'reason' => 'rank_math_sitemap_redirect',
+				),
+				$this->match( 'rankmath', $path ),
+				$path
+			);
+		}
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'rankmath', '/acc-sitemap.xml' ) );
+		array_pop( Stub::$vendor['rm_modules'] );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'rankmath', '/wp-sitemap.xml' ), 'With the sitemap module off WordPress serves its own.' );
+		$wp->public_query_vars = $public;
+	}
+
+	public function test_rankmath_with_its_redirections_module_off_answers_its_setting_redirects_alone(): void {
+		$this->only( array( 'rankmath' ) );
+		$this->set_permalink_structure( '/%postname%/' );
+		$parent = self::factory()->post->create(
+			array(
+				'post_name' => 'acc-parent',
+				'post_date' => '2025-01-10 10:00:00',
+			)
+		);
+		self::factory()->attachment->create_object(
+			array(
+				'file'        => 'acc-img.png',
+				'post_parent' => $parent,
+				'post_name'   => 'acc-img',
+			)
+		);
+		Stub::$vendor['rm_modules']                                      = array( '404-monitor' );
+		Stub::$vendor['rm_settings']['general.attachment_redirect_urls'] = true;
+		Stub::$vendor['rm_settings']['titles.disable_date_archives']     = true;
+		Stub::$vendor['rm_settings']['general.redirections_fallback']    = 'homepage';
+		Stub::$vendor['rm'] = array( aafm_siteops_redirect_stub_rm_row( 4, array( $this->source( 'acc-old' ) ), 'http://example.org/sample-page/' ) );
+		$this->assertFalse( aafm_site_redirect_call( 'rankmath', 'ready' ), 'The list tools still see no provider.' );
+
+		// The plugin's front-end class redirects attachment pages and switched-off archives on wp
+		// itself (frontend/class-redirection.php:28-35); the rules and the 404 fallback belong to the module.
+		$out = aafm_exec_site_test_redirect( array( 'url' => '/acc-parent/acc-img/' ) );
+		$this->assertSame( array( 'rankmath' ), array_column( $out['evaluated'], 'provider' ) );
+		$this->assertSame( 'rank_math_attachment_redirect', $out['first_match']['setting'] ?? null );
+		$this->assertSame( (string) get_permalink( $parent ), $out['first_match']['target'] ?? null );
+		$this->assertSame( 'rank_math_archive_redirect', $this->match( 'rankmath', '/2025/' )['setting'] ?? null );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'rankmath', '/acc-old' ), 'The module is off: its rules do not run.' );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'rankmath', '/nothing-here' ), 'Nor does its 404 fallback.' );
+		$this->assertNotContains( 'RankMath::match_redirections:acc-old', Stub::$calls );
+		add_filter( 'rank_math/redirection/pre_search', '__return_null' );
+		$this->assertSame( 'rank_math_archive_redirect', $this->match( 'rankmath', '/2025/' )['setting'] ?? null, 'Only the module applies the pre_search filter.' );
+		remove_filter( 'rank_math/redirection/pre_search', '__return_null' );
+
+		Stub::$vendor['rm_invalid'] = true;
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'rankmath', '/2025/' ), 'Without a connected or skipped registration the plugin loads no front end.' );
 	}
 
 	public function test_rankmath_not_found_log_is_grouped_and_in_utc(): void {
@@ -1159,6 +1274,11 @@ final class SiteRedirectAdaptersTest extends TestCase {
 				'reason' => $reason,
 			);
 		};
+		// A redirect of a page not found runs after WordPress's own canonical redirect, whose guess
+		// at a page not found can answer first (template_redirect priority 10, registered first).
+		$guessed = static function ( string $target, string $reason ) use ( $setting ): array {
+			return $setting( $target, $reason ) + array( 'approximate' => true );
+		};
 		add_post_meta( $moved, '_ss_old_permalink', 'acc-old' );
 
 		// Automatic redirects: attachment pages, author archives with no posts or on a site with one
@@ -1169,24 +1289,35 @@ final class SiteRedirectAdaptersTest extends TestCase {
 		$this->assertSame( $setting( (string) wp_get_attachment_url( $image ), 'slim_seo_auto_redirection' ), $this->match( 'slim_seo', '/acc-parent/acc-img/' ) );
 		$this->assertSame( $setting( home_url( '/' ), 'slim_seo_auto_redirection' ), $this->match( 'slim_seo', '/author/acc-idle/' ) );
 		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'slim_seo', '/author/acc-writer/' ), 'An author with posts on a site with several users stays.' );
-		$this->assertSame( $setting( (string) get_permalink( $moved ), 'slim_seo_auto_redirection' ), $this->match( 'slim_seo', '/ACC-OLD/' ), 'The old address is compared without case, as the plugin compares it.' );
+		$this->assertSame( $guessed( (string) get_permalink( $moved ), 'slim_seo_auto_redirection' ), $this->match( 'slim_seo', '/ACC-OLD/' ), 'The old address is compared without case, as the plugin compares it.' );
 		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'slim_seo', '/acc-parent/' ) );
 
 		// The 404 redirect, on a page not found only.
 		Stub::$vendor['slim_settings'] = array( 'redirect_404_to' => 'homepage' );
-		$this->assertSame( $setting( home_url(), 'slim_seo_404_redirect' ), $this->match( 'slim_seo', '/nothing' ) );
-		$this->assertSame( $setting( home_url(), 'slim_seo_404_redirect' ), $this->match( 'slim_seo', '/acc-old' ), 'With automatic redirects off, an old address is just a page not found.' );
+		$this->assertSame( $guessed( home_url(), 'slim_seo_404_redirect' ), $this->match( 'slim_seo', '/nothing' ) );
+		$this->assertSame( $guessed( home_url(), 'slim_seo_404_redirect' ), $this->match( 'slim_seo', '/acc-old' ), 'With automatic redirects off, an old address is just a page not found.' );
 		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'slim_seo', '/acc-parent/' ) );
 		Stub::$vendor['slim_settings'] = array(
 			'redirect_404_to'     => 'custom',
 			'redirect_404_to_url' => 'https://example.org/gone/',
 		);
-		$this->assertSame( $setting( 'https://example.org/gone/', 'slim_seo_404_redirect' ), $this->match( 'slim_seo', '/nothing' ) );
+		$this->assertSame( $guessed( 'https://example.org/gone/', 'slim_seo_404_redirect' ), $this->match( 'slim_seo', '/nothing' ) );
+
+		// Other plugin code where a real request could serve the page: a redirect of pages not found
+		// cannot be told; an address with no old permalink is still not redirected automatically.
+		add_action( 'pre_get_posts', '__return_null' );
+		$this->assertSame( $unknown( 'slim_seo_404_redirect' ), $this->match( 'slim_seo', '/nothing' ) );
+		Stub::$vendor['slim_settings'] = array( 'auto_redirection' => 1 );
+		$this->assertSame( $unknown( 'slim_seo_auto_redirection' ), $this->match( 'slim_seo', '/acc-old' ) );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'slim_seo', '/nothing' ) );
+		$this->assertSame( $setting( (string) wp_get_attachment_url( $image ), 'slim_seo_auto_redirection' ), $this->match( 'slim_seo', '/acc-parent/acc-img/' ) );
+		remove_action( 'pre_get_posts', '__return_null' );
 
 		// The www redirect, judged on this site's own host, the only one the tool accepts.
 		Stub::$vendor['slim_settings'] = array( 'redirect_www' => 'non-to-www' );
 		$this->assertSame( $setting( 'http://www.example.org/nothing', 'slim_seo_www_redirect' ), $this->match( 'slim_seo', '/nothing' ) );
 		$this->assertSame( 'k1', $this->match( 'slim_seo', '/old-a' )['id'] ?? null, 'A rule answers first.' );
+		$this->assertSame( $unknown( 'slim_seo_www_redirect' ), $this->match( 'slim_seo', '/café' ), 'The escapes of the address a browser sends make the target; they cannot be recovered.' );
 		Stub::$vendor['slim_settings'] = array( 'redirect_www' => 'www-to-non' );
 		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'slim_seo', '/nothing' ), 'This site has no www to remove.' );
 		update_option( 'home', 'http://www.example.org' );
@@ -1201,6 +1332,49 @@ final class SiteRedirectAdaptersTest extends TestCase {
 		$this->assertSame( $unknown( 'slim_seo_404_redirect' ), $this->match( 'slim_seo', '/nothing' ) );
 		Stub::$vendor['slim_settings'] = array();
 		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'slim_seo', '/nothing' ) );
+	}
+
+	public function test_slim_seo_old_category_base_redirects_first_and_without_the_redirect_module(): void {
+		global $wp, $wp_rewrite;
+		$this->only( array( 'slim_seo' ) );
+		$this->set_permalink_structure( '/%postname%/' );
+		$public                        = $wp->public_query_vars;
+		Stub::$vendor['slim']          = array( 'k1' => aafm_siteops_redirect_stub_slim_rule( 'category/acc-cat', 'hello-world/' ) );
+		Stub::$vendor['slim_settings'] = array();
+		$this->assertSame( 'k1', $this->match( 'slim_seo', '/category/acc-cat/' )['id'] ?? null, 'With the feature off the rule answers.' );
+
+		// No category base on: a query variable and a rule for the old base, and a request filter that
+		// redirects while WordPress parses the request (NoCategoryBase.php:95-113), before the rules.
+		$wp->public_query_vars[] = 'category_redirect';
+		$wp_rewrite->rules       = array( 'category/(.*)$' => 'index.php?category_redirect=$matches[1]' ) + $wp_rewrite->rules;
+		$expected                = array(
+			'state'   => 'matched',
+			'id'      => '',
+			'target'  => 'http://example.org/acc-cat/',
+			'code'    => 301,
+			'setting' => 'slim_seo_category_redirect',
+		);
+		$this->assertSame( $expected, $this->match( 'slim_seo', '/category/acc-cat/' ) );
+		add_filter( 'slim_seo_redirection_skip', '__return_true' );
+		$this->assertSame( $expected, $this->match( 'slim_seo', '/category/acc-cat/' ), 'The skip filter belongs to the redirect module.' );
+		remove_filter( 'slim_seo_redirection_skip', '__return_true' );
+		$this->assertSame(
+			array(
+				'state'  => 'unknown',
+				'reason' => 'slim_seo_category_redirect',
+			),
+			$this->match( 'slim_seo', '/category/café/' )
+		);
+
+		// The redirect module off: the old category base still redirects, and nothing else is read.
+		update_option( 'slim_seo', array( 'features' => array( 'no_category_base' ) ) );
+		$this->assertFalse( aafm_site_redirect_call( 'slim_seo', 'ready' ) );
+		$out = aafm_exec_site_test_redirect( array( 'url' => '/category/acc-cat/' ) );
+		$this->assertSame( array( 'slim_seo' ), array_column( $out['evaluated'], 'provider' ) );
+		$this->assertSame( 'slim_seo_category_redirect', $out['first_match']['setting'] ?? null );
+		Stub::$vendor['slim'] = array( 'k2' => aafm_siteops_redirect_stub_slim_rule( 'acc-old', 'hello-world/' ) );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'slim_seo', '/acc-old' ) );
+		$wp->public_query_vars = $public;
 	}
 
 	public function test_slim_seo_is_asked_below_the_home_path_and_its_relative_target_is_under_home(): void {

@@ -1962,6 +1962,12 @@ if ( ! class_exists( 'RankMath\\Helper' ) ) {
 		public static function get_settings( $field_id = '', $default_value = false ) {
 			return $default_value;
 		}
+		/**
+		 * @return bool
+		 */
+		public static function is_invalid_registration() {
+			return false;
+		}
 	}
 	class Aafm_Phpstan_Rank_Math_Redirections_Db {
 		/**

@@ -499,6 +499,9 @@ function aafm_siteops_redirect_stub_activate_rankmath(): void {
 			// The plugin's own reader: 'on' and 'off' come back as true and false, a missing key as the default.
 			return array_key_exists( $field_id, Aafm_Siteops_Redirect_Stub::$vendor['rm_settings'] ?? array() ) ? Aafm_Siteops_Redirect_Stub::$vendor['rm_settings'][ $field_id ] : $default_value;
 		}
+		public static function is_invalid_registration() {
+			return ! empty( Aafm_Siteops_Redirect_Stub::$vendor['rm_invalid'] );
+		}
 	}
 
 	// Rank Math's own front-end class, which hooks rank_math/redirection/pre_search for its attachment and archive redirects.

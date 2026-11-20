@@ -123,19 +123,29 @@ function aafm_redirect_rankmath_all(): array {
  * and its slash wherever they occur, not only in front: on a site at /sub the request
  * /sub/sub/old-b reaches the matcher as old-b, so a rule stored as sub/old-b never fires.
  *
- * The plugin also redirects from its settings, checked against 1.0.282 (class-redirector.php,
- * frontend/class-redirection.php), in its own order:
+ * The plugin also redirects from its settings, checked against 1.0.282, in its own order:
+ * - with 'general.strip_category_base' on, its request filter sends any address under the old
+ *   category base to the same address without it while WordPress parses the request, before
+ *   everything below (class-rewrite.php:34-37, :146-154, :168);
  * - a callback on rank_math/redirection/pre_search other than the plugin's own front-end class
  *   runs before the rules and can redirect any path (its WooCommerce base removal adds one):
  *   unknown;
  * - its own front-end class, also before the rules, sends an attachment page to its parent post
  *   or to the default address ('general.attachment_redirect_urls', on when missing), and a
- *   switched-off date or author archive to the home page, with 301;
+ *   switched-off date or author archive to the home page, with 301; with the Redirections module
+ *   off it does the same itself on wp (frontend/class-redirection.php:28-35), and the rules and
+ *   the fallback do not run;
  * - after the rules, the 404 fallback ('general.redirections_fallback' homepage, or custom with
  *   an address) sends a page not found to that address with the code of
- *   'general.redirections_header_code', except login, admin and dashboard.
- * Which kind of page a path is comes from aafm_site_redirect_path_class(), asked only while one
- * of these settings is on; a page it cannot classify gives unknown with the setting's reason.
+ *   'general.redirections_header_code', except login, admin and dashboard;
+ * - on template_redirect, the sitemap module sends WordPress's own sitemap addresses and a
+ *   /sitemap.xml not found to its own sitemaps (sitemap/class-redirect-core-sitemaps.php:40-90,
+ *   class-router.php:106-124): unknown.
+ * Without a connected or skipped registration the plugin loads none of this. Which kind of page a
+ * path is comes from aafm_site_redirect_path_class(), asked only while one of these settings is
+ * on; a page it cannot classify, or a page not found that other plugin code could serve for the
+ * fallback, gives unknown with the setting's reason. A target whose spelling depends on the
+ * escapes a browser sends gives unknown too.
  *
  * @param string              $path  The full path, home path included (the registry's match_path is full).
  * @param array<string,mixed> $cache Per-call cache; not used by this adapter.
@@ -143,9 +153,46 @@ function aafm_redirect_rankmath_all(): array {
  */
 function aafm_redirect_rankmath_match( string $path, array &$cache ): array {
 	unset( $cache );
-	global $wp_filter;
+	global $wp_filter, $wp;
+	if ( true === \RankMath\Helper::is_invalid_registration() ) {
+		return array( 'state' => 'no_match' );
+	}
+	$module = true === \RankMath\Helper::is_module_active( 'redirections' );
+
+	$strip       = $wp instanceof WP && in_array( 'rank_math_category_redirect', (array) $wp->public_query_vars, true );
+	$attachments = (bool) \RankMath\Helper::get_settings( 'general.attachment_redirect_urls', true );
+	$dates       = (bool) \RankMath\Helper::get_settings( 'titles.disable_date_archives' );
+	$authors     = true === \RankMath\Helper::get_settings( 'titles.disable_author_archives' );
+	$class       = null;
+	if ( $strip ) {
+		$class = aafm_site_redirect_path_class( $path, true );
+		if ( 'unclassified' === $class['class'] && array() === $class['vars'] ) {
+			// No rewrite rule could be followed, so the old base cannot be told apart.
+			return array(
+				'state'  => 'unknown',
+				'reason' => 'rank_math_category_redirect',
+			);
+		}
+		if ( isset( $class['vars']['rank_math_category_redirect'] ) ) {
+			$value = (string) $class['vars']['rank_math_category_redirect'];
+			if ( implode( '/', array_map( 'rawurlencode', explode( '/', $value ) ) ) !== $value ) {
+				return array(
+					'state'  => 'unknown',
+					'reason' => 'rank_math_category_redirect',
+				);
+			}
+			return array(
+				'state'   => 'matched',
+				'id'      => '',
+				'target'  => trailingslashit( (string) get_option( 'home' ) ) . user_trailingslashit( $value, 'category' ),
+				'code'    => 301,
+				'setting' => 'rank_math_category_redirect',
+			);
+		}
+	}
+
 	$hook = $wp_filter['rank_math/redirection/pre_search'] ?? null;
-	if ( $hook instanceof WP_Hook ) {
+	if ( $module && $hook instanceof WP_Hook ) {
 		foreach ( $hook->callbacks as $callbacks ) {
 			foreach ( $callbacks as $callback ) {
 				$function = $callback['function'] ?? null;
@@ -159,12 +206,8 @@ function aafm_redirect_rankmath_match( string $path, array &$cache ): array {
 		}
 	}
 
-	$attachments = (bool) \RankMath\Helper::get_settings( 'general.attachment_redirect_urls', true );
-	$dates       = (bool) \RankMath\Helper::get_settings( 'titles.disable_date_archives' );
-	$authors     = true === \RankMath\Helper::get_settings( 'titles.disable_author_archives' );
-	$class       = null;
 	if ( $attachments || $dates || $authors ) {
-		$class = aafm_site_redirect_path_class( $path );
+		$class = $class ?? aafm_site_redirect_path_class( $path );
 		if ( 'unclassified' === $class['class'] ) {
 			return array(
 				'state'  => 'unknown',
@@ -199,53 +242,61 @@ function aafm_redirect_rankmath_match( string $path, array &$cache ): array {
 		}
 	}
 
-	$uri   = trim( (string) \RankMath\Redirections\Redirection::strip_subdirectory( $path ), '/' );
-	$found = \RankMath\Redirections\DB::match_redirections( $uri );
-	if ( is_array( $found ) && isset( $found['id'] ) ) {
+	if ( $module ) {
+		$uri   = trim( (string) \RankMath\Redirections\Redirection::strip_subdirectory( $path ), '/' );
+		$found = \RankMath\Redirections\DB::match_redirections( $uri );
+		if ( is_array( $found ) && isset( $found['id'] ) ) {
+			return array(
+				'state'  => 'matched',
+				'id'     => (string) $found['id'],
+				'target' => isset( $found['url_to'] ) ? (string) $found['url_to'] : '',
+				'code'   => isset( $found['header_code'] ) ? (int) $found['header_code'] : 0,
+			);
+		}
+
+		$fallback = \RankMath\Helper::get_settings( 'general.redirections_fallback' );
+		$to       = '';
+		if ( 'homepage' === $fallback ) {
+			$to = home_url();
+		} elseif ( 'default' !== $fallback ) {
+			$to = (string) \RankMath\Helper::get_settings( 'general.redirections_custom_url' );
+		}
+		if ( '' !== $to && '' !== $uri ) {
+			if ( false !== has_filter( 'rank_math/redirection/fallback_exclude_locations' ) ) {
+				return array(
+					'state'  => 'unknown',
+					'reason' => 'rank_math_404_fallback',
+				);
+			}
+			if ( ! in_array( $uri, array( 'login', 'admin', 'dashboard' ), true ) ) {
+				$class = $class ?? aafm_site_redirect_path_class( $path );
+				if ( 'unclassified' === $class['class'] || ! empty( $class['hooked'] ) ) {
+					return array(
+						'state'  => 'unknown',
+						'reason' => 'rank_math_404_fallback',
+					);
+				}
+				if ( 'not_found' === $class['class'] ) {
+					return array(
+						'state'   => 'matched',
+						'id'      => '',
+						'target'  => $to,
+						'code'    => absint( \RankMath\Helper::get_settings( 'general.redirections_header_code' ) ),
+						'setting' => 'rank_math_404_fallback',
+					);
+				}
+			}
+		}
+	}
+
+	if ( true === \RankMath\Helper::is_module_active( 'sitemap' ) && ( 0 === strpos( $path, '/wp-sitemap' ) || aafm_site_redirect_home_path() . '/sitemap.xml' === $path ) ) {
 		return array(
-			'state'  => 'matched',
-			'id'     => (string) $found['id'],
-			'target' => isset( $found['url_to'] ) ? (string) $found['url_to'] : '',
-			'code'   => isset( $found['header_code'] ) ? (int) $found['header_code'] : 0,
+			'state'  => 'unknown',
+			'reason' => 'rank_math_sitemap_redirect',
 		);
 	}
 
-	$fallback = \RankMath\Helper::get_settings( 'general.redirections_fallback' );
-	$to       = '';
-	if ( 'homepage' === $fallback ) {
-		$to = home_url();
-	} elseif ( 'default' !== $fallback ) {
-		$to = (string) \RankMath\Helper::get_settings( 'general.redirections_custom_url' );
-	}
-	if ( '' === $to || '' === $uri ) {
-		return array( 'state' => 'no_match' );
-	}
-	if ( false !== has_filter( 'rank_math/redirection/fallback_exclude_locations' ) ) {
-		return array(
-			'state'  => 'unknown',
-			'reason' => 'rank_math_404_fallback',
-		);
-	}
-	if ( in_array( $uri, array( 'login', 'admin', 'dashboard' ), true ) ) {
-		return array( 'state' => 'no_match' );
-	}
-	$class = $class ?? aafm_site_redirect_path_class( $path );
-	if ( 'unclassified' === $class['class'] ) {
-		return array(
-			'state'  => 'unknown',
-			'reason' => 'rank_math_404_fallback',
-		);
-	}
-
-	return 'not_found' === $class['class']
-		? array(
-			'state'   => 'matched',
-			'id'      => '',
-			'target'  => $to,
-			'code'    => absint( \RankMath\Helper::get_settings( 'general.redirections_header_code' ) ),
-			'setting' => 'rank_math_404_fallback',
-		)
-		: array( 'state' => 'no_match' );
+	return array( 'state' => 'no_match' );
 }
 
 /**

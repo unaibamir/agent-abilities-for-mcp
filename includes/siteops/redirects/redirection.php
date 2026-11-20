@@ -236,13 +236,16 @@ function aafm_redirect_redirection_match( string $path, array &$cache ): array {
 	}
 
 	// Permalink migration runs on a page not found (pre_handle_404) and parses the address again
-	// under each old permalink structure; that is not modelled.
-	return empty( $options['permalinks'] )
-		? array( 'state' => 'no_match' )
-		: array(
-			'state'  => 'unknown',
-			'reason' => 'redirection_permalink_migration',
-		);
+	// under each old permalink structure; that is not modelled. A page WordPress finds is never
+	// migrated (models/permalinks.php needs_migrating()).
+	if ( empty( $options['permalinks'] ) || in_array( aafm_site_redirect_path_class( $path )['class'], array( 'attachment', 'author', 'date', 'other' ), true ) ) {
+		return array( 'state' => 'no_match' );
+	}
+
+	return array(
+		'state'  => 'unknown',
+		'reason' => 'redirection_permalink_migration',
+	);
 }
 
 /**

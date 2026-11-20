@@ -565,4 +565,273 @@ final class BackupGateTest extends TestCase {
 
 		$this->assertSame( $before, $this->write_snapshot() );
 	}
+
+	public function test_the_runner_does_nothing_and_reads_nothing_with_the_gate_off(): void {
+		aafm_updraft_stub_add_set( 'aaaaaaaaaaa1', 3600 );
+		delete_option( 'aafm_backup_gate' );
+		$reads = aafm_updraft_stub_reads();
+
+		$this->assertSame( 'nothing_to_do', aafm_backup_verify_run() );
+		$this->assertSame( $reads, aafm_updraft_stub_reads() );
+		$this->assertFalse( get_option( 'aafm_backup_verify' ) );
+	}
+
+	public function test_the_runner_does_nothing_with_no_backup_or_no_provider(): void {
+		$this->assertSame( 'nothing_to_do', aafm_backup_verify_run() );
+		$this->assertFalse( get_option( 'aafm_backup_verify' ), 'Nothing is written for an empty window.' );
+
+		aafm_updraft_stub_deactivate();
+		$this->assertSame( 'nothing_to_do', aafm_backup_verify_run() );
+	}
+
+	public function test_the_runner_stores_verified_and_failed_newest_first(): void {
+		$good = aafm_updraft_stub_add_set( 'aaaaaaaaaaa1', 7200 );
+		$bad  = aafm_updraft_stub_add_set( 'aaaaaaaaaaa2', 3600, 4096 );
+		aafm_updraft_stub_corrupt( $bad );
+		$order = array();
+		add_action(
+			'aafm_site_backup_hashed',
+			static function ( int $bytes, string $where ) use ( &$order ): void {
+				$order[] = $where . ':' . $bytes;
+			},
+			10,
+			2
+		);
+
+		$this->assertSame( 'ran', aafm_backup_verify_run() );
+
+		$stored = aafm_backup_verify_read();
+		$this->assertSame( 'failed', $stored['aaaaaaaaaaa2']['verdict'] );
+		$this->assertSame( 'verified', $stored['aaaaaaaaaaa1']['verdict'] );
+		$this->assertSame( aafm_site_updraft_fingerprint( 'aaaaaaaaaaa1', $good ), $stored['aaaaaaaaaaa1']['fingerprint'] );
+		$this->assertEqualsWithDelta( time(), $stored['aaaaaaaaaaa1']['checked_at'], 5 );
+		$this->assertSame( array( 'verifier:4096', 'verifier:2048' ), $order, 'Newest first.' );
+
+		$this->assertSame( 'nothing_to_do', aafm_backup_verify_run(), 'A second run has nothing left to hash.' );
+		remove_all_actions( 'aafm_site_backup_hashed' );
+		add_action( 'aafm_site_backup_hashed', array( $this, 'count_hashed' ) );
+	}
+
+	public function test_a_large_archive_is_pending_until_the_runner_has_checked_it(): void {
+		$this->budget( 1024 );
+		$file = aafm_updraft_stub_add_set( 'aaaaaaaaaaa1', 3600 );
+		$this->assertSame( 'backup_gate_pending', $this->adapter_fire() );
+
+		$this->assertSame( 'ran', aafm_backup_verify_run() );
+		$this->assertSame( '', $this->adapter_fire() );
+
+		aafm_updraft_stub_touch( $file, time() - 500 );
+		$this->assertSame( 'backup_gate_pending', $this->adapter_fire(), 'Touched after the run: the verdict is stale.' );
+	}
+
+	public function test_a_large_archive_corrupted_before_the_run_is_refused_after_it(): void {
+		$this->budget( 1024 );
+		aafm_updraft_stub_corrupt( aafm_updraft_stub_add_set( 'aaaaaaaaaaa1', 3600 ) );
+
+		$this->assertSame( 'ran', aafm_backup_verify_run() );
+		$this->assertSame( 'backup_gate', $this->adapter_fire() );
+	}
+
+	public function test_a_first_archive_that_does_not_finish_is_too_large(): void {
+		$this->budget( 1024 );
+		aafm_updraft_stub_add_set( 'aaaaaaaaaaa1', 7200 );
+		aafm_updraft_stub_add_set( 'aaaaaaaaaaa2', 3600 );
+
+		$this->assertSame( 'ran', aafm_backup_verify_run( 0 ) );
+
+		$stored = aafm_backup_verify_read();
+		$this->assertSame( 'too_large', $stored['aaaaaaaaaaa2']['verdict'] ?? null, 'The first archive started had the whole bound.' );
+		$this->assertArrayNotHasKey( 'aaaaaaaaaaa1', $stored, 'A later archive that was never started gets no verdict.' );
+		$this->assertSame( 0, $this->hashed );
+		$this->assertSame( 'backup_gate_pending', $this->adapter_fire(), 'The older set is still waiting, so the answer is pending.' );
+	}
+
+	public function test_a_too_large_verdict_is_retried_only_on_request(): void {
+		$this->budget( 1024 );
+		aafm_updraft_stub_add_set( 'aaaaaaaaaaa1', 3600 );
+		$this->assertSame( 'ran', aafm_backup_verify_run( 0 ) );
+		$this->assertSame( 'backup_gate_too_large', $this->adapter_fire() );
+		$this->assertSame( 'too_large_to_verify', aafm_backup_gate_state()['reason'] );
+
+		$this->assertSame( 'nothing_to_do', aafm_backup_verify_run(), 'The hourly run does not retry it.' );
+		$this->assertSame( 'too_large', aafm_backup_verify_read()['aaaaaaaaaaa1']['verdict'] );
+
+		$this->assertSame( 'ran', aafm_backup_verify_run( 20, true ), 'Verify now does.' );
+		$this->assertSame( 'verified', aafm_backup_verify_read()['aaaaaaaaaaa1']['verdict'] );
+		$this->assertSame( '', $this->adapter_fire() );
+	}
+
+	public function test_a_numeric_nonce_keeps_its_verdict(): void {
+		$this->budget( 1024 );
+		aafm_updraft_stub_add_set( '123456789012', 3600 );
+
+		$this->assertSame( 'ran', aafm_backup_verify_run() );
+		$this->assertSame( '', $this->adapter_fire() );
+		$this->assertSame( 'nothing_to_do', aafm_backup_verify_run() );
+	}
+
+	public function test_the_store_holds_exactly_the_sets_in_the_window(): void {
+		$this->budget( 1024 );
+		for ( $i = 1; $i <= 7; $i++ ) {
+			aafm_updraft_stub_add_set( 'bbbbbbbbbbb' . $i, $i * 600 );
+		}
+
+		$this->assertSame( 'ran', aafm_backup_verify_run() );
+		$this->assertCount( 7, aafm_backup_verify_read() );
+		$this->assertSame( 'nothing_to_do', aafm_backup_verify_run() );
+
+		aafm_updraft_stub_set_age( 'bbbbbbbbbbb7', 2 * DAY_IN_SECONDS );
+		$this->assertSame( 'ran', aafm_backup_verify_run(), 'The set that left the window is pruned.' );
+		$stored = aafm_backup_verify_read();
+		$this->assertCount( 6, $stored );
+		$this->assertArrayNotHasKey( 'bbbbbbbbbbb7', $stored );
+		$this->assertSame( 7 * 2048, $this->hashed, 'The prune run hashed nothing: seven archives were hashed once each.' );
+	}
+
+	/**
+	 * Slow by design: each run is held past its one-second bound after its first archive.
+	 *
+	 * @group slow
+	 */
+	public function test_the_newest_verdict_survives_runs_that_finish_one_archive_each(): void {
+		$this->budget( 1024 );
+		for ( $i = 1; $i <= 7; $i++ ) {
+			aafm_updraft_stub_add_set( 'bbbbbbbbbbb' . $i, $i * 600 );
+		}
+		$slow = static function ( int $bytes, string $where ): void {
+			unset( $bytes );
+			if ( 'verifier' === $where ) {
+				usleep( 1100000 );
+			}
+		};
+		add_action( 'aafm_site_backup_hashed', $slow, 10, 2 );
+
+		for ( $run = 1; $run <= 12; $run++ ) {
+			aafm_backup_verify_run( 1 );
+			$stored = aafm_backup_verify_read();
+			$this->assertSame( 'verified', $stored['bbbbbbbbbbb1']['verdict'] ?? null, "The newest set's verdict is present after run {$run}." );
+			$this->assertCount( min( $run, 7 ), $stored, "Run {$run}." );
+		}
+		remove_action( 'aafm_site_backup_hashed', $slow, 10 );
+	}
+
+	public function test_a_file_that_changes_during_the_run_gets_no_verdict(): void {
+		$this->budget( 1024 );
+		$file   = aafm_updraft_stub_add_set( 'aaaaaaaaaaa1', 3600 );
+		$change = static function ( int $bytes, string $where ) use ( $file ): void {
+			unset( $bytes );
+			if ( 'verifier' === $where ) {
+				aafm_updraft_stub_touch( $file, time() - 900 );
+			}
+		};
+		add_action( 'aafm_site_backup_hashed', $change, 10, 2 );
+
+		$this->assertSame( 'nothing_to_do', aafm_backup_verify_run() );
+		$this->assertSame( array(), aafm_backup_verify_read() );
+		remove_action( 'aafm_site_backup_hashed', $change, 10 );
+	}
+
+	public function test_a_history_reader_that_throws_is_reported_as_not_read(): void {
+		aafm_updraft_stub_add_set( 'aaaaaaaaaaa1', 3600 );
+		aafm_updraft_stub_throw( true );
+
+		$this->assertSame( 'not_read', aafm_backup_verify_run() );
+		$this->assertFalse( get_option( 'aafm_backup_verify' ) );
+	}
+
+	/**
+	 * Slow by design: the run is held past its one-second bound after its first archive.
+	 *
+	 * @group slow
+	 */
+	public function test_a_verdict_stored_by_another_run_meanwhile_is_kept_on_a_batched_request(): void {
+		$this->route_as_rest_request();
+		$this->budget( 1024 );
+		aafm_updraft_stub_add_set( 'aaaaaaaaaaa1', 600 );
+		$other     = aafm_updraft_stub_add_set( 'aaaaaaaaaaa2', 1200 );
+		$meanwhile = static function ( int $bytes, string $where ) use ( $other ): void {
+			global $wpdb;
+			unset( $bytes );
+			if ( 'verifier' !== $where ) {
+				return;
+			}
+			// Another process stores its verdict behind the row this request keeps; then time runs out.
+			$verdict = array(
+				'aaaaaaaaaaa2' => array(
+					'fingerprint' => aafm_site_updraft_fingerprint( 'aaaaaaaaaaa2', $other ),
+					'verdict'     => 'verified',
+					'checked_at'  => time(),
+				),
+			);
+			$wpdb->insert(
+				$wpdb->options,
+				array(
+					'option_name'  => 'aafm_backup_verify',
+					'option_value' => maybe_serialize( $verdict ),
+					'autoload'     => 'off',
+				)
+			);
+			usleep( 1100000 );
+		};
+		add_action( 'aafm_site_backup_hashed', $meanwhile, 10, 2 );
+
+		$this->assertSame( 'ran', aafm_backup_verify_run( 1 ) );
+		remove_action( 'aafm_site_backup_hashed', $meanwhile, 10 );
+
+		$row = aafm_option_row( 'aafm_backup_verify' );
+		$this->assertSame( array( 'aaaaaaaaaaa1', 'aaaaaaaaaaa2' ), array_keys( (array) $row['value'] ), 'The verdict stored meanwhile survives this run.' );
+	}
+
+	public function test_a_failed_store_is_logged_and_reported(): void {
+		$this->budget( 1024 );
+		aafm_updraft_stub_add_set( 'aaaaaaaaaaa1', 3600 );
+		// Whatever is written, the row is removed again at once, so the write never certifies.
+		$undo = static function ( $option ): void {
+			global $wpdb;
+			if ( 'aafm_backup_verify' === $option ) {
+				$wpdb->delete( $wpdb->options, array( 'option_name' => 'aafm_backup_verify' ) );
+			}
+		};
+		add_action( 'added_option', $undo );
+		add_action( 'updated_option', $undo );
+
+		$answer = aafm_backup_verify_run();
+
+		remove_action( 'added_option', $undo );
+		remove_action( 'updated_option', $undo );
+		$this->assertSame( 'not_stored', $answer );
+		$rows = aafm_query_activity( array( 'ability' => 'aafm_backup_verify' ) );
+		$this->assertNotEmpty( $rows );
+		$this->assertSame( 'error', $rows[0]['status'] );
+	}
+
+	public function test_the_bound_follows_the_hosts_execution_limit(): void {
+		$before = (string) ini_get( 'max_execution_time' );
+		// phpcs:disable WordPress.PHP.IniSet -- the test sets and restores the limit to read the bound it gives.
+		ini_set( 'max_execution_time', '15' );
+		$this->assertSame( 5, aafm_backup_verify_bound( 20 ) );
+		ini_set( 'max_execution_time', '30' );
+		$this->assertSame( 20, aafm_backup_verify_bound( 20 ) );
+		ini_set( 'max_execution_time', '25' );
+		$this->assertSame( 15, aafm_backup_verify_bound( 20 ) );
+		ini_set( 'max_execution_time', '0' );
+		$this->assertSame( 20, aafm_backup_verify_bound( 20 ) );
+		$this->assertSame( 0, aafm_backup_verify_bound( 0 ) );
+		ini_set( 'max_execution_time', $before );
+		// phpcs:enable WordPress.PHP.IniSet
+	}
+
+	public function test_the_runner_writes_only_its_own_option(): void {
+		$this->budget( 1024 );
+		aafm_updraft_stub_add_set( 'aaaaaaaaaaa1', 3600 );
+		global $wpdb;
+		$others = static function () use ( $wpdb ): string {
+			return md5( (string) wp_json_encode( $wpdb->get_results( "SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name <> 'aafm_backup_verify' ORDER BY option_name", ARRAY_A ) ) ) . md5( (string) wp_json_encode( _get_cron_array() ) );
+		};
+		$before = $others();
+
+		$this->assertSame( 'ran', aafm_backup_verify_run() );
+
+		$this->assertSame( $before, $others() );
+	}
 }

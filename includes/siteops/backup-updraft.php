@@ -609,3 +609,156 @@ function aafm_site_updraft_window_walk( array $verdicts, bool $accept_remote, bo
 		'waiting' => $waiting,
 	);
 }
+
+/**
+ * The seconds one verification run may spend hashing.
+ *
+ * Lowered to the host's execution limit minus ten seconds, never below five, so a run can store
+ * its answer before PHP stops it. With no limit set (WP-CLI reports 0) it is $seconds.
+ *
+ * @param int $seconds Requested bound.
+ * @return int
+ */
+function aafm_backup_verify_bound( int $seconds ): int {
+	$limit = (int) ini_get( 'max_execution_time' );
+
+	return $limit > 0 ? min( $seconds, max( 5, $limit - 10 ) ) : $seconds;
+}
+
+/**
+ * Hash the database archives in the gate window that have no usable verdict, and store the verdicts.
+ *
+ * The only writer of the aafm_backup_verify option. Called by the hourly event and by "Verify now".
+ * Each run rewrites the option to hold exactly the verdicts of the sets now in the window.
+ *
+ * @param int  $seconds         Time bound for hashing.
+ * @param bool $retry_too_large Hash again an archive an earlier run could not finish.
+ * @return string 'ran', 'nothing_to_do', 'not_read' (UpdraftPlus's history could not be read) or 'not_stored'.
+ */
+function aafm_backup_verify_run( int $seconds = 20, bool $retry_too_large = false ): string {
+	if ( ! aafm_stored_switch_on( 'aafm_backup_gate' ) || is_multisite() || ! aafm_site_updraft_loaded() ) {
+		return 'nothing_to_do';
+	}
+
+	$deadline = microtime( true ) + aafm_backup_verify_bound( $seconds );
+	$stored   = aafm_backup_verify_read();
+
+	$call = aafm_siteops_vendor_call(
+		static function () use ( $stored, $retry_too_large ): array {
+			$window = array();
+			$todo   = array();
+			$seen   = 0;
+			foreach ( aafm_site_updraft_history() as $timestamp => $entry ) {
+				if ( ! aafm_site_updraft_in_window( $timestamp ) ) {
+					continue;
+				}
+				if ( ++$seen > 20 ) {
+					break;
+				}
+				$archive = aafm_site_updraft_db_archive( $entry );
+				$nonce   = $entry['nonce'] ?? null;
+				if ( ! is_string( $nonce ) || 1 !== preg_match( '/^[0-9a-f]{12}$/', $nonce ) ) {
+					continue;
+				}
+				$window[] = $nonce;
+				if ( 'present' !== $archive['state'] ) {
+					continue;
+				}
+				$have = $stored[ $nonce ] ?? null;
+				if ( ! is_array( $have ) || $have['fingerprint'] !== $archive['fingerprint'] || ( $retry_too_large && 'too_large' === $have['verdict'] ) ) {
+					$todo[] = array(
+						'nonce'       => $nonce,
+						'file'        => (string) $archive['file'],
+						'size'        => $archive['size'],
+						'sha1'        => (string) $archive['sha1'],
+						'fingerprint' => (string) $archive['fingerprint'],
+					);
+				}
+			}
+			return array(
+				'window' => $window,
+				'todo'   => $todo,
+			);
+		}
+	);
+	if ( ! $call['ok'] || ! is_array( $call['value'] ) ) {
+		return 'not_read';
+	}
+
+	$new     = array();
+	$started = 0;
+	foreach ( $call['value']['todo'] as $item ) {
+		// The first archive is always started; a later one only while there is time left.
+		if ( $started > 0 && microtime( true ) >= $deadline ) {
+			break;
+		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Reads a local backup archive in chunks so the time bound can be tested between them; WP_Filesystem has no streaming read.
+		$handle = fopen( $item['file'], 'rb' );
+		if ( false === $handle ) {
+			continue;
+		}
+		$was_first = 0 === $started;
+		++$started;
+
+		$context  = hash_init( 'sha1' );
+		$finished = false;
+		while ( microtime( true ) < $deadline ) {
+			if ( 0 === hash_update_stream( $context, $handle, 1048576 ) ) {
+				$finished = true;
+				break;
+			}
+		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Closes the handle opened above.
+		fclose( $handle );
+
+		if ( $finished ) {
+			/** This action is documented in includes/siteops/backup-updraft.php */
+			do_action( 'aafm_site_backup_hashed', $item['size'], 'verifier' );
+			// A file that changed while it was read gets no verdict; the next run reads it again.
+			if ( aafm_site_updraft_fingerprint( $item['nonce'], $item['file'] ) === $item['fingerprint'] ) {
+				$new[ $item['nonce'] ] = array(
+					'fingerprint' => $item['fingerprint'],
+					'verdict'     => hash_equals( $item['sha1'], hash_final( $context ) ) ? 'verified' : 'failed',
+					'checked_at'  => time(),
+				);
+			}
+			continue;
+		}
+
+		// Out of time. An archive that had the whole bound to itself is too large to verify here;
+		// a later one is simply tried first on the next run.
+		if ( $was_first ) {
+			$new[ $item['nonce'] ] = array(
+				'fingerprint' => $item['fingerprint'],
+				'verdict'     => 'too_large',
+				'checked_at'  => time(),
+			);
+		}
+		break;
+	}
+
+	// Keep exactly the verdicts of the sets now in the window: new ones over what is stored. The
+	// row kept for this request is dropped first, so a verdict another run stored meanwhile is read.
+	aafm_policy_forget_row( 'aafm_backup_verify' );
+	$fresh  = aafm_backup_verify_read();
+	$result = array();
+	foreach ( $call['value']['window'] as $nonce ) {
+		if ( isset( $new[ $nonce ] ) ) {
+			$result[ $nonce ] = $new[ $nonce ];
+		} elseif ( isset( $fresh[ $nonce ] ) ) {
+			$result[ $nonce ] = $fresh[ $nonce ];
+		}
+	}
+	ksort( $result );
+	ksort( $fresh );
+	if ( $result === $fresh ) {
+		return array() === $new ? 'nothing_to_do' : 'ran';
+	}
+
+	if ( ! aafm_update_option_verified( 'aafm_backup_verify', $result ) ) {
+		aafm_log_ability_persist_failure( 'aafm_backup_verify', __( 'The backup check results', 'agent-abilities-for-mcp' ) );
+		return 'not_stored';
+	}
+
+	return 'ran';
+}

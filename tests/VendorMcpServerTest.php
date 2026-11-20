@@ -58,6 +58,7 @@ final class VendorMcpServerTest extends TestCase {
 		$this->assertIsArray( $row );
 		$this->assertSame( 'vendor_mcp', $row['id'] );
 		$this->assertSame( 'pass', $row['status'] );
+		$this->assertSame( '', $row['who'], 'A pass row names no one to fix it, so the support report prints no label.' );
 		$this->assertSame( 'WP Rocket also runs an MCP server on this site. It answers its own discovery addresses.', $row['detail'] );
 	}
 
@@ -85,7 +86,7 @@ final class VendorMcpServerTest extends TestCase {
 		$js = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a plugin source file in a test.
 		$page = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/page.php' );
-		$this->assertStringContainsString( "other: this.#t( 'doctorWhoOther', 'Another plugin on this site may be the cause' )", $js );
-		$this->assertStringContainsString( "'doctorWhoOther'           => __( 'Another plugin on this site may be the cause'", $page );
+		$this->assertMatchesRegularExpression( "/other:\\s*this\\.#t\\(\\s*'doctorWhoOther',\\s*'Another plugin on this site may be the cause'/", $js );
+		$this->assertMatchesRegularExpression( "/'doctorWhoOther'\\s*=>\\s*__\\(\\s*'Another plugin on this site may be the cause'/", $page );
 	}
 }

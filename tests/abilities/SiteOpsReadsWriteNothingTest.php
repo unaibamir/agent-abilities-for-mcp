@@ -216,4 +216,85 @@ final class SiteOpsReadsWriteNothingTest extends TestCase {
 			)
 		);
 	}
+
+
+	public function test_redirect_reads_write_nothing_with_every_vendor_stub(): void {
+		\Aafm_Siteops_Redirect_Stub::reset();
+		aafm_siteops_redirect_stub_activate_eps();
+		aafm_siteops_redirect_stub_activate_redirection();
+		aafm_siteops_redirect_stub_activate_srm();
+		aafm_siteops_redirect_stub_activate_rankmath();
+		aafm_siteops_redirect_stub_activate_slim_seo();
+		aafm_siteops_redirect_load();
+		$this->acting_as( 'administrator' );
+		foreach ( array( 'srm_manage_redirects', 'rank_math_redirections', 'rank_math_404_monitor' ) as $capability ) {
+			wp_get_current_user()->add_cap( $capability );
+		}
+		add_filter(
+			'aafm_site_redirect_adapters',
+			static function ( array $adapters ): array {
+				foreach ( $adapters as $slug => $entry ) {
+					$adapters[ $slug ]['detect'] = array();
+				}
+				return $adapters;
+			}
+		);
+
+		\Aafm_Siteops_Redirect_Stub::$vendor = array(
+			'rm_modules'    => array( 'redirections', '404-monitor' ),
+			'slim_settings' => array( 'enable_404_logs' => 1 ),
+			// The one named exception: with its redirect cache on, Redirection writes an object cache entry.
+			'red_cache_on'  => true,
+			'eps'           => array(
+				(object) array(
+					'id'       => '3',
+					'url_from' => 'same',
+					'url_to'   => '/t-eps',
+					'status'   => '301',
+					'type'     => 'url',
+					'count'    => '0',
+				),
+			),
+			'red'           => array( aafm_siteops_redirect_stub_red_row( 4, '/other', '/t-redirection' ) ),
+			'rm'            => array(
+				aafm_siteops_redirect_stub_rm_row(
+					5,
+					array(
+						array(
+							'pattern'    => 'other',
+							'comparison' => 'exact',
+						),
+					),
+					'http://example.org/t-rankmath'
+				),
+			),
+			'slim'          => array( 'abc123' => aafm_siteops_redirect_stub_slim_rule( 'other', 't-slim' ) ),
+		);
+		aafm_siteops_redirect_stub_srm_rule( '/other', '/t-srm' );
+		update_option( 'eps_redirects_404_log', array() );
+		// The cold-cache state: no stored rule list, nothing in the object cache.
+		delete_transient( '_srm_redirects_1000' );
+		wp_cache_flush();
+
+		$this->assertCount( 5, aafm_site_redirect_ready_slugs() );
+		$this->assert_redirect_reads_write_nothing(
+			array(
+				array( 'aafm_exec_site_list_redirects', array() ),
+				array(
+					'aafm_exec_site_get_redirect',
+					array(
+						'provider' => 'eps_301',
+						'id'       => '3',
+					),
+				),
+				array( 'aafm_exec_site_list_404s', array() ),
+				array( 'aafm_exec_site_test_redirect', array( 'url' => '/other' ) ),
+			)
+		);
+
+		$this->assertSame( 0, \Aafm_Siteops_Redirect_Stub::count( 'srm_get_redirects' ), 'The cached getter stores a transient and must never be called.' );
+		$this->assertSame( 0, \Aafm_Siteops_Redirect_Stub::count( 'srm_match_redirect' ) );
+		$this->assertFalse( get_transient( '_srm_redirects_1000' ) );
+		$this->assertSame( 1, wp_cache_get( 'aafm-stub-' . md5( '/other' ), 'redirection' ), 'An object cache entry in the plugin own group is not a database write.' );
+	}
 }

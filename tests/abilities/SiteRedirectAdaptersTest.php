@@ -850,4 +850,254 @@ final class SiteRedirectAdaptersTest extends TestCase {
 		Stub::$vendor['rm_modules'] = array( 'redirections' );
 		$this->assertRefused( 'aafm_site_provider_capability', aafm_exec_site_list_404s( array( 'provider' => 'rankmath' ) ), 'The 404 Monitor module is off.' );
 	}
+
+	/**
+	 * Overrides for a Slim SEO start-with rule that is off.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private function off_start_with(): array {
+		return array(
+			'condition' => 'start-with',
+			'enable'    => 0,
+		);
+	}
+
+	public function test_with_all_five_ready_a_path_is_evaluated_in_registry_order(): void {
+		$this->only( array( 'eps_301', 'redirection', 'safe_redirect_manager', 'rankmath', 'slim_seo' ) );
+		Stub::$vendor['eps']  = array(
+			(object) array(
+				'id'       => 3,
+				'url_from' => 'same',
+				'url_to'   => '/t-eps',
+				'status'   => '301',
+				'type'     => 'url',
+				'count'    => 0,
+			),
+		);
+		Stub::$vendor['red']  = array( aafm_siteops_redirect_stub_red_row( 4, '/same', '/t-redirection' ) );
+		Stub::$vendor['rm']   = array( aafm_siteops_redirect_stub_rm_row( 5, array( $this->source( 'same' ) ), 'http://example.org/t-rankmath' ) );
+		Stub::$vendor['slim'] = array( 'abc123' => aafm_siteops_redirect_stub_slim_rule( 'same', 't-slim' ) );
+		aafm_siteops_redirect_stub_srm_rule( '/same', '/t-srm' );
+
+		$this->assertSame( array( 'eps_301', 'redirection', 'safe_redirect_manager', 'rankmath', 'slim_seo' ), aafm_site_redirect_ready_slugs() );
+
+		$out = aafm_exec_site_test_redirect( array( 'url' => '/same' ) );
+
+		$this->assertSame( array( 'eps_301', 'redirection', 'safe_redirect_manager', 'rankmath', 'slim_seo' ), array_column( $out['evaluated'], 'provider' ) );
+		$this->assertSame( array( 'matched', 'matched', 'matched', 'matched', 'matched' ), array_column( $out['evaluated'], 'result' ) );
+		$this->assertSame( 'eps_301', $out['first_match']['provider'], 'The provider that runs first on a real request wins.' );
+		$this->assertSame( '/t-eps', $out['first_match']['target'] );
+	}
+
+	public function test_slim_seo_ready_follows_the_feature_switch(): void {
+		$this->only( array( 'slim_seo' ) );
+
+		$this->assertTrue( aafm_site_redirect_call( 'slim_seo', 'ready' ), 'No stored option means every feature is on.' );
+
+		update_option( 'slim_seo', array( 'features' => array( 'meta_title' ) ) );
+		$this->assertFalse( aafm_site_redirect_call( 'slim_seo', 'ready' ) );
+
+		update_option( 'slim_seo', array( 'features' => array( 'meta_title', 'redirection' ) ) );
+		$this->assertTrue( aafm_site_redirect_call( 'slim_seo', 'ready' ) );
+		$this->assertFalse( defined( 'SLIM_SEO_VER' ), 'The stub must not switch the Slim SEO field abilities on.' );
+	}
+
+	public function test_slim_seo_rows_are_normalised(): void {
+		$this->only( array( 'slim_seo' ) );
+		Stub::$vendor['slim'] = array(
+			'6afcd5d699922' => aafm_siteops_redirect_stub_slim_rule( 'old-a', 'hello-world/', array( 'type' => 302 ) ),
+			'12345'         => aafm_siteops_redirect_stub_slim_rule( 'go', 'https://example.com/resources/', $this->off_start_with() ),
+			'junk'          => 'not a rule',
+		);
+
+		$rows = $this->rows( 'slim_seo' );
+
+		$this->assertSame( 1, Stub::count( 'SlimSEO::list' ) );
+		$this->assertSame(
+			array(
+				array(
+					'id'      => '6afcd5d699922',
+					'source'  => '/old-a',
+					'target'  => 'hello-world/',
+					'code'    => 302,
+					'enabled' => true,
+					'kind'    => 'exact',
+					'hits'    => null,
+				),
+				array(
+					'id'      => '12345',
+					'source'  => '/go',
+					'target'  => 'https://example.com/resources/',
+					'code'    => 301,
+					'enabled' => false,
+					'kind'    => 'pattern',
+					'hits'    => null,
+				),
+			),
+			$rows
+		);
+		$this->assertSame( '12345', aafm_exec_site_get_redirect( array( 'id' => '12345' ) )['redirect']['id'], 'An all-digit key is still found as a string.' );
+
+		Stub::$vendor['slim_return'] = null;
+		$this->assertTrue( aafm_exec_site_list_redirects( array() )['providers'][0]['failed'] );
+	}
+
+	/**
+	 * One rule per condition: condition, stored source, a path it matches, a path it does not.
+	 *
+	 * @return array<string,array{0:string,1:string,2:string,3:string}>
+	 */
+	public function slim_conditions(): array {
+		return array(
+			'exact-match' => array( 'exact-match', 'Old-A', '/old-a/', '/old-a/more' ),
+			'contain'     => array( 'contain', 'promo', '/spring/promo-page', '/spring/sale' ),
+			'start-with'  => array( 'start-with', 'go', '/go/now', '/let-go' ),
+			'end-with'    => array( 'end-with', '.html', '/page.html', '/page.htm' ),
+			'regex'       => array( 'regex', 'blog/(.*)', '/blog/post-1', '/news/post-1' ),
+		);
+	}
+
+	/**
+	 * Each of the plugin's five conditions is evaluated.
+	 *
+	 * @dataProvider slim_conditions
+	 *
+	 * @param string $condition Condition.
+	 * @param string $from      Stored source.
+	 * @param string $hit       A path the rule matches.
+	 * @param string $miss      A path it does not match.
+	 */
+	public function test_slim_seo_evaluates_each_condition( string $condition, string $from, string $hit, string $miss ): void {
+		$this->only( array( 'slim_seo' ) );
+		Stub::$vendor['slim'] = array( 'k1' => aafm_siteops_redirect_stub_slim_rule( $from, 'https://example.com/$1/', array( 'condition' => $condition ) ) );
+
+		$matched = $this->match( 'slim_seo', $hit );
+		$this->assertSame( array( 'matched', 'k1', 301 ), array( $matched['state'], $matched['id'], $matched['code'] ) );
+		$this->assertSame( 'regex' === $condition ? 'https://example.com/post-1/' : 'https://example.com/$1/', $matched['target'] );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'slim_seo', $miss ) );
+	}
+
+	public function test_slim_seo_edge_rules(): void {
+		$this->only( array( 'slim_seo' ) );
+		Stub::$vendor['slim'] = array(
+			'off'  => aafm_siteops_redirect_stub_slim_rule( 'old-a', 'x', array( 'enable' => 0 ) ),
+			'gone' => aafm_siteops_redirect_stub_slim_rule( 'gone', 'ignored', array( 'type' => 410 ) ),
+			'on'   => aafm_siteops_redirect_stub_slim_rule( 'old-a', 'hello-world/' ),
+		);
+
+		$this->assertSame( 'on', $this->match( 'slim_seo', '/old-a' )['id'], 'A rule that is off is skipped.' );
+		$this->assertSame(
+			array(
+				'state'  => 'matched',
+				'id'     => 'gone',
+				'target' => '',
+				'code'   => 410,
+			),
+			$this->match( 'slim_seo', '/gone' )
+		);
+		$this->assertSame( 'gone_or_blocked', aafm_exec_site_test_redirect( array( 'url' => '/gone' ) )['chain_ends'] );
+
+		Stub::$vendor['slim_settings'] = array( 'case_sensitive' => 1 );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'slim_seo', '/OLD-A' ) );
+
+		Stub::$vendor['slim_settings'] = array();
+		Stub::$vendor['slim']          = array( 'all' => aafm_siteops_redirect_stub_slim_rule( '', 'everything', array( 'condition' => 'contain' ) ) );
+		$this->assertSame( 'all', $this->match( 'slim_seo', '/any/path' )['id'], 'An empty source matches every request, as it does in the plugin.' );
+
+		Stub::$vendor['slim'] = array(
+			'bad'   => aafm_siteops_redirect_stub_slim_rule( '(unclosed', 'x', array( 'condition' => 'regex' ) ),
+			'after' => aafm_siteops_redirect_stub_slim_rule( 'after', 'y' ),
+		);
+		$this->assertSame( array( 'state' => 'unknown' ), $this->match( 'slim_seo', '/nothing' ) );
+		$this->assertSame( array( 'state' => 'unknown' ), $this->match( 'slim_seo', '/after' ) );
+	}
+
+	public function test_slim_seo_a_skip_filter_gives_unknown(): void {
+		$this->only( array( 'slim_seo' ) );
+		Stub::$vendor['slim'] = array( 'k1' => aafm_siteops_redirect_stub_slim_rule( 'old-a', 'hello-world/' ) );
+		add_filter( 'slim_seo_redirection_skip', '__return_false' );
+
+		$this->assertSame( array( 'state' => 'unknown' ), $this->match( 'slim_seo', '/old-a' ) );
+		$this->assertSame( array( 'state' => 'unknown' ), $this->match( 'slim_seo', '/nothing' ) );
+	}
+
+	public function test_slim_seo_site_wide_redirects_it_cannot_evaluate_give_unknown(): void {
+		$this->only( array( 'slim_seo' ) );
+		Stub::$vendor['slim'] = array( 'k1' => aafm_siteops_redirect_stub_slim_rule( 'old-a', 'hello-world/' ) );
+		$unknown              = static function ( string $reason ): array {
+			return array(
+				'state'  => 'unknown',
+				'reason' => $reason,
+			);
+		};
+
+		// Each acts after the rules, so a rule still answers first.
+		Stub::$vendor['slim_settings'] = array( 'auto_redirection' => 1 );
+		$this->assertSame( $unknown( 'slim_seo_auto_redirection' ), $this->match( 'slim_seo', '/nothing' ) );
+		$this->assertSame( 'k1', $this->match( 'slim_seo', '/old-a' )['id'] ?? null );
+		Stub::$vendor['slim_settings'] = array( 'redirect_404_to' => 'homepage' );
+		$this->assertSame( $unknown( 'slim_seo_404_redirect' ), $this->match( 'slim_seo', '/nothing' ) );
+
+		// The www redirect, judged on this site's own host, the only one the tool accepts.
+		Stub::$vendor['slim_settings'] = array( 'redirect_www' => 'non-to-www' );
+		$this->assertSame( $unknown( 'slim_seo_www_redirect' ), $this->match( 'slim_seo', '/nothing' ) );
+		Stub::$vendor['slim_settings'] = array( 'redirect_www' => 'www-to-non' );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'slim_seo', '/nothing' ), 'This site has no www to remove.' );
+		update_option( 'home', 'http://www.example.org' );
+		$this->assertSame( $unknown( 'slim_seo_www_redirect' ), $this->match( 'slim_seo', '/nothing' ) );
+		Stub::$vendor['slim_settings'] = array( 'redirect_www' => 'non-to-www' );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'slim_seo', '/nothing' ) );
+	}
+
+	public function test_slim_seo_is_asked_below_the_home_path_and_its_relative_target_is_under_home(): void {
+		$this->only( array( 'slim_seo' ) );
+		update_option( 'home', 'http://example.org/sub' );
+		update_option( 'siteurl', 'http://example.org/sub' );
+		Stub::$vendor['slim'] = array(
+			'b' => aafm_siteops_redirect_stub_slim_rule( 'sub/old-b', 'sub/sample-page/' ),
+			'a' => aafm_siteops_redirect_stub_slim_rule( 'old-a', 'sub/hello-world/' ),
+		);
+
+		$out = aafm_exec_site_test_redirect( array( 'url' => '/sub/old-a' ) );
+		$this->assertSame( 'a', $out['first_match']['id'] );
+		$this->assertSame( 'resolves', $out['chain_ends'], 'The target is /sub/sub/hello-world/, a page of this site.' );
+		$this->assertSame( 'no_match', aafm_exec_site_test_redirect( array( 'url' => '/sub/old-b' ) )['chain_ends'] );
+		$this->assertSame( 'b', aafm_exec_site_test_redirect( array( 'url' => '/sub/sub/old-b' ) )['first_match']['id'] );
+	}
+
+	public function test_slim_seo_not_found_log_needs_the_setting_and_the_table(): void {
+		global $wpdb;
+		$this->only( array( 'slim_seo' ) );
+		update_option( 'timezone_string', 'Asia/Karachi' );
+		$table = $wpdb->prefix . 'slim_seo_404';
+		$wpdb->insert(
+			$table,
+			array(
+				'url'        => 'miss-1?q=secret',
+				'hit'        => 2,
+				'updated_at' => '2026-11-18 10:00:00',
+			)
+		);
+
+		$this->assertSame( array(), aafm_exec_site_list_404s( array() )['entries'], 'Logging is off by default.' );
+
+		Stub::$vendor['slim_settings'] = array( 'enable_404_logs' => 1 );
+		$this->assertSame(
+			array(
+				array(
+					'provider'       => 'slim_seo',
+					'untrusted_path' => '/miss-1',
+					'count'          => 2,
+					'last_seen'      => gmdate( 'c', strtotime( '2026-11-18 05:00:00 UTC' ) ),
+				),
+			),
+			aafm_exec_site_list_404s( array() )['entries']
+		);
+
+		$wpdb->query( $wpdb->prepare( 'DROP TABLE %i', $table ) );
+		$out = aafm_exec_site_list_404s( array() );
+		$this->assertSame( array(), $out['entries'], 'With logging on and no table the log is empty, not an error.' );
+		$this->assertFalse( $out['providers'][0]['failed'] );
+	}
 }

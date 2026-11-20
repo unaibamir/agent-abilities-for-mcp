@@ -101,6 +101,7 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/siteops/redirects/eps-301.php|aafm_redirect_eps_301_list_404s|1' => 'N',
 		'includes/siteops/redirects/eps-301.php|aafm_redirect_eps_301_list_404s|2' => 'N',
 		'includes/siteops/redirects/redirection.php|aafm_redirect_redirection_ready|1' => 'N',
+		'includes/siteops/redirects/slim-seo.php|aafm_redirect_slim_seo_ready|1' => 'N',
 	);
 
 	/**
@@ -376,7 +377,7 @@ final class OptionReadSweepTest extends TestCase {
 			array(
 				'G' => 21,
 				'L' => 3,
-				'N' => 51,
+				'N' => 52,
 			),
 			array(
 				'G' => count( array_keys( self::GET_OPTION, 'G', true ) ),

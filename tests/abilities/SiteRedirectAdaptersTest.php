@@ -770,50 +770,112 @@ final class SiteRedirectAdaptersTest extends TestCase {
 		$this->assertSame( '2', $this->match( 'rankmath', '/sub/old-b' )['id'] ?? null );
 	}
 
-	public function test_rankmath_settings_and_filters_it_cannot_evaluate_give_unknown(): void {
+	public function test_rankmath_settings_redirect_only_the_pages_they_apply_to(): void {
 		$this->only( array( 'rankmath' ) );
-		Stub::$vendor['rm'] = array( aafm_siteops_redirect_stub_rm_row( 2, array( $this->source( 'old-b' ) ), 'http://example.org/sample-page/' ) );
-		$unknown            = static function ( string $reason ): array {
+		$this->set_permalink_structure( '/%postname%/' );
+		$author   = self::factory()->user->create(
+			array(
+				'role'          => 'author',
+				'user_nicename' => 'acc-writer',
+			)
+		);
+		$parent   = self::factory()->post->create(
+			array(
+				'post_name'   => 'acc-parent',
+				'post_author' => $author,
+				'post_date'   => '2025-01-10 10:00:00',
+			)
+		);
+		$orphan   = self::factory()->attachment->create_object(
+			array(
+				'file'      => 'acc-orphan.png',
+				'post_name' => 'acc-orphan',
+			)
+		);
+		$image    = self::factory()->attachment->create_object(
+			array(
+				'file'        => 'acc-img.png',
+				'post_parent' => $parent,
+				'post_name'   => 'acc-img',
+			)
+		);
+		$attached = (string) get_permalink( $image );
+		$path     = (string) wp_parse_url( $attached, PHP_URL_PATH );
+		$settings = Stub::$vendor['rm_settings'];
+		$setting  = static function ( string $target, string $reason, int $code = 301 ): array {
+			return array(
+				'state'   => 'matched',
+				'id'      => '',
+				'target'  => $target,
+				'code'    => $code,
+				'setting' => $reason,
+			);
+		};
+		$unknown  = static function ( string $reason ): array {
 			return array(
 				'state'  => 'unknown',
 				'reason' => $reason,
 			);
 		};
-		$settings           = Stub::$vendor['rm_settings'];
+		$this->assertSame( '/acc-parent/acc-img/', $path );
+		Stub::$vendor['rm'] = array( aafm_siteops_redirect_stub_rm_row( 2, array( $this->source( 'acc-parent/acc-img' ) ), 'http://example.org/sample-page/' ) );
 
-		// The 404 fallback acts after the rules, so a rule still answers.
-		Stub::$vendor['rm_settings']['general.redirections_fallback'] = 'homepage';
-		$this->assertSame( $unknown( 'rank_math_404_fallback' ), $this->match( 'rankmath', '/nothing-here' ) );
-		$this->assertSame( '2', $this->match( 'rankmath', '/old-b' )['id'] ?? null );
+		// Attachment pages, before the rules: a rule for the same address is never reached.
+		Stub::$vendor['rm_settings']['general.attachment_redirect_urls'] = true;
+		$this->assertSame( $setting( (string) get_permalink( $parent ), 'rank_math_attachment_redirect' ), $this->match( 'rankmath', $path ) );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'rankmath', '/nothing-here' ), 'The setting cannot apply to a page that is not an attachment.' );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'rankmath', (string) wp_parse_url( (string) get_permalink( $orphan ), PHP_URL_PATH ) ), 'An attachment with no parent and no default address is not redirected.' );
+		Stub::$vendor['rm_settings']['general.attachment_redirect_default'] = 'http://example.org/media/';
+		$this->assertSame( $setting( 'http://example.org/media/', 'rank_math_attachment_redirect' ), $this->match( 'rankmath', (string) wp_parse_url( (string) get_permalink( $orphan ), PHP_URL_PATH ) ) );
+		add_filter( 'rank_math/frontend/attachment/redirect_url', '__return_empty_string' );
+		$this->assertSame( $unknown( 'rank_math_attachment_redirect' ), $this->match( 'rankmath', $path ), 'A filter can change the address.' );
+		remove_filter( 'rank_math/frontend/attachment/redirect_url', '__return_empty_string' );
+		unset( Stub::$vendor['rm_settings']['general.attachment_redirect_urls'] );
+		$this->assertSame( 'rank_math_attachment_redirect', $this->match( 'rankmath', $path )['setting'] ?? null, 'A missing attachment setting is on, as the plugin reads it.' );
+		Stub::$vendor['rm_settings'] = $settings;
+		$this->assertSame( '2', $this->match( 'rankmath', $path )['id'] ?? null, 'With the setting off the rule answers.' );
+
+		// Switched-off date and author archives go to the home page, before the rules.
+		Stub::$vendor['rm_settings']['titles.disable_date_archives'] = true;
+		$this->assertSame( $setting( (string) get_bloginfo( 'url' ), 'rank_math_archive_redirect' ), $this->match( 'rankmath', '/2025/' ) );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'rankmath', '/1999/' ), 'A date archive with no posts is a page not found.' );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'rankmath', '/author/acc-writer/' ) );
+		Stub::$vendor['rm_settings']                                   = $settings;
+		Stub::$vendor['rm_settings']['titles.disable_author_archives'] = true;
+		$this->assertSame( $setting( (string) get_bloginfo( 'url' ), 'rank_math_archive_redirect' ), $this->match( 'rankmath', '/author/acc-writer/' ) );
+		Stub::$vendor['rm_settings'] = $settings;
+
+		// The 404 fallback, after the rules, on a page not found only.
+		Stub::$vendor['rm_settings']['general.redirections_fallback']    = 'homepage';
+		Stub::$vendor['rm_settings']['general.redirections_header_code'] = '302';
+		$this->assertSame( $setting( home_url(), 'rank_math_404_fallback', 302 ), $this->match( 'rankmath', '/nothing-here' ) );
+		$this->assertSame( '2', $this->match( 'rankmath', $path )['id'] ?? null, 'A rule answers first.' );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'rankmath', '/acc-parent/' ), 'A page that exists is not a 404.' );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'rankmath', '/login' ), 'The plugin keeps its fallback off login, admin and dashboard.' );
+		add_filter( 'rank_math/redirection/fallback_exclude_locations', '__return_empty_array' );
+		$this->assertSame( $unknown( 'rank_math_404_fallback' ), $this->match( 'rankmath', '/nothing-here' ), 'A filter can change where the fallback stays off.' );
+		remove_filter( 'rank_math/redirection/fallback_exclude_locations', '__return_empty_array' );
 		Stub::$vendor['rm_settings']['general.redirections_fallback'] = 'custom';
 		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'rankmath', '/nothing-here' ), 'A custom fallback with no address redirects nowhere.' );
 		Stub::$vendor['rm_settings']['general.redirections_custom_url'] = 'https://example.org/gone/';
-		$this->assertSame( $unknown( 'rank_math_404_fallback' ), $this->match( 'rankmath', '/nothing-here' ) );
+		$this->assertSame( $setting( 'https://example.org/gone/', 'rank_math_404_fallback', 302 ), $this->match( 'rankmath', '/nothing-here' ) );
 
-		// Its own attachment and archive redirects, both on by default on a new install.
+		// Where the page cannot be classified, a setting that depends on it gives unknown.
+		$this->set_permalink_structure( '' );
+		$this->assertSame( $unknown( 'rank_math_404_fallback' ), $this->match( 'rankmath', '/nothing-here' ) );
 		Stub::$vendor['rm_settings']                                     = $settings;
 		Stub::$vendor['rm_settings']['general.attachment_redirect_urls'] = true;
 		$this->assertSame( $unknown( 'rank_math_attachment_redirect' ), $this->match( 'rankmath', '/nothing-here' ) );
-		Stub::$vendor['rm_settings']                                 = $settings;
-		Stub::$vendor['rm_settings']['titles.disable_date_archives'] = true;
-		$this->assertSame( $unknown( 'rank_math_archive_redirect' ), $this->match( 'rankmath', '/nothing-here' ) );
-		Stub::$vendor['rm_settings']                                   = $settings;
-		Stub::$vendor['rm_settings']['titles.disable_author_archives'] = true;
-		$this->assertSame( $unknown( 'rank_math_archive_redirect' ), $this->match( 'rankmath', '/nothing-here' ) );
-		unset( Stub::$vendor['rm_settings']['general.attachment_redirect_urls'] );
-		Stub::$vendor['rm_settings']['titles.disable_author_archives'] = false;
-		$this->assertSame( $unknown( 'rank_math_attachment_redirect' ), $this->match( 'rankmath', '/nothing-here' ), 'A missing attachment setting is on, as the plugin reads it.' );
 		Stub::$vendor['rm_settings'] = $settings;
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'rankmath', '/nothing-here' ), 'With every setting off nothing is classified.' );
 
 		// Rank Math's own front-end class on the filter is the attachment and archive case above.
 		$own = array( new \RankMath\Frontend\Redirection(), 'pre_redirection' );
 		add_filter( 'rank_math/redirection/pre_search', $own );
-		$this->assertSame( '2', $this->match( 'rankmath', '/old-b' )['id'] ?? null );
 		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'rankmath', '/nothing-here' ) );
 
 		// Any other callback runs before the rules and can redirect any path.
 		add_filter( 'rank_math/redirection/pre_search', '__return_null', 20 );
-		$this->assertSame( $unknown( 'rank_math_pre_search_filter' ), $this->match( 'rankmath', '/old-b' ) );
 		$this->assertSame( $unknown( 'rank_math_pre_search_filter' ), $this->match( 'rankmath', '/nothing-here' ) );
 		remove_filter( 'rank_math/redirection/pre_search', '__return_null', 20 );
 		remove_filter( 'rank_math/redirection/pre_search', $own );

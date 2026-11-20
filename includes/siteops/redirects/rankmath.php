@@ -123,16 +123,19 @@ function aafm_redirect_rankmath_all(): array {
  * and its slash wherever they occur, not only in front: on a site at /sub the request
  * /sub/sub/old-b reaches the matcher as old-b, so a rule stored as sub/old-b never fires.
  *
- * The plugin also redirects without a rule, and none of that can be decided from a path alone,
- * so each case answers 'unknown' with a reason (checked against 1.0.282, class-redirector.php and
- * frontend/class-redirection.php):
+ * The plugin also redirects from its settings, checked against 1.0.282 (class-redirector.php,
+ * frontend/class-redirection.php), in its own order:
  * - a callback on rank_math/redirection/pre_search other than the plugin's own front-end class
- *   runs before the rules and can redirect any path (its WooCommerce base removal adds one);
- * - its own front-end class redirects attachment pages ('general.attachment_redirect_urls', on
- *   when missing) and switched-off date or author archives, before the rules; only a path no
- *   rule matches is reported for these, so an attachment page that also has a rule is a limit;
- * - the 404 fallback ('general.redirections_fallback' homepage, or custom with an address) runs
- *   after the rules on a page that is not found.
+ *   runs before the rules and can redirect any path (its WooCommerce base removal adds one):
+ *   unknown;
+ * - its own front-end class, also before the rules, sends an attachment page to its parent post
+ *   or to the default address ('general.attachment_redirect_urls', on when missing), and a
+ *   switched-off date or author archive to the home page, with 301;
+ * - after the rules, the 404 fallback ('general.redirections_fallback' homepage, or custom with
+ *   an address) sends a page not found to that address with the code of
+ *   'general.redirections_header_code', except login, admin and dashboard.
+ * Which kind of page a path is comes from aafm_site_redirect_path_class(), asked only while one
+ * of these settings is on; a page it cannot classify gives unknown with the setting's reason.
  *
  * @param string              $path  The full path, home path included (the registry's match_path is full).
  * @param array<string,mixed> $cache Per-call cache; not used by this adapter.
@@ -156,7 +159,48 @@ function aafm_redirect_rankmath_match( string $path, array &$cache ): array {
 		}
 	}
 
-	$found = \RankMath\Redirections\DB::match_redirections( trim( \RankMath\Redirections\Redirection::strip_subdirectory( $path ), '/' ) );
+	$attachments = (bool) \RankMath\Helper::get_settings( 'general.attachment_redirect_urls', true );
+	$dates       = (bool) \RankMath\Helper::get_settings( 'titles.disable_date_archives' );
+	$authors     = true === \RankMath\Helper::get_settings( 'titles.disable_author_archives' );
+	$class       = null;
+	if ( $attachments || $dates || $authors ) {
+		$class = aafm_site_redirect_path_class( $path );
+		if ( 'unclassified' === $class['class'] ) {
+			return array(
+				'state'  => 'unknown',
+				'reason' => $attachments ? 'rank_math_attachment_redirect' : 'rank_math_archive_redirect',
+			);
+		}
+		if ( 'attachment' === $class['class'] && $attachments ) {
+			$to = (int) $class['parent'] > 0 ? get_permalink( (int) $class['parent'] ) : \RankMath\Helper::get_settings( 'general.attachment_redirect_default' );
+			if ( is_string( $to ) && '' !== $to ) {
+				if ( false !== has_filter( 'rank_math/frontend/attachment/redirect_url' ) ) {
+					return array(
+						'state'  => 'unknown',
+						'reason' => 'rank_math_attachment_redirect',
+					);
+				}
+				return array(
+					'state'   => 'matched',
+					'id'      => '',
+					'target'  => $to,
+					'code'    => 301,
+					'setting' => 'rank_math_attachment_redirect',
+				);
+			}
+		} elseif ( ( 'date' === $class['class'] && $dates ) || ( 'author' === $class['class'] && $authors ) ) {
+			return array(
+				'state'   => 'matched',
+				'id'      => '',
+				'target'  => (string) get_bloginfo( 'url' ),
+				'code'    => 301,
+				'setting' => 'rank_math_archive_redirect',
+			);
+		}
+	}
+
+	$uri   = trim( (string) \RankMath\Redirections\Redirection::strip_subdirectory( $path ), '/' );
+	$found = \RankMath\Redirections\DB::match_redirections( $uri );
 	if ( is_array( $found ) && isset( $found['id'] ) ) {
 		return array(
 			'state'  => 'matched',
@@ -166,24 +210,42 @@ function aafm_redirect_rankmath_match( string $path, array &$cache ): array {
 		);
 	}
 
-	$reason = '';
-	if ( \RankMath\Helper::get_settings( 'general.attachment_redirect_urls', true ) ) {
-		$reason = 'rank_math_attachment_redirect';
-	} elseif ( \RankMath\Helper::get_settings( 'titles.disable_date_archives' ) || \RankMath\Helper::get_settings( 'titles.disable_author_archives' ) ) {
-		$reason = 'rank_math_archive_redirect';
-	} else {
-		$fallback = \RankMath\Helper::get_settings( 'general.redirections_fallback', 'default' );
-		if ( 'homepage' === $fallback || ( 'custom' === $fallback && '' !== (string) \RankMath\Helper::get_settings( 'general.redirections_custom_url', '' ) ) ) {
-			$reason = 'rank_math_404_fallback';
-		}
+	$fallback = \RankMath\Helper::get_settings( 'general.redirections_fallback' );
+	$to       = '';
+	if ( 'homepage' === $fallback ) {
+		$to = home_url();
+	} elseif ( 'default' !== $fallback ) {
+		$to = (string) \RankMath\Helper::get_settings( 'general.redirections_custom_url' );
+	}
+	if ( '' === $to || '' === $uri ) {
+		return array( 'state' => 'no_match' );
+	}
+	if ( false !== has_filter( 'rank_math/redirection/fallback_exclude_locations' ) ) {
+		return array(
+			'state'  => 'unknown',
+			'reason' => 'rank_math_404_fallback',
+		);
+	}
+	if ( in_array( $uri, array( 'login', 'admin', 'dashboard' ), true ) ) {
+		return array( 'state' => 'no_match' );
+	}
+	$class = $class ?? aafm_site_redirect_path_class( $path );
+	if ( 'unclassified' === $class['class'] ) {
+		return array(
+			'state'  => 'unknown',
+			'reason' => 'rank_math_404_fallback',
+		);
 	}
 
-	return '' === $reason
-		? array( 'state' => 'no_match' )
-		: array(
-			'state'  => 'unknown',
-			'reason' => $reason,
-		);
+	return 'not_found' === $class['class']
+		? array(
+			'state'   => 'matched',
+			'id'      => '',
+			'target'  => $to,
+			'code'    => absint( \RankMath\Helper::get_settings( 'general.redirections_header_code' ) ),
+			'setting' => 'rank_math_404_fallback',
+		)
+		: array( 'state' => 'no_match' );
 }
 
 /**

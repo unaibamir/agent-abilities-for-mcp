@@ -1523,6 +1523,33 @@ if ( ! function_exists( 'geodir_save_post_meta' ) ) {
 	}
 }
 
+if ( ! class_exists( 'UpdraftPlus' ) ) {
+	/**
+	 * Minimal UpdraftPlus signature for static analysis only. Real UpdraftPlus (or the test stub,
+	 * tests/stubs/UpdraftStubStore.php) supplies the real class at runtime.
+	 */
+	class UpdraftPlus {
+	}
+}
+
+if ( ! class_exists( 'UpdraftPlus_Backup_History' ) ) {
+	/**
+	 * Minimal UpdraftPlus signature for static analysis only.
+	 */
+	class UpdraftPlus_Backup_History {
+		/**
+		 * The backup history, timestamp => entry, newest first.
+		 *
+		 * @param int|false $timestamp One set, or false for all.
+		 * @return array<int|string,mixed>
+		 */
+		public static function get_history( $timestamp = false ) {
+			unset( $timestamp );
+			return array();
+		}
+	}
+}
+
 if ( ! class_exists( 'WP_CLI' ) ) {
 	/**
 	 * Minimal WP-CLI signature for static analysis only. Real WP_CLI is provided by the

@@ -53,6 +53,10 @@
 	     (EPS_Redirects, Red_Item, srm_get_redirect_data() and the rest), which it cannot prefix
 	     without breaking the calls it stands in for. A test fixture, never shipped. -->
 	<exclude-pattern>*/tests/stubs/SiteopsRedirectStubStore.php</exclude-pattern>
+	<!-- Same reasoning as GeodirStubStore.php above: the UpdraftPlus stub declares the THIRD-PARTY
+	     classes (UpdraftPlus, UpdraftPlus_Backup_History) the backup readers call, and holds the
+	     file operations the backup tests need. A throwaway test fixture, never shipped. -->
+	<exclude-pattern>*/tests/stubs/UpdraftStubStore.php</exclude-pattern>
 
 	<arg name="extensions" value="php"/>
 	<arg name="basepath" value="."/>

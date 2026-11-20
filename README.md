@@ -151,6 +151,18 @@ That notice comes from a copy of the MCP Adapter that runs its own loader and fi
 
 If the notice still shows, another plugin ships its own copy of the adapter. The Connection Doctor report on the Connection tab shows which copy is running. If it says bundled, this plugin's copy is in use and the notice comes from the other plugin's copy, so update or remove the plugin that bundles its own MCP Adapter.
 
+### Can an AI agent clear my page cache, check redirects or see my backups?
+
+Yes, with 13 tools that start switched off and need a user who can manage options. Four work with your page cache plugin: one reports which supported cache plugins are active, and three clear one post, one URL or the whole site. Each result says, per plugin, whether a cached copy was found and removed or the purge was only requested. Supported: WP Super Cache, WP Fastest Cache, W3 Total Cache, WP-Optimize, Cache Enabler, Hummingbird, Jetpack Boost, SpeedyCache, Breeze, SiteGround Speed Optimizer, LiteSpeed Cache, Nginx Helper and Proxy Cache Purge.
+
+Four read redirects from Redirection, Rank Math, Safe Redirect Manager, 301 Redirects and Slim SEO: list them, read one, list not-found addresses and test which redirect a URL would hit. They change nothing. Two report UpdraftPlus backups, and three report Site Health results, waiting updates and scheduled tasks.
+
+These tools call the other plugin's own purge and read functions, and this plugin sends no request of its own for them. Some purges make the cache plugin contact its own proxy or CDN, the same as when you press its purge button.
+
+### What is the backup gate?
+
+A setting on the Settings tab that starts off. You tick the risky tools it covers, and each one is then refused unless UpdraftPlus has a database backup from the last 24 hours that passed a check. A small backup is compared with the checksum UpdraftPlus recorded when the tool is called, and a larger one is checked in the background about once an hour. No tool can start a backup, so run one in UpdraftPlus or let its schedule do it.
+
 ## More documentation
 
 - [Documentation](https://agentabilitieswp.com/docs/?utm_source=github&utm_medium=readme&utm_campaign=plugin-repo)
@@ -165,6 +177,14 @@ If the notice still shows, another plugin ships its own copy of the adapter. The
 The Model Context Protocol is an open specification that Anthropic originally developed. Claude, ChatGPT, Cursor, VS Code, Gemini and other product names belong to their owners, and Agent Abilities for MCP is a third-party plugin that isn't affiliated with, endorsed by or sponsored by any of them.
 
 ## Changelog
+### 1.13.0
+
+* **Feature:** Agents can clear one post, one URL or the whole site from the page cache of 13 cache plugins, including LiteSpeed Cache, WP Super Cache and W3 Total Cache. Each plugin's result says whether a cached copy was found and removed or the purge was only requested.
+* **Feature:** Agents can list redirects, read one, list not-found addresses and test which redirect a URL would hit in Redirection, Rank Math, Safe Redirect Manager, 301 Redirects and Slim SEO. These tools read only.
+* **Feature:** New read tools report UpdraftPlus backups, Site Health results, waiting updates and scheduled tasks without making a request.
+* **Feature:** Backup gate: choose risky tools that are refused unless a checked backup from the last 24 hours exists. Off by default, under Settings.
+* **Fix:** REST requests that are not for the MCP endpoint no longer build the tool list. wpbakery-replace-text now returns a restore point, and an image id sent as a string of digits is accepted in WPBakery element settings.
+
 ### 1.12.0
 
 * **Feature:** Agents can edit WPBakery Page Builder and Avada pages element by element with tools such as avada-update-element and wpbakery-insert-template. Restore revision works there too. [See every tool](https://agentabilitieswp.com/abilities/?utm_source=github&utm_medium=readme&utm_campaign=plugin-repo).

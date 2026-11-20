@@ -270,3 +270,18 @@ function aafm_backup_gate_error( string $reason ): WP_Error {
 
 	return new WP_Error( 'aafm_backup_gate', __( 'The site owner requires a checked backup from the last 24 hours before this tool can run, and this site has none that passed. The Backup gate card under Settings says why. This connection cannot start a backup.', 'agent-abilities-for-mcp' ) );
 }
+
+/**
+ * The hourly background check. Hooked on the scheduled event aafm_backup_verify.
+ *
+ * It lives in this always-loaded file so the hook has its callback in a cron request, which
+ * loads none of the lazy files. It loads the two it needs and calls the runner.
+ *
+ * @return void
+ */
+function aafm_backup_verify_cron(): void {
+	require_once AAFM_PLUGIN_DIR . 'includes/siteops/vendor-call.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/siteops/backup-updraft.php';
+	aafm_backup_verify_run();
+}
+add_action( 'aafm_backup_verify', 'aafm_backup_verify_cron' );

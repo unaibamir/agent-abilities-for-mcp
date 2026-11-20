@@ -582,3 +582,47 @@ function aafm_siteops_stub_jetpack_boost_activate(): void {
 		Aafm_Siteops_Vendor_Stub::hit( 'jetpack_boost_delete_cache_for_url', array( $url ) );
 	}
 }
+
+/**
+ * SpeedyCache's delete class. Aliased to \SpeedyCache\Delete on activation.
+ */
+final class Aafm_Siteops_Stub_Sc_Delete {
+	public static function url( $urls ) {
+		Aafm_Siteops_Vendor_Stub::hit( 'SpeedyCache\Delete::url', array( $urls ) );
+	}
+	public static function cache( $post_id = false ) {
+		Aafm_Siteops_Vendor_Stub::hit( 'SpeedyCache\Delete::cache', array( $post_id ) );
+	}
+	public static function all_cache() {
+		Aafm_Siteops_Vendor_Stub::hit( 'SpeedyCache\Delete::all_cache' );
+	}
+	public static function run( $actions ) {
+		Aafm_Siteops_Vendor_Stub::hit( 'SpeedyCache\Delete::run', array( $actions ) );
+	}
+}
+
+/**
+ * SpeedyCache's path helper. Aliased to \SpeedyCache\Util on activation.
+ */
+final class Aafm_Siteops_Stub_Sc_Util {
+	public static function cache_path( $loc = '' ) {
+		// The real base ends in <host:port>/<loc>/, speedycache/main/util.php:132-153.
+		return trailingslashit( Aafm_Siteops_Vendor_Stub::root() . '/speedycache/example.org/' . $loc );
+	}
+}
+
+/**
+ * SpeedyCache: its version constant, its two classes and its global options object.
+ */
+function aafm_siteops_stub_speedycache_activate(): void {
+	$GLOBALS['speedycache'] = (object) array( 'options' => array( 'status' => true ) );
+	if ( ! defined( 'SPEEDYCACHE_VERSION' ) ) {
+		define( 'SPEEDYCACHE_VERSION', '1.4.3' );
+	}
+	if ( ! class_exists( 'SpeedyCache\Delete', false ) ) {
+		class_alias( 'Aafm_Siteops_Stub_Sc_Delete', 'SpeedyCache\Delete' );
+	}
+	if ( ! class_exists( 'SpeedyCache\Util', false ) ) {
+		class_alias( 'Aafm_Siteops_Stub_Sc_Util', 'SpeedyCache\Util' );
+	}
+}

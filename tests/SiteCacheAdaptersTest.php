@@ -1103,4 +1103,125 @@ final class SiteCacheAdaptersTest extends TestCase {
 		$this->assertResult( 'purged', '', true, $this->call( 'aafm_cache_jetpack_boost_purge_all' ) );
 		$this->assertSame( array( 'jetpack_boost_clear_page_cache_all' ), Stub::names() );
 	}
+
+	private function sc_dir( string $relative, string $tree = 'all' ): string {
+		// A page directory under the desktop tree (all) or the mobile tree (mobile-cache). Decoded names.
+		return Stub::root() . '/speedycache/example.org/' . $tree . ( '' === $relative ? '' : '/' . $relative );
+	}
+
+	private function sc_ready(): void {
+		aafm_siteops_stub_speedycache_activate();
+		$this->load( 'speedycache' );
+	}
+
+	public function test_speedycache_registry_row_and_detection(): void {
+		$row = $this->assertRegistryRow(
+			'speedycache',
+			'speedycache/speedycache.php',
+			array( array( 'constant', 'SPEEDYCACHE_VERSION' ) ),
+			'file',
+			array(
+				'cli'           => false,
+				'vendor_http'   => true,
+				'recursive_url' => false,
+				'rewarms'       => false,
+			)
+		);
+		aafm_siteops_stub_speedycache_activate();
+		$this->assertTrue( aafm_site_cache_detected( $row ) );
+		$row['detect'][] = array( 'constant', 'AAFM_NO_SUCH_VENDOR_CONSTANT' );
+		$this->assertFalse( aafm_site_cache_detected( $row ) );
+	}
+
+	public function test_speedycache_serving_is_false_while_wp_cache_is_off(): void {
+		// Every other condition is met: both classes exist and the status option is on.
+		$this->sc_ready();
+		$this->assertFalse( defined( 'WP_CACHE' ) && WP_CACHE, 'The WordPress test suite always runs with WP_CACHE false.' );
+		$this->assertFalse( $this->call( 'aafm_cache_speedycache_serving' ) );
+		// The true case needs a real site: acceptance case P1. The off switch: case N7.
+	}
+
+	public function test_speedycache_post_and_url_both_send_the_decoded_url(): void {
+		$this->sc_ready();
+		$decoded                             = 'http://example.org/' . self::DEC . '/';
+		$desktop                             = $this->sc_dir( self::DEC );
+		$mobile                              = $this->sc_dir( self::DEC, 'mobile-cache' );
+		Stub::$on['SpeedyCache\Delete::url'] = static function () use ( $desktop, $mobile ): void {
+			Stub::rrmdir( $desktop );
+			Stub::rrmdir( $mobile );
+		};
+		$url                                 = $this->url( '/' . self::LO . '/' );
+
+		$this->put( $desktop . '/index.html' );
+		$this->put( $desktop . '/index.html.gz' );
+		$this->put( $mobile . '/index.html' );
+		$result = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_speedycache_purge_post( 41, $url );
+			}
+		);
+		$this->assertResult( 'purged', '', true, $result, 'The desktop and the mobile copy are both gone.' );
+
+		$this->put( $desktop . '/index.html' );
+		$result = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_speedycache_purge_url( $url );
+			}
+		);
+		$this->assertResult( 'purged', '', true, $result );
+
+		// Delete::cache( $id ) can never match a non-ASCII page and is never called.
+		$this->assertSame(
+			array(
+				array( 'SpeedyCache\Delete::url', array( $decoded ) ),
+				array( 'SpeedyCache\Delete::url', array( $decoded ) ),
+			),
+			Stub::$calls
+		);
+	}
+
+	public function test_speedycache_mobile_copy_left_behind_is_still_cached(): void {
+		$this->sc_ready();
+		wp_mkdir_p( $this->sc_dir( '' ) );
+		$this->put( $this->sc_dir( 'acc-a', 'mobile-cache' ) . '/index.html' );
+		$url    = $this->url( '/acc-a/' );
+		$result = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_speedycache_purge_url( $url );
+			}
+		);
+		$this->assertResult( 'failed', 'still_cached', true, $result );
+		$this->assertSame( array( array( 'SpeedyCache\Delete::url', array( 'http://example.org/acc-a/' ) ) ), Stub::$calls );
+	}
+
+	public function test_speedycache_never_cached_page_is_not_found(): void {
+		$this->sc_ready();
+		wp_mkdir_p( $this->sc_dir( '' ) );
+		$url    = $this->url( '/acc-a/' );
+		$result = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_speedycache_purge_url( $url );
+			}
+		);
+		$this->assertResult( 'requested', 'not_found_in_cache', false, $result );
+	}
+
+	public function test_speedycache_site_purge_calls_all_cache_and_reads_both_trees(): void {
+		$this->sc_ready();
+		$this->put( $this->sc_dir( 'acc-a' ) . '/index.html' );
+		$this->put( $this->sc_dir( 'acc-a', 'mobile-cache' ) . '/index.html' );
+		$desktop                                   = $this->sc_dir( 'acc-a' );
+		Stub::$on['SpeedyCache\Delete::all_cache'] = static function () use ( $desktop ): void {
+			Stub::rrmdir( $desktop );
+		};
+		$this->assertResult( 'failed', 'still_cached', true, $this->call( 'aafm_cache_speedycache_purge_all' ), 'The mobile tree still holds a page.' );
+		$mobile = $this->sc_dir( 'acc-a', 'mobile-cache' );
+		$this->put( $desktop . '/index.html' );
+		Stub::$on['SpeedyCache\Delete::all_cache'] = static function () use ( $desktop, $mobile ): void {
+			Stub::rrmdir( $desktop );
+			Stub::rrmdir( $mobile );
+		};
+		$this->assertResult( 'purged', '', true, $this->call( 'aafm_cache_speedycache_purge_all' ) );
+		$this->assertSame( array( 'SpeedyCache\Delete::all_cache', 'SpeedyCache\Delete::all_cache' ), Stub::names(), 'Never Delete::run().' );
+	}
 }

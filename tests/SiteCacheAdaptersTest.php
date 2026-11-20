@@ -1855,4 +1855,129 @@ final class SiteCacheAdaptersTest extends TestCase {
 		$this->assertResult( 'requested', 'no_acknowledgement', null, $this->call( 'aafm_cache_nginx_helper_purge_all' ), 'A Redis cache is not on disk.' );
 		$this->assertSame( array( 'rt_nginx_helper_purge_all', 'rt_nginx_helper_purge_all' ), Stub::names() );
 	}
+
+	private function vhp_ready(): void {
+		aafm_siteops_stub_proxy_cache_purge_activate();
+		$this->load( 'proxy_cache_purge' );
+	}
+
+	/**
+	 * Run a URL purge of /acc-a/.
+	 *
+	 * @return mixed
+	 */
+	private function vhp_purge_acc_a() {
+		$url = $this->url( '/acc-a/' );
+		return $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_proxy_cache_purge_purge_url( $url );
+			}
+		);
+	}
+
+	public function test_proxy_cache_purge_registry_row_and_detection(): void {
+		$row = $this->assertRegistryRow(
+			'proxy_cache_purge',
+			'varnish-http-purge/varnish-http-purge.php',
+			array( array( 'class', 'VarnishPurger' ) ),
+			'none',
+			array(
+				'cli'           => true,
+				'vendor_http'   => true,
+				'recursive_url' => false,
+				'rewarms'       => false,
+			)
+		);
+		aafm_siteops_stub_proxy_cache_purge_activate();
+		$this->assertTrue( aafm_site_cache_detected( $row ) );
+		$row['detect'][] = array( 'class', 'Aafm_No_Such_Vendor_Class' );
+		$this->assertFalse( aafm_site_cache_detected( $row ) );
+	}
+
+	public function test_proxy_cache_purge_serving_is_true_whenever_the_plugin_is_loaded(): void {
+		$this->vhp_ready();
+		$this->assertTrue( $this->call( 'aafm_cache_proxy_cache_purge_serving' ) );
+	}
+
+	public function test_proxy_cache_purge_a_2xx_answer_is_requested_never_purged(): void {
+		$this->vhp_ready();
+		$this->assertResult( 'requested', 'proxy_answered', null, $this->vhp_purge_acc_a() );
+		$this->assertSame( array( array( 'VarnishPurger::purge_url', array( 'http://example.org/acc-a/' ) ) ), Stub::$calls );
+		$this->assertFalse( has_action( 'after_purge_url' ), 'The listener is removed after the call.' );
+	}
+
+	public function test_proxy_cache_purge_failures(): void {
+		$this->vhp_ready();
+		Stub::$state['vhp_answers'] = array( 200, 503 );
+		$this->assertResult( 'failed', 'proxy_error', null, $this->vhp_purge_acc_a(), 'One of two proxies refused.' );
+		Stub::$state['vhp_answers'] = array( 'refused' );
+		$this->assertResult( 'failed', 'proxy_error', null, $this->vhp_purge_acc_a(), 'A transport error.' );
+		Stub::$state['vhp_answers'] = array();
+		$this->assertResult( 'failed', 'nothing_sent', null, $this->vhp_purge_acc_a(), 'The plugin sent no request.' );
+	}
+
+	public function test_proxy_cache_purge_post_is_the_url_call_and_site_is_the_regex_form(): void {
+		$this->vhp_ready();
+		$url    = $this->url( '/acc-a/' );
+		$result = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_proxy_cache_purge_purge_post( 41, $url );
+			}
+		);
+		$this->assertResult( 'requested', 'proxy_answered', null, $result );
+		$this->assertResult( 'requested', 'proxy_answered', null, $this->call( 'aafm_cache_proxy_cache_purge_purge_all' ) );
+		// Never purge_post(), which queues 16 requests for shutdown.
+		$this->assertSame(
+			array(
+				array( 'VarnishPurger::purge_url', array( 'http://example.org/acc-a/' ) ),
+				array( 'VarnishPurger::purge_url', array( 'http://example.org/?vhp-regex' ) ),
+			),
+			Stub::$calls
+		);
+	}
+
+	/**
+	 * Each adapter whose vendor entry point is missing, in a process where no vendor stub was ever
+	 * loaded: symbol, slug, operation, expected state and reason.
+	 *
+	 * @return array<string,array{0:string,1:string,2:string}>
+	 */
+	public function provide_missing_vendor_entry_points(): array {
+		return array(
+			'Hummingbird action listener' => array( 'hummingbird', 'url', 'failed vendor_error' ),
+			'Jetpack Boost URL action'    => array( 'jetpack_boost', 'url', 'failed vendor_error' ),
+			'Breeze purge class'          => array( 'breeze', 'url', 'failed vendor_error' ),
+			'Cache Enabler URL action'    => array( 'cache_enabler', 'url', 'failed vendor_error' ),
+			'SpeedyCache Delete::url'     => array( 'speedycache', 'url', 'failed vendor_error' ),
+			'WP-Optimize page cache'      => array( 'wp_optimize', 'url', 'failed vendor_error' ),
+			'w3tc_flush_url'              => array( 'w3_total_cache', 'url', 'failed vendor_error' ),
+			'VarnishPurger'               => array( 'proxy_cache_purge', 'url', 'failed vendor_error' ),
+			'LiteSpeed purge_all_lscache' => array( 'litespeed', 'all', 'skipped unsupported_operation' ),
+		);
+	}
+
+	/**
+	 * A vendor entry point that is not there is reported, never called and never read as a purge.
+	 * Runs in its own process: once a stub defines a vendor function or class it cannot be removed.
+	 *
+	 * @dataProvider provide_missing_vendor_entry_points
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 *
+	 * @param string $slug     Registry slug.
+	 * @param string $op       'url' or 'all'.
+	 * @param string $expected State and reason.
+	 */
+	public function test_a_missing_vendor_entry_point_is_reported_and_never_called( string $slug, string $op, string $expected ): void {
+		$this->load( $slug );
+		$url      = $this->url( '/acc-a/' );
+		$function = 'aafm_cache_' . $slug . '_purge_' . $op;
+		$result   = $this->call(
+			static function () use ( $function, $op, $url ) {
+				return 'all' === $op ? $function() : $function( $url );
+			}
+		);
+		$this->assertSame( $expected, $result['state'] . ' ' . $result['reason'] );
+		$this->assertSame( array(), Stub::$calls, 'Nothing reached a vendor stub.' );
+	}
 }

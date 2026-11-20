@@ -791,3 +791,33 @@ function aafm_siteops_stub_nginx_helper_activate(): void {
 	);
 	Aafm_Siteops_Vendor_Stub::listen( 'rt_nginx_helper_purge_all', 0 );
 }
+
+/**
+ * Proxy Cache Purge's class. Aliased to VarnishPurger on activation. purge_url() reports one
+ * answer per configured proxy through after_purge_url, as varnish-http-purge.php:1520-1690 does.
+ */
+final class Aafm_Siteops_Stub_Varnish {
+	public static function purge_url( $url ) {
+		Aafm_Siteops_Vendor_Stub::hit( 'VarnishPurger::purge_url', array( $url ) );
+		// vhp_answers: one entry per proxy. An int is a status code, anything else a transport error.
+		foreach ( Aafm_Siteops_Vendor_Stub::$state['vhp_answers'] ?? array( 200 ) as $answer ) {
+			$response = is_int( $answer ) ? array( 'response' => array( 'code' => $answer ) ) : new WP_Error( 'http_request_failed', 'refused' );
+			do_action( 'after_purge_url', array(), $url, $response, array() );
+		}
+	}
+	public static function the_home_url() {
+		return home_url();
+	}
+	public function purge_post( $post_id ) {
+		Aafm_Siteops_Vendor_Stub::hit( 'purge_post', array( $post_id ) );
+	}
+}
+
+/**
+ * Proxy Cache Purge: the VarnishPurger class.
+ */
+function aafm_siteops_stub_proxy_cache_purge_activate(): void {
+	if ( ! class_exists( 'VarnishPurger', false ) ) {
+		class_alias( 'Aafm_Siteops_Stub_Varnish', 'VarnishPurger' );
+	}
+}

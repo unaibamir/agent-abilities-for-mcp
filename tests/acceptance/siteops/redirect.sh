@@ -578,6 +578,29 @@ run_adapter() {
 			seed set "$s" general.redirections_fallback homepage >/dev/null
 			setting_case "$s" rank_math_404_fallback /acc-none
 			same_answer U1 "$s" /acc-page/
+			# A category archive is a term archive, which the tool never looks up: with the fallback on its
+			# answer is unknown, and a writer on pre_get_terms runs for a real request, never for the tool.
+			cat > "$WPROOT/wp-content/mu-plugins/aafm-accept-term-writer.php" <<'PHP'
+<?php
+// redirect.sh case U1: a writer on pre_get_terms that counts the lookups of the category uncategorized.
+add_action( 'pre_get_terms', function ( $q ) {
+	if ( in_array( 'uncategorized', (array) ( $q->query_vars['slug'] ?? array() ), true ) ) {
+		update_option( 'aafm_acc_term_runs', 1 + (int) get_option( 'aafm_acc_term_runs', 0 ) );
+	}
+} );
+PHP
+			runs=$(W option get aafm_acc_term_runs 2>/dev/null || echo 0)
+			unknown_case "$s" rank_math_404_fallback /category/uncategorized/ 0
+			after=$(W option get aafm_acc_term_runs 2>/dev/null || echo 0)
+			real=$(hit /category/uncategorized/)
+			last=$(W option get aafm_acc_term_runs 2>/dev/null || echo 0)
+			if [ "$runs" = "$after" ] && [ "$last" -gt "$after" ]; then
+				pass U1 "$s /category/uncategorized/: a real request ($real) looked the term up, the tool did not ($runs lookups before its call and $after after)"
+			else
+				fail U1 "$s /category/uncategorized/: term lookups $runs before the tool call, $after after it, $last after a real request ($real)"
+			fi
+			rm -f "$WPROOT/wp-content/mu-plugins/aafm-accept-term-writer.php"
+			W option delete aafm_acc_term_runs >/dev/null 2>&1
 			seed set "$s" general.redirections_fallback default >/dev/null
 			# The attachment and date archive redirects are on, as after install.
 			setting_case "$s" rank_math_attachment_redirect "$attach"

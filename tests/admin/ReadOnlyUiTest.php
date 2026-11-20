@@ -408,9 +408,9 @@ final class ReadOnlyUiTest extends TestCase {
 		$html = $this->render_settings_tab();
 
 		$this->assertSame(
-			3,
+			5,
 			substr_count( $html, '<details class="aafm-set-more">' ),
-			'Exactly three rows collapse: read-only mode, the high-risk switch, and delete on uninstall.'
+			'Exactly five rows collapse: read-only mode, the high-risk switch, delete on uninstall, and the off-site and large backup switches of the backup gate.'
 		);
 
 		preg_match_all( '#<details class="aafm-set-more">(.*?)</details>#s', $html, $m );

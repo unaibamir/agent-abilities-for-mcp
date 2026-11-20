@@ -75,6 +75,7 @@
 			this.#bindReviewInbox();
 			this.#bindChanges();
 			this.#bindClearLog();
+			this.#bindBackupVerify();
 			this.#bindNotifyTest();
 			this.#bindLogPaginationAndFilters();
 			this.#bindResetPlugin();
@@ -1997,6 +1998,18 @@
 						body.append( 'aafm_oauth_connect_roles[]', box.value );
 					} );
 				}
+				// Backup gate: the marker says the card was on the page, because an unchecked box sends nothing.
+				if ( form.querySelector( 'input[name="aafm_backup_gate_present"]' ) ) {
+					body.append( 'aafm_backup_gate_present', '1' );
+					[ 'aafm_backup_gate', 'aafm_backup_gate_accept_remote', 'aafm_backup_gate_accept_size' ].forEach( ( name ) => {
+						if ( form.querySelector( `input[name="${ name }"]` )?.checked ) {
+							body.append( name, '1' );
+						}
+					} );
+					form.querySelectorAll( 'input[name="aafm_backup_gate_abilities[]"]:checked' ).forEach( ( box ) => {
+						body.append( 'aafm_backup_gate_abilities[]', box.value );
+					} );
+				}
 				if ( proxyMode ) {
 					body.append( 'aafm_proxy_mode', proxyMode.value );
 					body.append( 'aafm_proxy_header', form.querySelector( 'select[name="aafm_proxy_header"]' )?.value ?? '' );
@@ -2517,6 +2530,30 @@
 				const json = await this.#post( 'aafm_notify_test' );
 				if ( status ) {
 					status.textContent = json?.data?.message ?? this.#t( 'error', 'Error' );
+				}
+			} );
+		}
+
+		#bindBackupVerify() {
+			const btn = document.querySelector( '.aafm-backup-verify-now' );
+			if ( ! btn ) {
+				return;
+			}
+			btn.addEventListener( 'click', async () => {
+				const status = document.querySelector( '.aafm-backup-verify-status' );
+				btn.disabled = true;
+				if ( status ) {
+					status.textContent = this.#t( 'backupVerifyChecking', 'Checking…' );
+				}
+				try {
+					const json = await this.#post( 'aafm_backup_verify_now' );
+					if ( status ) {
+						status.textContent = json?.data?.message ?? this.#t( 'backupVerifyFailed', 'The check could not be run. Reload this page and try again.' );
+					}
+				} finally {
+					// Re-enable and hand focus back, so it does not drop to the page body.
+					btn.disabled = false;
+					btn.focus();
 				}
 			} );
 		}

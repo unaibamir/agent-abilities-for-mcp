@@ -474,4 +474,87 @@ final class BackupGateSettingsTest extends TestCase {
 		$this->assertSame( 'Off-site backups no longer accepted', $detail( 'aafm/backup-gate-off-site' ) );
 		$this->assertSame( 'Large backups no longer accepted on size alone', $detail( 'aafm/backup-gate-large' ) );
 	}
+
+	/**
+	 * The rendered card.
+	 */
+	private function card(): string {
+		ob_start();
+		aafm_render_backup_gate_section();
+		return (string) ob_get_clean();
+	}
+
+	public function test_the_card_carries_the_sentinel_and_a_proper_verify_button(): void {
+		update_option( 'aafm_backup_gate', '1' );
+		$html = $this->card();
+
+		$this->assertStringContainsString( 'name="aafm_backup_gate_present" value="1"', $html );
+		$this->assertSame( 1, preg_match( '/<button[^>]*class="([^"]*)"[^>]*>Verify now<\/button>/', $html, $button ) );
+		$this->assertStringContainsString( 'type="button"', $button[0] );
+		$this->assertSame( array( 'aafm-btn', 'aafm-btn-secondary', 'aafm-backup-verify-now' ), explode( ' ', $button[1] ) );
+		$this->assertStringContainsString( 'data-aafm-untracked', $html );
+		$this->assertStringContainsString( 'aria-live="polite"', $html );
+		$this->assertSame( 1, substr_count( $html, 'aafm-card-head-title' ), 'One card, one head.' );
+		$this->assertStringContainsString( 'name="aafm_backup_gate_abilities[]" value="aafm/delete-post"', $html );
+		$this->assertStringNotContainsString( 'value="aafm/get-posts"', $html, 'A read is never offered.' );
+		$this->assertStringNotContainsString( 'value="aafm/site-list-backups"', $html );
+	}
+
+	public function test_the_card_shows_each_state(): void {
+		$this->assertStringContainsString( 'aafm-pill-neutral">Off<', $this->card(), 'Gate off.' );
+		$this->assertStringNotContainsString( 'Verify now', $this->card(), 'Nothing is checked while the gate is off, so Verify now is not offered.' );
+		$this->assertStringContainsString( 'UpdraftPlus detected', $this->card() );
+		$this->assertStringContainsString( 'No good backup found in the last 24 hours.', $this->card() );
+
+		update_option( 'aafm_backup_gate', '1' );
+		update_option( 'aafm_backup_gate_abilities', array( 'aafm/delete-post', 'gone/tool' ) );
+		$this->assertStringContainsString( 'aafm-pill-warn">No recent backup<', $this->card(), 'On, no backup.' );
+		$this->assertSame( 1, preg_match( '/value="gone\/tool"\s+checked/', $this->card() ), 'A stored slug that is no longer offered is listed, ticked.' );
+
+		$file = aafm_updraft_stub_add_set( 'aaaaaaaaaaa1', 3600 );
+		$html = $this->card();
+		$this->assertStringContainsString( 'aafm-pill-success">Backup found<', $html, 'On, a checked backup.' );
+		$this->assertStringContainsString( 'database only. It matched its checksum when it was checked.', $html );
+
+		add_filter( 'aafm_backup_gate_inline_checksum_max_bytes', static fn(): int => 1024 );
+		$html = $this->card();
+		$this->assertStringContainsString( 'aafm-pill-warn">Checking backup<', $html, 'On, a backup waiting to be checked.' );
+		$this->assertStringContainsString( 'A recent backup is waiting to be checked. The check is not scheduled yet. Reload this page.', $html );
+
+		delete_option( 'aafm_backup_gate' );
+		$html = $this->card();
+		$this->assertStringContainsString( 'A recent backup is waiting to be checked. Backups are checked once the gate is on.', $html, 'Gate off, a backup waiting.' );
+		$this->assertStringNotContainsString( 'not scheduled', $html );
+		$this->assertStringNotContainsString( 'Verify now', $html );
+		update_option( 'aafm_backup_gate', '1' );
+
+		update_option(
+			'aafm_backup_verify',
+			array(
+				'aaaaaaaaaaa1' => array(
+					'fingerprint' => aafm_site_updraft_fingerprint( 'aaaaaaaaaaa1', $file ),
+					'verdict'     => 'too_large',
+					'checked_at'  => time(),
+				),
+			)
+		);
+		$html = $this->card();
+		$this->assertStringContainsString( 'aafm-pill-warn">Backup too large to check<', $html, 'On, a backup too large to check.' );
+		$this->assertStringContainsString( 'switch on Large backups below', $html );
+
+		delete_option( 'aafm_backup_gate' );
+		$html = $this->card();
+		$this->assertStringContainsString( 'in the time one check is allowed. Switch on Large backups below to accept it on its size alone.', $html, 'Gate off, a backup too large to check.' );
+		$this->assertStringNotContainsString( 'Verify now', $html );
+		update_option( 'aafm_backup_gate', '1' );
+
+		update_option( 'aafm_backup_gate_abilities', array() );
+		$this->assertStringContainsString( 'The gate is on and no tool is chosen, so nothing is held back.', $this->card() );
+
+		aafm_updraft_stub_deactivate();
+		$html = $this->card();
+		$this->assertStringContainsString( 'No backup provider detected', $html, 'No provider.' );
+		$this->assertStringContainsString( 'aafm_backup_gate_vouch', $html );
+		$this->assertStringNotContainsString( 'Verify now', $html, 'The button is offered only with UpdraftPlus.' );
+	}
 }

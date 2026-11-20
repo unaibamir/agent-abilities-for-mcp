@@ -1377,6 +1377,10 @@ function aafm_render_settings_tab(): void {
 		)
 	);
 
+	// Backup gate. Inside the form, after Safety controls and before the save bar, so the one Save
+	// covers it. Its hidden marker field tells the save handler the card was on the page.
+	aafm_render_backup_gate_section();
+
 	// One Save, in the shared .aafm-savebar the Abilities, Integrations and Bridge tabs already
 	// use: it sticks to the foot of the viewport while the tab is scrolled, so the operator never
 	// has to travel the whole tab to reach it, and it settles into flow at the end of the form.

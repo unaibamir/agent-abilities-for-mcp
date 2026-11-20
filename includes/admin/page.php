@@ -196,6 +196,8 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'cleared'                  => __( 'Cleared', 'agent-abilities-for-mcp' ),
 				'error'                    => __( 'Error', 'agent-abilities-for-mcp' ),
 				'requestFailed'            => __( 'Request failed.', 'agent-abilities-for-mcp' ),
+				'backupVerifyChecking'     => __( 'Checking…', 'agent-abilities-for-mcp' ),
+				'backupVerifyFailed'       => __( 'The check could not be run. Reload this page and try again.', 'agent-abilities-for-mcp' ),
 				'grantActive'              => __( 'Active', 'agent-abilities-for-mcp' ),
 				'grantPaused'              => __( 'Paused', 'agent-abilities-for-mcp' ),
 				'grantExpired'             => __( 'Expired', 'agent-abilities-for-mcp' ),

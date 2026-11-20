@@ -197,11 +197,14 @@ final class BackupGateSettingsTest extends TestCase {
 	}
 
 	public function test_deactivation_clears_the_event(): void {
-		wp_schedule_event( time() + 60, 'hourly', 'aafm_backup_verify' );
+		$this->stored( true, false, false, array( 'aafm/delete-post' ) );
+		aafm_backup_verify_reconcile();
 		$this->assertNotFalse( wp_next_scheduled( 'aafm_backup_verify' ) );
 
-		aafm_notify_unschedule();
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core's own deactivation action for this plugin, fired with the gate still on.
+		do_action( 'deactivate_' . AAFM_PLUGIN_BASENAME, false );
 
+		$this->assertTrue( aafm_stored_switch_on( 'aafm_backup_gate' ) );
 		$this->assertFalse( wp_next_scheduled( 'aafm_backup_verify' ) );
 	}
 

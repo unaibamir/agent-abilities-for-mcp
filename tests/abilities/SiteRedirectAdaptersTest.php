@@ -268,4 +268,216 @@ final class SiteRedirectAdaptersTest extends TestCase {
 		$this->assertRefused( 'aafm_site_provider_capability', aafm_exec_site_list_redirects( array( 'provider' => 'eps_301' ) ) );
 		$this->assertRefused( 'aafm_site_provider_capability', aafm_exec_site_list_404s( array( 'provider' => 'eps_301' ) ) );
 	}
+
+	/**
+	 * Overrides for a Redirection rule that answers 410 and has no target.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private function gone(): array {
+		return array(
+			'action_type' => 'error',
+			'action_code' => 410,
+			'action_data' => null,
+		);
+	}
+
+	public function test_redirection_ready_reads_the_setup_state_without_changing_it(): void {
+		$this->only( array( 'redirection' ) );
+
+		$this->assertTrue( aafm_site_redirect_call( 'redirection', 'ready' ) );
+		$this->assertGreaterThan( 0, Stub::count( 'Red_Options::reset' ), 'The plugin memoises its options for the request.' );
+
+		Stub::$vendor['red_options'] = array( 'database' => '' );
+		$this->assertFalse( aafm_site_redirect_call( 'redirection', 'ready' ), 'Not set up.' );
+
+		update_option( 'redirection_version', '2.3' );
+		$this->assertFalse( aafm_site_redirect_call( 'redirection', 'ready' ), 'An old install with no schema version needs an upgrade.' );
+
+		Stub::$vendor['red_options'] = array( 'database' => '3.0' );
+		$this->assertFalse( aafm_site_redirect_call( 'redirection', 'ready' ), 'Needs an upgrade.' );
+
+		Stub::$vendor['red_options'] = array(
+			'database'       => '4.2',
+			'database_stage' => array( 'stage' => 'x' ),
+		);
+		$this->assertFalse( aafm_site_redirect_call( 'redirection', 'ready' ), 'An upgrade is in progress.' );
+
+		Stub::$vendor['red_options'] = 'not an array';
+		$this->assertFalse( aafm_site_redirect_call( 'redirection', 'ready' ) );
+	}
+
+	public function test_redirection_rows_come_from_the_items_wrapper(): void {
+		$this->only( array( 'redirection' ) );
+		Stub::$vendor['red'] = array(
+			aafm_siteops_redirect_stub_red_row( 1, '/old-a', '/hello-world/', array( 'hits' => 42 ) ),
+			aafm_siteops_redirect_stub_red_row( 2, '/rx-(\d+)', '/t/$1', array( 'regex' => true ) ),
+			aafm_siteops_redirect_stub_red_row(
+				3,
+				'/login-only',
+				'',
+				array(
+					'match_type'  => 'login',
+					'action_data' => array( 'logged_in' => '/in' ),
+					'enabled'     => false,
+					'action_code' => 302,
+				)
+			),
+			aafm_siteops_redirect_stub_red_row( 4, '/gone', '', $this->gone() ),
+		);
+
+		$rows = $this->rows( 'redirection' );
+
+		$this->assertSame( 1, Stub::count( 'Red_Item::get_filtered:0' ) );
+		$this->assertSame(
+			array(
+				'id'      => '1',
+				'source'  => '/old-a',
+				'target'  => '/hello-world/',
+				'code'    => 301,
+				'enabled' => true,
+				'kind'    => 'exact',
+				'hits'    => 42,
+			),
+			$rows[0]
+		);
+		$this->assertSame( 'pattern', $rows[1]['kind'] );
+		$this->assertSame( array( 'pattern', '', false, 302 ), array( $rows[2]['kind'], $rows[2]['target'], $rows[2]['enabled'], $rows[2]['code'] ) );
+		$this->assertSame( array( 'pattern', '', 410 ), array( $rows[3]['kind'], $rows[3]['target'], $rows[3]['code'] ) );
+
+		Stub::$vendor['red_return'] = Stub::$vendor['red'];
+		$out                        = aafm_exec_site_list_redirects( array() );
+		$this->assertTrue( $out['providers'][0]['failed'], 'A bare list is not the plugin wrapper, so the provider fails instead of listing nothing.' );
+		$this->assertSame( array(), $out['redirects'] );
+	}
+
+	public function test_redirection_reads_page_after_page_until_a_short_one(): void {
+		$this->only( array( 'redirection' ) );
+		$rows = array();
+		for ( $i = 1; $i <= 201; $i++ ) {
+			$rows[] = aafm_siteops_redirect_stub_red_row( $i, '/r' . $i, '/t' );
+		}
+		Stub::$vendor['red'] = $rows;
+
+		$all = aafm_site_redirect_call( 'redirection', 'all' );
+
+		$this->assertCount( 201, $all['rows'] );
+		$this->assertFalse( $all['truncated'] );
+		$this->assertSame( 1, Stub::count( 'Red_Item::get_filtered:0' ) );
+		$this->assertSame( 1, Stub::count( 'Red_Item::get_filtered:1' ) );
+		$this->assertSame( 0, Stub::count( 'Red_Item::get_filtered:2' ) );
+	}
+
+	public function test_redirection_match_uses_the_plugin_matcher(): void {
+		$this->only( array( 'redirection' ) );
+		Stub::$vendor['red'] = array(
+			aafm_siteops_redirect_stub_red_row( 1, '/old-a', '/sample-page/', array( 'action_code' => 302 ) ),
+			aafm_siteops_redirect_stub_red_row( 2, '/off', '/x', array( 'enabled' => false ) ),
+			aafm_siteops_redirect_stub_red_row( 3, '^/rx-(\d+)$', '/t', array( 'regex' => true ) ),
+			aafm_siteops_redirect_stub_red_row( 4, '/no-target', '', array( 'action_data' => null ) ),
+		);
+
+		$this->assertSame(
+			array(
+				'state'  => 'matched',
+				'id'     => '1',
+				'target' => '/sample-page/',
+				'code'   => 302,
+			),
+			$this->match( 'redirection', '/old-a' )
+		);
+		$this->assertSame( '3', $this->match( 'redirection', '/rx-12' )['id'] );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'redirection', '/off' ) );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'redirection', '/nothing-here' ) );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'redirection', '/no-target' ), 'A rule whose matcher gives no target does not redirect.' );
+
+		Stub::$calls = array();
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'redirection', '/wp-json/wp/v2/posts' ) );
+		$this->assertSame( array(), Stub::$calls, 'A protected URL is answered before any rule is read.' );
+	}
+
+	public function test_redirection_rule_it_cannot_evaluate_is_unknown(): void {
+		$this->only( array( 'redirection' ) );
+		Stub::$vendor['red'] = array(
+			aafm_siteops_redirect_stub_red_row( 1, '/old-a', '/x', array( 'stub_match' => null ) ),
+			aafm_siteops_redirect_stub_red_row( 2, '/old-a', '/y' ),
+		);
+
+		$this->assertSame( array( 'state' => 'unknown' ), $this->match( 'redirection', '/old-a' ), 'A later match does not hide an earlier rule that could not be evaluated.' );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'redirection', '/other' ), 'A rule whose source does not match the path is not in question.' );
+	}
+
+	public function test_redirection_a_site_move_or_an_alias_of_this_site_gives_unknown(): void {
+		$this->only( array( 'redirection' ) );
+		Stub::$vendor['red'] = array( aafm_siteops_redirect_stub_red_row( 1, '/old-a', '/x' ) );
+		$unknown             = static function ( string $reason ): array {
+			return array(
+				'state'  => 'unknown',
+				'reason' => $reason,
+			);
+		};
+
+		// The site-move setting sends every request to another domain before any rule is read.
+		Stub::$vendor['red_options'] = array(
+			'database' => '4.2',
+			'relocate' => 'https://new.example.com',
+		);
+		$this->assertSame( $unknown( 'redirection_relocate' ), $this->match( 'redirection', '/old-a' ) );
+		$this->assertSame( $unknown( 'redirection_relocate' ), $this->match( 'redirection', '/nothing-here' ) );
+		Stub::$vendor['red_options']['relocate'] = 'http://example.org/';
+		$this->assertSame( '1', $this->match( 'redirection', '/old-a' )['id'] ?? null, 'A move to this same domain sends nothing anywhere.' );
+
+		// An alias equal to this site's own host is redirected to the site address.
+		Stub::$vendor['red_options'] = array(
+			'database' => '4.2',
+			'aliases'  => array( 'example.org' ),
+		);
+		$this->assertSame( $unknown( 'redirection_site_alias' ), $this->match( 'redirection', '/nothing-here' ) );
+
+		// The preferred domain, HTTPS and other aliases act on another host or scheme, never on this
+		// site's own address, which is the only one the tool accepts.
+		Stub::$vendor['red_options'] = array(
+			'database'         => '4.2',
+			'aliases'          => array( 'other.example' ),
+			'preferred_domain' => 'www',
+			'https'            => true,
+		);
+		$this->assertSame( '1', $this->match( 'redirection', '/old-a' )['id'] ?? null );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'redirection', '/nothing-here' ) );
+	}
+
+	public function test_redirection_capability_and_not_found_log(): void {
+		$this->only( array( 'redirection' ) );
+		Stub::$vendor['red_404'] = array(
+			(object) array(
+				'count' => 6,
+				'url'   => '/old-a',
+				'id'    => '/old-a',
+			),
+			(object) array(
+				'count' => 1,
+				'url'   => '/missing-1?utm=x',
+				'id'    => '/missing-1?utm=x',
+			),
+		);
+
+		$out = aafm_exec_site_list_404s( array() );
+
+		$this->assertSame( 1, Stub::count( 'Red_404_Log::get_grouped:url' ) );
+		$this->assertSame( array( '/old-a', '/missing-1' ), array_column( $out['entries'], 'untrusted_path' ) );
+		$this->assertSame( array( 6, 1 ), array_column( $out['entries'], 'count' ) );
+		$this->assertSame( array( null, null ), array_column( $out['entries'], 'last_seen' ) );
+
+		Stub::$vendor['red_404_return'] = array( 'bare' );
+		$this->assertSame( array(), aafm_exec_site_list_404s( array() )['entries'] );
+
+		add_filter(
+			'redirection_role',
+			static function (): string {
+				return 'aafm_capability_nobody_has';
+			}
+		);
+		$this->assertRefused( 'aafm_site_provider_capability', aafm_exec_site_list_redirects( array( 'provider' => 'redirection' ) ) );
+		$this->assertRefused( 'aafm_site_provider_capability', aafm_exec_site_list_404s( array( 'provider' => 'redirection' ) ) );
+	}
 }

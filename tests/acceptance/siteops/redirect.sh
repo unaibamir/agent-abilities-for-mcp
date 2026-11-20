@@ -694,6 +694,20 @@ PHP
 			# Automatic redirects are on, the default.
 			same_answer U1 "$s" /acc-none
 			setting_case "$s" slim_seo_auto_redirection "$attach"
+			# The same attachment through a rule that also sets a taxonomy variable: WordPress serves it as
+			# the attachment page and ignores the variable, so the tool must answer the attachment redirect.
+			cat > "$WPROOT/wp-content/mu-plugins/aafm-accept-mixed-rule.php" <<'PHP'
+<?php
+// redirect.sh case U1: a taxonomy, and a rewrite rule that sets an attachment and a term of it.
+add_action( 'init', function () {
+	register_taxonomy( 'acc_mix', array( 'post', 'attachment' ), array( 'public' => true, 'query_var' => 'acc_mix' ) );
+	add_rewrite_rule( 'acc-mix/([^/]+)/([^/]+)/?$', 'index.php?attachment=$matches[1]&acc_mix=$matches[2]', 'top' );
+} );
+PHP
+			W rewrite flush --quiet >/dev/null 2>&1
+			setting_case "$s" slim_seo_auto_redirection "/acc-mix/$(basename "$attach")/red/"
+			rm -f "$WPROOT/wp-content/mu-plugins/aafm-accept-mixed-rule.php"
+			W rewrite flush --quiet >/dev/null 2>&1
 			setting_case "$s" slim_seo_auto_redirection /author/admin/
 			setting_case "$s" slim_seo_auto_redirection "$renamed"
 			seed set "$s" redirect_www non-to-www >/dev/null

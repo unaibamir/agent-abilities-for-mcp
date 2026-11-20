@@ -957,11 +957,14 @@ final class SiteCacheDispatchTest extends TestCase {
 			'fake_c' => 'throw',
 		);
 
-		$saved_host           = self::host();
-		$_SERVER['HTTP_HOST'] = 'Other.Example';
+		$saved_host                = self::host();
+		$_SERVER['HTTP_HOST']      = 'Other.Example';
+		$_SERVER['HTTP_CF_RAY']    = '8f1e2d3c4b5a6978-LHR';
+		$_SERVER['HTTP_X_VARNISH'] = '32770';
 
 		$result = wp_get_ability( 'aafm/site-cache-status' )->execute( array() );
 
+		unset( $_SERVER['HTTP_CF_RAY'], $_SERVER['HTTP_X_VARNISH'] );
 		if ( null === $saved_host ) {
 			unset( $_SERVER['HTTP_HOST'] );
 		} else {
@@ -969,7 +972,8 @@ final class SiteCacheDispatchTest extends TestCase {
 		}
 
 		$this->assertIsArray( $result );
-		$this->assertSame( array( 'providers', 'status_only', 'object_cache', 'budget', 'multisite', 'request_host_differs', 'purge_supported' ), array_keys( $result ) );
+		$this->assertSame( array( 'providers', 'status_only', 'object_cache', 'budget', 'multisite', 'request_host_differs', 'edge_layers', 'purge_supported' ), array_keys( $result ) );
+		$this->assertSame( array( 'Cloudflare', 'Varnish' ), $result['edge_layers'], 'Caches in front of the site are named from the headers they add to the request.' );
 		$this->assertSame(
 			array(
 				array(
@@ -1039,6 +1043,7 @@ final class SiteCacheDispatchTest extends TestCase {
 		}
 		$_SERVER['HTTP_HOST'] = 'example.com:8443';
 		$this->assertTrue( wp_get_ability( 'aafm/site-cache-status' )->execute( array() )['request_host_differs'] );
+		$this->assertSame( array(), wp_get_ability( 'aafm/site-cache-status' )->execute( array() )['edge_layers'], 'No edge header, no edge layer.' );
 
 		add_filter( 'aafm_siteops_is_cli', '__return_true' );
 		Stub::register( array( 'fake_a' => Stub::entry( 'Fake A', array( 'cli' => false ) ) ) );

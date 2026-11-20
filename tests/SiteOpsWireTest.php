@@ -140,7 +140,7 @@ final class SiteOpsWireTest extends TestCase {
 		}
 
 		$this->assertEqualsCanonicalizing(
-			array( 'providers', 'status_only', 'object_cache', 'budget', 'multisite', 'request_host_differs', 'purge_supported' ),
+			array( 'providers', 'status_only', 'object_cache', 'budget', 'multisite', 'request_host_differs', 'edge_layers', 'purge_supported' ),
 			$this->keys_of_call( $handler, 'aafm/site-cache-status', array() )
 		);
 

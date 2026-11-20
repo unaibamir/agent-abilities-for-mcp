@@ -51,7 +51,7 @@ function aafm_site_cache_registry_definitions(): array {
 	return array(
 		'aafm/site-cache-status'     => array(
 			'label'        => __( 'Cache status', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists the supported page cache plugins that are active on this site, whether each one is serving cached pages right now, which purges it supports, whether a purge can be confirmed at best or only requested, whether it also removes pages under a URL, and whether it sends requests of its own when it purges. Names cache plugins it found that these tools do not cover. Also says whether a persistent object cache is in use and how much of the site-wide purge budget is left. Reads only: it calls no purge and makes no request. Never returns settings, hosts or file paths. Requires the manage-options capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Lists the supported page cache plugins that are active on this site, whether each one is serving cached pages right now, which purges it supports, whether a purge can be confirmed at best or only requested, whether it also removes pages under a URL, and whether it sends requests of its own when it purges. Names cache plugins it found that these tools do not cover, and caches in front of the site such as Cloudflare, Varnish or Fastly that it can see in the headers of this request; these tools never purge a CDN or a cache run by the host. Also says whether a persistent object cache is in use and how much of the site-wide purge budget is left. Reads only: it calls no purge and makes no request. Never returns settings, hosts or file paths. Requires the manage-options capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'site_cache',
@@ -59,7 +59,7 @@ function aafm_site_cache_registry_definitions(): array {
 		),
 		'aafm/site-purge-post-cache' => array(
 			'label'        => __( 'Purge a post from the page cache', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Removes one published post or page from the page cache of every supported cache plugin that is serving cached pages on this site, and reports each plugin separately: purged (the standard cached copy was found where the plugin keeps it and no copy from before the purge is left; when the reason is recached the plugin has already cached the page again, which SiteGround Speed Optimizer does straight away when its preheat option is on), requested (the purge was sent and removal could not be proven, which includes the case where no cached copy was found), failed, or skipped with a reason. The page URL is worked out from the post id; it cannot be supplied. Some plugins also clear the home page, archives or pages under the same address, some send their own requests to the site or to a proxy when they purge, and some request or queue the page again afterwards; cache-status says which. A plugin that fetches the page again while it purges can make this call take several seconds. Counts against a site-wide purge budget shared with the other purge tools. Does not touch the object cache. Refused on multisite. Requires the manage-options capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Removes one published post or page from the page cache of every supported cache plugin that is serving cached pages on this site, and reports each plugin separately: purged (the standard cached copy was found where the plugin keeps it and no copy from before the purge is left; when the reason is recached the plugin has already cached the page again, which SiteGround Speed Optimizer does straight away when its preheat option is on), requested (the purge was sent and removal could not be proven, which includes the case where no cached copy was found), failed, or skipped with a reason. The page URL is worked out from the post id; it cannot be supplied. Some plugins also clear the home page, archives or pages under the same address, some send their own requests to the site or to a proxy when they purge, and some request or queue the page again afterwards; cache-status says which. A plugin that fetches the page again while it purges can make this call take several seconds. Counts against a site-wide purge budget shared with the other purge tools. Does not touch the object cache, and does not purge a CDN, Cloudflare, Varnish or a cache run by the host in front of the site; cache-status names the ones it can see. Refused on multisite. Requires the manage-options capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'site_cache',
@@ -67,7 +67,7 @@ function aafm_site_cache_registry_definitions(): array {
 		),
 		'aafm/site-purge-url-cache'  => array(
 			'label'        => __( 'Purge a URL from the page cache', 'agent-abilities-for-mcp' ),
-			'description'  => __( "Removes one URL of this site from the page cache of every supported cache plugin that is serving cached pages, and reports each plugin separately as purged, requested, failed or skipped, with the same meanings as purge-post-cache. The URL must be on this site's own address, with no query string and no fragment; wildcards, relative steps and addresses on other sites are refused before any cache plugin is called. The address is put into the form this site serves (with or without a final slash) and the result shows the address used. Some plugins also remove pages under that URL; cache-status says which. A plugin for which the home URL means the whole site is skipped here; use purge-site-cache for that. Some plugins send their own requests when they purge, and one that fetches the page again while it purges can make this call take several seconds. Counts against the site-wide purge budget. Refused on multisite. Requires the manage-options capability.", 'agent-abilities-for-mcp' ),
+			'description'  => __( "Removes one URL of this site from the page cache of every supported cache plugin that is serving cached pages, and reports each plugin separately as purged, requested, failed or skipped, with the same meanings as purge-post-cache. The URL must be on this site's own address, with no query string and no fragment; wildcards, relative steps and addresses on other sites are refused before any cache plugin is called. The address is put into the form this site serves (with or without a final slash) and the result shows the address used. Some plugins also remove pages under that URL; cache-status says which. A plugin for which the home URL means the whole site is skipped here; use purge-site-cache for that. Some plugins send their own requests when they purge, and one that fetches the page again while it purges can make this call take several seconds. Counts against the site-wide purge budget. Does not purge a CDN, Cloudflare, Varnish or a cache run by the host in front of the site; cache-status names the ones it can see. Refused on multisite. Requires the manage-options capability.", 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'site_cache',
@@ -75,7 +75,7 @@ function aafm_site_cache_registry_definitions(): array {
 		),
 		'aafm/site-purge-site-cache' => array(
 			'label'        => __( 'Purge the whole page cache', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Removes every cached page of this site from each supported cache plugin that is serving cached pages, and reports each plugin separately as purged, requested, failed or skipped, with the same meanings as purge-post-cache. It does not flush the object cache. Some plugins remove other generated files with their page cache (SpeedyCache also removes its critical CSS files) and some restart their preload or send their own requests. The site is slower until pages are cached again. Allowed once every 15 minutes for the whole site, and it uses a large share of the site-wide purge budget. Refused on multisite. Requires the manage-options capability. Off by default.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Removes every cached page of this site from each supported cache plugin that is serving cached pages, and reports each plugin separately as purged, requested, failed or skipped, with the same meanings as purge-post-cache. It does not flush the object cache, and does not purge a CDN, Cloudflare, Varnish or a cache run by the host in front of the site; cache-status names the ones it can see. Some plugins remove other generated files with their page cache (SpeedyCache also removes its critical CSS files) and some restart their preload or send their own requests. The site is slower until pages are cached again. Allowed once every 15 minutes for the whole site, and it uses a large share of the site-wide purge budget. Refused on multisite. Requires the manage-options capability. Off by default.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'destructive',
 			'subject'      => 'site_cache',
@@ -242,6 +242,11 @@ function aafm_args_site_cache_status(): array {
 				'request_host_differs' => array(
 					'type'        => 'boolean',
 					'description' => __( 'This request reached the site under another host name than its address. Plugins that name their cache by host may report nothing found.', 'agent-abilities-for-mcp' ),
+				),
+				'edge_layers'          => array(
+					'type'        => 'array',
+					'items'       => array( 'type' => 'string' ),
+					'description' => __( "Caches in front of this site that this request's headers show, such as Cloudflare or Varnish. It is a guess from the headers; these tools purge none of them.", 'agent-abilities-for-mcp' ),
 				),
 				'purge_supported'      => array( 'type' => 'boolean' ),
 			),
@@ -428,6 +433,7 @@ function aafm_exec_site_cache_status(): array {
 	$site_host    = aafm_siteops_canonical_host();
 	$default_port = 'https' === wp_parse_url( home_url( '/' ), PHP_URL_SCHEME ) ? '443' : '80';
 	$host_differs = '' !== $request_host && $request_host !== $site_host && $request_host !== $site_host . ':' . $default_port;
+	$edge_layers  = aafm_site_cache_edge_layers();
 
 	$map       = aafm_site_cache_serving_map();
 	$is_cli    = aafm_siteops_is_cli();
@@ -483,8 +489,36 @@ function aafm_exec_site_cache_status(): array {
 		),
 		'multisite'            => is_multisite(),
 		'request_host_differs' => $host_differs,
+		'edge_layers'          => $edge_layers,
 		'purge_supported'      => ! is_multisite(),
 	);
+}
+
+/**
+ * Caches in front of this site, guessed from the headers they add to the request that reached it.
+ * None of the cache tools purges them. A layer that adds none of these headers is not seen.
+ *
+ * @return list<string> Labels, in a fixed order.
+ */
+function aafm_site_cache_edge_layers(): array {
+	$layers = array(
+		'Cloudflare'      => array( 'HTTP_CF_RAY', 'HTTP_CF_CONNECTING_IP' ),
+		'Sucuri firewall' => array( 'HTTP_X_SUCURI_CLIENTIP' ),
+		'Varnish'         => array( 'HTTP_X_VARNISH' ),
+		'Fastly'          => array( 'HTTP_FASTLY_CLIENT_IP' ),
+		'bunny.net'       => array( 'HTTP_CDN_PULLZONEID' ),
+	);
+	$seen   = array();
+	foreach ( $layers as $label => $keys ) {
+		foreach ( $keys as $key ) {
+			if ( ! empty( $_SERVER[ $key ] ) ) {
+				$seen[] = $label;
+				break;
+			}
+		}
+	}
+
+	return $seen;
 }
 
 /**

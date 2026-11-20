@@ -689,4 +689,365 @@ final class SiteCacheDispatchTest extends TestCase {
 		);
 		$this->assertStringNotContainsString( '/aafm/test/only', (string) wp_json_encode( aafm_site_cache_status_only() ) );
 	}
+
+	/**
+	 * The Host header as PHP sees it now.
+	 *
+	 * @return string|null
+	 */
+	private static function host(): ?string {
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- Read to assert what the wrapper set; never used as input.
+		return isset( $_SERVER['HTTP_HOST'] ) ? (string) $_SERVER['HTTP_HOST'] : null;
+	}
+
+	/**
+	 * Register the four cache tools with the integration forced on, as an administrator.
+	 */
+	private function enable_tools(): void {
+		add_filter( 'aafm_integration_active_site_cache', '__return_true' );
+		aafm_flush_registry_cache();
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		$this->register_enabled( self::TOOLS );
+		$this->acting_as( 'administrator' );
+	}
+
+	/**
+	 * The purge tools refuse on a network, so their behaviour tests run on a single site only.
+	 */
+	private function single_site_only(): void {
+		if ( is_multisite() ) {
+			$this->markTestSkipped( 'The purge tools refuse on multisite; see MsSiteCachePurgeRefusalTest.' );
+		}
+	}
+
+	/**
+	 * A published post.
+	 *
+	 * @param string $slug Slug.
+	 * @return int
+	 */
+	private function published( string $slug ): int {
+		return (int) self::factory()->post->create(
+			array(
+				'post_status' => 'publish',
+				'post_name'   => $slug,
+			)
+		);
+	}
+
+	/**
+	 * The error code of a refusal.
+	 *
+	 * @param mixed $result Result of a tool call.
+	 * @return string
+	 */
+	private function code( $result ): string {
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		return (string) $result->get_error_code();
+	}
+
+	public function test_the_four_tools_are_registered_under_site_cache(): void {
+		$this->enable_tools();
+		$registry = aafm_get_abilities_registry();
+		$expected = array(
+			'aafm/site-cache-status'     => array( 'reads', 'read' ),
+			'aafm/site-purge-post-cache' => array( 'writes', 'write' ),
+			'aafm/site-purge-url-cache'  => array( 'writes', 'write' ),
+			'aafm/site-purge-site-cache' => array( 'writes', 'destructive' ),
+		);
+		foreach ( $expected as $name => $row ) {
+			$this->assertSame( $row, array( $registry[ $name ]['group'], $registry[ $name ]['risk'] ), $name );
+			$this->assertSame( 'site_cache', $registry[ $name ]['subject'], $name );
+			$this->assertStringContainsString( 'Requires the manage-options capability.', $registry[ $name ]['description'], $name );
+			$this->assertNotNull( wp_get_ability( $name ), $name );
+			$this->acting_as( 'editor' );
+			$this->assertNotTrue( wp_get_ability( $name )->check_permissions( 'aafm/site-purge-post-cache' === $name ? array( 'post_id' => 1 ) : ( 'aafm/site-purge-url-cache' === $name ? array( 'url' => '/a/' ) : array() ) ), $name );
+			$this->acting_as( 'administrator' );
+		}
+		$this->assertContains( 'aafm/site-purge-site-cache', aafm_recoverable_delete_abilities() );
+		$this->assertSame(
+			array(
+				'total'       => 4,
+				'read'        => 1,
+				'write'       => 2,
+				'destructive' => 1,
+			),
+			array_intersect_key( aafm_integration_manifest()['site_cache'], array_flip( array( 'total', 'read', 'write', 'destructive' ) ) )
+		);
+	}
+
+	public function test_the_integration_is_active_only_when_an_adapter_is_detected(): void {
+		$this->assertFalse( aafm_site_cache_active(), 'No cache plugin is on the test site.' );
+		$this->assertFalse( aafm_integration_active( 'site_cache' ) );
+
+		Stub::register( array( 'fake_a' => Stub::entry( 'Fake A' ) ) );
+		$this->assertTrue( aafm_site_cache_active() );
+		$this->assertTrue( aafm_integration_active( 'site_cache' ) );
+
+		add_filter( 'aafm_site_cache_active', '__return_false' );
+		$this->assertFalse( aafm_integration_active( 'site_cache' ) );
+		remove_filter( 'aafm_site_cache_active', '__return_false' );
+	}
+
+	public function test_the_card_lists_every_registry_basename(): void {
+		$basenames = array();
+		foreach ( aafm_site_cache_adapters() as $entry ) {
+			$basenames = array_merge( $basenames, $entry['plugins'] );
+		}
+		$card = aafm_integration_cards()['site_cache'];
+		$this->assertSame( $basenames, $card['plugins'] );
+		$this->assertSame( 'integrations', $card['icon'] );
+	}
+
+	public function test_summary_rules(): void {
+		$row = function ( string $state, string $reason = '' ): array {
+			return array_merge(
+				array(
+					'provider' => 'x',
+					'label'    => 'X',
+				),
+				$this->result( $state, $reason, null )
+			);
+		};
+		$this->assertSame( 'nothing_to_do', aafm_site_cache_summary( array() ) );
+		$this->assertSame( 'nothing_to_do', aafm_site_cache_summary( array( $row( 'skipped', 'not_caching' ), $row( 'skipped', 'over_budget' ) ) ) );
+		$this->assertSame( 'failed', aafm_site_cache_summary( array( $row( 'failed', 'vendor_error' ), $row( 'skipped', 'not_caching' ) ) ) );
+		$this->assertSame( 'partial', aafm_site_cache_summary( array( $row( 'failed', 'still_cached' ), $row( 'purged' ) ) ) );
+		$this->assertSame( 'partial', aafm_site_cache_summary( array( $row( 'purged' ), $row( 'skipped', 'over_budget' ) ) ) );
+		$this->assertSame( 'purged', aafm_site_cache_summary( array( $row( 'purged' ), $row( 'purged', 'recached' ), $row( 'skipped', 'not_caching' ) ) ) );
+		$this->assertSame( 'requested', aafm_site_cache_summary( array( $row( 'purged' ), $row( 'requested', 'stale_window' ) ) ) );
+		$this->assertSame( 'requested', aafm_site_cache_summary( array( $row( 'requested', 'not_found_in_cache' ) ) ) );
+	}
+
+	public function test_purge_post_reports_each_adapter_and_spends_one_unit(): void {
+		$this->single_site_only();
+		$this->enable_tools();
+		Stub::register(
+			array(
+				'fake_a' => Stub::entry( 'Fake A' ),
+				'fake_b' => Stub::entry( 'Fake B' ),
+			)
+		);
+		Stub::$purge = array( 'fake_b' => $this->result( 'requested', 'not_found_in_cache', false ) );
+		$id          = $this->published( 'hello-there' );
+
+		$result = wp_get_ability( 'aafm/site-purge-post-cache' )->execute( array( 'post_id' => $id ) );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( $id, $result['post_id'] );
+		$this->assertSame( 'https://example.com/hello-there/', $result['url'] );
+		$this->assertSame( array( 'purged', 'requested' ), wp_list_pluck( $result['results'], 'state' ) );
+		$this->assertSame( array( 'fake_a', 'fake_b' ), wp_list_pluck( $result['results'], 'provider' ) );
+		$this->assertSame( 'requested', $result['summary'] );
+		$this->assertSame( 29, $result['budget_remaining'] );
+		$this->assertSame( $id, Stub::purge_calls( 'fake_a' )[0][1][0] );
+		$this->assertSame( 'https://example.com/hello-there/', Stub::purge_calls( 'fake_a' )[0][1][1]['url'] );
+		$this->assertFalse( has_filter( 'pre_http_request', 'aafm_siteops_http_guard_pre' ), 'The HTTP guard stopped counting when fan-out ended.' );
+	}
+
+	public function test_purge_url_uses_the_form_this_site_serves(): void {
+		$this->single_site_only();
+		$this->enable_tools();
+		Stub::register( array( 'fake_a' => Stub::entry( 'Fake A' ) ) );
+
+		$result = wp_get_ability( 'aafm/site-purge-url-cache' )->execute( array( 'url' => 'https://example.com/about' ) );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'https://example.com/about/', $result['url'] );
+		$this->assertSame( 'purged', $result['summary'] );
+		$this->assertSame( 'https://example.com/about/', Stub::purge_calls( 'fake_a' )[0][1][0]['url'] );
+		$this->assertArrayNotHasKey( 'post_id', $result );
+	}
+
+	public function test_one_adapter_whose_serving_throws_is_reported_not_hidden(): void {
+		$this->single_site_only();
+		$this->enable_tools();
+		Stub::register( array( 'fake_a' => Stub::entry( 'Fake A' ) ) );
+		Stub::$serving = array( 'fake_a' => 'throw' );
+
+		$result = wp_get_ability( 'aafm/site-purge-site-cache' )->execute( array() );
+
+		$this->assertIsArray( $result, 'A broken adapter is not "no cache plugin".' );
+		$this->assertCount( 1, $result['results'] );
+		$this->assertSame( 'failed', $result['results'][0]['state'] );
+		$this->assertSame( 'vendor_error', $result['results'][0]['reason'] );
+		$this->assertSame( 'failed', $result['summary'] );
+		$this->assertSame( array(), Stub::purge_calls( 'fake_a' ) );
+	}
+
+	public function test_nothing_serving_is_refused_and_no_answer_is_kept_between_calls(): void {
+		$this->single_site_only();
+		$this->enable_tools();
+		Stub::register( array( 'fake_a' => Stub::entry( 'Fake A' ) ) );
+		$id = $this->published( 'memo' );
+
+		$this->assertIsArray( wp_get_ability( 'aafm/site-purge-post-cache' )->execute( array( 'post_id' => $id ) ) );
+
+		Stub::$serving = array( 'fake_a' => false );
+		$this->assertSame( 'aafm_site_no_provider', $this->code( wp_get_ability( 'aafm/site-purge-post-cache' )->execute( array( 'post_id' => $id ) ) ), 'The second call in the same process noticed the plugin stopped serving.' );
+
+		Stub::$serving = array();
+		$this->assertIsArray( wp_get_ability( 'aafm/site-purge-post-cache' )->execute( array( 'post_id' => $id ) ) );
+	}
+
+	public function test_early_refusals_spend_no_budget(): void {
+		$this->single_site_only();
+		$this->enable_tools();
+		Stub::register( array( 'fake_a' => Stub::entry( 'Fake A' ) ) );
+		$draft = (int) self::factory()->post->create( array( 'post_status' => 'draft' ) );
+		$live  = $this->published( 'live' );
+
+		$this->assertSame( 'aafm_site_bad_url', $this->code( wp_get_ability( 'aafm/site-purge-url-cache' )->execute( array( 'url' => '/a/../b' ) ) ) );
+		$this->assertSame( 'aafm_site_bad_url', $this->code( wp_get_ability( 'aafm/site-purge-url-cache' )->execute( array( 'url' => 'https://other.example/live/' ) ) ) );
+		$this->assertSame( 'aafm_site_post_not_public', $this->code( wp_get_ability( 'aafm/site-purge-post-cache' )->execute( array( 'post_id' => $draft ) ) ) );
+		Stub::$serving = array( 'fake_a' => false );
+		$this->assertSame( 'aafm_site_no_provider', $this->code( wp_get_ability( 'aafm/site-purge-site-cache' )->execute( array() ) ) );
+		$this->assertSame( 'aafm_site_no_provider', $this->code( wp_get_ability( 'aafm/site-purge-post-cache' )->execute( array( 'post_id' => $live ) ) ) );
+
+		$this->assertSame( array(), Stub::purge_calls( 'fake_a' ) );
+		$this->assertSame( 0, aafm_site_purge_budget_state()['used'] );
+	}
+
+	public function test_a_call_whose_row_was_not_written_purges_nothing(): void {
+		$this->single_site_only();
+		Stub::register( array( 'fake_a' => Stub::entry( 'Fake A' ) ) );
+		$id = $this->published( 'no-row' );
+		aafm_current_invocation_row_id( 0 );
+
+		$this->assertSame( 'aafm_site_purge_not_recorded', $this->code( aafm_exec_site_purge_post_cache( array( 'post_id' => $id ) ) ) );
+		$this->assertSame( 'aafm_site_purge_not_recorded', $this->code( aafm_exec_site_purge_url_cache( array( 'url' => '/no-row/' ) ) ) );
+		$this->assertSame( 'aafm_site_purge_not_recorded', $this->code( aafm_exec_site_purge_site_cache() ) );
+		$this->assertSame( array(), Stub::purge_calls( 'fake_a' ) );
+	}
+
+	public function test_a_second_site_purge_is_refused_by_the_cooldown(): void {
+		$this->single_site_only();
+		$this->enable_tools();
+		Stub::register( array( 'fake_a' => Stub::entry( 'Fake A' ) ) );
+
+		$first = wp_get_ability( 'aafm/site-purge-site-cache' )->execute( array() );
+		$this->assertIsArray( $first );
+		$this->assertSame( 'purged', $first['summary'] );
+		$this->assertSame( 20, $first['budget_remaining'] );
+
+		$this->assertSame( 'aafm_site_purge_cooldown', $this->code( wp_get_ability( 'aafm/site-purge-site-cache' )->execute( array() ) ) );
+		$this->assertCount( 1, Stub::purge_calls( 'fake_a' ) );
+	}
+
+	public function test_cache_status_lists_providers_budget_and_host(): void {
+		$this->enable_tools();
+		update_option( 'active_plugins', array( 'fake-old/plugin.php' ) );
+		Stub::register(
+			array(
+				'fake_old' => Stub::entry( 'Fake Old', array( 'detect' => array( array( 'function', 'aafm_no_such_function' ) ) ) ),
+				'fake_a'   => Stub::entry(
+					'Fake A',
+					array(
+						'confirm'       => 'none',
+						'recursive_url' => true,
+						'vendor_http'   => true,
+					)
+				),
+				'fake_b'   => Stub::entry( 'Fake B' ),
+				'fake_c'   => Stub::entry( 'Fake C' ),
+			)
+		);
+		Stub::$serving = array(
+			'fake_b' => false,
+			'fake_c' => 'throw',
+		);
+
+		$saved_host           = self::host();
+		$_SERVER['HTTP_HOST'] = 'Other.Example';
+
+		$result = wp_get_ability( 'aafm/site-cache-status' )->execute( array() );
+
+		if ( null === $saved_host ) {
+			unset( $_SERVER['HTTP_HOST'] );
+		} else {
+			$_SERVER['HTTP_HOST'] = $saved_host;
+		}
+
+		$this->assertIsArray( $result );
+		$this->assertSame( array( 'providers', 'status_only', 'object_cache', 'budget', 'multisite', 'request_host_differs', 'purge_supported' ), array_keys( $result ) );
+		$this->assertSame(
+			array(
+				array(
+					'provider'        => 'fake_old',
+					'label'           => 'Fake Old',
+					'status'          => 'unsupported_version',
+					'operations'      => array(),
+					'can_confirm'     => true,
+					'purges_children' => false,
+					'vendor_requests' => false,
+				),
+				array(
+					'provider'        => 'fake_a',
+					'label'           => 'Fake A',
+					'status'          => 'serving',
+					'operations'      => array( 'post', 'url', 'all' ),
+					'can_confirm'     => false,
+					'purges_children' => true,
+					'vendor_requests' => true,
+				),
+				array(
+					'provider'        => 'fake_b',
+					'label'           => 'Fake B',
+					'status'          => 'not_caching',
+					'operations'      => array( 'post', 'url', 'all' ),
+					'can_confirm'     => true,
+					'purges_children' => false,
+					'vendor_requests' => false,
+				),
+				array(
+					'provider'        => 'fake_c',
+					'label'           => 'Fake C',
+					'status'          => 'error',
+					'operations'      => array( 'post', 'url', 'all' ),
+					'can_confirm'     => true,
+					'purges_children' => false,
+					'vendor_requests' => false,
+				),
+			),
+			$result['providers']
+		);
+		$this->assertSame(
+			array(
+				'window_seconds'          => 600,
+				'limit'                   => 30,
+				'used'                    => 0,
+				'remaining'               => 30,
+				'site_purge_available_in' => 0,
+			),
+			$result['budget']
+		);
+		$this->assertSame( array( 'persistent', 'drop_in' ), array_keys( $result['object_cache'] ) );
+		$this->assertSame( is_multisite(), $result['multisite'] );
+		$this->assertSame( ! is_multisite(), $result['purge_supported'] );
+		$this->assertTrue( $result['request_host_differs'] );
+		$this->assertSame( array(), array_filter( Stub::$calls, static fn( array $call ): bool => 'serving' !== $call[1] ), 'cache-status calls no purge.' );
+	}
+
+	public function test_cache_status_does_not_flag_the_site_host_or_its_default_port(): void {
+		$this->enable_tools();
+		Stub::register( array( 'fake_a' => Stub::entry( 'Fake A' ) ) );
+		$saved_host = self::host();
+
+		foreach ( array( 'example.com', 'EXAMPLE.com', 'example.com:443' ) as $host ) {
+			$_SERVER['HTTP_HOST'] = $host;
+			$this->assertFalse( wp_get_ability( 'aafm/site-cache-status' )->execute( array() )['request_host_differs'], $host );
+		}
+		$_SERVER['HTTP_HOST'] = 'example.com:8443';
+		$this->assertTrue( wp_get_ability( 'aafm/site-cache-status' )->execute( array() )['request_host_differs'] );
+
+		add_filter( 'aafm_siteops_is_cli', '__return_true' );
+		Stub::register( array( 'fake_a' => Stub::entry( 'Fake A', array( 'cli' => false ) ) ) );
+		$this->assertSame( array(), wp_get_ability( 'aafm/site-cache-status' )->execute( array() )['providers'][0]['operations'], 'An adapter that cannot run in this process offers no operation.' );
+
+		if ( null === $saved_host ) {
+			unset( $_SERVER['HTTP_HOST'] );
+		} else {
+			$_SERVER['HTTP_HOST'] = $saved_host;
+		}
+	}
 }

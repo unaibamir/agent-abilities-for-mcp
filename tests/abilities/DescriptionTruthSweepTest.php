@@ -19,7 +19,7 @@ use AAFM\Tests\TestCase;
 
 final class DescriptionTruthSweepTest extends TestCase {
 
-	private const INTEGRATIONS = array( 'yoast', 'rankmath', 'aioseo', 'acf', 'woocommerce', 'slim_seo', 'tec', 'event_tickets', 'avada', 'wpbakery', 'geodirectory' );
+	private const INTEGRATIONS = array( 'yoast', 'rankmath', 'aioseo', 'acf', 'woocommerce', 'slim_seo', 'tec', 'event_tickets', 'avada', 'wpbakery', 'geodirectory', 'site_cache' );
 
 	/**
 	 * Capabilities a description may name, each with the spellings the descriptions use.

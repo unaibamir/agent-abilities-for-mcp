@@ -16,6 +16,11 @@ use AAFM\Tests\TestCase;
 
 final class SiteOpsReadsWriteNothingTest extends TestCase {
 
+	public function tear_down(): void {
+		\SiteopsCacheStubStore::reset();
+		parent::tear_down();
+	}
+
 	/**
 	 * Every Site Ops read: its execute callback and the input to call it with.
 	 *
@@ -26,6 +31,7 @@ final class SiteOpsReadsWriteNothingTest extends TestCase {
 			'site-health-status' => array( 'aafm_exec_site_health_status', array() ),
 			'site-list-updates'  => array( 'aafm_exec_site_list_updates', array() ),
 			'site-cron-status'   => array( 'aafm_exec_site_cron_status', array() ),
+			'site-cache-status'  => array( 'aafm_exec_site_cache_status', array() ),
 		);
 	}
 
@@ -35,7 +41,15 @@ final class SiteOpsReadsWriteNothingTest extends TestCase {
 	 * @param string $callback Execute callback about to be called.
 	 */
 	private function prepare( string $callback ): void {
-		unset( $callback );
+		if ( 'aafm_exec_site_cache_status' === $callback ) {
+			\SiteopsCacheStubStore::register(
+				array(
+					'fake_a' => \SiteopsCacheStubStore::entry( 'Fake A' ),
+					'fake_b' => \SiteopsCacheStubStore::entry( 'Fake B' ),
+				)
+			);
+			\SiteopsCacheStubStore::$serving = array( 'fake_b' => false );
+		}
 	}
 
 	/**

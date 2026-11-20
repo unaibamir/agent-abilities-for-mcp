@@ -319,6 +319,12 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 			),
 			'reason' => 'The helper\'s own implementation. This IS the chokepoint every stored write is required to route through; the WordPress sanitizer runs here and the invisible-character strip is applied to its result.',
 		),
+		'includes/abilities/site-cache.php::aafm_exec_site_cache_status::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( wp_unslash( $_SERVER[\'HTTP_HOST\'] ) )',
+			),
+			'reason' => 'The Host header of the request, compared with the site address to set the boolean request_host_differs of cache-status. The value is never stored and never returned; only the boolean is.',
+		),
 	);
 
 	/**

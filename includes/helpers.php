@@ -1010,6 +1010,8 @@ function aafm_recoverable_delete_abilities(): array {
 		'aafm/avada-remove-element',
 		// Undoing a create moves the post to the Trash, and it refuses when the Trash is off.
 		'aafm/undo-change',
+		// Removes cached copies of pages only; each page is rebuilt on its next visit and no content is removed.
+		'aafm/site-purge-site-cache',
 	);
 
 	/**

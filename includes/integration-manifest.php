@@ -548,6 +548,24 @@ function aafm_integration_ability_order(): array {
 				'risk' => 'write',
 			),
 		),
+		'site_cache'    => array(
+			array(
+				'name' => 'aafm/site-cache-status',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/site-purge-post-cache',
+				'risk' => 'write',
+			),
+			array(
+				'name' => 'aafm/site-purge-url-cache',
+				'risk' => 'write',
+			),
+			array(
+				'name' => 'aafm/site-purge-site-cache',
+				'risk' => 'destructive',
+			),
+		),
 	);
 }
 

@@ -23,7 +23,7 @@ defined( 'ABSPATH' ) || exit;
  * Whether a given integration's host plugin is active (so its abilities should
  * register / discover).
  *
- * @param string $slug One of 'yoast' | 'rankmath' | 'aioseo' | 'acf' | 'woocommerce' | 'slim_seo' | 'tec' | 'event_tickets' | 'avada' | 'wpbakery' | 'geodirectory'.
+ * @param string $slug One of 'yoast' | 'rankmath' | 'aioseo' | 'acf' | 'woocommerce' | 'slim_seo' | 'tec' | 'event_tickets' | 'avada' | 'wpbakery' | 'geodirectory' | 'site_cache'.
  * @return bool
  */
 function aafm_integration_active( string $slug ): bool {
@@ -60,6 +60,9 @@ function aafm_integration_active( string $slug ): bool {
 			break;
 		case 'geodirectory':
 			$active = aafm_geodirectory_active();
+			break;
+		case 'site_cache':
+			$active = aafm_site_cache_active();
 			break;
 		default:
 			return false;
@@ -368,6 +371,35 @@ function aafm_geodirectory_active(): bool {
 	 * @param bool $active Detected active state.
 	 */
 	return (bool) apply_filters( 'aafm_geodirectory_active', $active );
+}
+
+/**
+ * Whether a supported page cache plugin is present, behind a filterable seam.
+ *
+ * True when the detect tests of any cache adapter registry entry pass. Symbol tests only: no
+ * adapter file is loaded and no vendor code runs. A site whose only cache is an object cache
+ * drop-in, an asset optimiser or a page cache plugin without an adapter in this version does not
+ * count: the purge tools could do nothing there.
+ *
+ * @return bool
+ */
+function aafm_site_cache_active(): bool {
+	$active = false;
+	// The registry file is loaded by the bootstrap; a caller that runs without it sees no cache plugin.
+	$entries = function_exists( 'aafm_site_cache_adapters' ) ? aafm_site_cache_adapters() : array();
+	foreach ( $entries as $entry ) {
+		if ( aafm_site_cache_detected( $entry ) ) {
+			$active = true;
+			break;
+		}
+	}
+
+	/**
+	 * Filters whether a supported page cache plugin is reported present.
+	 *
+	 * @param bool $active Detected active state.
+	 */
+	return (bool) apply_filters( 'aafm_site_cache_active', $active );
 }
 
 /**

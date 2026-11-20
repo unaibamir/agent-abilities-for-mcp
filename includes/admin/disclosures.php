@@ -284,5 +284,11 @@ function aafm_ability_disclosures(): array {
 		'aafm/site-health-status'           => __( "Runs WordPress's own Site Health checks that need no network request and returns each check's result, plus whether debug mode, a debug log, recovery mode or a paused plugin or theme is present. Never a log line, a file path or a version number.", 'agent-abilities-for-mcp' ),
 		'aafm/site-list-updates'            => __( 'Lists the core, plugin and theme updates WordPress already knows are waiting, from its last update check. It never starts a check, never returns a download address and updates nothing.', 'agent-abilities-for-mcp' ),
 		'aafm/site-cron-status'             => __( "Summarises WordPress's scheduled tasks: how many are scheduled, due and late, and the 50 due soonest by hook name. It runs nothing and never returns a task's arguments.", 'agent-abilities-for-mcp' ),
+
+		// Page cache (1.13.0).
+		'aafm/site-cache-status'            => __( 'Lists the supported page cache plugins that are active, whether each is serving cached pages, and how much of the site-wide purge budget is left. It purges nothing and never returns settings, hosts or file paths.', 'agent-abilities-for-mcp' ),
+		'aafm/site-purge-post-cache'        => __( "Asks every supported cache plugin that is serving cached pages to remove one published post or page from its page cache, through that plugin's own purge, and says for each plugin whether a cached copy was found and removed or the purge was only requested. Counts against a site-wide purge budget.", 'agent-abilities-for-mcp' ),
+		'aafm/site-purge-url-cache'         => __( "Asks every supported cache plugin that is serving cached pages to remove one URL of this site from its page cache, through that plugin's own purge. Addresses on other sites, query strings and wildcards are refused. Counts against a site-wide purge budget.", 'agent-abilities-for-mcp' ),
+		'aafm/site-purge-site-cache'        => __( 'Asks every supported cache plugin that is serving cached pages to empty its whole page cache. No content is removed, but the site is slower until pages are cached again. Allowed once every 15 minutes for the whole site.', 'agent-abilities-for-mcp' ),
 	);
 }

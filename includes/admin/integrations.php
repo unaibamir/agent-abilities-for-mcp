@@ -89,6 +89,25 @@ function aafm_integration_cards(): array {
 			'icon'    => 'integrations',
 			'plugins' => array( 'geodirectory/geodirectory.php' ),
 		),
+		'site_cache'    => array(
+			'label'   => __( 'Page cache', 'agent-abilities-for-mcp' ),
+			'icon'    => 'integrations',
+			'plugins' => array(
+				'wp-super-cache/wp-cache.php',
+				'wp-fastest-cache/wpFastestCache.php',
+				'w3-total-cache/w3-total-cache.php',
+				'wp-optimize/wp-optimize.php',
+				'cache-enabler/cache-enabler.php',
+				'hummingbird-performance/wp-hummingbird.php',
+				'jetpack-boost/jetpack-boost.php',
+				'speedycache/speedycache.php',
+				'breeze/breeze.php',
+				'sg-cachepress/sg-cachepress.php',
+				'litespeed-cache/litespeed-cache.php',
+				'nginx-helper/nginx-helper.php',
+				'varnish-http-purge/varnish-http-purge.php',
+			),
+		),
 	);
 }
 

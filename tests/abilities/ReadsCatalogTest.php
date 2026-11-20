@@ -44,6 +44,7 @@ final class ReadsCatalogTest extends TestCase {
 		add_filter( 'aafm_integration_active_avada', '__return_true' );
 		add_filter( 'aafm_integration_active_wpbakery', '__return_true' );
 		add_filter( 'aafm_integration_active_geodirectory', '__return_true' );
+		add_filter( 'aafm_integration_active_site_cache', '__return_true' );
 		aafm_flush_registry_cache();
 	}
 

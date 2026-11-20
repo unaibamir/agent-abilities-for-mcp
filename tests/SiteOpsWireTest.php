@@ -16,10 +16,13 @@ final class SiteOpsWireTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
+		add_filter( 'aafm_integration_active_site_cache', '__return_true' );
 		aafm_flush_registry_cache();
 	}
 
 	public function tear_down(): void {
+		remove_filter( 'aafm_integration_active_site_cache', '__return_true' );
+		\SiteopsCacheStubStore::reset();
 		aafm_flush_registry_cache();
 		parent::tear_down();
 	}
@@ -118,6 +121,51 @@ final class SiteOpsWireTest extends TestCase {
 		$this->assertEqualsCanonicalizing(
 			array( 'wp_cron_disabled', 'alternate_cron', 'total_events', 'due_now', 'overdue', 'oldest_overdue_seconds', 'hooks' ),
 			$this->keys_of_call( $handler, 'aafm/site-cron-status', array() )
+		);
+	}
+
+	public function test_the_cache_tools_are_listed_and_answer_with_exactly_their_keys(): void {
+		$names   = array( 'aafm/site-cache-status', 'aafm/site-purge-post-cache', 'aafm/site-purge-url-cache', 'aafm/site-purge-site-cache' );
+		$handler = $this->server( $names );
+		\SiteopsCacheStubStore::register( array( 'fake_a' => \SiteopsCacheStubStore::entry( 'Fake A' ) ) );
+		update_option( 'home', 'https://example.com' );
+		$this->set_permalink_structure( '/%postname%/' );
+
+		$listed = array();
+		foreach ( $handler->list_tools()->getTools() as $tool ) {
+			$listed[] = $tool->getName();
+		}
+		foreach ( $names as $name ) {
+			$this->assertContains( aafm_mcp_tool_name( $name ), $listed );
+		}
+
+		$this->assertEqualsCanonicalizing(
+			array( 'providers', 'status_only', 'object_cache', 'budget', 'multisite', 'request_host_differs', 'purge_supported' ),
+			$this->keys_of_call( $handler, 'aafm/site-cache-status', array() )
+		);
+
+		if ( is_multisite() ) {
+			return;
+		}
+
+		$id = self::factory()->post->create(
+			array(
+				'post_status' => 'publish',
+				'post_name'   => 'wire-post',
+			)
+		);
+		// A write whose output is an object also carries the undo key the call path adds.
+		$this->assertEqualsCanonicalizing(
+			array( 'post_id', 'url', 'results', 'summary', 'budget_remaining', 'undo' ),
+			$this->keys_of_call( $handler, 'aafm/site-purge-post-cache', array( 'post_id' => $id ) )
+		);
+		$this->assertEqualsCanonicalizing(
+			array( 'url', 'results', 'summary', 'budget_remaining', 'undo' ),
+			$this->keys_of_call( $handler, 'aafm/site-purge-url-cache', array( 'url' => '/wire-post/' ) )
+		);
+		$this->assertEqualsCanonicalizing(
+			array( 'results', 'summary', 'budget_remaining', 'undo' ),
+			$this->keys_of_call( $handler, 'aafm/site-purge-site-cache', array() )
 		);
 	}
 }

@@ -324,4 +324,142 @@ final class SiteCacheAdaptersTest extends TestCase {
 		};
 		$this->assertResult( 'failed', 'still_cached', true, $this->call( 'aafm_cache_wp_super_cache_purge_all' ) );
 	}
+
+	private function wpfc_ready(): void {
+		aafm_siteops_stub_wp_fastest_cache_activate();
+		$this->load( 'wp_fastest_cache' );
+		update_option( 'WpFastestCache', '{"wpFastestCacheStatus":"on"}' );
+	}
+
+	public function test_wp_fastest_cache_registry_row_and_detection(): void {
+		$row = $this->assertRegistryRow(
+			'wp_fastest_cache',
+			'wp-fastest-cache/wpFastestCache.php',
+			array( array( 'class', 'WpFastestCache' ), array( 'function', 'wpfc_clear_post_cache_by_id' ) ),
+			'file',
+			array(
+				'cli'           => true,
+				'vendor_http'   => true,
+				'recursive_url' => false,
+				'rewarms'       => false,
+			)
+		);
+		aafm_siteops_stub_wp_fastest_cache_activate();
+		$this->assertTrue( aafm_site_cache_detected( $row ) );
+		$row['detect'][] = array( 'function', 'aafm_no_such_vendor_function' );
+		$this->assertFalse( aafm_site_cache_detected( $row ) );
+	}
+
+	public function test_wp_fastest_cache_serving_reads_the_status_key(): void {
+		aafm_siteops_stub_wp_fastest_cache_activate();
+		$this->load( 'wp_fastest_cache' );
+		delete_option( 'WpFastestCache' );
+		$this->assertFalse( $this->call( 'aafm_cache_wp_fastest_cache_serving' ) );
+		update_option( 'WpFastestCache', '{"wpFastestCacheLanguage":"eng"}' );
+		$this->assertFalse( $this->call( 'aafm_cache_wp_fastest_cache_serving' ), 'Saved settings with caching off have no status key.' );
+		update_option( 'WpFastestCache', '{"wpFastestCacheStatus":"on"}' );
+		$this->assertTrue( $this->call( 'aafm_cache_wp_fastest_cache_serving' ) );
+	}
+
+	public function test_wp_fastest_cache_post_purge_calls_the_id_function_and_looks_under_the_decoded_name(): void {
+		$this->wpfc_ready();
+		$file                                    = $this->put( Stub::root() . '/wpfc/cache/all/' . self::DEC . '/index.html' );
+		Stub::$on['wpfc_clear_post_cache_by_id'] = static function () use ( $file ): void {
+			unlink( $file );
+		};
+		$url                                     = $this->url( '/' . self::LO . '/' );
+		$result                                  = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_wp_fastest_cache_purge_post( 41, $url );
+			}
+		);
+		$this->assertResult( 'purged', '', true, $result );
+		$this->assertSame( array( array( 'wpfc_clear_post_cache_by_id', array( 41 ) ) ), Stub::$calls );
+	}
+
+	public function test_wp_fastest_cache_url_purge_calls_the_url_function(): void {
+		$this->wpfc_ready();
+		$file                                = $this->put( Stub::root() . '/wpfc/cache/all/acc-a/index.html' );
+		Stub::$on['wpfc_clear_cache_by_url'] = static function () use ( $file ): void {
+			unlink( $file );
+		};
+		$url                                 = $this->url( '/acc-a/' );
+		$result                              = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_wp_fastest_cache_purge_url( $url );
+			}
+		);
+		$this->assertResult( 'purged', '', true, $result );
+		$this->assertSame( array( array( 'wpfc_clear_cache_by_url', array( 'http://example.org/acc-a/' ) ) ), Stub::$calls );
+	}
+
+	public function test_wp_fastest_cache_never_cached_and_untouched_pages(): void {
+		$this->wpfc_ready();
+		wp_mkdir_p( Stub::root() . '/wpfc/cache/all' );
+		$url  = $this->url( '/acc-a/' );
+		$call = static function () use ( $url ) {
+			return aafm_cache_wp_fastest_cache_purge_url( $url );
+		};
+		$this->assertResult( 'requested', 'not_found_in_cache', false, $this->call( $call ) );
+		$this->put( Stub::root() . '/wpfc/cache/all/acc-a/index.html' );
+		$this->assertResult( 'failed', 'still_cached', true, $this->call( $call ) );
+	}
+
+	public function test_wp_fastest_cache_explicit_vendor_failure_is_a_vendor_error(): void {
+		$this->wpfc_ready();
+		$this->put( Stub::root() . '/wpfc/cache/all/acc-a/index.html' );
+		Stub::$on['wpfc_clear_cache_by_url'] = static function () {
+			return array( 'success' => false );
+		};
+		$url                                 = $this->url( '/acc-a/' );
+		$result                              = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_wp_fastest_cache_purge_url( $url );
+			}
+		);
+		$this->assertResult( 'failed', 'vendor_error', null, $result );
+	}
+
+	public function test_wp_fastest_cache_premium_mobile_copies_downgrade_a_purge(): void {
+		$this->wpfc_ready();
+		$file = $this->put( Stub::root() . '/wpfc/cache/all/acc-a/index.html' );
+		$this->put( Stub::root() . '/wpfc/cache/wpfc-mobile-cache/acc-a/index.html' );
+		Stub::$on['wpfc_clear_cache_by_url'] = static function () use ( $file ): void {
+			unlink( $file );
+		};
+		$url                                 = $this->url( '/acc-a/' );
+		$result                              = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_wp_fastest_cache_purge_url( $url );
+			}
+		);
+		$this->assertResult( 'requested', 'variants_unchecked', true, $result );
+	}
+
+	public function test_wp_fastest_cache_site_purge_reads_a_moved_folder_as_purged(): void {
+		$this->wpfc_ready();
+		$this->put( Stub::root() . '/wpfc/cache/all/acc-a/index.html' );
+		$root                             = Stub::root() . '/wpfc/cache';
+		Stub::$on['wpfc_clear_all_cache'] = static function () use ( $root ): void {
+			// The real plugin moves cache/all to cache/tmpWpfc/<time> (bench3 B4).
+			wp_mkdir_p( $root . '/tmpWpfc' );
+			rename( $root . '/all', $root . '/tmpWpfc/1700000000' );
+		};
+		$this->assertResult( 'purged', '', true, $this->call( 'aafm_cache_wp_fastest_cache_purge_all' ) );
+		$this->assertSame( array( 'wpfc_clear_all_cache' ), Stub::names() );
+	}
+
+	public function test_wp_fastest_cache_site_purge_with_premium_mobile_copies_is_variants_unchecked(): void {
+		$this->wpfc_ready();
+		$this->put( Stub::root() . '/wpfc/cache/all/acc-a/index.html' );
+		$this->put( Stub::root() . '/wpfc/cache/wpfc-mobile-cache/acc-a/index.html' );
+		$root                             = Stub::root() . '/wpfc/cache';
+		Stub::$on['wpfc_clear_all_cache'] = static function () use ( $root ): void {
+			// The plugin moves both folders away, so the mobile folder has to be read before the call.
+			wp_mkdir_p( $root . '/tmpWpfc' );
+			rename( $root . '/all', $root . '/tmpWpfc/1700000000' );
+			rename( $root . '/wpfc-mobile-cache', $root . '/tmpWpfc/1700000001' );
+		};
+		$this->assertResult( 'requested', 'variants_unchecked', true, $this->call( 'aafm_cache_wp_fastest_cache_purge_all' ) );
+	}
 }

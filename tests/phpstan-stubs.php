@@ -1642,4 +1642,42 @@ if ( ! function_exists( 'wp_cache_clear_cache' ) ) {
 	function wp_cache_clear_cache( $blog_id = 0 ) {
 	}
 }
+if ( ! function_exists( 'wpfc_clear_post_cache_by_id' ) ) {
+	/**
+	 * Minimal WP Fastest Cache signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @param int|false $post_id Post id.
+	 * @return mixed
+	 */
+	function wpfc_clear_post_cache_by_id( $post_id = false ) {
+		return null;
+	}
+}
+
+if ( ! function_exists( 'wpfc_clear_cache_by_url' ) ) {
+	/**
+	 * Minimal WP Fastest Cache signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @param string|false $url URL.
+	 * @return mixed
+	 */
+	function wpfc_clear_cache_by_url( $url = false ) {
+		return null;
+	}
+}
+
+if ( ! function_exists( 'wpfc_clear_all_cache' ) ) {
+	/**
+	 * Minimal WP Fastest Cache signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @param bool $minified Also clear minified files.
+	 * @return mixed
+	 */
+	function wpfc_clear_all_cache( $minified = false ) {
+		return null;
+	}
+}
 // phpcs:enable

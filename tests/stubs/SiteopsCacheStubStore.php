@@ -356,3 +356,34 @@ function aafm_siteops_stub_wp_super_cache_activate(): void {
 		Aafm_Siteops_Vendor_Stub::hit( 'wp_cache_clear_cache', array( $blog_id ) );
 	}
 }
+
+/**
+ * WP Fastest Cache's main object: only the directory resolver the adapter reads.
+ */
+final class Aafm_Siteops_Stub_Wpfc {
+	public function getWpContentDir( $path = false ) {
+		return Aafm_Siteops_Vendor_Stub::root() . '/wpfc' . $path;
+	}
+}
+
+/**
+ * WP Fastest Cache: its three purge functions, its global object and its class name.
+ */
+function aafm_siteops_stub_wp_fastest_cache_activate(): void {
+	$GLOBALS['wp_fastest_cache'] = new Aafm_Siteops_Stub_Wpfc();
+	if ( ! class_exists( 'WpFastestCache', false ) ) {
+		class_alias( 'Aafm_Siteops_Stub_Wpfc', 'WpFastestCache' );
+	}
+	if ( function_exists( 'wpfc_clear_post_cache_by_id' ) ) {
+		return;
+	}
+	function wpfc_clear_post_cache_by_id( $post_id = false ) {
+		return Aafm_Siteops_Vendor_Stub::hit( 'wpfc_clear_post_cache_by_id', array( $post_id ) );
+	}
+	function wpfc_clear_cache_by_url( $url = false ) {
+		return Aafm_Siteops_Vendor_Stub::hit( 'wpfc_clear_cache_by_url', array( $url ) );
+	}
+	function wpfc_clear_all_cache( $minified = false ) {
+		return Aafm_Siteops_Vendor_Stub::hit( 'wpfc_clear_all_cache', array( $minified ) );
+	}
+}

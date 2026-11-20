@@ -1738,4 +1738,121 @@ final class SiteCacheAdaptersTest extends TestCase {
 		$this->assertResult( 'failed', 'vendor_error', null, $result );
 		$this->ls_restore();
 	}
+
+	private function ngx_file( string $path ): string {
+		// The cache file nginx keeps for one address: md5 of scheme, GET, host and path, levels 1:2.
+		$hash = md5( 'httpGETexample.org' . $path );
+		return Stub::root() . '/ngx/' . substr( $hash, -1 ) . '/' . substr( $hash, -3, 2 ) . '/' . $hash;
+	}
+
+	private function ngx_ready(): void {
+		aafm_siteops_stub_nginx_helper_activate();
+		$this->load( 'nginx_helper' );
+	}
+
+	/**
+	 * Run a URL purge.
+	 *
+	 * @param string $path Path, percent escapes lower-case.
+	 * @return mixed
+	 */
+	private function ngx_purge( string $path ) {
+		$url = $this->url( $path );
+		return $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_nginx_helper_purge_url( $url );
+			}
+		);
+	}
+
+	public function test_nginx_helper_registry_row_and_detection(): void {
+		$row = $this->assertRegistryRow(
+			'nginx_helper',
+			'nginx-helper/nginx-helper.php',
+			array( array( 'constant', 'NGINX_HELPER_BASENAME' ) ),
+			'file',
+			array(
+				'cli'           => true,
+				'vendor_http'   => true,
+				'recursive_url' => false,
+				'rewarms'       => false,
+			)
+		);
+		aafm_siteops_stub_nginx_helper_activate();
+		$this->assertTrue( aafm_site_cache_detected( $row ) );
+		$row['detect'][] = array( 'constant', 'AAFM_NO_SUCH_VENDOR_CONSTANT' );
+		$this->assertFalse( aafm_site_cache_detected( $row ) );
+	}
+
+	public function test_nginx_helper_serving_follows_the_purge_switch(): void {
+		$this->ngx_ready();
+		$this->assertTrue( $this->call( 'aafm_cache_nginx_helper_serving' ) );
+		$GLOBALS['nginx_helper_admin']->options['enable_purge'] = 0;
+		$this->assertFalse( $this->call( 'aafm_cache_nginx_helper_serving' ) );
+	}
+
+	public function test_nginx_helper_unlink_mode_cached_page_is_purged_on_the_file_the_vendor_named(): void {
+		$this->ngx_ready();
+		$file = $this->put( $this->ngx_file( '/acc-a/' ) );
+		$this->assertResult( 'purged', '', true, $this->ngx_purge( '/acc-a/' ) );
+		$this->assertFileDoesNotExist( $file );
+		// One URL only, and never the feed variants or purge_post().
+		$this->assertSame( array( array( 'purge_url', array( 'http://example.org/acc-a/', false ) ) ), Stub::$calls );
+		$this->assertFalse( has_filter( 'rt_nginx_helper_purge_cached_file' ), 'The recorder is removed after the call.' );
+		$this->assertFalse( has_action( 'rt_nginx_helper_purged_file' ), 'The counter is removed after the call.' );
+	}
+
+	public function test_nginx_helper_unlink_mode_never_cached_page_is_not_found(): void {
+		$this->ngx_ready();
+		$this->assertResult( 'requested', 'not_found_in_cache', false, $this->ngx_purge( '/acc-a/' ) );
+	}
+
+	public function test_nginx_helper_unlink_mode_failed_unlink_is_still_cached(): void {
+		$this->ngx_ready();
+		$this->put( $this->ngx_file( '/acc-a/' ) );
+		Stub::$state['ngx_unlink_fails'] = true;
+		$this->assertResult( 'failed', 'still_cached', true, $this->ngx_purge( '/acc-a/' ) );
+	}
+
+	public function test_nginx_helper_non_ascii_page_is_two_calls(): void {
+		$this->ngx_ready();
+		$this->put( $this->ngx_file( '/' . self::LO . '/' ) );
+		$this->put( $this->ngx_file( '/' . self::UP . '/' ) );
+		$this->assertResult( 'purged', '', true, $this->ngx_purge( '/' . self::LO . '/' ) );
+		$this->assertSame(
+			array(
+				array( 'purge_url', array( 'http://example.org/' . self::LO . '/', false ) ),
+				array( 'purge_url', array( 'http://example.org/' . self::UP . '/', false ) ),
+			),
+			Stub::$calls
+		);
+	}
+
+	public function test_nginx_helper_request_mode_is_never_confirmed(): void {
+		$this->ngx_ready();
+		$GLOBALS['nginx_helper_admin']->options['purge_method'] = 'get_request';
+		$file = $this->put( $this->ngx_file( '/acc-a/' ) );
+		$this->assertResult( 'requested', 'no_acknowledgement', null, $this->ngx_purge( '/acc-a/' ) );
+		$this->assertFileExists( $file );
+		$this->assertSame( array( array( 'purge_url', array( 'http://example.org/acc-a/', false ) ) ), Stub::$calls );
+	}
+
+	public function test_nginx_helper_site_purge_is_confirmed_only_for_a_fastcgi_cache(): void {
+		$this->ngx_ready();
+		$this->put( $this->ngx_file( '/acc-a/' ) );
+		$this->put( $this->ngx_file( '/acc-page/' ) );
+		Stub::$on['rt_nginx_helper_purge_all'] = function (): void {
+			// The real purge deletes every file and leaves the empty level directories (bench4 N5).
+			foreach ( array( '/acc-a/', '/acc-page/' ) as $path ) {
+				if ( is_file( $this->ngx_file( $path ) ) ) {
+					unlink( $this->ngx_file( $path ) );
+				}
+			}
+		};
+		$this->assertResult( 'purged', '', true, $this->call( 'aafm_cache_nginx_helper_purge_all' ) );
+
+		$GLOBALS['nginx_helper_admin']->options['cache_method'] = 'enable_redis';
+		$this->assertResult( 'requested', 'no_acknowledgement', null, $this->call( 'aafm_cache_nginx_helper_purge_all' ), 'A Redis cache is not on disk.' );
+		$this->assertSame( array( 'rt_nginx_helper_purge_all', 'rt_nginx_helper_purge_all' ), Stub::names() );
+	}
 }

@@ -742,3 +742,52 @@ function aafm_siteops_stub_litespeed_activate(): void {
 	// Never fired by the adapter. Listened to so a test can prove it.
 	Aafm_Siteops_Vendor_Stub::listen( 'litespeed_purge_all', 0 );
 }
+
+/**
+ * Nginx Helper's purger. purge_url() follows the real unlink path of
+ * nginx-helper/admin/class-purger.php:447-496: name the file, pass it through the filter, return
+ * when it is missing, and fire the action only after a successful unlink.
+ */
+final class Aafm_Siteops_Stub_Ngx_Purger {
+	public function purge_url( $url, $feed = true ) {
+		Aafm_Siteops_Vendor_Stub::hit( 'purge_url', array( $url, $feed ) );
+		if ( 'unlink_files' !== ( $GLOBALS['nginx_helper_admin']->options['purge_method'] ?? '' ) ) {
+			return;
+		}
+		$parts = wp_parse_url( $url );
+		$hash  = md5( $parts['scheme'] . 'GET' . $parts['host'] . $parts['path'] );
+		$file  = RT_WP_NGINX_HELPER_CACHE_PATH . '/' . substr( $hash, -1 ) . '/' . substr( $hash, -3, 2 ) . '/' . $hash;
+		$file  = apply_filters( 'rt_nginx_helper_purge_cached_file', $file, $url );
+		if ( ! file_exists( $file ) ) {
+			return;
+		}
+		// A test sets ngx_unlink_fails to model a file the web server user may not delete.
+		if ( empty( Aafm_Siteops_Vendor_Stub::$state['ngx_unlink_fails'] ) && unlink( $file ) ) {
+			do_action( 'rt_nginx_helper_purged_file', $url, $file );
+		}
+	}
+	public function purge_post( $post_id ) {
+		Aafm_Siteops_Vendor_Stub::hit( 'purge_post', array( $post_id ) );
+	}
+}
+
+/**
+ * Nginx Helper: its two constants, its two globals and its purge-all action.
+ */
+function aafm_siteops_stub_nginx_helper_activate(): void {
+	if ( ! defined( 'NGINX_HELPER_BASENAME' ) ) {
+		define( 'NGINX_HELPER_BASENAME', 'nginx-helper/nginx-helper.php' );
+	}
+	if ( ! defined( 'RT_WP_NGINX_HELPER_CACHE_PATH' ) ) {
+		define( 'RT_WP_NGINX_HELPER_CACHE_PATH', Aafm_Siteops_Vendor_Stub::root() . '/ngx' );
+	}
+	$GLOBALS['nginx_purger']       = new Aafm_Siteops_Stub_Ngx_Purger();
+	$GLOBALS['nginx_helper_admin'] = (object) array(
+		'options' => array(
+			'enable_purge' => 1,
+			'purge_method' => 'unlink_files',
+			'cache_method' => 'enable_fastcgi',
+		),
+	);
+	Aafm_Siteops_Vendor_Stub::listen( 'rt_nginx_helper_purge_all', 0 );
+}

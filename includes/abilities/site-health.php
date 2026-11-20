@@ -302,12 +302,27 @@ function aafm_site_health_extensions_paused(): bool {
 }
 
 /**
+ * The pre_schedule_event filter that refuses core's weekly Site Health event, and no other.
+ *
+ * @param null|bool|WP_Error $pre   The answer so far.
+ * @param object             $event The event being scheduled.
+ * @return null|bool|WP_Error
+ */
+function aafm_site_health_block_weekly_check( $pre, $event ) {
+	if ( is_object( $event ) && isset( $event->hook ) && 'wp_site_health_scheduled_check' === $event->hook ) {
+		return false;
+	}
+	return $pre;
+}
+
+/**
  * Execute aafm/site-health-status.
  *
  * WP_Site_Health::get_instance() is used and never the constructor: WordPress creates the
  * instance on every request, and constructing a second one would schedule its weekly event.
- * Only each test's status is kept; labels, descriptions and actions are HTML that can name
- * plugins and versions.
+ * Should the instance not exist yet, get_instance() runs the constructor, so the weekly event is
+ * refused for the length of that call. Only each test's status is kept; labels, descriptions and
+ * actions are HTML that can name plugins and versions.
  *
  * @return array<string,mixed>
  */
@@ -319,7 +334,12 @@ function aafm_exec_site_health_status(): array {
 	require_once ABSPATH . 'wp-admin/includes/file.php';
 	require_once ABSPATH . 'wp-admin/includes/misc.php';
 
-	$health = WP_Site_Health::get_instance();
+	add_filter( 'pre_schedule_event', 'aafm_site_health_block_weekly_check', 10, 2 );
+	try {
+		$health = WP_Site_Health::get_instance();
+	} finally {
+		remove_filter( 'pre_schedule_event', 'aafm_site_health_block_weekly_check', 10 );
+	}
 	$tests  = array();
 	$counts = array(
 		'good'        => 0,

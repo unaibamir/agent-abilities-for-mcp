@@ -86,6 +86,24 @@ final class SiteHealthTest extends TestCase {
 		$this->assertStringNotContainsString( get_bloginfo( 'version' ), $json );
 	}
 
+	public function test_health_status_never_schedules_the_weekly_check_when_it_builds_the_instance(): void {
+		$instance = new \ReflectionProperty( \WP_Site_Health::class, 'instance' );
+		$instance->setAccessible( true );
+		$saved = $instance->getValue();
+		wp_clear_scheduled_hook( 'wp_site_health_scheduled_check' );
+		$instance->setValue( null, null );
+
+		try {
+			$this->assertIsArray( aafm_exec_site_health_status() );
+			$this->assertInstanceOf( \WP_Site_Health::class, $instance->getValue(), 'The cold path ran: the call built the instance.' );
+			$this->assertFalse( wp_next_scheduled( 'wp_site_health_scheduled_check' ), 'Building the instance scheduled nothing.' );
+			$this->assertFalse( has_filter( 'pre_schedule_event', 'aafm_site_health_block_weekly_check' ), 'The block is removed after the call.' );
+			$this->assertNotFalse( wp_schedule_single_event( time() + 60, 'aafm_test_after_health' ), 'Other events still schedule.' );
+		} finally {
+			$instance->setValue( null, $saved );
+		}
+	}
+
 	public function test_extensions_paused_is_false_for_a_stored_empty_array(): void {
 		$this->acting_as( 'administrator' );
 		add_option( 'aafmtest_paused_extensions', array() );

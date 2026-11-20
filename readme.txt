@@ -373,10 +373,10 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 = 1.13.0 =
 
 * **Feature:** Agents can clear one post, one URL or the whole site from the page cache of 13 cache plugins, including LiteSpeed Cache, WP Super Cache and W3 Total Cache. Each plugin's result says whether a cached copy was found and removed or the purge was only requested.
-* **Feature:** Agents can list redirects, read one, list not-found addresses and test which redirect a URL would hit in Redirection, Rank Math, Safe Redirect Manager, 301 Redirects and Slim SEO. These tools read only.
-* **Feature:** New read tools report UpdraftPlus backups, Site Health results, waiting updates and scheduled tasks without making a request.
-* **Feature:** Backup gate: choose risky tools that are refused unless a checked backup from the last 24 hours exists. Off by default, under Settings.
-* **Fix:** REST requests that are not for the MCP endpoint no longer build the tool list. wpbakery-replace-text now returns a restore point, and an image id sent as a string of digits is accepted in WPBakery element settings.
+* **Feature:** Agents can list redirects, read one, list not-found addresses and test which redirect a URL would hit in Redirection, Rank Math, Safe Redirect Manager, 301 Redirects and Slim SEO. These tools change nothing.
+* **Feature:** New read tools report UpdraftPlus backups, Site Health results, waiting updates and scheduled tasks, and send no request of their own. The backup gate under Settings, off by default, refuses the risky tools you pick unless a checked backup from the last 24 hours exists.
+* **Fix:** REST requests that are not for the MCP endpoint no longer build the tool list. wpbakery-replace-text now returns a restore point, WPBakery element settings accept an image id sent as a string of digits, and Check my connection reports WP Rocket's MCP server when both run on one site.
+* **Chore:** The FAQ no longer says WPBakery's Role Manager is never applied, and the admin header now says nothing from this plugin is exposed until you switch it on.
 
 = 1.12.0 =
 
@@ -500,6 +500,10 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 [Full release history](https://agentabilitieswp.com/changelog/?utm_source=wordpress.org&utm_medium=readme&utm_campaign=plugin-listing).
 
 == Upgrade Notice ==
+
+= 1.13.0 =
+
+Adds page cache, redirect, backup and site health tools, and a backup gate under Settings. Every new tool starts off, and so does the gate.
 
 = 1.12.0 =
 

@@ -526,3 +526,39 @@ function aafm_siteops_stub_cache_enabler_activate(): void {
 	// Never fired by the adapter. Listened to so a test can prove it.
 	Aafm_Siteops_Vendor_Stub::listen( 'cache_enabler_clear_complete_cache', 0 );
 }
+
+/**
+ * Hummingbird's page cache module: is_active() and clear_cache().
+ */
+final class Aafm_Siteops_Stub_Hb_Cache {
+	public function is_active() {
+		return ! empty( Aafm_Siteops_Vendor_Stub::$state['hb_active'] );
+	}
+	public function clear_cache( $directory = '', $single = false, $domain_check = true ) {
+		Aafm_Siteops_Vendor_Stub::hit( 'clear_cache', func_get_args() );
+		return true;
+	}
+}
+
+/**
+ * Hummingbird's module lookup. Aliased to \Hummingbird\Core\Utils on activation.
+ */
+final class Aafm_Siteops_Stub_Hb_Utils {
+	public static function get_module( $module ) {
+		return 'page_cache' === $module ? new Aafm_Siteops_Stub_Hb_Cache() : null;
+	}
+}
+
+/**
+ * Hummingbird: its version constant, its module lookup and its post purge action.
+ */
+function aafm_siteops_stub_hummingbird_activate(): void {
+	Aafm_Siteops_Vendor_Stub::$state['hb_active'] = true;
+	if ( ! defined( 'WPHB_VERSION' ) ) {
+		define( 'WPHB_VERSION', '4.0.3' );
+	}
+	if ( ! class_exists( 'Hummingbird\Core\Utils', false ) ) {
+		class_alias( 'Aafm_Siteops_Stub_Hb_Utils', 'Hummingbird\Core\Utils' );
+	}
+	Aafm_Siteops_Vendor_Stub::listen( 'wphb_clear_page_cache' );
+}

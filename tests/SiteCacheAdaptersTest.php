@@ -807,4 +807,150 @@ final class SiteCacheAdaptersTest extends TestCase {
 		$this->assertResult( 'purged', '', true, $this->call( 'aafm_cache_cache_enabler_purge_all' ) );
 		$this->assertSame( array( 'cache_enabler_clear_site_cache' ), Stub::names() );
 	}
+
+	private const HB_FILE = '0123456789abcdef0123456789abcdef';
+
+	private function hb_dir( string $relative, bool $mobile = false ): string {
+		// A page directory in the desktop or the mobile tree. The host directory carries the port when the site has one.
+		return WP_CONTENT_DIR . '/wphb-cache/cache/' . ( $mobile ? 'mobile/' : '' ) . 'example.org' . ( '' === $relative ? '' : '/' . $relative );
+	}
+
+	private function hb_ready(): void {
+		aafm_siteops_stub_hummingbird_activate();
+		$this->load( 'hummingbird' );
+		$this->cleanup[] = WP_CONTENT_DIR . '/wphb-cache';
+	}
+
+	private function hb_clears_the_path_given(): callable {
+		// A stand-in for the real clear_cache(): it clears the directory of the path it is given, in both trees.
+		return function ( $directory = '' ): void {
+			Stub::rrmdir( $this->hb_dir( trim( (string) $directory, '/' ) ) );
+			Stub::rrmdir( $this->hb_dir( trim( (string) $directory, '/' ), true ) );
+		};
+	}
+
+	public function test_hummingbird_registry_row_and_detection(): void {
+		$row = $this->assertRegistryRow(
+			'hummingbird',
+			'hummingbird-performance/wp-hummingbird.php',
+			array( array( 'constant', 'WPHB_VERSION' ) ),
+			'file',
+			array(
+				'cli'           => false,
+				'vendor_http'   => true,
+				'recursive_url' => false,
+				'rewarms'       => false,
+			)
+		);
+		aafm_siteops_stub_hummingbird_activate();
+		$this->assertTrue( aafm_site_cache_detected( $row ) );
+		$row['detect'][] = array( 'constant', 'AAFM_NO_SUCH_VENDOR_CONSTANT' );
+		$this->assertFalse( aafm_site_cache_detected( $row ) );
+	}
+
+	public function test_hummingbird_serving_needs_the_module_and_its_action(): void {
+		$this->hb_ready();
+		$this->assertTrue( $this->call( 'aafm_cache_hummingbird_serving' ) );
+		Stub::$state['hb_active'] = false;
+		$this->assertFalse( $this->call( 'aafm_cache_hummingbird_serving' ), 'The page cache module is off.' );
+		Stub::$state['hb_active'] = true;
+		remove_all_actions( 'wphb_clear_page_cache' );
+		$this->assertFalse( $this->call( 'aafm_cache_hummingbird_serving' ), 'Nothing listens on the purge action.' );
+	}
+
+	public function test_hummingbird_post_purge_fires_the_action(): void {
+		$this->hb_ready();
+		$this->put( $this->hb_dir( 'acc-a' ) . '/' . self::HB_FILE . '.html' );
+		$dir                               = $this->hb_dir( 'acc-a' );
+		Stub::$on['wphb_clear_page_cache'] = static function () use ( $dir ): void {
+			Stub::rrmdir( $dir );
+		};
+		$url                               = $this->url( '/acc-a/' );
+		$result                            = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_hummingbird_purge_post( 41, $url );
+			}
+		);
+		$this->assertResult( 'purged', '', true, $result );
+		$this->assertSame( array( array( 'wphb_clear_page_cache', array( 41 ) ) ), Stub::$calls );
+	}
+
+	public function test_hummingbird_non_ascii_url_is_two_calls_over_four_directories(): void {
+		$this->hb_ready();
+		$this->put( $this->hb_dir( self::LO ) . '/' . self::HB_FILE . '.html' );
+		// A logged-in visitor's copy is a .php file; a phone's copy sits in the mobile tree.
+		$this->put( $this->hb_dir( self::UP ) . '/' . self::HB_FILE . '.php' );
+		$this->put( $this->hb_dir( self::LO, true ) . '/' . self::HB_FILE . '.html' );
+		Stub::$on['clear_cache'] = $this->hb_clears_the_path_given();
+		$url                     = $this->url( '/' . self::LO . '/' );
+		$result                  = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_hummingbird_purge_url( $url );
+			}
+		);
+		$this->assertResult( 'purged', '', true, $result );
+		$this->assertSame(
+			array(
+				array( 'clear_cache', array( '/' . self::LO . '/' ) ),
+				array( 'clear_cache', array( '/' . self::UP . '/' ) ),
+			),
+			Stub::$calls
+		);
+	}
+
+	public function test_hummingbird_mobile_copy_left_behind_is_still_cached(): void {
+		$this->hb_ready();
+		$this->put( $this->hb_dir( 'acc-a', true ) . '/' . self::HB_FILE . '.php' );
+		$url    = $this->url( '/acc-a/' );
+		$result = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_hummingbird_purge_url( $url );
+			}
+		);
+		$this->assertResult( 'failed', 'still_cached', true, $result );
+		$this->assertSame( array( array( 'clear_cache', array( '/acc-a/' ) ) ), Stub::$calls, 'An ASCII path is one call.' );
+	}
+
+	public function test_hummingbird_placeholder_file_is_not_a_cached_page(): void {
+		$this->hb_ready();
+		$this->put( $this->hb_dir( 'acc-a' ) . '/index.html' );
+		$url    = $this->url( '/acc-a/' );
+		$result = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_hummingbird_purge_url( $url );
+			}
+		);
+		$this->assertResult( 'requested', 'not_found_in_cache', false, $result );
+	}
+
+	public function test_hummingbird_home_url_is_a_single_slash(): void {
+		$this->hb_ready();
+		wp_mkdir_p( $this->hb_dir( '' ) );
+		$url = $this->url( '/' );
+		$this->call(
+			static function () use ( $url ) {
+				return aafm_cache_hummingbird_purge_url( $url );
+			}
+		);
+		$this->assertSame( array( array( 'clear_cache', array( '/' ) ) ), Stub::$calls );
+	}
+
+	public function test_hummingbird_site_purge_reads_both_trees(): void {
+		$this->hb_ready();
+		$this->put( $this->hb_dir( 'acc-a' ) . '/' . self::HB_FILE . '.html' );
+		$this->put( $this->hb_dir( 'acc-a', true ) . '/' . self::HB_FILE . '.html' );
+		$desktop                 = $this->hb_dir( '' );
+		Stub::$on['clear_cache'] = static function () use ( $desktop ): void {
+			Stub::rrmdir( $desktop );
+		};
+		$this->assertResult( 'failed', 'still_cached', true, $this->call( 'aafm_cache_hummingbird_purge_all' ), 'The mobile tree still holds a page.' );
+		$this->put( $this->hb_dir( 'acc-a' ) . '/' . self::HB_FILE . '.html' );
+		$mobile                  = $this->hb_dir( '', true );
+		Stub::$on['clear_cache'] = static function () use ( $desktop, $mobile ): void {
+			Stub::rrmdir( $desktop );
+			Stub::rrmdir( $mobile );
+		};
+		$this->assertResult( 'purged', '', true, $this->call( 'aafm_cache_hummingbird_purge_all' ), 'A host directory that is gone holds nothing.' );
+		$this->assertSame( array( array(), array() ), Stub::args( 'clear_cache' ), 'A full clear takes no argument.' );
+	}
 }

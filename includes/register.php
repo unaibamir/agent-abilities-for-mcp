@@ -1351,6 +1351,19 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			}
 		}
 
+		// Backup gate: one more AND, after the allowlist, so a refusal reaches the same audit block
+		// below and is written as exactly one 'denied' row. With the gate off this is one switch read.
+		// The adapter's fire gets the reason as a tool error; core's re-check inside execute() gets a
+		// bare false, as the paused-connection refusal does, because a WP_Error there trips
+		// _doing_it_wrong().
+		if ( true === $allowed ) {
+			$gate_refusal = aafm_backup_gate_refusal( $name );
+			if ( '' !== $gate_refusal ) {
+				$allowed = null === aafm_executing_ability() ? aafm_backup_gate_error( $gate_refusal ) : false;
+				$reason  = $gate_refusal;
+			}
+		}
+
 		// The WP Abilities API admits ONLY a strict true; every other return (false, WP_Error,
 		// null, 0, '') is a denial. Audit any non-true result so a malformed or future permission
 		// callback's denial is never silently unlogged.

@@ -45,6 +45,10 @@
 	     integration calls - names it cannot prefix without breaking the calls it stands in for.
 	     A throwaway test fixture, never shipped. -->
 	<exclude-pattern>*/tests/stubs/GeodirStubStore.php</exclude-pattern>
+	<!-- The Site Ops cache stub declares the fake adapter functions the dispatcher calls by name,
+	     beside the class that backs them, and from batch 3 the THIRD-PARTY cache plugin globals
+	     the real adapters call. A throwaway test fixture, never shipped. -->
+	<exclude-pattern>*/tests/stubs/SiteopsCacheStubStore.php</exclude-pattern>
 
 	<arg name="extensions" value="php"/>
 	<arg name="basepath" value="."/>

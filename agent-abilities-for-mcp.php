@@ -414,6 +414,8 @@ function aafm_bootstrap() {
 	// The Connection Doctor's own probe: answered before any MCP code runs, only for a live single-use token.
 	add_filter( 'rest_pre_dispatch', 'aafm_doctor_handle_probe', 1, 3 );
 
+	// Site Ops: the cache adapter registry. Detection only; adapter files load on first use.
+	require_once AAFM_PLUGIN_DIR . 'includes/siteops/cache-registry.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/posts.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/pages.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/terms.php';

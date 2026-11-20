@@ -595,6 +595,27 @@ final class SiteRedirectsTest extends TestCase {
 		$this->assertSame( 'https://new.example/caf%C3%A9', $out['chain'][0]['target'] );
 		$this->assertArrayNotHasKey( 'verify', $out['evaluated'][0] );
 
+		// A plugin that also redirects from settings outside its redirect module is asked while that
+		// module is off, where its registry entry says so; the list tools still do not see it.
+		$this->fakes(
+			array(
+				'fake_a' => Stub::entry( 'Fake A' ),
+				'fake_b' => Stub::entry( 'Fake B', array( 'ask_when_not_ready' => true ) ),
+			)
+		);
+		Stub::$fake['fake_b']['ready'] = false;
+		$out                           = aafm_exec_site_test_redirect( array( 'url' => '/café-old' ) );
+		$this->assertSame( array( 'fake_a', 'fake_b' ), array_column( $out['evaluated'], 'provider' ) );
+		$this->assertSame( 'redirection_relocate', $out['first_match']['setting'] ?? null );
+		$this->assertSame( array( 'fake_a' ), aafm_site_redirect_ready_slugs() );
+		$this->fakes(
+			array(
+				'fake_a' => Stub::entry( 'Fake A' ),
+				'fake_b' => Stub::entry( 'Fake B' ),
+			)
+		);
+		$this->assertSame( array( 'fake_a' ), array_column( aafm_exec_site_test_redirect( array( 'url' => '/café-old' ) )['evaluated'], 'provider' ), 'Without the key a provider that is not ready is not asked.' );
+
 		$schema = aafm_args_site_test_redirect()['output_schema']['properties'];
 		$this->assertSame( array( 'type' => 'string' ), $schema['first_match']['properties']['setting'] );
 		$this->assertSame( array( 'type' => 'string' ), $schema['chain']['items']['properties']['setting'] );

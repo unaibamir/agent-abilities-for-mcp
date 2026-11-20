@@ -76,7 +76,7 @@ function aafm_site_redirects_registry_definitions(): array {
 		),
 		'aafm/site-test-redirect'  => array(
 			'label'        => __( 'Test a URL against the redirects', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Works out which stored redirect a URL on this site would hit, without requesting the URL and without changing any hit counter or log, then follows the redirects it can see for up to ten steps and says whether they end, leave the site or form a loop. It checks the supported redirect plugins in the order they were seen to run and reports what each one said. It is a simulation with limits: it does not see server rules, WordPress\'s own redirects, a CDN, or redirect plugins it does not support, which it names when it finds them, so the answer is never complete. Some redirects come from a plugin setting rather than a stored rule: a 404 fallback, attachment, author or date archive redirects, a redirect for a changed slug, a www redirect, a site move or a permalink migration. For these the tool uses this site\'s own permalink rules to work out what kind of page the address is. A setting that applies gives a match that names the setting instead of a rule id; a setting that cannot apply is ignored. When the address cannot be classified, or another plugin has hooked the redirect plugin\'s filters, that plugin answers unknown with a reason naming the setting and a hint to request the address without following redirects. That request is the only sure check. Pages that plugin code serves outside WordPress\'s permalink rules are judged as WordPress alone would judge them. Conditional and pattern redirects are evaluated by each plugin\'s own matcher where it has one and are otherwise unknown. It changes nothing. Requires the manage-options capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Works out which stored redirect a URL on this site would hit, without requesting the URL and without changing any hit counter or log, then follows the redirects it can see for up to ten steps and says whether they end, leave the site or form a loop. It checks the supported redirect plugins in the order they were seen to run and reports what each one said. It is a simulation with limits: it does not see server rules, WordPress\'s own redirects, a CDN, or redirect plugins it does not support, which it names when it finds them, so the answer is never complete. Some redirects come from a plugin setting rather than a stored rule: a 404 fallback, attachment, author or date archive redirects, a redirect for a changed slug, a www redirect, a site move, a permalink migration or an old category base. For these the tool uses this site\'s own permalink rules to work out what kind of page the address is. A setting that applies gives a match that names the setting instead of a rule id; a setting that cannot apply is ignored. When the address cannot be classified, or another plugin has hooked the redirect plugin\'s filters, that plugin answers unknown with a reason naming the setting and a hint to request the address without following redirects. That request is the only sure check. When other plugins hook WordPress\'s request handling and could serve a page WordPress alone would not find, a setting for pages not found also answers unknown. Other pages are judged as WordPress alone would judge them. A redirect of a page not found that WordPress\'s own redirect may answer first is marked approximate. Conditional and pattern redirects are evaluated by each plugin\'s own matcher where it has one and are otherwise unknown. It changes nothing. Requires the manage-options capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'site_redirects',
@@ -682,8 +682,16 @@ function aafm_exec_site_test_redirect( array $input ) {
 		return $url;
 	}
 
-	$path   = (string) $url['path'];
-	$result = aafm_site_redirect_chain( $path, aafm_site_redirect_ready_slugs() );
+	// Rank Math and Slim SEO also redirect from settings outside their redirect modules (attachment
+	// pages and archives, the old category base), so they are asked while those modules are off.
+	$path  = (string) $url['path'];
+	$slugs = aafm_site_redirect_ready_slugs();
+	foreach ( aafm_site_redirect_adapters() as $slug => $entry ) {
+		if ( ! empty( $entry['ask_when_not_ready'] ) && ! in_array( (string) $slug, $slugs, true ) && null !== aafm_site_redirect_detected_entry( (string) $slug ) ) {
+			$slugs[] = (string) $slug;
+		}
+	}
+	$result = aafm_site_redirect_chain( $path, $slugs );
 
 	$evaluated = array();
 	foreach ( $result['evaluated'] as $row ) {

@@ -739,6 +739,12 @@ function aafm_config_option_names(): array {
 		'aafm_oauth_connect_roles',
 		'aafm_trusted_proxy',
 		'aafm_oauth_default_preset',
+		// 1.13.0 backup gate: the four owner settings and the stored verification verdicts.
+		'aafm_backup_gate',
+		'aafm_backup_gate_abilities',
+		'aafm_backup_gate_accept_remote',
+		'aafm_backup_gate_accept_size',
+		'aafm_backup_verify',
 	);
 }
 

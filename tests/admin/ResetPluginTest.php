@@ -35,6 +35,11 @@ final class ResetPluginTest extends TestCase {
 				'aafm_denied_user_meta_keys',
 				'aafm_exposed_term_meta_keys',
 				'aafm_denied_term_meta_keys',
+				'aafm_backup_gate',
+				'aafm_backup_gate_abilities',
+				'aafm_backup_gate_accept_remote',
+				'aafm_backup_gate_accept_size',
+				'aafm_backup_verify',
 			) as $expected
 		) {
 			$this->assertContains( $expected, $names );

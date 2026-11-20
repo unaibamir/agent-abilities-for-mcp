@@ -165,20 +165,38 @@ function aafm_redirect_redirection_match( string $path, array &$cache ): array {
 	}
 
 	// The plugin's site settings run on init before its rules (modules/wordpress.php,
-	// models/canonical.php, 5.10.1). A site move sends every request elsewhere, and an alias equal
-	// to this site's own host is redirected. The preferred domain, HTTPS and other aliases act only
-	// on another host or scheme, and the tool accepts only this site's own address.
+	// models/canonical.php, 5.10.1). A site move sends every request outside three protected
+	// paths to the same path on another domain, a match from that setting. With no move set, an
+	// alias equal to this site's own host is redirected to the site address with a scheme taken
+	// from the request, which the tool cannot model. The preferred domain, HTTPS and other aliases
+	// act only on another host or scheme, and the tool accepts only this site's own address.
 	$options = Red_Options::get();
 	$options = is_array( $options ) ? $options : array();
 	$host    = strtolower( (string) wp_parse_url( home_url(), PHP_URL_HOST ) );
 	$move    = isset( $options['relocate'] ) && is_string( $options['relocate'] ) ? trim( $options['relocate'] ) : '';
-	if ( '' !== $move && strtolower( (string) wp_parse_url( ( false === strpos( $move, '://' ) ? 'http://' : '' ) . $move, PHP_URL_HOST ) ) !== $host ) {
-		return array(
-			'state'  => 'unknown',
-			'reason' => 'redirection_relocate',
-		);
-	}
-	if ( isset( $options['aliases'] ) && is_array( $options['aliases'] ) && in_array( $host, array_map( 'strtolower', array_map( 'strval', $options['aliases'] ) ), true ) ) {
+	if ( '' !== $move ) {
+		if ( strtolower( (string) wp_parse_url( ( false === strpos( $move, '://' ) ? 'http://' : '' ) . $move, PHP_URL_HOST ) ) !== $host ) {
+			if ( false === strpos( $move, '://' ) || false !== has_filter( 'redirect_relocate_protected' ) || false !== has_filter( 'redirect_relocate_target' ) ) {
+				return array(
+					'state'  => 'unknown',
+					'reason' => 'redirection_relocate',
+				);
+			}
+			$protected = false;
+			foreach ( array( '/wp-admin', '/wp-login.php', '/wp-json/' ) as $base ) {
+				$protected = $protected || 0 === strpos( $path, $base );
+			}
+			if ( ! $protected ) {
+				return array(
+					'state'   => 'matched',
+					'id'      => '',
+					'target'  => rtrim( $move, '/' ) . $path,
+					'code'    => 301,
+					'setting' => 'redirection_relocate',
+				);
+			}
+		}
+	} elseif ( isset( $options['aliases'] ) && is_array( $options['aliases'] ) && in_array( $host, array_map( 'strtolower', array_map( 'strval', $options['aliases'] ) ), true ) ) {
 		return array(
 			'state'  => 'unknown',
 			'reason' => 'redirection_site_alias',
@@ -213,7 +231,18 @@ function aafm_redirect_redirection_match( string $path, array &$cache ): array {
 			);
 	}
 
-	return array( 'state' => $unknown ? 'unknown' : 'no_match' );
+	if ( $unknown ) {
+		return array( 'state' => 'unknown' );
+	}
+
+	// Permalink migration runs on a page not found (pre_handle_404) and parses the address again
+	// under each old permalink structure; that is not modelled.
+	return empty( $options['permalinks'] )
+		? array( 'state' => 'no_match' )
+		: array(
+			'state'  => 'unknown',
+			'reason' => 'redirection_permalink_migration',
+		);
 }
 
 /**

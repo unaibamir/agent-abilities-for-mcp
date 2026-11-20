@@ -407,7 +407,7 @@ final class SiteRedirectAdaptersTest extends TestCase {
 		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'redirection', '/other' ), 'A rule whose source does not match the path is not in question.' );
 	}
 
-	public function test_redirection_a_site_move_or_an_alias_of_this_site_gives_unknown(): void {
+	public function test_redirection_a_site_move_is_a_match_from_its_setting_before_the_rules(): void {
 		$this->only( array( 'redirection' ) );
 		Stub::$vendor['red'] = array( aafm_siteops_redirect_stub_red_row( 1, '/old-a', '/x' ) );
 		$unknown             = static function ( string $reason ): array {
@@ -416,23 +416,48 @@ final class SiteRedirectAdaptersTest extends TestCase {
 				'reason' => $reason,
 			);
 		};
+		$moved               = static function ( string $path ): array {
+			return array(
+				'state'   => 'matched',
+				'id'      => '',
+				'target'  => 'https://new.example.com' . $path,
+				'code'    => 301,
+				'setting' => 'redirection_relocate',
+			);
+		};
 
-		// The site-move setting sends every request to another domain before any rule is read.
+		// The site move runs on init, before any rule is read, and keeps the path.
 		Stub::$vendor['red_options'] = array(
 			'database' => '4.2',
-			'relocate' => 'https://new.example.com',
+			'relocate' => 'https://new.example.com/',
 		);
-		$this->assertSame( $unknown( 'redirection_relocate' ), $this->match( 'redirection', '/old-a' ) );
-		$this->assertSame( $unknown( 'redirection_relocate' ), $this->match( 'redirection', '/nothing-here' ) );
+		$this->assertSame( $moved( '/old-a' ), $this->match( 'redirection', '/old-a' ) );
+		$this->assertSame( $moved( '/nothing-here' ), $this->match( 'redirection', '/nothing-here' ) );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'redirection', '/wp-admin/options.php' ), 'The plugin never moves its protected paths.' );
+		add_filter( 'redirect_relocate_target', '__return_empty_string' );
+		$this->assertSame( $unknown( 'redirection_relocate' ), $this->match( 'redirection', '/nothing-here' ), 'A filter on the move can change it for any path.' );
+		remove_filter( 'redirect_relocate_target', '__return_empty_string' );
+		Stub::$vendor['red_options']['relocate'] = 'new.example.com';
+		$this->assertSame( $unknown( 'redirection_relocate' ), $this->match( 'redirection', '/nothing-here' ), 'A move with no scheme cannot be modelled.' );
 		Stub::$vendor['red_options']['relocate'] = 'http://example.org/';
 		$this->assertSame( '1', $this->match( 'redirection', '/old-a' )['id'] ?? null, 'A move to this same domain sends nothing anywhere.' );
 
-		// An alias equal to this site's own host is redirected to the site address.
+		// Permalink migration runs on a page not found, by parsing the address again under old structures.
+		Stub::$vendor['red_options'] = array(
+			'database'   => '4.2',
+			'permalinks' => array( '/%year%/%postname%/' ),
+		);
+		$this->assertSame( '1', $this->match( 'redirection', '/old-a' )['id'] ?? null );
+		$this->assertSame( $unknown( 'redirection_permalink_migration' ), $this->match( 'redirection', '/nothing-here' ) );
+
+		// An alias equal to this site's own host is redirected to the site address, unless a move is set.
 		Stub::$vendor['red_options'] = array(
 			'database' => '4.2',
 			'aliases'  => array( 'example.org' ),
 		);
 		$this->assertSame( $unknown( 'redirection_site_alias' ), $this->match( 'redirection', '/nothing-here' ) );
+		Stub::$vendor['red_options']['relocate'] = 'http://example.org/';
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'redirection', '/nothing-here' ), 'With a move set, the plugin never reads its aliases.' );
 
 		// The preferred domain, HTTPS and other aliases act on another host or scheme, never on this
 		// site's own address, which is the only one the tool accepts.

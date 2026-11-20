@@ -175,4 +175,477 @@ final class SiteCacheDispatchTest extends TestCase {
 		Stub::reset();
 		$this->assertCount( 13, aafm_site_cache_adapters() );
 	}
+
+	/**
+	 * A result, shorter to write.
+	 *
+	 * @param string    $state      State.
+	 * @param string    $reason     Reason.
+	 * @param bool|null $was_cached Was cached.
+	 * @return array<string,mixed>
+	 */
+	private function result( string $state, string $reason, ?bool $was_cached ): array {
+		return array(
+			'state'      => $state,
+			'reason'     => $reason,
+			'was_cached' => $was_cached,
+		);
+	}
+
+	public function test_file_sequence_cannot_confirm_when_no_base_exists(): void {
+		$called = 0;
+		$result = aafm_site_cache_file_confirmed(
+			array( array( '/aafm/no/such/base', 'page' ) ),
+			'/^index\.html$/',
+			static function () use ( &$called ): void {
+				++$called;
+			}
+		);
+		$this->assertSame( $this->result( 'requested', 'no_acknowledgement', null ), $result );
+		$this->assertSame( 1, $called );
+	}
+
+	public function test_file_sequence_refuses_a_path_outside_the_base_without_calling_the_vendor(): void {
+		$base   = $this->tmp();
+		$called = 0;
+		$result = aafm_site_cache_file_confirmed(
+			array( array( $base, 'a/../b' ) ),
+			'/^index\.html$/',
+			static function () use ( &$called ): void {
+				++$called;
+			}
+		);
+		$this->assertSame( $this->result( 'failed', 'vendor_error', null ), $result );
+		$this->assertSame( 0, $called );
+	}
+
+	public function test_file_sequence_reports_purged_only_when_a_file_was_there_and_is_gone(): void {
+		$base = $this->tmp();
+		$file = $base . '/page/index.html';
+		$this->put( $file );
+		$result = aafm_site_cache_file_confirmed(
+			array( array( $base, 'page' ), array( $base, 'page' ) ),
+			'/^index\.html$/',
+			static function () use ( $file ): void {
+				wp_delete_file( $file );
+			}
+		);
+		$this->assertSame( $this->result( 'purged', '', true ), $result );
+	}
+
+	public function test_file_sequence_reports_not_found_when_nothing_was_cached(): void {
+		$base   = $this->tmp();
+		$called = 0;
+		$result = aafm_site_cache_file_confirmed(
+			array( array( $base, 'page' ) ),
+			'/^index\.html$/',
+			static function () use ( &$called ): bool {
+				++$called;
+				return true;
+			}
+		);
+		$this->assertSame( $this->result( 'requested', 'not_found_in_cache', false ), $result );
+		$this->assertSame( 1, $called );
+	}
+
+	public function test_file_sequence_reports_a_copy_the_vendor_left(): void {
+		$base = $this->tmp();
+		$this->put( $base . '/page/index.html' );
+		$result = aafm_site_cache_file_confirmed(
+			array( array( $base, 'page' ) ),
+			'/^index\.html$/',
+			static function (): bool {
+				return true;
+			}
+		);
+		$this->assertSame( $this->result( 'failed', 'still_cached', true ), $result );
+	}
+
+	public function test_file_sequence_reports_a_surviving_spelling(): void {
+		$base  = $this->tmp();
+		$lower = $base . '/caf%c3%a9/index.html';
+		$upper = $base . '/caf%C3%A9/index.html';
+		$this->put( $lower );
+		$this->put( $upper );
+		$result = aafm_site_cache_file_confirmed(
+			array( array( $base, 'caf%c3%a9' ), array( $base, 'caf%C3%A9' ) ),
+			'/^index\.html$/',
+			static function () use ( $lower ): void {
+				wp_delete_file( $lower );
+			}
+		);
+		$this->assertSame( $this->result( 'failed', 'variant_still_cached', true ), $result );
+	}
+
+	/**
+	 * Run the file sequence on one cached page with a vendor that replaces, touches or leaves it.
+	 *
+	 * @param string $vendor  'replace' | 'touch' | 'leave' | 'create'.
+	 * @param bool   $rewarms Fourth argument of the sequence.
+	 * @return array<string,mixed>
+	 */
+	private function recache_case( string $vendor, bool $rewarms ): array {
+		$base = $this->tmp();
+		$file = $base . '/page/index.html';
+		if ( 'create' === $vendor ) {
+			wp_mkdir_p( $base . '/page' );
+		} else {
+			$this->put( $file );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_touch -- Test fixture in a temporary directory.
+			touch( $file, time() - 100 );
+		}
+		$put = function ( string $path ): void {
+			$this->put( $path );
+		};
+		return aafm_site_cache_file_confirmed(
+			array( array( $base, 'page' ) ),
+			'/^index\.html$/',
+			static function () use ( $vendor, $file, $put ): void {
+				clearstatcache();
+				if ( 'replace' === $vendor ) {
+					// A new file moved over the old one: a new inode, given the old file's mtime.
+					$old = (int) filemtime( $file );
+					$put( $file . '.new' );
+					// phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename -- Test fixture in a temporary directory.
+					rename( $file . '.new', $file );
+					// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_touch -- Test fixture in a temporary directory.
+					touch( $file, $old );
+				} elseif ( 'touch' === $vendor ) {
+					// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_touch -- Test fixture in a temporary directory.
+					touch( $file, time() );
+				} elseif ( 'create' === $vendor ) {
+					$put( $file );
+				}
+			},
+			$rewarms
+		);
+	}
+
+	public function test_recache_rule_reads_a_replaced_file_as_purged_and_recached(): void {
+		$this->assertSame( $this->result( 'purged', 'recached', true ), $this->recache_case( 'replace', true ) );
+	}
+
+	public function test_without_the_recache_rule_a_replaced_file_is_still_cached(): void {
+		$this->assertSame( $this->result( 'failed', 'still_cached', true ), $this->recache_case( 'replace', false ) );
+	}
+
+	public function test_recache_rule_never_calls_a_touched_file_new(): void {
+		$this->assertSame( $this->result( 'requested', 'no_acknowledgement', true ), $this->recache_case( 'touch', true ) );
+	}
+
+	public function test_recache_rule_keeps_an_untouched_file_as_still_cached(): void {
+		$this->assertSame( $this->result( 'failed', 'still_cached', true ), $this->recache_case( 'leave', true ) );
+	}
+
+	public function test_recache_rule_reads_a_page_first_cached_by_the_vendor_as_not_found(): void {
+		$this->assertSame( $this->result( 'requested', 'not_found_in_cache', false ), $this->recache_case( 'create', true ) );
+	}
+
+	public function test_tree_sequence(): void {
+		$noop = static function (): void {};
+
+		$this->assertSame( $this->result( 'requested', 'no_acknowledgement', null ), aafm_site_cache_tree_confirmed( array( '/aafm/no/such/base' ), '/\.html$/', $noop ) );
+
+		$empty = $this->tmp();
+		$this->assertSame( $this->result( 'requested', 'not_found_in_cache', false ), aafm_site_cache_tree_confirmed( array( $empty ), '/\.html$/', $noop ) );
+
+		$left = $this->tmp();
+		$this->put( $left . '/a/index.html' );
+		$this->assertSame( $this->result( 'failed', 'still_cached', true ), aafm_site_cache_tree_confirmed( array( $left ), '/\.html$/', $noop ) );
+
+		$gone = $this->tmp();
+		$this->put( $gone . '/all/a/index.html' );
+		$tree = $gone . '/all';
+		$this->assertSame(
+			$this->result( 'purged', '', true ),
+			aafm_site_cache_tree_confirmed(
+				array( $tree, '/aafm/no/such/base' ),
+				'/\.html$/',
+				function () use ( $tree ): void {
+					$this->remove_tree( $tree );
+				}
+			),
+			'A base that is gone after a call that began with files in it is the positive result.'
+		);
+	}
+
+	public function test_variants_downgrade_only_changes_a_purged_result(): void {
+		$variants = $this->tmp();
+		$purged   = $this->result( 'purged', '', true );
+		$failed   = $this->result( 'failed', 'still_cached', true );
+
+		$this->assertSame( $purged, aafm_site_cache_variants_downgrade( $purged, array( $variants, '/aafm/no/such/dir' ) ), 'An empty variant directory changes nothing.' );
+		$this->put( $variants . '/m/index.html' );
+		$this->assertSame( $this->result( 'requested', 'variants_unchecked', true ), aafm_site_cache_variants_downgrade( $purged, array( $variants ) ) );
+		$this->assertSame( $failed, aafm_site_cache_variants_downgrade( $failed, array( $variants ) ) );
+	}
+
+	public function test_valid_result_accepts_only_the_pairs_of_the_contract(): void {
+		$this->assertTrue( aafm_site_cache_valid_result( $this->result( 'purged', '', true ) ) );
+		$this->assertTrue( aafm_site_cache_valid_result( $this->result( 'purged', 'recached', true ) ) );
+		$this->assertTrue( aafm_site_cache_valid_result( $this->result( 'requested', 'stale_window', null ) ) );
+		$this->assertTrue( aafm_site_cache_valid_result( $this->result( 'skipped', 'over_budget', null ) ) );
+		$this->assertFalse( aafm_site_cache_valid_result( $this->result( 'requested', 'recached', true ) ) );
+		$this->assertFalse( aafm_site_cache_valid_result( $this->result( 'purged', 'still_cached', true ) ) );
+		$this->assertFalse( aafm_site_cache_valid_result( $this->result( 'done', '', true ) ) );
+		$this->assertFalse( aafm_site_cache_valid_result( array( 'state' => 'purged' ) ) );
+		$this->assertFalse( aafm_site_cache_valid_result( array_merge( $this->result( 'purged', '', true ), array( 'path' => '/var/cache' ) ) ) );
+		$this->assertFalse( aafm_site_cache_valid_result( true ) );
+		$this->assertFalse(
+			aafm_site_cache_valid_result(
+				array(
+					'state'      => 'purged',
+					'reason'     => '',
+					'was_cached' => 'yes',
+				)
+			)
+		);
+	}
+
+	/**
+	 * A canonical URL array for a test.
+	 *
+	 * @param string $path Path.
+	 * @return array<string,mixed>
+	 */
+	private function url( string $path ): array {
+		$url = aafm_siteops_canonical_url( $path );
+		$this->assertIsArray( $url );
+		return $url;
+	}
+
+	public function test_serving_map_holds_true_false_or_null_for_ready_adapters_only(): void {
+		Stub::register(
+			array(
+				'fake_a'       => Stub::entry( 'Fake A' ),
+				'fake_b'       => Stub::entry( 'Fake B' ),
+				'fake_c'       => Stub::entry( 'Fake C' ),
+				'fake_partial' => Stub::entry( 'Fake Partial' ),
+				'fake_absent'  => Stub::entry( 'Fake Absent', array( 'detect' => array( array( 'function', 'aafm_no_such_function' ) ) ) ),
+			)
+		);
+		Stub::$serving = array(
+			'fake_b' => false,
+			'fake_c' => 'throw',
+		);
+		$this->assertSame(
+			array(
+				'fake_a' => true,
+				'fake_b' => false,
+				'fake_c' => null,
+			),
+			aafm_site_cache_serving_map()
+		);
+
+		Stub::$serving = array( 'fake_a' => 1 );
+		$this->assertFalse( aafm_site_cache_serving_map()['fake_a'], 'Only an exact true is serving.' );
+	}
+
+	public function test_fan_out_gives_one_row_per_adapter_in_registry_order(): void {
+		Stub::register(
+			array(
+				'fake_a' => Stub::entry( 'Fake A' ),
+				'fake_b' => Stub::entry( 'Fake B' ),
+			)
+		);
+		Stub::$purge = array( 'fake_b' => $this->result( 'requested', 'no_acknowledgement', null ) );
+		$url         = $this->url( '/about/' );
+
+		$rows = aafm_site_cache_fan_out(
+			'post',
+			array(
+				'post_id' => 7,
+				'url'     => $url,
+			),
+			aafm_site_cache_serving_map()
+		);
+
+		$this->assertSame(
+			array(
+				array(
+					'provider'   => 'fake_a',
+					'label'      => 'Fake A',
+					'state'      => 'purged',
+					'reason'     => '',
+					'was_cached' => true,
+				),
+				array(
+					'provider'   => 'fake_b',
+					'label'      => 'Fake B',
+					'state'      => 'requested',
+					'reason'     => 'no_acknowledgement',
+					'was_cached' => null,
+				),
+			),
+			$rows
+		);
+		$this->assertSame( array( array( 'purge_post', array( 7, $url ) ) ), Stub::purge_calls( 'fake_a' ) );
+
+		Stub::$calls = array();
+		aafm_site_cache_fan_out( 'url', array( 'url' => $url ), aafm_site_cache_serving_map() );
+		$this->assertSame( array( array( 'purge_url', array( $url ) ) ), Stub::purge_calls( 'fake_b' ) );
+
+		Stub::$calls = array();
+		aafm_site_cache_fan_out( 'all', array(), aafm_site_cache_serving_map() );
+		$this->assertSame( array( array( 'purge_all', array() ) ), Stub::purge_calls( 'fake_a' ) );
+	}
+
+	public function test_fan_out_skips_what_is_missing_unsupported_or_not_caching(): void {
+		update_option( 'active_plugins', array( 'fake-old/plugin.php' ) );
+		Stub::register(
+			array(
+				'fake_absent'  => Stub::entry( 'Fake Absent', array( 'detect' => array( array( 'function', 'aafm_no_such_function' ) ) ) ),
+				'fake_old'     => Stub::entry( 'Fake Old', array( 'detect' => array( array( 'function', 'aafm_no_such_function' ) ) ) ),
+				'fake_partial' => Stub::entry( 'Fake Partial' ),
+				'fake_a'       => Stub::entry( 'Fake A', array( 'ops' => array( 'post', 'all' ) ) ),
+				'fake_b'       => Stub::entry( 'Fake B' ),
+				'fake_c'       => Stub::entry( 'Fake C' ),
+			)
+		);
+		Stub::$serving = array(
+			'fake_b' => false,
+			'fake_c' => 'throw',
+		);
+
+		$rows = aafm_site_cache_fan_out( 'url', array( 'url' => $this->url( '/about/' ) ), aafm_site_cache_serving_map() );
+		$got  = array();
+		foreach ( $rows as $row ) {
+			$got[ $row['provider'] ] = $row['state'] . ' ' . $row['reason'];
+		}
+
+		$this->assertSame(
+			array(
+				'fake_old'     => 'skipped unsupported_version',
+				'fake_partial' => 'skipped unsupported_version',
+				'fake_a'       => 'skipped unsupported_operation',
+				'fake_b'       => 'skipped not_caching',
+				'fake_c'       => 'failed vendor_error',
+			),
+			$got,
+			'An undetected plugin that is not active has no row; one that is active reads as an unsupported version.'
+		);
+		$this->assertSame( array(), Stub::purge_calls( 'fake_a' ) );
+		$this->assertSame( array(), Stub::purge_calls( 'fake_b' ) );
+		$this->assertSame( array(), Stub::purge_calls( 'fake_c' ) );
+	}
+
+	public function test_fan_out_skips_an_adapter_that_does_not_work_in_a_cli_process(): void {
+		Stub::register(
+			array(
+				'fake_a' => Stub::entry( 'Fake A', array( 'cli' => false ) ),
+				'fake_b' => Stub::entry( 'Fake B' ),
+			)
+		);
+		add_filter( 'aafm_siteops_is_cli', '__return_true' );
+		$rows = aafm_site_cache_fan_out( 'all', array(), aafm_site_cache_serving_map() );
+		$this->assertSame( 'skipped', $rows[0]['state'] );
+		$this->assertSame( 'unsupported_operation', $rows[0]['reason'] );
+		$this->assertSame( 'purged', $rows[1]['state'] );
+	}
+
+	public function test_fan_out_contains_a_throw_and_a_malformed_answer_and_goes_on(): void {
+		Stub::register(
+			array(
+				'fake_a' => Stub::entry( 'Fake A' ),
+				'fake_b' => Stub::entry( 'Fake B' ),
+				'fake_c' => Stub::entry( 'Fake C' ),
+			)
+		);
+		Stub::$purge = array(
+			'fake_a' => 'throw',
+			'fake_b' => true,
+		);
+		$rows        = aafm_site_cache_fan_out( 'all', array(), aafm_site_cache_serving_map() );
+		$this->assertSame( array( 'failed', 'vendor_error', null ), array( $rows[0]['state'], $rows[0]['reason'], $rows[0]['was_cached'] ) );
+		$this->assertSame( array( 'failed', 'vendor_error', null ), array( $rows[1]['state'], $rows[1]['reason'], $rows[1]['was_cached'] ) );
+		$this->assertSame( 'purged', $rows[2]['state'] );
+
+		Stub::$purge = array(
+			'fake_a' => $this->result( 'requested', 'recached', true ),
+			'fake_b' => $this->result( 'purged', 'recached', true ),
+		);
+		$rows        = aafm_site_cache_fan_out( 'all', array(), aafm_site_cache_serving_map() );
+		$this->assertSame( 'failed vendor_error', $rows[0]['state'] . ' ' . $rows[0]['reason'], 'requested with recached is not a pair of the contract.' );
+		$this->assertSame( 'purged recached', $rows[1]['state'] . ' ' . $rows[1]['reason'] );
+	}
+
+	public function test_fan_out_routes_a_post_whose_url_is_the_home_url_to_the_url_purge(): void {
+		Stub::register(
+			array(
+				'fake_a' => Stub::entry( 'Fake A' ),
+				'fake_b' => Stub::entry( 'Fake B', array( 'ops' => array( 'post', 'all' ) ) ),
+			)
+		);
+		$home = $this->url( '/' );
+		$this->assertTrue( $home['is_home'] );
+
+		$rows = aafm_site_cache_fan_out(
+			'post',
+			array(
+				'post_id' => 9,
+				'url'     => $home,
+			),
+			aafm_site_cache_serving_map()
+		);
+		$this->assertSame( array( array( 'purge_url', array( $home ) ) ), Stub::purge_calls( 'fake_a' ) );
+		$this->assertSame( 'skipped unsupported_operation', $rows[1]['state'] . ' ' . $rows[1]['reason'], 'The home rules are the URL rules, so the operation tested is url.' );
+		$this->assertSame( array(), Stub::purge_calls( 'fake_b' ) );
+	}
+
+	public function test_fan_out_starts_no_adapter_after_the_wall_time(): void {
+		add_filter(
+			'aafm_site_purge_budget',
+			static function ( $settings ) {
+				$settings['wall_seconds'] = 1;
+				return $settings;
+			}
+		);
+		Stub::register(
+			array(
+				'fake_a' => Stub::entry( 'Fake A' ),
+				'fake_b' => Stub::entry( 'Fake B' ),
+			)
+		);
+		$purged      = $this->result( 'purged', '', true );
+		Stub::$purge = array(
+			'fake_a' => static function () use ( $purged ): array {
+				$until = microtime( true ) + 1.2;
+				while ( microtime( true ) < $until ) {
+					continue;
+				}
+				return $purged;
+			},
+		);
+
+		$rows = aafm_site_cache_fan_out( 'all', array(), aafm_site_cache_serving_map() );
+		$this->assertSame( 'purged', $rows[0]['state'] );
+		$this->assertSame( 'skipped over_budget', $rows[1]['state'] . ' ' . $rows[1]['reason'] );
+		$this->assertSame( array(), Stub::purge_calls( 'fake_b' ) );
+	}
+
+	public function test_recache_rule_cannot_confirm_when_the_scan_before_the_call_fails(): void {
+		if ( function_exists( 'posix_geteuid' ) && 0 === posix_geteuid() ) {
+			$this->markTestSkipped( 'Running as root: a directory cannot be made unreadable.' );
+		}
+		$one = $this->tmp();
+		$two = $this->tmp();
+		$this->put( $one . '/page/index.html' );
+		$this->put( $two . '/page/index.html' );
+		// The second copy cannot be read before the call and can after it, unchanged.
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Test fixture in a temporary directory.
+		chmod( $two . '/page', 0000 );
+
+		$result = aafm_site_cache_file_confirmed(
+			array( array( $one, 'page' ), array( $two, 'page' ) ),
+			'/^index\.html$/',
+			static function () use ( $one, $two ): void {
+				wp_delete_file( $one . '/page/index.html' );
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Test fixture in a temporary directory.
+				chmod( $two . '/page', 0755 );
+			},
+			true
+		);
+
+		$this->assertSame( $this->result( 'requested', 'no_acknowledgement', null ), $result );
+	}
 }

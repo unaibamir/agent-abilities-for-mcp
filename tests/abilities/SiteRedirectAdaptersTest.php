@@ -29,7 +29,7 @@ final class SiteRedirectAdaptersTest extends TestCase {
 		aafm_siteops_redirect_stub_activate_rankmath();
 		aafm_siteops_redirect_stub_activate_slim_seo();
 		Stub::$vendor['rm_modules'] = array( 'redirections', '404-monitor' );
-		// Rank Math's own attachment and archive redirects off, as redirect.sh sets them; a test that needs one on says so.
+		// Rank Math's own attachment and archive redirects off, so a path is not classified; a test that needs one on says so.
 		Stub::$vendor['rm_settings'] = array(
 			'general.attachment_redirect_urls' => false,
 			'titles.disable_date_archives'     => false,

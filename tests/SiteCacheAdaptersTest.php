@@ -605,4 +605,83 @@ final class SiteCacheAdaptersTest extends TestCase {
 		$this->put( $this->w3tc_dir( 'acc-b' ) . '/_index_slash.html_gzip' );
 		$this->assertResult( 'failed', 'still_cached', true, $this->call( 'aafm_cache_w3_total_cache_purge_all' ), 'A live copy the flush left behind.' );
 	}
+
+	private function wpo_ready(): void {
+		aafm_siteops_stub_wp_optimize_activate();
+		$this->load( 'wp_optimize' );
+	}
+
+	public function test_wp_optimize_registry_row_and_detection(): void {
+		$row = $this->assertRegistryRow(
+			'wp_optimize',
+			'wp-optimize/wp-optimize.php',
+			array( array( 'function', 'WP_Optimize' ) ),
+			'file',
+			array(
+				'cli'           => false,
+				'vendor_http'   => true,
+				'recursive_url' => false,
+				'rewarms'       => false,
+			)
+		);
+		aafm_siteops_stub_wp_optimize_activate();
+		$this->assertTrue( aafm_site_cache_detected( $row ) );
+		$row['detect'][] = array( 'function', 'aafm_no_such_vendor_function' );
+		$this->assertFalse( aafm_site_cache_detected( $row ) );
+	}
+
+	public function test_wp_optimize_serving_is_false_while_wp_cache_is_off(): void {
+		// Every other condition is met: both vendor constants are set and the plugin says enabled.
+		$this->wpo_ready();
+		$this->assertFalse( defined( 'WP_CACHE' ) && WP_CACHE, 'The WordPress test suite always runs with WP_CACHE false.' );
+		$this->assertFalse( $this->call( 'aafm_cache_wp_optimize_serving' ) );
+		// The true case needs a real site: acceptance case P1. The off switch: case N7.
+	}
+
+	public function test_wp_optimize_post_purge_looks_under_the_host_without_port_and_the_decoded_name(): void {
+		$this->wpo_ready();
+		$dir = Stub::root() . '/wpo/example.org/' . self::DEC;
+		$this->put( $dir . '/index.html' );
+		$this->put( $dir . '/index.html.gz' );
+		$this->put( $dir . '/mobile.index.html' );
+		Stub::$on['WPO_Page_Cache::delete_single_post_cache'] = static function () use ( $dir ): void {
+			Stub::rrmdir( $dir );
+		};
+		$url    = $this->url( '/' . self::LO . '/' );
+		$result = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_wp_optimize_purge_post( 41, $url );
+			}
+		);
+		$this->assertResult( 'purged', '', true, $result );
+		$this->assertSame( array( array( 'WPO_Page_Cache::delete_single_post_cache', array( 41 ) ) ), Stub::$calls );
+	}
+
+	public function test_wp_optimize_url_purge_results(): void {
+		$this->wpo_ready();
+		wp_mkdir_p( Stub::root() . '/wpo/example.org' );
+		$url  = $this->url( '/acc-a/' );
+		$call = static function () use ( $url ) {
+			return aafm_cache_wp_optimize_purge_url( $url );
+		};
+		// The stub returns true, as the real method does for a page that was never cached.
+		$this->assertResult( 'requested', 'not_found_in_cache', false, $this->call( $call ) );
+		$this->assertSame( array( array( 'WPO_Page_Cache::delete_cache_by_url', array( 'http://example.org/acc-a/' ) ) ), Stub::$calls );
+
+		$this->put( Stub::root() . '/wpo/example.org/acc-a/mobile.index.html' );
+		$this->assertResult( 'failed', 'still_cached', true, $this->call( $call ), 'A mobile copy the plugin left.' );
+	}
+
+	public function test_wp_optimize_site_purge_calls_purge_only(): void {
+		$this->wpo_ready();
+		$this->put( Stub::root() . '/wpo/example.org/acc-a/index.html' );
+		// A copy under an alias host must not keep the result at still_cached.
+		$this->put( Stub::root() . '/wpo/alias.example/acc-a/index.html' );
+		$dir               = Stub::root() . '/wpo/example.org/acc-a';
+		Stub::$on['purge'] = static function () use ( $dir ): void {
+			Stub::rrmdir( $dir );
+		};
+		$this->assertResult( 'purged', '', true, $this->call( 'aafm_cache_wp_optimize_purge_all' ) );
+		$this->assertSame( array( 'purge' ), Stub::names(), 'Never wpo_cache_flush(), which also flushes the object cache.' );
+	}
 }

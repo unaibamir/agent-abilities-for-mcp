@@ -1730,4 +1730,15 @@ if ( ! function_exists( 'w3tc_flush_posts' ) ) {
 	function w3tc_flush_posts( $extras = null ) {
 	}
 }
+if ( ! function_exists( 'WP_Optimize' ) ) {
+	/**
+	 * Minimal WP-Optimize signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @return mixed
+	 */
+	function WP_Optimize() {
+		return null;
+	}
+}
 // phpcs:enable

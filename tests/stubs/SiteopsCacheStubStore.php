@@ -449,3 +449,63 @@ function aafm_siteops_stub_w3_total_cache_activate(): void {
 		Aafm_Siteops_Vendor_Stub::hit( 'w3tc_flush_all' );
 	}
 }
+
+/**
+ * WP-Optimize's page cache object: is_enabled() and purge().
+ */
+final class Aafm_Siteops_Stub_Wpo_Cache {
+	public function is_enabled() {
+		return ! empty( Aafm_Siteops_Vendor_Stub::$state['wpo_enabled'] );
+	}
+	public function purge() {
+		return Aafm_Siteops_Vendor_Stub::hit( 'purge' );
+	}
+}
+
+/**
+ * WP-Optimize's main object: get_page_cache() only.
+ */
+final class Aafm_Siteops_Stub_Wpo {
+	public function get_page_cache() {
+		return new Aafm_Siteops_Stub_Wpo_Cache();
+	}
+}
+
+/**
+ * WP-Optimize's static purge entry points. Aliased to WPO_Page_Cache on activation.
+ */
+final class Aafm_Siteops_Stub_Wpo_Page_Cache {
+	public static function delete_single_post_cache( $post_id ) {
+		Aafm_Siteops_Vendor_Stub::hit( 'WPO_Page_Cache::delete_single_post_cache', array( $post_id ) );
+		return true;
+	}
+	public static function delete_cache_by_url( $url, $recursive = false ) {
+		Aafm_Siteops_Vendor_Stub::hit( 'WPO_Page_Cache::delete_cache_by_url', array( $url ) );
+		return true;
+	}
+}
+
+/**
+ * WP-Optimize: its two constants, the WP_Optimize() function and the WPO_Page_Cache class.
+ */
+function aafm_siteops_stub_wp_optimize_activate(): void {
+	Aafm_Siteops_Vendor_Stub::$state['wpo_enabled'] = true;
+	if ( ! defined( 'WPO_ADVANCED_CACHE' ) ) {
+		define( 'WPO_ADVANCED_CACHE', true );
+	}
+	if ( ! defined( 'WPO_CACHE_FILES_DIR' ) ) {
+		define( 'WPO_CACHE_FILES_DIR', Aafm_Siteops_Vendor_Stub::root() . '/wpo' );
+	}
+	if ( ! class_exists( 'WPO_Page_Cache', false ) ) {
+		class_alias( 'Aafm_Siteops_Stub_Wpo_Page_Cache', 'WPO_Page_Cache' );
+	}
+	if ( function_exists( 'WP_Optimize' ) ) {
+		return;
+	}
+	function WP_Optimize() {
+		return new Aafm_Siteops_Stub_Wpo();
+	}
+	function wpo_cache_flush() {
+		Aafm_Siteops_Vendor_Stub::hit( 'wpo_cache_flush' );
+	}
+}

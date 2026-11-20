@@ -851,6 +851,28 @@ function aafm_doctor_last_header_result(): ?bool {
 }
 
 /**
+ * Row: another plugin's MCP server on this site.
+ *
+ * WP Rocket starts its own MCP server and sign-in layer when this plugin's bundled adapter can be
+ * loaded. Both plugins use the same two discovery addresses and this plugin answers them first.
+ * The row makes no request and changes nothing. It exists only while that server is present.
+ *
+ * @return array<string,mixed>|null
+ */
+function aafm_doctor_check_vendor_mcp(): ?array {
+	if ( ! class_exists( 'WPMedia\MCP\OAuth\Bootstrap', false ) ) {
+		return null;
+	}
+
+	$label = __( 'Other MCP servers', 'agent-abilities-for-mcp' );
+	if ( aafm_oauth_enabled() ) {
+		return aafm_doctor_row( 'vendor_mcp', $label, 'warn', 'plugin', __( "WP Rocket also runs an MCP server on this site. Both plugins use the same two discovery addresses and this plugin answers them first, so an AI client that tries to connect to WP Rocket's server can be sent to this one and may refuse to connect. This plugin has not switched anything off.", 'agent-abilities-for-mcp' ) );
+	}
+
+	return aafm_doctor_row( 'vendor_mcp', $label, 'pass', 'plugin', __( 'WP Rocket also runs an MCP server on this site. It answers its own discovery addresses.', 'agent-abilities-for-mcp' ) );
+}
+
+/**
  * Run every check.
  *
  * @return list<array<string,mixed>> Rows, endpoint first.
@@ -874,9 +896,11 @@ function aafm_doctor_run_checks(): array {
 			aafm_doctor_check_oauth_http(),
 			aafm_doctor_check_permalinks(),
 			aafm_doctor_check_security_plugins(),
+			aafm_doctor_check_vendor_mcp(),
 		)
 	);
-	// The OAuth-over-HTTP row exists only in its warning case.
+	// The OAuth-over-HTTP row exists only in its warning case, and the other-MCP-server row only
+	// on a site that has one.
 	$rows = array_values( array_filter( $rows ) );
 	if ( $oauth_on ) {
 		$rows = array_merge( $rows, aafm_doctor_check_oauth_discovery() );

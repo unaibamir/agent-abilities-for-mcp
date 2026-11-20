@@ -821,3 +821,18 @@ function aafm_siteops_stub_proxy_cache_purge_activate(): void {
 		class_alias( 'Aafm_Siteops_Stub_Varnish', 'VarnishPurger' );
 	}
 }
+
+/**
+ * Stand-in for the class WP Rocket's MCP sign-in layer declares. Aliased on activation.
+ */
+final class Aafm_Siteops_Stub_Rocket_Mcp_Bootstrap {
+}
+
+/**
+ * WP Rocket's MCP server: only the class name the Connection Doctor and cache-status look for.
+ */
+function aafm_siteops_stub_wp_rocket_mcp_activate(): void {
+	if ( ! class_exists( 'WPMedia\MCP\OAuth\Bootstrap', false ) ) {
+		class_alias( 'Aafm_Siteops_Stub_Rocket_Mcp_Bootstrap', 'WPMedia\MCP\OAuth\Bootstrap' );
+	}
+}

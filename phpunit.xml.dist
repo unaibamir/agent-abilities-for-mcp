@@ -59,6 +59,7 @@
 			<file>tests/OptionReadSweepTest.php</file>
 			<file>tests/RouteMatchSweepTest.php</file>
 			<file>tests/SiteCacheAdaptersTest.php</file>
+			<file>tests/VendorMcpServerTest.php</file>
 		</testsuite>
 	</testsuites>
 	<!--

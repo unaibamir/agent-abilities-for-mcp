@@ -1680,4 +1680,54 @@ if ( ! function_exists( 'wpfc_clear_all_cache' ) ) {
 		return null;
 	}
 }
+if ( ! function_exists( 'w3tc_config' ) ) {
+	/**
+	 * Minimal W3 Total Cache signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @return mixed
+	 */
+	function w3tc_config() {
+		return null;
+	}
+}
+
+if ( ! function_exists( 'w3tc_flush_post' ) ) {
+	/**
+	 * Minimal W3 Total Cache signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @param int   $post_id Post id.
+	 * @param bool  $force   Flush although the post type is excluded.
+	 * @param mixed $extras  Extras.
+	 * @return void
+	 */
+	function w3tc_flush_post( $post_id, $force = false, $extras = null ) {
+	}
+}
+
+if ( ! function_exists( 'w3tc_flush_url' ) ) {
+	/**
+	 * Minimal W3 Total Cache signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @param string $w3tc_url URL.
+	 * @param mixed  $extras   Extras.
+	 * @return void
+	 */
+	function w3tc_flush_url( $w3tc_url, $extras = null ) {
+	}
+}
+
+if ( ! function_exists( 'w3tc_flush_posts' ) ) {
+	/**
+	 * Minimal W3 Total Cache signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @param mixed $extras Extras.
+	 * @return void
+	 */
+	function w3tc_flush_posts( $extras = null ) {
+	}
+}
 // phpcs:enable

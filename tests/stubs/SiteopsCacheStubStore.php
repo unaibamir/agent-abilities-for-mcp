@@ -387,3 +387,65 @@ function aafm_siteops_stub_wp_fastest_cache_activate(): void {
 		return Aafm_Siteops_Vendor_Stub::hit( 'wpfc_clear_all_cache', array( $minified ) );
 	}
 }
+
+/**
+ * W3 Total Cache's config object: get_boolean() only.
+ */
+final class Aafm_Siteops_Stub_W3tc_Config {
+	public function get_boolean( $key, $default_value = false ) {
+		return 'pgcache.enabled' === $key ? ! empty( Aafm_Siteops_Vendor_Stub::$state['w3tc_enabled'] ) : $default_value;
+	}
+}
+
+/**
+ * W3 Total Cache's CacheFlush component: the delayed run only.
+ */
+final class Aafm_Siteops_Stub_W3tc_Flush {
+	public function execute_delayed_operations() {
+		$answer = Aafm_Siteops_Vendor_Stub::hit( 'execute_delayed_operations' );
+		// The real return for a page cache flush, bench.md B3.
+		return null === $answer ? array( array( 'module' => 'pgcache' ) ) : $answer;
+	}
+}
+
+/**
+ * W3 Total Cache's dispatcher. Aliased to \W3TC\Dispatcher on activation.
+ */
+final class Aafm_Siteops_Stub_W3tc_Dispatcher {
+	public static function component( $class_name ) {
+		Aafm_Siteops_Vendor_Stub::hit( 'W3TC\Dispatcher::component', array( $class_name ) );
+		// A test sets w3tc_no_runner to model a plugin version without the internal method.
+		return empty( Aafm_Siteops_Vendor_Stub::$state['w3tc_no_runner'] ) ? new Aafm_Siteops_Stub_W3tc_Flush() : null;
+	}
+}
+
+/**
+ * W3 Total Cache: the constant and functions of its detect list, its flush functions and its dispatcher.
+ */
+function aafm_siteops_stub_w3_total_cache_activate(): void {
+	Aafm_Siteops_Vendor_Stub::$state['w3tc_enabled'] = true;
+	if ( ! defined( 'W3TC' ) ) {
+		define( 'W3TC', true );
+	}
+	if ( ! class_exists( 'W3TC\Dispatcher', false ) ) {
+		class_alias( 'Aafm_Siteops_Stub_W3tc_Dispatcher', 'W3TC\Dispatcher' );
+	}
+	if ( function_exists( 'w3tc_config' ) ) {
+		return;
+	}
+	function w3tc_config() {
+		return new Aafm_Siteops_Stub_W3tc_Config();
+	}
+	function w3tc_flush_post( $post_id, $force = false, $extras = null ) {
+		Aafm_Siteops_Vendor_Stub::hit( 'w3tc_flush_post', array( $post_id, $force ) );
+	}
+	function w3tc_flush_url( $w3tc_url, $extras = null ) {
+		Aafm_Siteops_Vendor_Stub::hit( 'w3tc_flush_url', array( $w3tc_url ) );
+	}
+	function w3tc_flush_posts( $extras = null ) {
+		Aafm_Siteops_Vendor_Stub::hit( 'w3tc_flush_posts' );
+	}
+	function w3tc_flush_all( $extras = null ) {
+		Aafm_Siteops_Vendor_Stub::hit( 'w3tc_flush_all' );
+	}
+}

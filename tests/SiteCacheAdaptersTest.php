@@ -462,4 +462,147 @@ final class SiteCacheAdaptersTest extends TestCase {
 		};
 		$this->assertResult( 'requested', 'variants_unchecked', true, $this->call( 'aafm_cache_wp_fastest_cache_purge_all' ) );
 	}
+
+	private function w3tc_dir( string $relative ): string {
+		// The page directory under Disk: Enhanced. Host directory, lower-case escapes.
+		return WP_CONTENT_DIR . '/cache/page_enhanced/example.org' . ( '' === $relative ? '' : '/' . $relative );
+	}
+
+	private function w3tc_ready(): void {
+		aafm_siteops_stub_w3_total_cache_activate();
+		$this->load( 'w3_total_cache' );
+		$this->cleanup[] = WP_CONTENT_DIR . '/cache/page_enhanced';
+	}
+
+	public function test_w3_total_cache_registry_row_and_detection(): void {
+		$row = $this->assertRegistryRow(
+			'w3_total_cache',
+			'w3-total-cache/w3-total-cache.php',
+			array( array( 'constant', 'W3TC' ), array( 'function', 'w3tc_config' ), array( 'function', 'w3tc_flush_post' ) ),
+			'file',
+			array(
+				'cli'           => true,
+				'vendor_http'   => true,
+				'recursive_url' => false,
+				'rewarms'       => false,
+			)
+		);
+		aafm_siteops_stub_w3_total_cache_activate();
+		$this->assertTrue( aafm_site_cache_detected( $row ) );
+		$row['detect'][] = array( 'constant', 'AAFM_NO_SUCH_VENDOR_CONSTANT' );
+		$this->assertFalse( aafm_site_cache_detected( $row ) );
+	}
+
+	public function test_w3_total_cache_serving_is_false_while_wp_cache_is_off(): void {
+		// Every other condition is met: the page cache setting is on.
+		$this->w3tc_ready();
+		$this->assertFalse( defined( 'WP_CACHE' ) && WP_CACHE, 'The WordPress test suite always runs with WP_CACHE false.' );
+		$this->assertFalse( $this->call( 'aafm_cache_w3_total_cache_serving' ) );
+		// The true case needs a real site: acceptance case P1. The off switch: case N7.
+	}
+
+	public function test_w3_total_cache_post_purge_is_never_purged_and_forces_the_delayed_run(): void {
+		$this->w3tc_ready();
+		$file                                   = $this->put( $this->w3tc_dir( self::LO ) . '/_index_slash.html' );
+		Stub::$on['execute_delayed_operations'] = static function () use ( $file ) {
+			// The real flush renames, it does not delete (bench3 B1 to B5).
+			rename( $file, $file . '_old' );
+			return array( array( 'module' => 'pgcache' ) );
+		};
+		$url                                    = $this->url( '/' . self::LO . '/' );
+		$result                                 = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_w3_total_cache_purge_post( 41, $url );
+			}
+		);
+		$this->assertResult( 'requested', 'stale_window', true, $result );
+		$this->assertSame( array( 'W3TC\Dispatcher::component', 'w3tc_flush_post', 'execute_delayed_operations' ), Stub::names() );
+		$this->assertSame( array( array( 41, true ) ), Stub::args( 'w3tc_flush_post' ) );
+		$this->assertSame( array( array( 'CacheFlush' ) ), Stub::args( 'W3TC\Dispatcher::component' ) );
+	}
+
+	public function test_w3_total_cache_url_purge_results(): void {
+		$this->w3tc_ready();
+		wp_mkdir_p( $this->w3tc_dir( '' ) );
+		$url  = $this->url( '/acc-a/' );
+		$call = static function () use ( $url ) {
+			return aafm_cache_w3_total_cache_purge_url( $url );
+		};
+		$this->assertResult( 'requested', 'not_found_in_cache', false, $this->call( $call ) );
+		$this->assertSame( array( array( 'http://example.org/acc-a/' ) ), Stub::args( 'w3tc_flush_url' ) );
+
+		$this->put( $this->w3tc_dir( 'acc-a' ) . '/_index_slash.html_gzip' );
+		$this->assertResult( 'failed', 'still_cached', true, $this->call( $call ), 'A live copy the flush left behind.' );
+
+		Stub::$on['execute_delayed_operations'] = static function () {
+			return array();
+		};
+		$this->assertResult( 'failed', 'nothing_sent', null, $this->call( $call ), 'The delayed run did not name the page cache.' );
+	}
+
+	public function test_w3_total_cache_page_path_that_leaves_the_cache_folder_is_a_vendor_error(): void {
+		$this->w3tc_ready();
+		$outside = Stub::root() . '/outside';
+		wp_mkdir_p( $outside );
+		wp_mkdir_p( $this->w3tc_dir( '' ) );
+		symlink( $outside, $this->w3tc_dir( 'acc-a' ) );
+		$url    = $this->url( '/acc-a/' );
+		$result = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_w3_total_cache_purge_url( $url );
+			}
+		);
+		$this->assertResult( 'failed', 'vendor_error', null, $result, 'Not nothing_sent: the plugin was never called.' );
+		$this->assertSame( array( 'W3TC\Dispatcher::component' ), Stub::names(), 'The runner was looked up; nothing was flushed.' );
+	}
+
+	public function test_w3_total_cache_without_the_internal_method_is_deferred(): void {
+		$this->w3tc_ready();
+		Stub::$state['w3tc_no_runner'] = true;
+		$url                           = $this->url( '/acc-a/' );
+		$result                        = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_w3_total_cache_purge_url( $url );
+			}
+		);
+		$this->assertResult( 'requested', 'deferred', null, $result );
+		$this->assertContains( 'w3tc_flush_url', Stub::names(), 'The flush is still issued.' );
+		$this->assertResult( 'requested', 'deferred', null, $this->call( 'aafm_cache_w3_total_cache_purge_all' ) );
+	}
+
+	public function test_w3_total_cache_another_engine_is_a_stale_window_without_evidence(): void {
+		$this->w3tc_ready();
+		// No page_enhanced directory: memcached, Redis or Disk: Basic.
+		$url    = $this->url( '/acc-a/' );
+		$result = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_w3_total_cache_purge_url( $url );
+			}
+		);
+		$this->assertResult( 'requested', 'stale_window', null, $result );
+		$this->assertResult( 'requested', 'deferred', null, $this->call( 'aafm_cache_w3_total_cache_purge_all' ) );
+	}
+
+	public function test_w3_total_cache_site_purge_is_a_stale_window_and_never_calls_flush_all(): void {
+		$this->w3tc_ready();
+		$file                                   = $this->put( $this->w3tc_dir( 'acc-a' ) . '/_index_slash.html' );
+		$old                                    = $this->put( $this->w3tc_dir( 'acc-b' ) . '/_index_slash.html_old' );
+		Stub::$on['execute_delayed_operations'] = static function () use ( $file ) {
+			// The real whole-site flush renames every live copy to *_old as well (acceptance 2026-11-20).
+			rename( $file, $file . '_old' );
+			return array( array( 'module' => 'pgcache' ) );
+		};
+		$this->assertResult( 'requested', 'stale_window', true, $this->call( 'aafm_cache_w3_total_cache_purge_all' ) );
+		$this->assertSame( array( 'W3TC\Dispatcher::component', 'w3tc_flush_posts', 'execute_delayed_operations' ), Stub::names() );
+		$this->assertFileExists( $old, 'A renamed copy is not a live one.' );
+	}
+
+	public function test_w3_total_cache_site_purge_results_from_the_live_copies_only(): void {
+		$this->w3tc_ready();
+		$this->put( $this->w3tc_dir( 'acc-a' ) . '/_index_slash.html_old' );
+		$this->assertResult( 'requested', 'not_found_in_cache', false, $this->call( 'aafm_cache_w3_total_cache_purge_all' ), 'Only renamed copies before the call.' );
+
+		$this->put( $this->w3tc_dir( 'acc-b' ) . '/_index_slash.html_gzip' );
+		$this->assertResult( 'failed', 'still_cached', true, $this->call( 'aafm_cache_w3_total_cache_purge_all' ), 'A live copy the flush left behind.' );
+	}
 }

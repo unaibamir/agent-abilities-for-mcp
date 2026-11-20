@@ -165,28 +165,87 @@ function aafm_redirect_slim_seo_match( string $path, array &$cache ): array {
 		return array( 'state' => 'unknown' );
 	}
 
-	// After the rules (template_redirect priority 1) the plugin redirects without a rule: the www
-	// redirect (priority 5, judged here on the site's own host, the only one the tool accepts),
-	// automatic redirects of attachment pages, author archives and changed slugs (priority 10, on
-	// by default) and the 404 redirect (priority 20). Checked against 4.11.6, Redirection.php and
-	// Redirection404.php.
-	$www    = (string) \SlimSEO\Redirection\Settings::get( 'redirect_www' );
-	$host   = strtolower( (string) wp_parse_url( home_url(), PHP_URL_HOST ) );
-	$reason = '';
+	// After the rules (template_redirect priority 1) the plugin redirects from its settings, in this
+	// order (4.11.6, Redirection.php and Redirection404.php), each with 301: the www redirect
+	// (priority 5, judged on the site's own host, the only one the tool accepts); automatic
+	// redirects (priority 10, on by default) of attachment pages to their file, of author archives
+	// with no posts or on a site with one user to the home page, and of a page not found whose
+	// address is a stored old address of a page; the 404 redirect (priority 20). Which kind of
+	// page a path is comes from aafm_site_redirect_path_class(); a page it cannot classify gives
+	// unknown with the setting's reason.
+	$home   = (string) home_url();
+	$host   = strtolower( (string) wp_parse_url( $home, PHP_URL_HOST ) );
+	$port   = wp_parse_url( $home, PHP_URL_PORT );
+	$port   = $port ? ':' . $port : '';
+	$scheme = (string) wp_parse_url( $home, PHP_URL_SCHEME );
+	$full   = aafm_site_redirect_home_path() . $path;
+	// The address as a browser sends it, which the plugin reads without decoding.
+	$sent = implode( '/', array_map( 'rawurlencode', explode( '/', $full ) ) );
+	$www  = (string) \SlimSEO\Redirection\Settings::get( 'redirect_www' );
 	if ( ( 'www-to-non' === $www && 0 === strpos( $host, 'www.' ) ) || ( 'non-to-www' === $www && 0 !== strpos( $host, 'www.' ) ) ) {
-		$reason = 'slim_seo_www_redirect';
-	} elseif ( \SlimSEO\Redirection\Settings::get( 'auto_redirection' ) ) {
-		$reason = 'slim_seo_auto_redirection';
-	} elseif ( \SlimSEO\Redirection\Settings::get( 'redirect_404_to' ) ) {
-		$reason = 'slim_seo_404_redirect';
+		$other = 0 === strpos( $host, 'www.' ) ? substr( $host, 4 ) : 'www.' . $host;
+		return array(
+			'state'   => 'matched',
+			'id'      => '',
+			'target'  => \SlimSEO\Redirection\Helper::normalize_url( $scheme . '://' . $other . $port . $sent ),
+			'code'    => 301,
+			'setting' => 'slim_seo_www_redirect',
+		);
 	}
 
-	return '' === $reason
-		? array( 'state' => 'no_match' )
-		: array(
+	$auto  = (bool) \SlimSEO\Redirection\Settings::get( 'auto_redirection' );
+	$to404 = (string) \SlimSEO\Redirection\Settings::get( 'redirect_404_to' );
+	if ( ! $auto && '' === $to404 ) {
+		return array( 'state' => 'no_match' );
+	}
+	$class = aafm_site_redirect_path_class( $full );
+	if ( 'unclassified' === $class['class'] ) {
+		return array(
 			'state'  => 'unknown',
-			'reason' => $reason,
+			'reason' => $auto ? 'slim_seo_auto_redirection' : 'slim_seo_404_redirect',
 		);
+	}
+	$auto_to = '';
+	if ( $auto && 'attachment' === $class['class'] ) {
+		$auto_to = wp_validate_redirect( esc_url_raw( (string) wp_get_attachment_url( (int) $class['id'] ) ), admin_url() );
+	} elseif ( $auto && 'author' === $class['class'] && ( empty( $class['has_posts'] ) || 1 === count(
+		get_users(
+			array(
+				'number' => 2,
+				'fields' => 'ID',
+			)
+		)
+	) ) ) {
+		$auto_to = home_url( '/' );
+	} elseif ( $auto && 'not_found' === $class['class'] ) {
+		global $wpdb;
+		$request = \SlimSEO\Redirection\Helper::normalize_url( $scheme . '://' . (string) wp_parse_url( $home, PHP_URL_HOST ) . $port . $sent );
+		$found   = \SlimSEO\Redirection\Settings::get( 'case_sensitive' )
+			? aafm_wpdb_scalar( (string) $wpdb->prepare( 'SELECT post_id FROM %i WHERE meta_key = %s AND meta_value = %s LIMIT 1', $wpdb->postmeta, '_ss_old_permalink', $request ) )
+			: aafm_wpdb_scalar( (string) $wpdb->prepare( 'SELECT post_id FROM %i WHERE meta_key = %s AND LOWER( meta_value ) = LOWER( %s ) LIMIT 1', $wpdb->postmeta, '_ss_old_permalink', $request ) );
+		if ( $found['ok'] && (int) $found['value'] > 0 ) {
+			$auto_to = wp_validate_redirect( (string) get_permalink( (int) $found['value'] ), admin_url() );
+		}
+	}
+	if ( '' !== $auto_to ) {
+		return array(
+			'state'   => 'matched',
+			'id'      => '',
+			'target'  => $auto_to,
+			'code'    => 301,
+			'setting' => 'slim_seo_auto_redirection',
+		);
+	}
+
+	return ( '' !== $to404 && 'not_found' === $class['class'] )
+		? array(
+			'state'   => 'matched',
+			'id'      => '',
+			'target'  => 'custom' === $to404 ? (string) \SlimSEO\Redirection\Settings::get( 'redirect_404_to_url' ) : $home,
+			'code'    => 301,
+			'setting' => 'slim_seo_404_redirect',
+		)
+		: array( 'state' => 'no_match' );
 }
 
 /**

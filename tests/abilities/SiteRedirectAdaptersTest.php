@@ -1109,31 +1109,97 @@ final class SiteRedirectAdaptersTest extends TestCase {
 		$this->assertSame( array( 'state' => 'unknown' ), $this->match( 'slim_seo', '/nothing' ) );
 	}
 
-	public function test_slim_seo_site_wide_redirects_it_cannot_evaluate_give_unknown(): void {
+	public function test_slim_seo_settings_redirect_only_the_pages_they_apply_to(): void {
 		$this->only( array( 'slim_seo' ) );
+		$this->set_permalink_structure( '/%postname%/' );
 		Stub::$vendor['slim'] = array( 'k1' => aafm_siteops_redirect_stub_slim_rule( 'old-a', 'hello-world/' ) );
-		$unknown              = static function ( string $reason ): array {
+		$writer               = self::factory()->user->create(
+			array(
+				'role'          => 'author',
+				'user_nicename' => 'acc-writer',
+			)
+		);
+		self::factory()->user->create(
+			array(
+				'role'          => 'author',
+				'user_nicename' => 'acc-idle',
+			)
+		);
+		$parent  = self::factory()->post->create(
+			array(
+				'post_name'   => 'acc-parent',
+				'post_author' => $writer,
+			)
+		);
+		$image   = self::factory()->attachment->create_object(
+			array(
+				'file'        => 'acc-img.png',
+				'post_parent' => $parent,
+				'post_name'   => 'acc-img',
+			)
+		);
+		$moved   = self::factory()->post->create(
+			array(
+				'post_type' => 'page',
+				'post_name' => 'acc-new',
+			)
+		);
+		$setting = static function ( string $target, string $reason ): array {
+			return array(
+				'state'   => 'matched',
+				'id'      => '',
+				'target'  => $target,
+				'code'    => 301,
+				'setting' => $reason,
+			);
+		};
+		$unknown = static function ( string $reason ): array {
 			return array(
 				'state'  => 'unknown',
 				'reason' => $reason,
 			);
 		};
+		add_post_meta( $moved, '_ss_old_permalink', 'acc-old' );
 
-		// Each acts after the rules, so a rule still answers first.
+		// Automatic redirects: attachment pages, author archives with no posts or on a site with one
+		// user, and old addresses of pages whose slug changed. Each acts after the rules.
 		Stub::$vendor['slim_settings'] = array( 'auto_redirection' => 1 );
-		$this->assertSame( $unknown( 'slim_seo_auto_redirection' ), $this->match( 'slim_seo', '/nothing' ) );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'slim_seo', '/nothing' ), 'A page not found with no old address is not redirected.' );
 		$this->assertSame( 'k1', $this->match( 'slim_seo', '/old-a' )['id'] ?? null );
+		$this->assertSame( $setting( (string) wp_get_attachment_url( $image ), 'slim_seo_auto_redirection' ), $this->match( 'slim_seo', '/acc-parent/acc-img/' ) );
+		$this->assertSame( $setting( home_url( '/' ), 'slim_seo_auto_redirection' ), $this->match( 'slim_seo', '/author/acc-idle/' ) );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'slim_seo', '/author/acc-writer/' ), 'An author with posts on a site with several users stays.' );
+		$this->assertSame( $setting( (string) get_permalink( $moved ), 'slim_seo_auto_redirection' ), $this->match( 'slim_seo', '/ACC-OLD/' ), 'The old address is compared without case, as the plugin compares it.' );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'slim_seo', '/acc-parent/' ) );
+
+		// The 404 redirect, on a page not found only.
 		Stub::$vendor['slim_settings'] = array( 'redirect_404_to' => 'homepage' );
-		$this->assertSame( $unknown( 'slim_seo_404_redirect' ), $this->match( 'slim_seo', '/nothing' ) );
+		$this->assertSame( $setting( home_url(), 'slim_seo_404_redirect' ), $this->match( 'slim_seo', '/nothing' ) );
+		$this->assertSame( $setting( home_url(), 'slim_seo_404_redirect' ), $this->match( 'slim_seo', '/acc-old' ), 'With automatic redirects off, an old address is just a page not found.' );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'slim_seo', '/acc-parent/' ) );
+		Stub::$vendor['slim_settings'] = array(
+			'redirect_404_to'     => 'custom',
+			'redirect_404_to_url' => 'https://example.org/gone/',
+		);
+		$this->assertSame( $setting( 'https://example.org/gone/', 'slim_seo_404_redirect' ), $this->match( 'slim_seo', '/nothing' ) );
 
 		// The www redirect, judged on this site's own host, the only one the tool accepts.
 		Stub::$vendor['slim_settings'] = array( 'redirect_www' => 'non-to-www' );
-		$this->assertSame( $unknown( 'slim_seo_www_redirect' ), $this->match( 'slim_seo', '/nothing' ) );
+		$this->assertSame( $setting( 'http://www.example.org/nothing', 'slim_seo_www_redirect' ), $this->match( 'slim_seo', '/nothing' ) );
+		$this->assertSame( 'k1', $this->match( 'slim_seo', '/old-a' )['id'] ?? null, 'A rule answers first.' );
 		Stub::$vendor['slim_settings'] = array( 'redirect_www' => 'www-to-non' );
 		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'slim_seo', '/nothing' ), 'This site has no www to remove.' );
 		update_option( 'home', 'http://www.example.org' );
-		$this->assertSame( $unknown( 'slim_seo_www_redirect' ), $this->match( 'slim_seo', '/nothing' ) );
-		Stub::$vendor['slim_settings'] = array( 'redirect_www' => 'non-to-www' );
+		$this->assertSame( $setting( 'http://example.org/nothing', 'slim_seo_www_redirect' ), $this->match( 'slim_seo', '/nothing' ) );
+		update_option( 'home', 'http://example.org' );
+
+		// Where the page cannot be classified, a setting that depends on it gives unknown.
+		$this->set_permalink_structure( '' );
+		Stub::$vendor['slim_settings'] = array( 'auto_redirection' => 1 );
+		$this->assertSame( $unknown( 'slim_seo_auto_redirection' ), $this->match( 'slim_seo', '/nothing' ) );
+		Stub::$vendor['slim_settings'] = array( 'redirect_404_to' => 'homepage' );
+		$this->assertSame( $unknown( 'slim_seo_404_redirect' ), $this->match( 'slim_seo', '/nothing' ) );
+		Stub::$vendor['slim_settings'] = array();
 		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'slim_seo', '/nothing' ) );
 	}
 

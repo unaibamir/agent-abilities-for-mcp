@@ -92,6 +92,13 @@ abstract class TestCase extends WP_UnitTestCase {
 		delete_option( 'aafm_oauth_connect_roles' );
 		delete_option( 'aafm_trusted_proxy' );
 		delete_option( 'aafm_oauth_default_preset' );
+		// The 1.13.0 backup gate options and its hourly event escape the rollback for the same TRUNCATE
+		// reason: a test that turns the gate on and then resets the plugin commits both, and the next
+		// test would read a gate that is on and a check that is scheduled.
+		foreach ( array( 'aafm_backup_gate', 'aafm_backup_gate_abilities', 'aafm_backup_gate_accept_remote', 'aafm_backup_gate_accept_size', 'aafm_backup_verify' ) as $backup_option ) {
+			delete_option( $backup_option );
+		}
+		wp_clear_scheduled_hook( 'aafm_backup_verify' );
 		// Every test runs as an install that has already stamped its OAuth schema. The suite's database
 		// is rebuilt each run, so without this the first install of the run would look brand new and be
 		// seeded Administrators only (aafm_seed_fresh_install_defaults()). Fresh-install tests drop the row.

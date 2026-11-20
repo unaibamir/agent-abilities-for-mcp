@@ -520,6 +520,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/playbooks.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/integrations.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/bridge-directory.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/admin/backup-gate.php';
 	if ( is_admin() ) {
 		add_action( 'admin_init', 'aafm_bridge_review_sync', 20 );
 		add_action( 'admin_menu', 'aafm_register_admin_menu' );
@@ -564,6 +565,7 @@ function aafm_bootstrap() {
 		// The same answer, arriving as a plain link when the notice's footer script never ran.
 		add_action( 'admin_post_aafm_review_request', 'aafm_handle_review_request_post' );
 		add_action( 'wp_ajax_aafm_notify_test', 'aafm_ajax_notify_test' );
+		add_action( 'wp_ajax_aafm_backup_verify_now', 'aafm_ajax_backup_verify_now' );
 		add_action( 'admin_post_aafm_notify_dismiss', 'aafm_handle_notify_dismiss' );
 		add_action( 'admin_notices', 'aafm_notify_admin_notice' );
 		add_action( 'admin_notices', 'aafm_render_review_request_notice' );

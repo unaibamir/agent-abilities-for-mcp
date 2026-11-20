@@ -57,4 +57,43 @@ final class MsSiteBackupsTest extends TestCase {
 		add_filter( 'aafm_backup_gate_vouch', '__return_true' );
 		$this->assertSame( '', aafm_backup_gate_refusal( 'aafm/delete-post' ) );
 	}
+
+	public function test_verify_now_answers_with_an_error_on_a_network(): void {
+		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		grant_super_admin( $user_id );
+		wp_set_current_user( $user_id );
+		$nonce             = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']    = $nonce;
+		$_REQUEST['nonce'] = $nonce;
+		add_filter( 'wp_doing_ajax', '__return_true' );
+		$die     = static function (): void {
+			throw new \WPDieException( 'aafm-die' );
+		};
+		$handler = static fn() => $die;
+		add_filter( 'wp_die_ajax_handler', $handler );
+
+		ob_start();
+		try {
+			aafm_ajax_backup_verify_now();
+		} catch ( \WPDieException $e ) {
+			unset( $e );
+		}
+		$json = json_decode( (string) ob_get_clean(), true );
+
+		remove_filter( 'wp_die_ajax_handler', $handler );
+		remove_filter( 'wp_doing_ajax', '__return_true' );
+		unset( $_POST['nonce'], $_REQUEST['nonce'] );
+		$this->assertFalse( $json['success'] ?? true );
+		$this->assertStringContainsString( 'multisite network', (string) ( $json['data']['message'] ?? '' ) );
+	}
+
+	public function test_the_check_is_never_scheduled_on_a_network(): void {
+		update_option( 'aafm_backup_gate', '1' );
+		aafm_backup_verify_reconcile();
+		$this->assertFalse( wp_next_scheduled( 'aafm_backup_verify' ), 'The gate is on, but the check does not run on a network.' );
+
+		wp_schedule_event( time() + 60, 'hourly', 'aafm_backup_verify' );
+		aafm_backup_verify_reconcile();
+		$this->assertFalse( wp_next_scheduled( 'aafm_backup_verify' ), 'An event left from before is cleared.' );
+	}
 }

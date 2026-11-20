@@ -45,8 +45,9 @@ add_filter(
 		$port    = is_array( $parts ) && isset( $parts['port'] ) ? (int) $parts['port'] : 0;
 		$path    = is_array( $parts ) && isset( $parts['path'] ) ? $parts['path'] : '/';
 		$method  = isset( $args['method'] ) ? $args['method'] : 'GET';
-		// This site's port only: inside the container, localhost on port 80 is the main site.
-		$allowed = in_array( $host, array( 'localhost', '127.0.0.1' ), true ) && 8072 === $port;
+		// This site and the proxy listener of cache.sh, the list cache-mu.php allows: inside the
+		// container, localhost on port 80 is the main site.
+		$allowed = in_array( $host . ':' . $port, array( 'localhost:8072', '127.0.0.1:8072', '127.0.0.1:8099' ), true );
 		file_put_contents( '/tmp/aafm_accept_siteops/outbound.log', $method . ' ' . $host . ' ' . $path . ( $allowed ? '' : ' BLOCKED' ) . "\n", FILE_APPEND | LOCK_EX );
 		return $allowed ? $pre : new WP_Error( 'blocked', 'Blocked by the acceptance outbound logger.' );
 	},

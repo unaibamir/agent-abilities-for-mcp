@@ -1,7 +1,8 @@
 <?php
 /**
  * Site Ops redirect read helpers: the value rules for stored redirect text and for not-found
- * paths, the stored-target model, the protected path list and the chain follower.
+ * paths, the stored-target model, the protected path list, the chain follower and the path
+ * classifier that the adapters use for the redirects a plugin makes from a setting.
  *
  * Nothing here writes, and nothing here gates a write. Loaded on first use by
  * aafm_siteops_redirect_load().
@@ -350,6 +351,10 @@ function aafm_site_redirect_chain( string $path, array $ready_slugs ): array {
 					'target'   => (string) $answer['target'],
 					'code'     => (int) $answer['code'],
 				);
+				if ( isset( $answer['setting'] ) ) {
+					// The plugin setting that redirects, where no stored rule does.
+					$hop['setting'] = (string) $answer['setting'];
+				}
 				break;
 			}
 		}
@@ -372,6 +377,9 @@ function aafm_site_redirect_chain( string $path, array $ready_slugs ): array {
 				'target'   => $hop['target'],
 				'code'     => $hop['code'],
 			);
+			if ( isset( $hop['setting'] ) ) {
+				$first_match['setting'] = $hop['setting'];
+			}
 		}
 
 		if ( in_array( $hop['code'], array( 403, 404, 410 ), true ) ) {
@@ -533,4 +541,138 @@ function aafm_siteops_table_exists( string $table ): bool {
 	$wpdb->suppress_errors( $suppress );
 
 	return $found['ok'];
+}
+
+/**
+ * What WordPress's own main query makes of a path, for the redirects a plugin makes from a setting
+ * rather than a stored rule: attachment pages, author and date archives, pages not found.
+ *
+ * It copies the first half of url_to_postid() and WP::parse_request(): the same rewrite rule
+ * loop, the same check of verbose page rules, the same public query variables. Then one WP_Query
+ * that asks for what a visitor sees (published posts and attachments), then the rules of
+ * WP::handle_404(). It never calls WP::parse_request(), whose hooks other plugins use to send
+ * headers or redirect, and it writes nothing; callbacks on pre_get_posts run inside the query, as
+ * they do inside url_to_postid(). A page that plugin code serves outside the rewrite rules is
+ * classed as WordPress alone would class it.
+ *
+ * Unclassified: plain permalinks, rewrite rules this request has not built, an index.php/ address,
+ * a callback on pre_handle_404 when the page would otherwise be a 404 (the callback can stop the
+ * 404, and the reset of the flags that comes with it), and any error.
+ *
+ * @param string $path Full canonical decoded path, home path included.
+ * @return array<string,mixed> 'class' is attachment (with 'id' and 'parent'), author (with
+ *                             'has_posts'), date, not_found, other or unclassified.
+ */
+function aafm_site_redirect_path_class( string $path ): array {
+	global $wp_rewrite, $wp;
+
+	try {
+		$request = trim( $path, '/' );
+		$home    = trim( aafm_site_redirect_home_path(), '/' );
+		if ( '' !== $home ) {
+			$request = trim( (string) preg_replace( '|^' . preg_quote( $home, '|' ) . '|i', '', $request ), '/' );
+		}
+		if ( '' === $request || 'index.php' === $request ) {
+			return array( 'class' => 'other' );
+		}
+
+		// The rules this request already holds: WP::parse_request() built them for it. Building them
+		// here with wp_rewrite_rules() would store them when the option is empty.
+		$rules = ( $wp_rewrite instanceof WP_Rewrite && '' !== (string) $wp_rewrite->permalink_structure && is_array( $wp_rewrite->rules ) ) ? $wp_rewrite->rules : array();
+		if ( empty( $rules ) || ! ( $wp instanceof WP ) || 0 === strpos( $request, 'index.php/' ) ) {
+			return array( 'class' => 'unclassified' );
+		}
+
+		$perma = null;
+		foreach ( (array) $rules as $match => $query ) {
+			if ( 1 !== preg_match( '#^' . $match . '#', $request, $matches ) ) {
+				continue;
+			}
+			if ( $wp_rewrite->use_verbose_page_rules && 1 === preg_match( '/pagename=\$matches\[([0-9]+)\]/', (string) $query, $varmatch ) ) {
+				$page = get_page_by_path( (string) ( $matches[ $varmatch[1] ] ?? '' ) );
+				if ( ! $page instanceof WP_Post ) {
+					continue;
+				}
+				$status = get_post_status_object( $page->post_status );
+				if ( $status && ! $status->public && ! $status->protected && ! $status->private && $status->exclude_from_search ) {
+					continue;
+				}
+			}
+			parse_str( addslashes( WP_MatchesMapRegex::apply( (string) preg_replace( '!^.+\?!', '', (string) $query ), $matches ) ), $perma );
+			break;
+		}
+		if ( ! is_array( $perma ) ) {
+			// No rule matched: WordPress answers 404.
+			return array( 'class' => 'not_found' );
+		}
+
+		$type_vars = array();
+		foreach ( get_post_types( array(), 'objects' ) as $type => $object ) {
+			if ( is_post_type_viewable( $object ) && $object->query_var ) {
+				$type_vars[ $object->query_var ] = $type;
+			}
+		}
+		$vars = array();
+		foreach ( (array) $wp->public_query_vars as $var ) {
+			if ( ! isset( $perma[ $var ] ) ) {
+				continue;
+			}
+			$vars[ $var ] = $perma[ $var ];
+			if ( ! empty( $vars[ $var ] ) && isset( $type_vars[ $var ] ) ) {
+				$vars['post_type'] = $type_vars[ $var ];
+				$vars['name']      = $vars[ $var ];
+			}
+		}
+		if ( isset( $vars['post_type'] ) && is_string( $vars['post_type'] ) && ! in_array( $vars['post_type'], get_post_types( array( 'publicly_queryable' => true ) ), true ) ) {
+			unset( $vars['post_type'] );
+		}
+		$vars                  = wp_resolve_numeric_slug_conflicts( $vars );
+		$vars['post_status']   = array( 'publish', 'inherit' );
+		$vars['no_found_rows'] = true;
+		$query                 = new WP_Query( $vars );
+
+		if ( $query->is_404() ) {
+			return array( 'class' => 'not_found' );
+		}
+		$set_404 = true;
+		$page    = trim( (string) ( $vars['page'] ?? '' ), '/' );
+		if ( $query->is_robots() || $query->is_favicon() || '' !== (string) $query->get( 'sitemap' ) || '' !== (string) $query->get( 'sitemap-stylesheet' ) ) {
+			$set_404 = false;
+		} elseif ( ! empty( $query->posts ) ) {
+			$set_404 = false;
+			if ( '' !== $page && $query->is_singular() && $query->post instanceof WP_Post ) {
+				$next    = substr_count( $query->post->post_content, '<!--nextpage-->' );
+				$set_404 = 0 === $next || (int) $page > $next + 1;
+			}
+			if ( '' !== $page && $query->is_posts_page ) {
+				$set_404 = true;
+			}
+		} elseif ( ! $query->is_paged() ) {
+			$author  = $query->get( 'author' );
+			$set_404 = ! ( ( $query->is_author() && is_numeric( $author ) && $author > 0 && is_user_member_of_blog( (int) $author ) )
+				|| ( ( $query->is_tag() || $query->is_category() || $query->is_tax() || $query->is_post_type_archive() ) && $query->get_queried_object() )
+				|| $query->is_home() || $query->is_search() || $query->is_feed() );
+		}
+
+		if ( $set_404 ) {
+			return array( 'class' => false !== has_filter( 'pre_handle_404' ) ? 'unclassified' : 'not_found' );
+		}
+		if ( $query->is_attachment() && $query->post instanceof WP_Post ) {
+			return array(
+				'class'  => 'attachment',
+				'id'     => (int) $query->post->ID,
+				'parent' => (int) $query->post->post_parent,
+			);
+		}
+		if ( $query->is_author() ) {
+			return array(
+				'class'     => 'author',
+				'has_posts' => ! empty( $query->posts ),
+			);
+		}
+
+		return array( 'class' => $query->is_date() ? 'date' : 'other' );
+	} catch ( \Throwable $e ) {
+		return array( 'class' => 'unclassified' );
+	}
 }

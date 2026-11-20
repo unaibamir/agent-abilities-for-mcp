@@ -16,10 +16,18 @@ use Aafm_Siteops_Redirect_Stub as Stub;
 
 final class SiteRedirectReadTest extends TestCase {
 
+	/**
+	 * How many times WordPress had parsed a request when the test started.
+	 *
+	 * @var int
+	 */
+	private $parse_requests = 0;
+
 	public function set_up(): void {
 		parent::set_up();
 		Stub::reset();
 		aafm_siteops_redirect_load();
+		$this->parse_requests = did_action( 'parse_request' );
 	}
 
 	/**
@@ -435,6 +443,139 @@ final class SiteRedirectReadTest extends TestCase {
 		);
 		$this->assertSame( array( 'state' => 'no_match' ), aafm_site_redirect_match( 'fake_a', '/x', $cache ), 'A reason belongs to unknown only.' );
 		$this->assertArrayNotHasKey( 'reason', $this->chain( '/x' )['evaluated'][0] );
+	}
+
+	public function test_a_match_from_a_plugin_setting_names_the_setting_instead_of_a_rule(): void {
+		$this->fakes( array( 'fake_a' => Stub::entry( 'Fake A' ) ) );
+		$cache   = array();
+		$setting = array(
+			'state'   => 'matched',
+			'id'      => '',
+			'target'  => 'http://example.org/',
+			'code'    => 301,
+			'setting' => 'rank_math_404_fallback',
+		);
+
+		Stub::$fake['fake_a'] = array( 'match_return' => $setting );
+		$this->assertSame( $setting, aafm_site_redirect_match( 'fake_a', '/gone', $cache ) );
+		$result = $this->chain( '/gone' );
+		$this->assertSame(
+			array(
+				'provider' => 'fake_a',
+				'id'       => '',
+				'target'   => 'http://example.org/',
+				'code'     => 301,
+				'setting'  => 'rank_math_404_fallback',
+			),
+			$result['first_match']
+		);
+		$this->assertSame( 'rank_math_404_fallback', $result['chain'][0]['setting'] );
+		$this->assertSame( 'matched', $result['evaluated'][0]['result'] );
+
+		$setting['setting']   = 'Not a code!';
+		Stub::$fake['fake_a'] = array( 'match_return' => $setting );
+		$this->assertSame( array( 'state' => 'unknown' ), aafm_site_redirect_match( 'fake_a', '/gone', $cache ), 'A match must name a rule or a setting.' );
+		unset( $setting['setting'] );
+		Stub::$fake['fake_a'] = array( 'match_return' => $setting );
+		$this->assertSame( array( 'state' => 'unknown' ), aafm_site_redirect_match( 'fake_a', '/gone', $cache ) );
+
+		Stub::$fake['fake_a']['rows'] = array( Stub::rule( '7', '/old', '/new/' ) );
+		unset( Stub::$fake['fake_a']['match_return'] );
+		$this->assertArrayNotHasKey( 'setting', $this->chain( '/old' )['first_match'], 'A rule match carries no setting key.' );
+	}
+
+	public function test_path_class_follows_the_rewrite_rules_and_handle_404(): void {
+		$this->set_permalink_structure( '/%postname%/' );
+		$author = self::factory()->user->create(
+			array(
+				'role'          => 'author',
+				'user_nicename' => 'acc-writer',
+			)
+		);
+		$idle   = self::factory()->user->create(
+			array(
+				'role'          => 'author',
+				'user_nicename' => 'acc-idle',
+			)
+		);
+		$parent = self::factory()->post->create(
+			array(
+				'post_name'   => 'acc-parent',
+				'post_author' => $author,
+				'post_date'   => '2025-01-10 10:00:00',
+			)
+		);
+		$image  = self::factory()->attachment->create_object(
+			array(
+				'file'           => 'acc-img.png',
+				'post_parent'    => $parent,
+				'post_name'      => 'acc-img',
+				'post_mime_type' => 'image/png',
+			)
+		);
+		self::factory()->post->create(
+			array(
+				'post_name'   => 'acc-private',
+				'post_status' => 'private',
+			)
+		);
+
+		$this->assertSame( array( 'class' => 'other' ), aafm_site_redirect_path_class( '/' ) );
+		$this->assertSame( array( 'class' => 'other' ), aafm_site_redirect_path_class( '/acc-parent/' ) );
+		$this->assertSame(
+			array(
+				'class'  => 'attachment',
+				'id'     => $image,
+				'parent' => $parent,
+			),
+			aafm_site_redirect_path_class( '/acc-parent/acc-img/' )
+		);
+		$this->assertSame(
+			array(
+				'class'     => 'author',
+				'has_posts' => true,
+			),
+			aafm_site_redirect_path_class( '/author/acc-writer/' )
+		);
+		$this->assertSame(
+			array(
+				'class'     => 'author',
+				'has_posts' => false,
+			),
+			aafm_site_redirect_path_class( '/author/acc-idle/' ),
+			'An author with no posts is not a 404 page, as WP::handle_404() says.'
+		);
+		$this->assertSame( array( 'class' => 'date' ), aafm_site_redirect_path_class( '/2025/' ) );
+		$this->assertSame( array( 'class' => 'not_found' ), aafm_site_redirect_path_class( '/1999/' ), 'A date archive with no posts is a 404 page.' );
+		$this->assertSame( array( 'class' => 'not_found' ), aafm_site_redirect_path_class( '/acc-nothing-here/' ) );
+		$this->assertSame( array( 'class' => 'not_found' ), aafm_site_redirect_path_class( '/acc-private/' ), 'A private post is not found for a visitor.' );
+		$this->assertSame( array( 'class' => 'not_found' ), aafm_site_redirect_path_class( '/author/no-such-writer/' ) );
+
+		update_option( 'home', 'http://example.org/sub' );
+		$this->assertSame( array( 'class' => 'date' ), aafm_site_redirect_path_class( '/sub/2025/' ), 'The home path is removed first, as WP::parse_request() removes it.' );
+		$this->assertSame( array( 'class' => 'other' ), aafm_site_redirect_path_class( '/sub/' ) );
+		$this->assertSame( 0, did_action( 'parse_request' ) - $this->parse_requests, 'The request is never parsed by WordPress itself.' );
+	}
+
+	public function test_path_class_is_unclassified_where_it_cannot_decide(): void {
+		$this->set_permalink_structure( '/%postname%/' );
+		self::factory()->post->create( array( 'post_name' => 'acc-found' ) );
+
+		add_filter( 'pre_handle_404', '__return_false' );
+		$this->assertSame( array( 'class' => 'unclassified' ), aafm_site_redirect_path_class( '/acc-nothing-here/' ), 'A callback on pre_handle_404 can keep a page from being a 404.' );
+		$this->assertSame( array( 'class' => 'other' ), aafm_site_redirect_path_class( '/acc-found/' ), 'A page that has content is not a 404 page whatever the callback does.' );
+		remove_filter( 'pre_handle_404', '__return_false' );
+
+		$this->assertSame( array( 'class' => 'unclassified' ), aafm_site_redirect_path_class( '/index.php/acc-found/' ) );
+
+		global $wp_rewrite;
+		$wp_rewrite->rules = array();
+		delete_option( 'rewrite_rules' );
+		$this->assertSame( array( 'class' => 'unclassified' ), aafm_site_redirect_path_class( '/acc-found/' ), 'Rules this request has not built are not built here.' );
+		$this->assertFalse( get_option( 'rewrite_rules' ), 'Building them would store them: a read writes nothing.' );
+
+		$this->set_permalink_structure( '' );
+		$this->assertSame( array( 'class' => 'unclassified' ), aafm_site_redirect_path_class( '/acc-found/' ), 'Plain permalinks have no rewrite rules to follow.' );
 	}
 
 	public function test_output_rule_applies_each_value_rule(): void {

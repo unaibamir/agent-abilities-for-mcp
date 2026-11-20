@@ -244,12 +244,22 @@ function aafm_site_redirect_match( string $slug, string $path, array &$cache ): 
 		);
 	}
 	if ( 'matched' === $value['state'] && isset( $value['id'], $value['target'], $value['code'] ) && is_string( $value['id'] ) && is_string( $value['target'] ) && is_int( $value['code'] ) ) {
-		return array(
+		// A redirect made by a plugin setting rather than a stored rule names that setting; a
+		// match must name a rule or a setting.
+		$setting = isset( $value['setting'] ) && is_string( $value['setting'] ) && 1 === preg_match( '/^[a-z0-9_]{1,64}$/', $value['setting'] ) ? $value['setting'] : '';
+		if ( '' === $value['id'] && '' === $setting ) {
+			return $unknown;
+		}
+		$matched = array(
 			'state'  => 'matched',
 			'id'     => $value['id'],
 			'target' => $value['target'],
 			'code'   => $value['code'],
 		);
+		if ( '' !== $setting ) {
+			$matched['setting'] = $setting;
+		}
+		return $matched;
 	}
 
 	return $unknown;

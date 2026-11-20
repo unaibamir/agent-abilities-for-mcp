@@ -79,12 +79,14 @@ teardown_all() {
 }
 
 # mcp_post <json body> [session id]: prints the HTTP code; body in $OUT/body.json, headers in $OUT/head.txt.
+# REST is how the address reaches the REST API: index.php?rest_route=/ unless a case sets wp-json/.
+REST='index.php?rest_route=/'
 mcp_post() {
 	local sid=()
 	[ -n "${2:-}" ] && sid=(-H "Mcp-Session-Id: $2" -H 'MCP-Protocol-Version: 2025-06-18')
 	curl -s --max-time 60 -D "$OUT/head.txt" -o "$OUT/body.json" -w '%{http_code}' -u "admin:$APP_PW" \
 		-H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
-		${sid[@]+"${sid[@]}"} -X POST "$URL/index.php?rest_route=/$ROUTE" -d "$1"
+		${sid[@]+"${sid[@]}"} -X POST "$URL/$REST$ROUTE" -d "$1"
 }
 
 # call <ability> <args json>: one tools/call. The JSON-RPC answer is left in $OUT/body.json.
@@ -154,6 +156,9 @@ unknown_case() {
 	if [ "$(sc ".evaluated[] | select(.provider == \"$1\") | .result + \" \" + (.reason // \"\")")" != "unknown $2" ]; then
 		fail U1 "$1 $3: wanted unknown $2, the tool said $(sc '.evaluated' | tr -d '\n' | head -c 200)"; return 1
 	fi
+	if ! sc ".evaluated[] | select(.provider == \"$1\") | .verify // \"\"" | grep -q 'without following redirects'; then
+		fail U1 "$1 $3: the unknown answer carries no hint to check it with a real request"; return 1
+	fi
 	if [ "$4" = 1 ]; then
 		real=$(hit "$3")
 		case "$real" in
@@ -162,6 +167,28 @@ unknown_case() {
 		esac
 	else
 		pass U1 "$1 $3: the tool answers unknown, $2"
+	fi
+}
+
+# setting_case <slug> <setting> <path>: a real request for <path> is redirected by a setting of the
+# plugin, and the tool answers matched for this plugin, naming that setting, with the same code
+# and the same address, host included.
+setting_case() {
+	local r code loc state tcode target
+	r=$(curl -s --max-time 30 -o /dev/null -w '%{http_code} %{redirect_url}' "$ORIGIN$3"); code=${r%% *}; loc=${r#* }
+	if ! call aafm/site-test-redirect "$(jq -nc --arg u "$3" '{url:$u}')" || ! ran; then
+		fail U1 "$1 $3: the tool did not answer: $(errtext | head -c 200)"; return 1
+	fi
+	state=$(sc ".evaluated[] | select(.provider == \"$1\") | .result"); tcode=$(sc '.first_match.code'); target=$(sc '.first_match.target')
+	case "$target" in http://*|https://*) ;; *) target="$ORIGIN$(norm_target "$1" "$target")" ;; esac
+	case "$code" in
+		301|302|303|307|308) ;;
+		*) fail U1 "$1 $3: a real request was not redirected ($code), so setting $2 cannot be checked"; return 1 ;;
+	esac
+	if [ "$state" = matched ] && [ "$(sc '.first_match.setting')" = "$2" ] && [ "$(sc '.first_match.id')" = "" ] && [ "$tcode" = "$code" ] && [ "${target%/}" = "${loc%/}" ]; then
+		pass U1 "$1 $3: curl $code $loc, tool matched by setting $2 with $tcode $target"
+	else
+		fail U1 "$1 $3: curl $code $loc, tool state=$state setting=$(sc '.first_match.setting') code=$tcode target=$target"
 	fi
 }
 
@@ -206,20 +233,13 @@ switch ( $action ) {
 		if ( 'rankmath' === $slug ) {
 			add_option( 'rank_math_registration_skip', true );
 			\RankMath\Helper::update_modules( array( 'redirections' => 'on', '404-monitor' => 'on' ) );
-			// Its own attachment and date archive redirects are on after install; case U1 turns each on again.
-			foreach ( array( 'general' => 'attachment_redirect_urls', 'titles' => 'disable_date_archives' ) as $group => $field ) {
-				$o = get_option( 'rank-math-options-' . $group, array() );
-				$o = is_array( $o ) ? $o : array();
-				$o[ $field ] = 'off';
-				update_option( 'rank-math-options-' . $group, $o );
-			}
+			// Its own attachment and date archive redirects stay on, as after install: every case runs with them.
 		}
 		if ( 'slim_seo' === $slug ) {
 			$o = get_option( 'slim_seo', array() );
 			$o = is_array( $o ) ? $o : array();
 			$o['enable_404_logs'] = 1;
-			// Automatic redirects are on by default; case U1 turns them on again.
-			$o['auto_redirection'] = 0;
+			// Automatic redirects stay on, the default: every case runs with them.
 			update_option( 'slim_seo', $o );
 			( new \SlimSEO\Redirection\Database\Log404() )->create_table();
 		}
@@ -264,6 +284,21 @@ switch ( $action ) {
 		echo wp_json_encode( array( 'caf' => aafm_acc_rule( 'safe_redirect_manager', '/caf-old', '/acc-page/', 301 ), 'code' => aafm_acc_rule( 'safe_redirect_manager', '/acc-code', '/acc-page/', 301 ) ) );
 		break;
 
+	case 'attach':
+		// An image attached to acc-a, with attachment pages on so WordPress itself does not redirect them.
+		update_option( 'wp_attachment_pages_enabled', 1 );
+		$parent = get_page_by_path( 'acc-a', OBJECT, 'post' );
+		$id     = wp_insert_attachment( array( 'post_title' => 'acc-img', 'post_name' => 'acc-img', 'post_mime_type' => 'image/png', 'post_status' => 'inherit' ), 'acc-img.png', $parent ? $parent->ID : 0 );
+		echo (string) wp_parse_url( (string) get_permalink( $id ), PHP_URL_PATH );
+		break;
+
+	case 'slug':
+		// A page renamed after it was published, so Slim SEO stores its old address.
+		$id = wp_insert_post( array( 'post_type' => 'page', 'post_status' => 'publish', 'post_title' => 'acc-slug-old', 'post_name' => 'acc-slug-old' ) );
+		wp_update_post( array( 'ID' => $id, 'post_name' => 'acc-slug-new' ) );
+		echo '/acc-slug-old';
+		break;
+
 	case 'broken':
 		echo aafm_acc_rule( $slug, '(unclosed', '/acc-page/', 301, 'regex' );
 		break;
@@ -284,7 +319,7 @@ switch ( $action ) {
 		if ( '-' === $value ) {
 			unset( $o[ $field ] );
 		} else {
-			$o[ $field ] = ctype_digit( $value ) ? (int) $value : $value;
+			$o[ $field ] = ctype_digit( $value ) ? (int) $value : ( '[' === substr( $value, 0, 1 ) ? json_decode( $value, true ) : $value );
 		}
 		update_option( $name, $o );
 		echo 'set';
@@ -418,7 +453,7 @@ build_sub() {
 
 # --- Cases ----------------------------------------------------------------------
 run_adapter() {
-	local s=$1 ids e d page_id foreign before after n p path
+	local s=$1 ids e d page_id foreign before after n p path attach renamed
 	install_plugin "$s"
 
 	ids=$(seed main "$s" "${ORIGIN#*://}")
@@ -505,18 +540,25 @@ run_adapter() {
 	same_answer T3 "$s" /acc-none-pattern
 	[ "$(echo "$ids" | jq '.patterns | length')" = 0 ] && skip T3 "$s: this plugin has exact rules only"
 
-	# U1: a site-wide redirect that is not a rule makes the plugin answer unknown and name it.
+	# U1: a redirect a plugin makes from a setting. Where the setting applies to the path, a real
+	# request is redirected and the tool reports a match by that setting with the same code and
+	# address; where it cannot apply, both say no redirect; where the tool cannot tell, it answers
+	# unknown with the setting's name and a hint to check with a real request.
 	case "$s" in
 		rankmath)
+			attach=$(seed attach)
 			seed set "$s" general.redirections_fallback homepage >/dev/null
-			unknown_case "$s" rank_math_404_fallback /acc-none 1
+			setting_case "$s" rank_math_404_fallback /acc-none
+			same_answer U1 "$s" /acc-page/
 			seed set "$s" general.redirections_fallback default >/dev/null
-			seed set "$s" general.attachment_redirect_urls on >/dev/null
-			unknown_case "$s" rank_math_attachment_redirect /acc-none 0
-			seed set "$s" general.attachment_redirect_urls off >/dev/null
-			seed set "$s" titles.disable_date_archives on >/dev/null
-			unknown_case "$s" rank_math_archive_redirect /2025/ 1
-			seed set "$s" titles.disable_date_archives off >/dev/null
+			# The attachment and date archive redirects are on, as after install.
+			setting_case "$s" rank_math_attachment_redirect "$attach"
+			setting_case "$s" rank_math_archive_redirect /2025/
+			same_answer U1 "$s" /1999/
+			same_answer U1 "$s" /acc-none
+			seed set "$s" titles.disable_author_archives on >/dev/null
+			setting_case "$s" rank_math_archive_redirect /author/admin/
+			seed set "$s" titles.disable_author_archives off >/dev/null
 			cat > "$WPROOT/wp-content/mu-plugins/aafm-accept-rm-pre-search.php" <<'PHP'
 <?php
 // redirect.sh case U1: another plugin's filter on Rank Math's pre_search, which runs before its rules.
@@ -525,31 +567,39 @@ add_filter( 'rank_math/redirection/pre_search', function ( $pre, $uri ) {
 }, 10, 2 );
 PHP
 			unknown_case "$s" rank_math_pre_search_filter /acc-pre-search 1
-			rm -f "$WPROOT/wp-content/mu-plugins/aafm-accept-rm-pre-search.php" ;;
+			rm -f "$WPROOT/wp-content/mu-plugins/aafm-accept-rm-pre-search.php"
+			W rewrite structure '' --quiet >/dev/null 2>&1
+			unknown_case "$s" rank_math_attachment_redirect /acc-none 0
+			W rewrite structure '/%postname%/' --quiet >/dev/null 2>&1 ;;
 		slim_seo)
+			attach=$(seed attach); renamed=$(seed slug)
 			seed set "$s" redirect_404_to homepage >/dev/null
-			unknown_case "$s" slim_seo_404_redirect /acc-none 1
+			setting_case "$s" slim_seo_404_redirect /acc-none
+			same_answer U1 "$s" /acc-page/
 			seed set "$s" redirect_404_to - >/dev/null
-			seed set "$s" auto_redirection 1 >/dev/null
-			unknown_case "$s" slim_seo_auto_redirection /acc-none 0
-			seed set "$s" auto_redirection 0 >/dev/null
+			# Automatic redirects are on, the default.
+			same_answer U1 "$s" /acc-none
+			setting_case "$s" slim_seo_auto_redirection "$attach"
+			setting_case "$s" slim_seo_auto_redirection /author/admin/
+			setting_case "$s" slim_seo_auto_redirection "$renamed"
 			seed set "$s" redirect_www non-to-www >/dev/null
-			unknown_case "$s" slim_seo_www_redirect /acc-none 1
-			seed set "$s" redirect_www - >/dev/null ;;
+			setting_case "$s" slim_seo_www_redirect /acc-none
+			seed set "$s" redirect_www - >/dev/null
+			W rewrite structure '' --quiet >/dev/null 2>&1
+			unknown_case "$s" slim_seo_auto_redirection /acc-none 0
+			W rewrite structure '/%postname%/' --quiet >/dev/null 2>&1 ;;
 		redirection)
-			# The site move would also move this script's own MCP requests, which use index.php?rest_route=.
-			cat > "$WPROOT/wp-content/mu-plugins/aafm-accept-red-protect.php" <<'PHP'
-<?php
-// redirect.sh case U1: keep the MCP endpoint of this script out of Redirection's site move.
-add_filter( 'redirect_relocate_protected', function ( $paths ) {
-	$paths[] = '/index.php';
-	return $paths;
-} );
-PHP
+			# The site move would also move this script's own MCP requests, so they go to /wp-json/, a
+			# path the plugin never moves, while it is on.
+			REST=wp-json/
 			seed set "$s" relocate http://example.invalid >/dev/null
-			unknown_case "$s" redirection_relocate /acc-none 1
+			setting_case "$s" redirection_relocate /acc-none
+			setting_case "$s" redirection_relocate /acc-old-a
 			seed set "$s" relocate '' >/dev/null
-			rm -f "$WPROOT/wp-content/mu-plugins/aafm-accept-red-protect.php" ;;
+			REST='index.php?rest_route=/'
+			seed set "$s" permalinks '["/%year%/%postname%/"]' >/dev/null
+			unknown_case "$s" redirection_permalink_migration /2025/acc-a/ 1
+			seed set "$s" permalinks '[]' >/dev/null ;;
 	esac
 
 	# T5 and T6: Safe Redirect Manager only.

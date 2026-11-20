@@ -562,3 +562,23 @@ function aafm_siteops_stub_hummingbird_activate(): void {
 	}
 	Aafm_Siteops_Vendor_Stub::listen( 'wphb_clear_page_cache' );
 }
+
+/**
+ * Jetpack Boost: its version constant, the function that exists only while the module is on, and
+ * its four purge actions.
+ */
+function aafm_siteops_stub_jetpack_boost_activate(): void {
+	if ( ! defined( 'JETPACK_BOOST_VERSION' ) ) {
+		define( 'JETPACK_BOOST_VERSION', '4.8.2' );
+	}
+	Aafm_Siteops_Vendor_Stub::listen( 'jetpack_boost_clear_page_cache_post' );
+	Aafm_Siteops_Vendor_Stub::listen( 'jetpack_boost_clear_page_cache_url' );
+	Aafm_Siteops_Vendor_Stub::listen( 'jetpack_boost_clear_page_cache_home', 0 );
+	Aafm_Siteops_Vendor_Stub::listen( 'jetpack_boost_clear_page_cache_all', 0 );
+	if ( function_exists( 'jetpack_boost_delete_cache_for_url' ) ) {
+		return;
+	}
+	function jetpack_boost_delete_cache_for_url( $url ) {
+		Aafm_Siteops_Vendor_Stub::hit( 'jetpack_boost_delete_cache_for_url', array( $url ) );
+	}
+}

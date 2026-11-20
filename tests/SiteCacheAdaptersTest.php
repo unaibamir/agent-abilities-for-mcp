@@ -953,4 +953,154 @@ final class SiteCacheAdaptersTest extends TestCase {
 		$this->assertResult( 'purged', '', true, $this->call( 'aafm_cache_hummingbird_purge_all' ), 'A host directory that is gone holds nothing.' );
 		$this->assertSame( array( array(), array() ), Stub::args( 'clear_cache' ), 'A full clear takes no argument.' );
 	}
+
+	private function jb_dir( string $relative ): string {
+		return WP_CONTENT_DIR . '/boost-cache/cache/example.org' . ( '' === $relative ? '' : '/' . $relative );
+	}
+
+	private function jb_ready(): void {
+		aafm_siteops_stub_jetpack_boost_activate();
+		$this->load( 'jetpack_boost' );
+		update_option( 'jetpack_boost_status_page-cache', true );
+		$this->cleanup[] = WP_CONTENT_DIR . '/boost-cache';
+	}
+
+	private function jb_clears_the_spelling_given(): callable {
+		// A stand-in for the real URL purge: it clears only the directory of the spelling it is given.
+		return function ( $url ): void {
+			Stub::rrmdir( $this->jb_dir( trim( (string) wp_parse_url( $url, PHP_URL_PATH ), '/' ) ) );
+		};
+	}
+
+	public function test_jetpack_boost_registry_row_and_detection(): void {
+		$row = $this->assertRegistryRow(
+			'jetpack_boost',
+			'jetpack-boost/jetpack-boost.php',
+			array( array( 'constant', 'JETPACK_BOOST_VERSION' ) ),
+			'file',
+			array(
+				'cli'           => false,
+				'vendor_http'   => false,
+				'recursive_url' => true,
+				'rewarms'       => false,
+			)
+		);
+		aafm_siteops_stub_jetpack_boost_activate();
+		$this->assertTrue( aafm_site_cache_detected( $row ) );
+		$row['detect'][] = array( 'constant', 'AAFM_NO_SUCH_VENDOR_CONSTANT' );
+		$this->assertFalse( aafm_site_cache_detected( $row ) );
+	}
+
+	public function test_jetpack_boost_serving_is_false_while_wp_cache_is_off(): void {
+		// Every other condition is met: the module's function exists and its status option is on.
+		$this->jb_ready();
+		$this->assertFalse( defined( 'WP_CACHE' ) && WP_CACHE, 'The WordPress test suite always runs with WP_CACHE false.' );
+		$this->assertFalse( $this->call( 'aafm_cache_jetpack_boost_serving' ) );
+		// The true case needs a real site: acceptance case P1. The off switch: case N7.
+	}
+
+	public function test_jetpack_boost_ascii_url_is_one_url_action(): void {
+		$this->jb_ready();
+		$this->put( $this->jb_dir( 'acc-a' ) . '/0123456789abcdef0123456789abcdef.html' );
+		Stub::$on['jetpack_boost_clear_page_cache_url'] = $this->jb_clears_the_spelling_given();
+		$url    = $this->url( '/acc-a/' );
+		$result = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_jetpack_boost_purge_url( $url );
+			}
+		);
+		$this->assertResult( 'purged', '', true, $result );
+		$this->assertSame( array( array( 'jetpack_boost_clear_page_cache_url', array( 'http://example.org/acc-a/' ) ) ), Stub::$calls );
+	}
+
+	public function test_jetpack_boost_never_cached_and_untouched_pages(): void {
+		$this->jb_ready();
+		wp_mkdir_p( $this->jb_dir( '' ) );
+		$url  = $this->url( '/acc-a/' );
+		$call = static function () use ( $url ) {
+			return aafm_cache_jetpack_boost_purge_url( $url );
+		};
+		$this->assertResult( 'requested', 'not_found_in_cache', false, $this->call( $call ) );
+		$this->put( $this->jb_dir( 'acc-a' ) . '/0123456789abcdef0123456789abcdef.html' );
+		$this->assertResult( 'failed', 'still_cached', true, $this->call( $call ), 'The action ran and the page file is still there.' );
+	}
+
+	public function test_jetpack_boost_non_ascii_post_is_the_post_action_then_the_upper_case_url(): void {
+		$this->jb_ready();
+		$this->put( $this->jb_dir( self::LO ) . '/0123456789abcdef0123456789abcdef.html' );
+		$this->put( $this->jb_dir( self::UP ) . '/0123456789abcdef0123456789abcdef.html' );
+		$lower = $this->jb_dir( self::LO );
+		Stub::$on['jetpack_boost_clear_page_cache_post'] = static function () use ( $lower ): void {
+			Stub::rrmdir( $lower );
+		};
+		Stub::$on['jetpack_boost_clear_page_cache_url']  = $this->jb_clears_the_spelling_given();
+		$url    = $this->url( '/' . self::LO . '/' );
+		$result = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_jetpack_boost_purge_post( 41, $url );
+			}
+		);
+		$this->assertResult( 'purged', '', true, $result );
+		$this->assertSame(
+			array(
+				array( 'jetpack_boost_clear_page_cache_post', array( 41 ) ),
+				array( 'jetpack_boost_clear_page_cache_url', array( 'http://example.org/' . self::UP . '/' ) ),
+			),
+			Stub::$calls
+		);
+	}
+
+	public function test_jetpack_boost_copy_under_the_other_spelling_that_survives_is_a_variant_failure(): void {
+		$this->jb_ready();
+		$this->put( $this->jb_dir( self::LO ) . '/0123456789abcdef0123456789abcdef.html' );
+		if ( is_dir( $this->jb_dir( self::UP ) ) ) {
+			// A case-insensitive disk (a macOS or Windows host mount) keeps both spellings in one directory.
+			$this->markTestSkipped( 'WP_CONTENT_DIR folds case here, so no second copy can exist to survive.' );
+		}
+		$this->put( $this->jb_dir( self::UP ) . '/0123456789abcdef0123456789abcdef.html' );
+		$lower = $this->jb_dir( self::LO );
+		// A vendor that clears the lower-case copy and ignores the second call.
+		Stub::$on['jetpack_boost_clear_page_cache_url'] = static function ( $url ) use ( $lower ): void {
+			if ( false !== strpos( $url, '%c3' ) ) {
+				Stub::rrmdir( $lower );
+			}
+		};
+		$url    = $this->url( '/' . self::LO . '/' );
+		$result = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_jetpack_boost_purge_url( $url );
+			}
+		);
+		$this->assertResult( 'failed', 'variant_still_cached', true, $result );
+	}
+
+	public function test_jetpack_boost_home_url_uses_the_home_action_never_the_url_action(): void {
+		$this->jb_ready();
+		$this->put( $this->jb_dir( '' ) . '/0123456789abcdef0123456789abcdef.html' );
+		$this->put( $this->jb_dir( '' ) . '/index.html' );
+		$home = $this->jb_dir( '' ) . '/0123456789abcdef0123456789abcdef.html';
+		Stub::$on['jetpack_boost_clear_page_cache_home'] = static function () use ( $home ): void {
+			unlink( $home );
+		};
+		$url    = $this->url( '/' );
+		$result = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_jetpack_boost_purge_url( $url );
+			}
+		);
+		// The placeholder index.html that is left is not a cached page.
+		$this->assertResult( 'purged', '', true, $result );
+		$this->assertSame( array( 'jetpack_boost_clear_page_cache_home' ), Stub::names() );
+	}
+
+	public function test_jetpack_boost_site_purge_fires_the_all_action(): void {
+		$this->jb_ready();
+		$this->put( $this->jb_dir( 'acc-a' ) . '/0123456789abcdef0123456789abcdef.html' );
+		$base = $this->jb_dir( '' );
+		Stub::$on['jetpack_boost_clear_page_cache_all'] = static function () use ( $base ): void {
+			Stub::rrmdir( $base );
+		};
+		$this->assertResult( 'purged', '', true, $this->call( 'aafm_cache_jetpack_boost_purge_all' ) );
+		$this->assertSame( array( 'jetpack_boost_clear_page_cache_all' ), Stub::names() );
+	}
 }

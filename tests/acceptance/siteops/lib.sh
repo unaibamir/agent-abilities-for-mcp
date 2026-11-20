@@ -114,9 +114,11 @@ call_text() {
 	jq -r '.result.content[0].text // .error.message // empty' "$ACC_ROOT/body.json"
 }
 
-# snapshot <outfile>: what a read must leave unchanged, as sorted JSON.
+# snapshot <outfile>: what a read must leave unchanged, as sorted JSON. Anything that is not a
+# snapshot, such as a REST error body, leaves the file empty, so two failed reads never compare equal.
 snapshot() {
 	curl -s --max-time 60 -u "admin:$ACC_APP_PW" "$ACC_URL/index.php?rest_route=/aafm-accept/v1/snapshot" | jq -S . > "$1"
+	jq -e 'has("options")' "$1" > /dev/null 2>&1 || { : > "$1"; return 1; }
 }
 
 # outbound_reset: empty the outbound log. outbound_log: print it.

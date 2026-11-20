@@ -42,10 +42,11 @@ add_filter(
 		}
 		$parts   = wp_parse_url( (string) $url );
 		$host    = is_array( $parts ) && isset( $parts['host'] ) ? strtolower( $parts['host'] ) : '';
+		$port    = is_array( $parts ) && isset( $parts['port'] ) ? (int) $parts['port'] : 0;
 		$path    = is_array( $parts ) && isset( $parts['path'] ) ? $parts['path'] : '/';
 		$method  = isset( $args['method'] ) ? $args['method'] : 'GET';
-		$site    = strtolower( (string) wp_parse_url( home_url( '/' ), PHP_URL_HOST ) );
-		$allowed = in_array( $host, array( $site, '127.0.0.1' ), true );
+		// This site's port only: inside the container, localhost on port 80 is the main site.
+		$allowed = in_array( $host, array( 'localhost', '127.0.0.1' ), true ) && 8072 === $port;
 		file_put_contents( '/tmp/aafm_accept_siteops/outbound.log', $method . ' ' . $host . ' ' . $path . ( $allowed ? '' : ' BLOCKED' ) . "\n", FILE_APPEND | LOCK_EX );
 		return $allowed ? $pre : new WP_Error( 'blocked', 'Blocked by the acceptance outbound logger.' );
 	},

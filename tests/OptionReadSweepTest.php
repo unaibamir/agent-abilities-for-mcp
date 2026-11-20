@@ -98,6 +98,8 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/siteops/cache/wp-super-cache.php|aafm_cache_wp_super_cache_purge_url|1' => 'N',
 		'includes/siteops/cache/wp-fastest-cache.php|aafm_cache_wp_fastest_cache_serving|1' => 'N',
 		'includes/siteops/cache/jetpack-boost.php|aafm_cache_jetpack_boost_serving|1' => 'N',
+		'includes/siteops/redirects/eps-301.php|aafm_redirect_eps_301_list_404s|1' => 'N',
+		'includes/siteops/redirects/eps-301.php|aafm_redirect_eps_301_list_404s|2' => 'N',
 	);
 
 	/**
@@ -373,7 +375,7 @@ final class OptionReadSweepTest extends TestCase {
 			array(
 				'G' => 21,
 				'L' => 3,
-				'N' => 48,
+				'N' => 50,
 			),
 			array(
 				'G' => count( array_keys( self::GET_OPTION, 'G', true ) ),

@@ -749,7 +749,7 @@ function aafm_site_redirect_path_class( string $path, bool $with_vars = false ):
 				'post_status'            => $statuses,
 				'no_found_rows'          => true,
 				'update_post_term_cache' => false,
-				'suppress_filters'       => true,
+				'suppress_filters'       => true, // phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.SuppressFilters_suppress_filters -- Deliberate: no plugin code may run in this read-only classification query.
 			)
 		);
 

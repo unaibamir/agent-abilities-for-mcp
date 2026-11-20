@@ -626,3 +626,48 @@ function aafm_siteops_stub_speedycache_activate(): void {
 		class_alias( 'Aafm_Siteops_Stub_Sc_Util', 'SpeedyCache\Util' );
 	}
 }
+
+/**
+ * Breeze's option reader. Aliased to Breeze_Options_Reader on activation.
+ */
+final class Aafm_Siteops_Stub_Breeze_Options {
+	public static function get_option_value( $option_name = '', $hierarchy = false, $root = false ) {
+		return 'breeze-active' === $option_name ? ( Aafm_Siteops_Vendor_Stub::$state['breeze_active'] ?? '1' ) : false;
+	}
+}
+
+/**
+ * Breeze's purge class. Aliased to Breeze_PurgeCache on activation.
+ */
+final class Aafm_Siteops_Stub_Breeze_Purge {
+	public static function breeze_cache_flush( $flush_cache = true, $clear_ocp = true, $purge_all_html_folder = false ) {
+		Aafm_Siteops_Vendor_Stub::hit( 'Breeze_PurgeCache::breeze_cache_flush', array( $flush_cache, $clear_ocp, $purge_all_html_folder ) );
+	}
+}
+
+/**
+ * Breeze: its version constant, its two functions, its two classes and its post purge action.
+ */
+function aafm_siteops_stub_breeze_activate(): void {
+	if ( ! defined( 'BREEZE_VERSION' ) ) {
+		define( 'BREEZE_VERSION', '2.6.5' );
+	}
+	if ( ! class_exists( 'Breeze_Options_Reader', false ) ) {
+		class_alias( 'Aafm_Siteops_Stub_Breeze_Options', 'Breeze_Options_Reader' );
+	}
+	if ( ! class_exists( 'Breeze_PurgeCache', false ) ) {
+		class_alias( 'Aafm_Siteops_Stub_Breeze_Purge', 'Breeze_PurgeCache' );
+	}
+	Aafm_Siteops_Vendor_Stub::listen( 'purge_post_cache' );
+	// Never fired by the adapter. Listened to so a test can prove it.
+	Aafm_Siteops_Vendor_Stub::listen( 'breeze_clear_all_cache', 0 );
+	if ( function_exists( 'breeze_get_cache_base_path' ) ) {
+		return;
+	}
+	function breeze_get_cache_base_path( $is_network = false, $blog_id_requested = 0 ) {
+		return Aafm_Siteops_Vendor_Stub::root() . '/breeze/';
+	}
+	function breeze_purge_local_cache_for_urls( array $urls, string $cache_base_path ) {
+		Aafm_Siteops_Vendor_Stub::hit( 'breeze_purge_local_cache_for_urls', array( $urls, $cache_base_path ) );
+	}
+}

@@ -1224,4 +1224,146 @@ final class SiteCacheAdaptersTest extends TestCase {
 		$this->assertResult( 'purged', '', true, $this->call( 'aafm_cache_speedycache_purge_all' ) );
 		$this->assertSame( array( 'SpeedyCache\Delete::all_cache', 'SpeedyCache\Delete::all_cache' ), Stub::names(), 'Never Delete::run().' );
 	}
+
+	private function breeze_dir( string $address ): string {
+		// The cache directory of one address: sha256 of the full URL with its final slash.
+		return Stub::root() . '/breeze/' . hash( 'sha256', $address );
+	}
+
+	private function breeze_ready(): void {
+		aafm_siteops_stub_breeze_activate();
+		$this->load( 'breeze' );
+	}
+
+	private function breeze_clears_the_addresses_given(): callable {
+		// A stand-in for the real URL purge: it removes the directory of each address it is given.
+		return function ( array $urls ): void {
+			foreach ( $urls as $address ) {
+				Stub::rrmdir( $this->breeze_dir( trailingslashit( $address ) ) );
+			}
+		};
+	}
+
+	public function test_breeze_registry_row_and_detection(): void {
+		$row = $this->assertRegistryRow(
+			'breeze',
+			'breeze/breeze.php',
+			array( array( 'constant', 'BREEZE_VERSION' ) ),
+			'file',
+			array(
+				'cli'           => true,
+				'vendor_http'   => true,
+				'recursive_url' => false,
+				'rewarms'       => false,
+			)
+		);
+		$this->assertSame( 'Breeze (file cache)', $row['label'] );
+		aafm_siteops_stub_breeze_activate();
+		$this->assertTrue( aafm_site_cache_detected( $row ) );
+		$row['detect'][] = array( 'constant', 'AAFM_NO_SUCH_VENDOR_CONSTANT' );
+		$this->assertFalse( aafm_site_cache_detected( $row ) );
+	}
+
+	public function test_breeze_serving_is_false_while_wp_cache_is_off(): void {
+		// Every other condition is met: the option reads 1 and the purge action has a listener.
+		$this->breeze_ready();
+		$this->assertFalse( defined( 'WP_CACHE' ) && WP_CACHE, 'The WordPress test suite always runs with WP_CACHE false.' );
+		$this->assertFalse( $this->call( 'aafm_cache_breeze_serving' ) );
+		// The true case needs a real site: acceptance case P1. The off switch: case N7.
+	}
+
+	public function test_breeze_url_purge_is_followed_by_the_other_scheme(): void {
+		$this->breeze_ready();
+		$name = str_repeat( 'ab', 32 );
+		$this->put( $this->breeze_dir( 'http://example.org/acc-a/' ) . '/' . $name . '.html' );
+		// A page reached over https, with the plugin's separate mobile cache on.
+		$this->put( $this->breeze_dir( 'https://example.org/acc-a/' ) . '/mobile_' . $name . '.html' );
+		Stub::$on['breeze_purge_local_cache_for_urls'] = $this->breeze_clears_the_addresses_given();
+		$url    = $this->url( '/acc-a/' );
+		$result = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_breeze_purge_url( $url );
+			}
+		);
+		$this->assertResult( 'purged', '', true, $result );
+		$base = Stub::root() . '/breeze/';
+		$this->assertSame(
+			array(
+				array( 'breeze_purge_local_cache_for_urls', array( array( 'http://example.org/acc-a/' ), $base ) ),
+				array( 'breeze_purge_local_cache_for_urls', array( array( 'https://example.org/acc-a/', 'https://example.org/acc-a/' ), $base ) ),
+			),
+			Stub::$calls
+		);
+	}
+
+	public function test_breeze_other_scheme_copy_that_survives_is_a_variant_failure(): void {
+		$this->breeze_ready();
+		$name = str_repeat( 'ab', 32 );
+		$this->put( $this->breeze_dir( 'http://example.org/acc-a/' ) . '/' . $name . '.html' );
+		$this->put( $this->breeze_dir( 'https://example.org/acc-a/' ) . '/' . $name . '.html' );
+		$http = $this->breeze_dir( 'http://example.org/acc-a/' );
+		// A vendor that removes the scheme it was first given and ignores the second call.
+		Stub::$on['breeze_purge_local_cache_for_urls'] = static function () use ( $http ): void {
+			Stub::rrmdir( $http );
+		};
+		$url    = $this->url( '/acc-a/' );
+		$result = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_breeze_purge_url( $url );
+			}
+		);
+		$this->assertResult( 'failed', 'variant_still_cached', true, $result );
+	}
+
+	public function test_breeze_non_ascii_post_checks_both_spellings_and_both_schemes(): void {
+		$this->breeze_ready();
+		$name  = str_repeat( 'cd', 32 );
+		$lower = 'http://example.org/' . self::LO . '/';
+		$upper = 'http://example.org/' . self::UP . '/';
+		$this->put( $this->breeze_dir( $lower ) . '/' . $name . '.html' );
+		$this->put( $this->breeze_dir( $upper ) . '/' . $name . '.html' );
+		Stub::$on['purge_post_cache'] = function () use ( $lower, $upper ): void {
+			// The real post purge removes both spellings of the scheme it works in (bench4 N4).
+			Stub::rrmdir( $this->breeze_dir( $lower ) );
+			Stub::rrmdir( $this->breeze_dir( $upper ) );
+		};
+		$url                          = $this->url( '/' . self::LO . '/' );
+		$result                       = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_breeze_purge_post( 41, $url );
+			}
+		);
+		$this->assertResult( 'purged', '', true, $result );
+		$this->assertSame( array( 'purge_post_cache', 'breeze_purge_local_cache_for_urls' ), Stub::names() );
+		$this->assertSame( array( array( 41 ) ), Stub::args( 'purge_post_cache' ) );
+		$this->assertSame(
+			array( array( array( 'https://example.org/' . self::LO . '/', 'https://example.org/' . self::UP . '/' ), Stub::root() . '/breeze/' ) ),
+			Stub::args( 'breeze_purge_local_cache_for_urls' )
+		);
+	}
+
+	public function test_breeze_placeholder_file_is_not_a_cached_page(): void {
+		$this->breeze_ready();
+		$this->put( $this->breeze_dir( 'http://example.org/acc-a/' ) . '/index.html' );
+		$url    = $this->url( '/acc-a/' );
+		$result = $this->call(
+			static function () use ( $url ) {
+				return aafm_cache_breeze_purge_url( $url );
+			}
+		);
+		$this->assertResult( 'requested', 'not_found_in_cache', false, $result );
+	}
+
+	public function test_breeze_site_purge_flushes_the_local_cache_only(): void {
+		$this->breeze_ready();
+		$name = str_repeat( 'ab', 32 );
+		$this->put( $this->breeze_dir( 'http://example.org/acc-a/' ) . '/' . $name . '.html' );
+		$this->put( $this->breeze_dir( 'http://example.org/acc-page/' ) . '/mobile_' . $name . '.html' );
+		$first = $this->breeze_dir( 'http://example.org/acc-a/' );
+		Stub::$on['Breeze_PurgeCache::breeze_cache_flush'] = static function () use ( $first ): void {
+			Stub::rrmdir( $first );
+		};
+		$this->assertResult( 'failed', 'still_cached', true, $this->call( 'aafm_cache_breeze_purge_all' ), 'A mobile copy is left.' );
+		$this->assertSame( array( array( 'Breeze_PurgeCache::breeze_cache_flush', array( false, false, true ) ) ), Stub::$calls, 'Never the breeze_clear_all_cache action, which flushes the object cache.' );
+	}
 }

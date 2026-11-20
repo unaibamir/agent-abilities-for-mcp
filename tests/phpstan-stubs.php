@@ -1741,4 +1741,31 @@ if ( ! function_exists( 'WP_Optimize' ) ) {
 		return null;
 	}
 }
+if ( ! function_exists( 'breeze_get_cache_base_path' ) ) {
+	/**
+	 * Minimal Breeze signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @param bool $is_network        Network path.
+	 * @param int  $blog_id_requested Blog id.
+	 * @return string
+	 */
+	function breeze_get_cache_base_path( $is_network = false, $blog_id_requested = 0 ) {
+		return '';
+	}
+}
+
+if ( ! function_exists( 'breeze_purge_local_cache_for_urls' ) ) {
+	/**
+	 * Minimal Breeze signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @param array<int,string> $urls            URLs.
+	 * @param string            $cache_base_path Cache base path.
+	 * @return mixed
+	 */
+	function breeze_purge_local_cache_for_urls( array $urls, string $cache_base_path ) {
+		return null;
+	}
+}
 // phpcs:enable

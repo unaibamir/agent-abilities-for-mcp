@@ -25,6 +25,7 @@ final class ReplaceSitewideScanSweepTest extends TestCase {
 	 * Every call, by key, with its class.
 	 */
 	private const CALLS = array(
+		'includes/siteops/redirects/safe-redirect-manager.php|aafm_redirect_safe_redirect_manager_all|1' => 'READ',
 		'includes/wpml.php|aafm_wpml_count_posts_by_status|1'           => 'READ',
 		'includes/helpers.php|aafm_with_seo_render_scope|1'             => 'READ',
 		'includes/abilities/blocks.php|aafm_exec_list_blocks|1'         => 'READ',

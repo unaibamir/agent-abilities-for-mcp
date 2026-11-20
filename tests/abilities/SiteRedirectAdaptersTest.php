@@ -480,4 +480,162 @@ final class SiteRedirectAdaptersTest extends TestCase {
 		$this->assertRefused( 'aafm_site_provider_capability', aafm_exec_site_list_redirects( array( 'provider' => 'redirection' ) ) );
 		$this->assertRefused( 'aafm_site_provider_capability', aafm_exec_site_list_404s( array( 'provider' => 'redirection' ) ) );
 	}
+
+	public function test_srm_lists_with_its_own_query_and_never_calls_the_cached_getter(): void {
+		$this->only( array( 'safe_redirect_manager' ) );
+		$page  = self::factory()->post->create( array( 'post_type' => 'page' ) );
+		$on    = aafm_siteops_redirect_stub_srm_rule( '/old-a', '/hello-world/', 301 );
+		$off   = aafm_siteops_redirect_stub_srm_rule( '/old-off', '/x', 302, false, 'draft' );
+		$regex = aafm_siteops_redirect_stub_srm_rule( '/rx-(\d+)', '/t/$1', 301, true );
+		$wild  = aafm_siteops_redirect_stub_srm_rule( '/blog/*', '/news/*', 301 );
+		update_post_meta( $page, '_redirect_rule_from', '/not-a-rule' );
+
+		$this->assertTrue( aafm_site_redirect_call( 'safe_redirect_manager', 'ready' ) );
+		$rows = $this->rows( 'safe_redirect_manager' );
+
+		$this->assertSame( array( (string) $on, (string) $off, (string) $regex, (string) $wild ), array_column( $rows, 'id' ) );
+		$this->assertSame(
+			array(
+				'id'      => (string) $on,
+				'source'  => '/old-a',
+				'target'  => '/hello-world/',
+				'code'    => 301,
+				'enabled' => true,
+				'kind'    => 'exact',
+				'hits'    => null,
+				'regex'   => false,
+			),
+			$rows[0]
+		);
+		$this->assertFalse( $rows[1]['enabled'] );
+		$this->assertSame( array( 'pattern', true, '/rx-(\d+)' ), array( $rows[2]['kind'], $rows[2]['regex'], $rows[2]['source'] ) );
+		$this->assertSame( array( 'pattern', false ), array( $rows[3]['kind'], $rows[3]['regex'] ) );
+
+		$listed = aafm_exec_site_list_redirects( array() );
+		$this->assertArrayNotHasKey( 'regex', $listed['redirects'][0], 'The internal key never reaches the output.' );
+		$this->assertRefused( 'aafm_site_redirect_not_found', aafm_exec_site_get_redirect( array( 'id' => (string) $page ) ), 'An ordinary page is not a redirect.' );
+		$this->assertSame( (string) $off, aafm_exec_site_get_redirect( array( 'id' => (string) $off ) )['redirect']['id'] );
+
+		aafm_exec_site_test_redirect( array( 'url' => '/old-a' ) );
+		$this->assertSame( 0, Stub::count( 'srm_get_redirects' ) );
+		$this->assertSame( 0, Stub::count( 'srm_match_redirect' ) );
+		$this->assertFalse( get_transient( '_srm_redirects_1000' ), 'No read may store the rule list.' );
+
+		unregister_post_type( 'redirect_rule' );
+		$this->assertFalse( aafm_site_redirect_call( 'safe_redirect_manager', 'ready' ) );
+	}
+
+	public function test_srm_match_exact_wildcard_and_regex(): void {
+		$this->only( array( 'safe_redirect_manager' ) );
+		$exact = aafm_siteops_redirect_stub_srm_rule( '/Old-A/', '/hello-world/', 307 );
+		aafm_siteops_redirect_stub_srm_rule( '/old-off', '/x', 301, false, 'draft' );
+		$wild  = aafm_siteops_redirect_stub_srm_rule( '/blog/*', '/news/*' );
+		$host  = aafm_siteops_redirect_stub_srm_rule( '/out*', 'https://example.com*' );
+		$regex = aafm_siteops_redirect_stub_srm_rule( '^/rx-(\d+)$', '/t/$1', 301, true );
+		$gone  = aafm_siteops_redirect_stub_srm_rule( '/gone', '', 410 );
+		aafm_siteops_redirect_stub_srm_rule( '/empty-target', '', 301 );
+
+		$this->assertSame(
+			array(
+				'state'  => 'matched',
+				'id'     => (string) $exact,
+				'target' => '/hello-world/',
+				'code'   => 307,
+			),
+			$this->match( 'safe_redirect_manager', '/old-a' )
+		);
+		$this->assertSame( (string) $exact, $this->match( 'safe_redirect_manager', '/OLD-A/' )['id'] );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'safe_redirect_manager', '/old-off' ), 'A draft rule is off.' );
+		$this->assertSame( array( (string) $wild, '/news/post' ), array_slice( array_values( $this->match( 'safe_redirect_manager', '/blog/post/' ) ), 1, 2 ), 'The plugin drops the trailing slash of the request before it matches.' );
+		$this->assertSame( array( (string) $host, 'https://example.com/abc' ), array_slice( array_values( $this->match( 'safe_redirect_manager', '/out/abc' ) ), 1, 2 ), 'A wildcard may extend the path, never the host.' );
+		$this->assertSame( array( (string) $regex, '/t/12' ), array_slice( array_values( $this->match( 'safe_redirect_manager', '/rx-12' ) ), 1, 2 ) );
+		$this->assertSame( (string) $regex, $this->match( 'safe_redirect_manager', '/rx-12/' )['id'] );
+		$this->assertSame( array( (string) $gone, '', 410 ), array_slice( array_values( $this->match( 'safe_redirect_manager', '/gone' ) ), 1, 3 ) );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'safe_redirect_manager', '/empty-target' ), 'A rule with no target and a redirect code is skipped.' );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'safe_redirect_manager', '/nothing' ) );
+	}
+
+	public function test_srm_a_pattern_that_does_not_compile_is_unknown(): void {
+		$this->only( array( 'safe_redirect_manager' ) );
+		aafm_siteops_redirect_stub_srm_rule( '(unclosed', '/t', 301, true );
+		aafm_siteops_redirect_stub_srm_rule( '/after', '/t2' );
+
+		$this->assertSame( array( 'state' => 'unknown' ), $this->match( 'safe_redirect_manager', '/nothing' ) );
+		$this->assertSame( array( 'state' => 'unknown' ), $this->match( 'safe_redirect_manager', '/after' ), 'The rule that could not be evaluated comes first and might have applied.' );
+	}
+
+	/**
+	 * The five filters that can change live matching.
+	 *
+	 * @return array<string,array{0:string}>
+	 */
+	public function srm_filters(): array {
+		return array(
+			'srm_registered_redirects' => array( 'srm_registered_redirects' ),
+			'srm_match_query_params'   => array( 'srm_match_query_params' ),
+			'srm_redirect_to'          => array( 'srm_redirect_to' ),
+			'srm_redirect_only_on_404' => array( 'srm_redirect_only_on_404' ),
+			'srm_requested_path'       => array( 'srm_requested_path' ),
+		);
+	}
+
+	/**
+	 * Each of the five filters, hooked by a site, makes the matcher decline to answer.
+	 *
+	 * @dataProvider srm_filters
+	 *
+	 * @param string $hook Filter name.
+	 */
+	public function test_srm_a_site_filter_on_live_matching_gives_unknown( string $hook ): void {
+		$this->only( array( 'safe_redirect_manager' ) );
+		aafm_siteops_redirect_stub_srm_rule( '/old-a', '/hello-world/' );
+		$this->assertSame( 'matched', $this->match( 'safe_redirect_manager', '/old-a' )['state'] );
+
+		add_filter( $hook, '__return_false' );
+
+		$this->assertSame( array( 'state' => 'unknown' ), $this->match( 'safe_redirect_manager', '/old-a' ) );
+		$this->assertSame( array( 'state' => 'unknown' ), $this->match( 'safe_redirect_manager', '/nothing' ) );
+	}
+
+	public function test_srm_a_non_ascii_path_is_unknown(): void {
+		$this->only( array( 'safe_redirect_manager' ) );
+		$plain = aafm_siteops_redirect_stub_srm_rule( '/caf-old', '/a' );
+		aafm_siteops_redirect_stub_srm_rule( '/café-old', '/b' );
+		$ascii = aafm_siteops_redirect_stub_srm_rule( '/cafe-old', '/c' );
+
+		$this->assertSame( array( 'state' => 'unknown' ), $this->match( 'safe_redirect_manager', '/café-old' ) );
+		$this->assertSame( (string) $plain, $this->match( 'safe_redirect_manager', '/caf-old' )['id'] );
+		$this->assertSame( (string) $ascii, $this->match( 'safe_redirect_manager', '/cafe-old' )['id'] );
+
+		$out = aafm_exec_site_test_redirect( array( 'url' => '/café-old' ) );
+		$this->assertSame( 'unknown', $out['evaluated'][0]['result'] );
+		$this->assertNull( $out['first_match'] );
+		$this->assertSame( 'leaves_site_or_unknown', $out['chain_ends'] );
+	}
+
+	public function test_srm_reports_the_status_the_plugin_sends(): void {
+		$this->only( array( 'safe_redirect_manager' ) );
+		aafm_siteops_redirect_stub_srm_rule( '/acc-code', '/acc-page/', 999 );
+
+		$this->assertSame( 302, $this->match( 'safe_redirect_manager', '/acc-code' )['code'], 'The plugin redirects with 302 for a stored code it does not accept.' );
+
+		add_filter( 'srm_default_direct_status', '__return_zero' );
+		$this->assertSame( array( 'state' => 'unknown' ), $this->match( 'safe_redirect_manager', '/acc-code' ) );
+	}
+
+	public function test_srm_strips_the_home_path_and_checks_its_capability(): void {
+		$this->only( array( 'safe_redirect_manager' ) );
+		update_option( 'home', 'http://example.org/sub' );
+		update_option( 'siteurl', 'http://example.org/sub' );
+		$a = aafm_siteops_redirect_stub_srm_rule( '/old-a', '/sub/hello-world/' );
+		$b = aafm_siteops_redirect_stub_srm_rule( '/sub/old-b', '/sub/sample-page/' );
+
+		$this->assertSame( (string) $a, $this->match( 'safe_redirect_manager', '/sub/old-a' )['id'] );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'safe_redirect_manager', '/sub/old-b' ) );
+		$this->assertSame( (string) $b, $this->match( 'safe_redirect_manager', '/sub/sub/old-b' )['id'] );
+
+		wp_get_current_user()->remove_cap( 'srm_manage_redirects' );
+		$this->assertRefused( 'aafm_site_provider_capability', aafm_exec_site_list_redirects( array( 'provider' => 'safe_redirect_manager' ) ) );
+		$this->assertRefused( 'aafm_site_no_provider', aafm_exec_site_list_404s( array() ), 'This plugin keeps no not-found log.' );
+	}
 }

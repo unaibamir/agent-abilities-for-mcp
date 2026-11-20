@@ -307,8 +307,8 @@ function aafm_ajax_save_settings(): void {
 			wp_send_json_error( array( 'message' => $ntf_error ) );
 		}
 	}
-	// Roles and proxy are refused here too, before any write.
-	$access_error = aafm_connect_roles_input_error( $posted ) ?? aafm_proxy_input_error( $posted );
+	// Roles, proxy and the backup gate tool list are refused here too, before any write.
+	$access_error = aafm_connect_roles_input_error( $posted ) ?? aafm_proxy_input_error( $posted ) ?? aafm_backup_gate_input_error( $posted );
 	if ( null !== $access_error ) {
 		wp_send_json_error( array( 'message' => $access_error ) );
 	}
@@ -517,6 +517,20 @@ function aafm_ajax_save_settings(): void {
 			if ( ! $undo_persisted ) {
 				wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Change history', 'agent-abilities-for-mcp' ) ) ) );
 			}
+		}
+	}
+
+	// Backup gate. Posted-only through its marker field, like the roles list: a save from a page
+	// without the card (a stale cached script) reads nothing, writes nothing and leaves the
+	// schedule alone. With the marker, restrictive changes are written before permissive ones and
+	// the first write that does not take stops the block. The schedule is reconciled either way,
+	// so it follows the switch as it is stored now.
+	$backup_gate = aafm_sanitize_backup_gate_input( $posted );
+	if ( null !== $backup_gate ) {
+		$backup_gate_error = aafm_backup_gate_save( $backup_gate );
+		aafm_backup_verify_reconcile();
+		if ( null !== $backup_gate_error ) {
+			wp_send_json_error( array( 'message' => $backup_gate_error ) );
 		}
 	}
 

@@ -246,4 +246,232 @@ final class BackupGateSettingsTest extends TestCase {
 		$this->assertStringContainsString( 'Reload', (string) ( $json['data']['message'] ?? '' ) );
 		$this->assertSame( 'verified', aafm_backup_verify_read()['aaaaaaaaaaa1']['verdict'] );
 	}
+
+	public function test_a_save_without_the_sentinel_changes_nothing(): void {
+		$this->stored( true, false, true, array( 'aafm/delete-page', 'aafm/delete-post' ) );
+		aafm_backup_verify_reconcile();
+		$rows  = $this->rows();
+		$event = wp_next_scheduled( 'aafm_backup_verify' );
+		$this->assertNotFalse( $event );
+
+		$json = $this->save( array( 'aafm_rate_limit_per_min' => '0' ) );
+
+		$this->assertTrue( $json['success'] ?? false );
+		$this->assertSame( $rows, $this->rows(), 'A save from a page without the card leaves all four settings as they were.' );
+		$this->assertSame( $event, wp_next_scheduled( 'aafm_backup_verify' ) );
+
+		wp_clear_scheduled_hook( 'aafm_backup_verify' );
+		$this->save( array( 'aafm_rate_limit_per_min' => '0' ) );
+		$this->assertFalse( wp_next_scheduled( 'aafm_backup_verify' ), 'Without the sentinel the save does not reconcile the schedule either.' );
+	}
+
+	public function test_a_save_with_the_sentinel_and_nothing_else_turns_the_gate_off(): void {
+		$this->stored( true, true, true, array( 'aafm/delete-post' ) );
+		aafm_backup_verify_reconcile();
+
+		$json = $this->save( array( 'aafm_backup_gate_present' => '1' ) );
+
+		$this->assertTrue( $json['success'] ?? false );
+		$this->assertSame(
+			array(
+				'aafm_backup_gate'               => null,
+				'aafm_backup_gate_abilities'     => array(),
+				'aafm_backup_gate_accept_remote' => null,
+				'aafm_backup_gate_accept_size'   => null,
+			),
+			$this->rows()
+		);
+		$this->assertFalse( wp_next_scheduled( 'aafm_backup_verify' ), 'Turning the gate off clears the event in the same request.' );
+	}
+
+	public function test_a_save_stores_what_was_posted_and_schedules_the_check(): void {
+		$json = $this->save(
+			array(
+				'aafm_backup_gate_present'     => '1',
+				'aafm_backup_gate'             => '1',
+				'aafm_backup_gate_accept_size' => '1',
+				'aafm_backup_gate_abilities'   => array( 'woocommerce/product-delete', 'aafm/delete-post', 'aafm/delete-post', 'Not A Slug', 'Upper/Case' ),
+			)
+		);
+
+		$this->assertTrue( $json['success'] ?? false );
+		$this->assertTrue( aafm_stored_switch_on( 'aafm_backup_gate' ) );
+		$this->assertSame( array( 'aafm/delete-post', 'woocommerce/product-delete' ), aafm_backup_gate_list(), 'Sorted, unique, and only slug-shaped values.' );
+		$this->assertTrue( aafm_backup_gate_permissive_on( 'aafm_backup_gate_accept_size' ) );
+		$this->assertFalse( aafm_backup_gate_permissive_on( 'aafm_backup_gate_accept_remote' ) );
+		$this->assertNotFalse( wp_next_scheduled( 'aafm_backup_verify' ), 'Turning the gate on schedules the event in the same request.' );
+	}
+
+	public function test_a_save_that_changes_nothing_still_repairs_a_missing_event(): void {
+		$this->stored( true, false, false, array( 'aafm/delete-post' ) );
+		$this->assertFalse( wp_next_scheduled( 'aafm_backup_verify' ) );
+
+		$this->save(
+			array(
+				'aafm_backup_gate_present'   => '1',
+				'aafm_backup_gate'           => '1',
+				'aafm_backup_gate_abilities' => array( 'aafm/delete-post' ),
+			)
+		);
+
+		$this->assertNotFalse( wp_next_scheduled( 'aafm_backup_verify' ) );
+	}
+
+	public function test_a_list_that_is_not_an_array_is_refused_and_writes_nothing(): void {
+		$this->stored( false, false, false, array( 'aafm/delete-post' ) );
+		$rows = $this->rows();
+
+		$json = $this->save(
+			array(
+				'aafm_backup_gate_present'   => '1',
+				'aafm_backup_gate'           => '1',
+				'aafm_backup_gate_abilities' => 'aafm/delete-post',
+			)
+		);
+
+		$this->assertFalse( $json['success'] ?? true );
+		$this->assertSame( 'The backup gate tool list could not be read. Reload this page and try again.', $json['data']['message'] ?? '' );
+		$this->assertSame( $rows, $this->rows() );
+	}
+
+	public function test_restrictive_changes_are_written_before_the_list_and_the_gate_turning_on(): void {
+		$this->stored( false, true, true, array( 'aafm/delete-post' ) );
+		$this->record_writes();
+
+		$this->save(
+			array(
+				'aafm_backup_gate_present'   => '1',
+				'aafm_backup_gate'           => '1',
+				'aafm_backup_gate_abilities' => array( 'aafm/delete-page', 'aafm/delete-post' ),
+			)
+		);
+
+		$this->assertSame( array( 'aafm_backup_gate_accept_remote', 'aafm_backup_gate_accept_size', 'aafm_backup_gate', 'aafm_backup_gate_abilities' ), $this->written );
+	}
+
+	public function test_permissive_changes_are_written_after_the_list_and_the_gate_turns_off_last(): void {
+		$this->stored( true, false, false, array( 'aafm/delete-post' ) );
+		$this->record_writes();
+
+		$this->save(
+			array(
+				'aafm_backup_gate_present'       => '1',
+				'aafm_backup_gate_accept_remote' => '1',
+				'aafm_backup_gate_accept_size'   => '1',
+				'aafm_backup_gate_abilities'     => array( 'aafm/delete-page' ),
+			)
+		);
+
+		$this->assertSame( array( 'aafm_backup_gate_abilities', 'aafm_backup_gate_accept_remote', 'aafm_backup_gate_accept_size', 'aafm_backup_gate' ), $this->written );
+	}
+
+	/**
+	 * Each of the seven writes, failing in turn. Scenario A makes writes 1 to 4, scenario B writes 4 to 7.
+	 *
+	 * @return array<string,array{0:string,1:string,2:string}>
+	 */
+	public function failing_writes(): array {
+		return array(
+			'1 off-site off' => array( 'A', 'aafm_backup_gate_accept_remote', 'Off-site backups' ),
+			'2 large off'    => array( 'A', 'aafm_backup_gate_accept_size', 'Large backups' ),
+			'3 gate on'      => array( 'A', 'aafm_backup_gate', 'The backup gate' ),
+			'4 list'         => array( 'A', 'aafm_backup_gate_abilities', 'The backup gate tool list' ),
+			'4 list again'   => array( 'B', 'aafm_backup_gate_abilities', 'The backup gate tool list' ),
+			'5 off-site on'  => array( 'B', 'aafm_backup_gate_accept_remote', 'Off-site backups' ),
+			'6 large on'     => array( 'B', 'aafm_backup_gate_accept_size', 'Large backups' ),
+			'7 gate off'     => array( 'B', 'aafm_backup_gate', 'The backup gate' ),
+		);
+	}
+
+	/**
+	 * A write that does not persist stops the block and names its setting.
+	 *
+	 * @dataProvider failing_writes
+	 *
+	 * @param string $scenario 'A' or 'B'.
+	 * @param string $failing  The option whose write does not persist.
+	 * @param string $label    The name the error must use for it.
+	 */
+	public function test_a_write_that_does_not_persist_stops_the_block_and_names_the_setting( string $scenario, string $failing, string $label ): void {
+		if ( 'A' === $scenario ) {
+			$this->stored( false, true, true, array( 'aafm/delete-post' ) );
+			$order  = array( 'aafm_backup_gate_accept_remote', 'aafm_backup_gate_accept_size', 'aafm_backup_gate', 'aafm_backup_gate_abilities' );
+			$fields = array(
+				'aafm_backup_gate_present'   => '1',
+				'aafm_backup_gate'           => '1',
+				'aafm_backup_gate_abilities' => array( 'aafm/delete-page', 'aafm/delete-post' ),
+			);
+			$wanted = array(
+				'aafm_backup_gate'               => '1',
+				'aafm_backup_gate_abilities'     => array( 'aafm/delete-page', 'aafm/delete-post' ),
+				'aafm_backup_gate_accept_remote' => null,
+				'aafm_backup_gate_accept_size'   => null,
+			);
+		} else {
+			$this->stored( true, false, false, array( 'aafm/delete-post' ) );
+			$order  = array( 'aafm_backup_gate_abilities', 'aafm_backup_gate_accept_remote', 'aafm_backup_gate_accept_size', 'aafm_backup_gate' );
+			$fields = array(
+				'aafm_backup_gate_present'       => '1',
+				'aafm_backup_gate_accept_remote' => '1',
+				'aafm_backup_gate_accept_size'   => '1',
+				'aafm_backup_gate_abilities'     => array( 'aafm/delete-page' ),
+			);
+			$wanted = array(
+				'aafm_backup_gate'               => null,
+				'aafm_backup_gate_abilities'     => array( 'aafm/delete-page' ),
+				'aafm_backup_gate_accept_remote' => '1',
+				'aafm_backup_gate_accept_size'   => '1',
+			);
+		}
+		$before = $this->rows();
+		$this->make_unpersistable( $failing );
+
+		$json = $this->save( $fields );
+
+		$this->assertFalse( $json['success'] ?? true );
+		$this->assertStringContainsString( $label, (string) ( $json['data']['message'] ?? '' ) );
+		$after  = $this->rows();
+		$passed = true;
+		foreach ( $order as $option ) {
+			if ( $option === $failing ) {
+				$passed = false;
+			}
+			$is_on_off = 'aafm_backup_gate_abilities' !== $option;
+			$expect    = $passed ? $wanted[ $option ] : $before[ $option ];
+			if ( $is_on_off ) {
+				$this->assertSame( null !== $expect, null !== $after[ $option ], "{$option} after a failed write of {$failing}." );
+			} else {
+				$this->assertSame( $expect, $after[ $option ], "{$option} after a failed write of {$failing}." );
+			}
+		}
+	}
+
+	public function test_each_change_is_logged(): void {
+		$this->stored( false, false, false, array() );
+
+		$this->save(
+			array(
+				'aafm_backup_gate_present'       => '1',
+				'aafm_backup_gate'               => '1',
+				'aafm_backup_gate_accept_remote' => '1',
+				'aafm_backup_gate_accept_size'   => '1',
+				'aafm_backup_gate_abilities'     => array( 'aafm/delete-post', 'aafm/delete-page' ),
+			)
+		);
+
+		$detail = static function ( string $ability ): string {
+			$rows = aafm_query_activity( array( 'ability' => $ability ) );
+			return (string) ( $rows[0]['detail'] ?? '' );
+		};
+		$this->assertSame( 'Backup gate turned on', $detail( 'aafm/backup-gate' ) );
+		$this->assertSame( 'Backup gate tools changed: 2 chosen', $detail( 'aafm/backup-gate-tools' ) );
+		$this->assertSame( 'Off-site backups accepted', $detail( 'aafm/backup-gate-off-site' ) );
+		$this->assertSame( 'Large backups accepted on size alone', $detail( 'aafm/backup-gate-large' ) );
+
+		$this->save( array( 'aafm_backup_gate_present' => '1' ) );
+		$this->assertSame( 'Backup gate turned off', $detail( 'aafm/backup-gate' ) );
+		$this->assertSame( 'Backup gate tools changed: 0 chosen', $detail( 'aafm/backup-gate-tools' ) );
+		$this->assertSame( 'Off-site backups no longer accepted', $detail( 'aafm/backup-gate-off-site' ) );
+		$this->assertSame( 'Large backups no longer accepted on size alone', $detail( 'aafm/backup-gate-large' ) );
+	}
 }

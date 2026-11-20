@@ -416,6 +416,7 @@ function aafm_bootstrap() {
 
 	// Site Ops: the cache adapter registry. Detection only; adapter files load on first use.
 	require_once AAFM_PLUGIN_DIR . 'includes/siteops/cache-registry.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/siteops/redirect-registry.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/posts.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/pages.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/terms.php';

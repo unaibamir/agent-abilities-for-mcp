@@ -296,5 +296,7 @@ function aafm_ability_disclosures(): array {
 		'aafm/site-get-redirect'            => __( 'Reads one stored redirect by its id. It changes nothing.', 'agent-abilities-for-mcp' ),
 		'aafm/site-list-404s'               => __( 'Lists the addresses visitors asked for that were not found, as your redirect plugin recorded them, with query strings removed and token-like parts redacted. These addresses can contain personal data a visitor typed into a URL. Never returns an IP address, a browser name or a referring address.', 'agent-abilities-for-mcp' ),
 		'aafm/site-test-redirect'           => __( 'Works out which stored redirect a URL on this site would hit and follows the chain, without requesting the URL or changing any hit counter. It is a simulation: it does not see server rules or redirect plugins it does not support.', 'agent-abilities-for-mcp' ),
+		'aafm/site-backup-status'           => __( 'Reports whether an UpdraftPlus backup is running, how old the newest checked backup is, and whether the backup gate is satisfied. It cannot start a backup.', 'agent-abilities-for-mcp' ),
+		'aafm/site-list-backups'            => __( 'Lists the backup sets UpdraftPlus has on record with their date, size, where they are kept and whether they passed a check. Never returns file names or download links.', 'agent-abilities-for-mcp' ),
 	);
 }

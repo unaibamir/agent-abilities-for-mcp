@@ -113,6 +113,11 @@ function aafm_integration_cards(): array {
 			'icon'    => 'integrations',
 			'plugins' => array( 'eps-301-redirects/eps-301-redirects.php', 'redirection/redirection.php', 'safe-redirect-manager/safe-redirect-manager.php', 'seo-by-rank-math/rank-math.php', 'slim-seo/slim-seo.php' ),
 		),
+		'site_backups'   => array(
+			'label'   => __( 'Backups', 'agent-abilities-for-mcp' ),
+			'icon'    => 'integrations',
+			'plugins' => array( 'updraftplus/updraftplus.php' ),
+		),
 	);
 }
 

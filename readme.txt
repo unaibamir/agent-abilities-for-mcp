@@ -25,7 +25,7 @@ Once connected, you can ask things like:
 * "Which WooCommerce orders are still on hold?"
 * "Write a post about the spring sale and save it as a draft."
 
-There are 227 abilities (the tools an AI client can call), 97 for WordPress itself and 130 for plugins such as WooCommerce, ACF and Yoast SEO. Every one starts switched off.
+There are 229 abilities (the tools an AI client can call), 97 for WordPress itself and 132 for plugins such as WooCommerce, ACF and Yoast SEO. Every one starts switched off.
 
 = What is a WordPress MCP server? =
 

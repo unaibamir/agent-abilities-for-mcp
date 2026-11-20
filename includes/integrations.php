@@ -23,7 +23,7 @@ defined( 'ABSPATH' ) || exit;
  * Whether a given integration's host plugin is active (so its abilities should
  * register / discover).
  *
- * @param string $slug One of 'yoast' | 'rankmath' | 'aioseo' | 'acf' | 'woocommerce' | 'slim_seo' | 'tec' | 'event_tickets' | 'avada' | 'wpbakery' | 'geodirectory' | 'site_cache' | 'site_redirects'.
+ * @param string $slug One of 'yoast' | 'rankmath' | 'aioseo' | 'acf' | 'woocommerce' | 'slim_seo' | 'tec' | 'event_tickets' | 'avada' | 'wpbakery' | 'geodirectory' | 'site_cache' | 'site_redirects' | 'site_backups'.
  * @return bool
  */
 function aafm_integration_active( string $slug ): bool {
@@ -66,6 +66,9 @@ function aafm_integration_active( string $slug ): bool {
 			break;
 		case 'site_redirects':
 			$active = aafm_site_redirects_active();
+			break;
+		case 'site_backups':
+			$active = aafm_site_backups_active();
 			break;
 		default:
 			return false;
@@ -602,4 +605,23 @@ function aafm_woocommerce_active(): bool {
 	 * @param bool $active Detected active state.
 	 */
 	return (bool) apply_filters( 'aafm_woocommerce_active', $active );
+}
+
+/**
+ * Whether the backup tools have a provider, behind a filterable seam.
+ *
+ * True when UpdraftPlus is loaded. The test reads one global and one class name: it loads no file
+ * and calls no vendor code.
+ *
+ * @return bool
+ */
+function aafm_site_backups_active(): bool {
+	$active = aafm_site_updraft_loaded();
+
+	/**
+	 * Filters whether the backup tools' host plugin is reported active.
+	 *
+	 * @param bool $active Detected active state.
+	 */
+	return (bool) apply_filters( 'aafm_site_backups_active', $active );
 }

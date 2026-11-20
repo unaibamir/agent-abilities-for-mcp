@@ -331,4 +331,99 @@ final class SiteOpsWireTest extends TestCase {
 		remove_filter( 'aafm_integration_active_site_redirects', '__return_true' );
 		aafm_flush_registry_cache();
 	}
+
+	/**
+	 * A throwaway MCP server carrying only the two backup abilities.
+	 *
+	 * @return \WP\MCP\Core\McpServer
+	 * @throws \RuntimeException When the adapter refuses to build the test-only server.
+	 */
+	private function build_site_backups_wire_server(): \WP\MCP\Core\McpServer {
+		static $counter = 0;
+		++$counter;
+		$server_id = 'aafm-server-site-backups-wire-test-' . $counter;
+		$adapter   = \WP\MCP\Core\McpAdapter::instance();
+		$tools     = aafm_build_server_tools(
+			aafm_preflight_bound_server_tools_cached( array( 'aafm/site-backup-status', 'aafm/site-list-backups' ) )
+		);
+
+		$this->in_action(
+			'mcp_adapter_init',
+			static function () use ( $adapter, $server_id, $tools ): void {
+				$adapter->create_server(
+					$server_id,
+					AAFM_MCP_NAMESPACE,
+					AAFM_MCP_ROUTE_SEGMENT,
+					'Agent Abilities for MCP (backup wire test)',
+					'Test-only server carrying only the two backup abilities.',
+					AAFM_VERSION,
+					array( \WP\MCP\Transport\HttpTransport::class ),
+					\WP\MCP\Infrastructure\ErrorHandling\ErrorLogMcpErrorHandler::class,
+					\WP\MCP\Infrastructure\Observability\NullMcpObservabilityHandler::class,
+					$tools,
+					array(),
+					array(),
+					'aafm_transport_permission_callback'
+				);
+			}
+		);
+
+		$server = $adapter->get_server( $server_id );
+		if ( ! $server instanceof \WP\MCP\Core\McpServer ) {
+			throw new \RuntimeException( 'Failed to build the test-only backup wire server.' );
+		}
+		return $server;
+	}
+
+	public function test_the_backup_tools_list_and_answer_over_a_real_tools_call(): void {
+		aafm_updraft_stub_activate();
+		add_filter( 'aafm_integration_active_site_backups', '__return_true' );
+		aafm_flush_registry_cache();
+		try {
+			aafm_updraft_stub_add_set( 'aaaaaaaaaaa1', 3600 );
+			$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+			$this->register_enabled( array( 'aafm/site-backup-status', 'aafm/site-list-backups' ) );
+			$this->acting_as( 'administrator' );
+			$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $this->build_site_backups_wire_server() );
+
+			$names = array_map( static fn( $tool ) => $tool->getName(), $handler->list_tools()->getTools() );
+			$this->assertContains( aafm_mcp_tool_name( 'aafm/site-backup-status' ), $names );
+			$this->assertContains( aafm_mcp_tool_name( 'aafm/site-list-backups' ), $names );
+
+			$status = $handler->call_tool(
+				array(
+					'name'      => aafm_mcp_tool_name( 'aafm/site-backup-status' ),
+					'arguments' => array(),
+				),
+				'req-site-backup-status-1'
+			);
+			$this->assertInstanceOf( \AAFM\Tests\Support\McpToolCallOutcome::class, $status );
+			$this->assertFalse( $status->getIsError(), (string) wp_json_encode( $status->getContent() ) );
+			$body = (array) $status->getStructuredContent();
+			$this->assertSame( array( 'provider', 'running', 'stage', 'queued', 'stalled', 'failed_job', 'last_good', 'gate' ), array_keys( $body ) );
+			$this->assertSame( array( 'started_at', 'age_seconds', 'scope', 'storage', 'database_check', 'files_check', 'checked_at' ), array_keys( (array) $body['last_good'] ) );
+			$this->assertSame( 'verified', $body['last_good']['database_check'] );
+			$this->assertSame( array( 'on', 'satisfied', 'reason', 'verify_schedule' ), array_keys( (array) $body['gate'] ) );
+
+			$list = $handler->call_tool(
+				array(
+					'name'      => aafm_mcp_tool_name( 'aafm/site-list-backups' ),
+					'arguments' => array( 'per_page' => 5 ),
+				),
+				'req-site-list-backups-1'
+			);
+			$this->assertInstanceOf( \AAFM\Tests\Support\McpToolCallOutcome::class, $list );
+			$this->assertFalse( $list->getIsError(), (string) wp_json_encode( $list->getContent() ) );
+			$body = (array) $list->getStructuredContent();
+			$this->assertSame( array( 'backups', 'total', 'page', 'per_page' ), array_keys( $body ) );
+			$this->assertSame( array( 'started_at', 'scope', 'entities', 'total_bytes', 'storage', 'database_check', 'files_check', 'checked_at' ), array_keys( (array) $body['backups'][0] ), 'No file name, nonce or storage key reaches the wire.' );
+			$this->assertSame( 1, $body['total'] );
+			$this->assertSame( 5, $body['per_page'] );
+
+		} finally {
+			remove_filter( 'aafm_integration_active_site_backups', '__return_true' );
+			aafm_flush_registry_cache();
+			aafm_updraft_stub_deactivate();
+		}
+	}
 }

@@ -297,4 +297,46 @@ final class SiteOpsReadsWriteNothingTest extends TestCase {
 		$this->assertFalse( get_transient( '_srm_redirects_1000' ) );
 		$this->assertSame( 1, wp_cache_get( 'aafm-stub-' . md5( '/other' ), 'redirection' ), 'An object cache entry in the plugin own group is not a database write.' );
 	}
+
+	public function test_the_two_backup_reads_write_nothing(): void {
+		global $wpdb;
+		aafm_updraft_stub_activate();
+		require_once AAFM_PLUGIN_DIR . 'includes/siteops/vendor-call.php';
+		require_once AAFM_PLUGIN_DIR . 'includes/siteops/backup-updraft.php';
+		update_option( 'aafm_backup_gate', '1' );
+		aafm_updraft_stub_add_set( 'aaaaaaaaaaa1', 7200 );
+		aafm_updraft_stub_corrupt( aafm_updraft_stub_add_set( 'aaaaaaaaaaa2', 3600 ) );
+		aafm_updraft_stub_job( 'cccccccccc01', array( 'jobstatus' => 'filescreating' ) );
+
+		$snapshot = static function () use ( $wpdb ): array {
+			return array(
+				'options'    => md5( (string) wp_json_encode( $wpdb->get_results( "SELECT option_name, option_value FROM {$wpdb->options} ORDER BY option_name", ARRAY_A ) ) ),
+				'cron'       => md5( serialize( _get_cron_array() ) ), // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- a fingerprint of the cron array, never stored.
+				'posts'      => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts}" ),
+				'postmeta'   => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->postmeta}" ),
+				'transients' => $wpdb->get_col( "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE '\\_transient\\_%' ORDER BY option_name" ),
+			);
+		};
+		$writes   = array();
+		$record   = static function () use ( &$writes ): void {
+			$writes[] = current_filter();
+		};
+		foreach ( array( 'add_option', 'update_option', 'delete_option' ) as $hook ) {
+			add_action( $hook, $record );
+		}
+		$before = $snapshot();
+
+		try {
+			$this->assertIsArray( aafm_exec_site_backup_status() );
+			$this->assertIsArray( aafm_exec_site_list_backups( array() ) );
+		} finally {
+			foreach ( array( 'add_option', 'update_option', 'delete_option' ) as $hook ) {
+				remove_action( $hook, $record );
+			}
+		}
+
+		$this->assertSame( array(), $writes, 'Neither backup read may add, update or delete an option.' );
+		$this->assertSame( $before, $snapshot() );
+		aafm_updraft_stub_deactivate();
+	}
 }

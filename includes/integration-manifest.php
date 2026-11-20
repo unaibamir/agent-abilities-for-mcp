@@ -584,6 +584,16 @@ function aafm_integration_ability_order(): array {
 				'risk' => 'read',
 			),
 		),
+		'site_backups'   => array(
+			array(
+				'name' => 'aafm/site-backup-status',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/site-list-backups',
+				'risk' => 'read',
+			),
+		),
 	);
 }
 

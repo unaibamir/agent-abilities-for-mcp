@@ -416,4 +416,195 @@ final class SiteBackupsTest extends TestCase {
 			aafm_site_updraft_jobs()
 		);
 	}
+
+	public function test_backup_status_reports_the_good_set_and_the_gate(): void {
+		aafm_updraft_stub_add_set( 'aaaaaaaaaaa1', 3600 );
+
+		$out = aafm_exec_site_backup_status();
+
+		$this->assertIsArray( $out );
+		$this->assertSame( 'updraftplus', $out['provider'] );
+		$this->assertFalse( $out['running'] );
+		$this->assertSame( '', $out['stage'] );
+		$this->assertSame( gmdate( 'c', time() - 3600 ), $out['last_good']['started_at'] );
+		$this->assertSame( 'database', $out['last_good']['scope'] );
+		$this->assertSame( 'local', $out['last_good']['storage'] );
+		$this->assertSame( 'verified', $out['last_good']['database_check'] );
+		$this->assertSame( 'not_included', $out['last_good']['files_check'] );
+		$this->assertNull( $out['last_good']['checked_at'] );
+		$this->assertGreaterThanOrEqual( 3600, $out['last_good']['age_seconds'] );
+		$this->assertSame(
+			array(
+				'on'              => false,
+				'satisfied'       => true,
+				'reason'          => 'ok',
+				'verify_schedule' => 'not_scheduled',
+			),
+			$out['gate']
+		);
+	}
+
+	public function test_backup_status_reports_a_running_job_and_a_dead_one(): void {
+		$now = time();
+		aafm_updraft_stub_job(
+			'cccccccccc01',
+			array(
+				'jobstatus'    => 'dbcreating',
+				'runs_started' => array( (float) $now - 5 ),
+				'backup_time'  => $now - 5,
+			)
+		);
+		aafm_updraft_stub_job(
+			'cccccccccc02',
+			array(
+				'jobstatus'    => 'filescreating',
+				'runs_started' => array( (float) $now - 4000 ),
+				'backup_time'  => $now - 4000,
+			)
+		);
+
+		$out = aafm_exec_site_backup_status();
+
+		$this->assertTrue( $out['running'] );
+		$this->assertSame( 'database', $out['stage'] );
+		$this->assertTrue( $out['failed_job'] );
+		$this->assertFalse( $out['queued'] );
+		$this->assertFalse( $out['stalled'] );
+		$this->assertNull( $out['last_good'] );
+		$this->assertSame( 'no_backup', $out['gate']['reason'] );
+	}
+
+	public function test_a_history_reader_that_throws_gives_no_good_set_and_no_list(): void {
+		aafm_updraft_stub_add_set( 'aaaaaaaaaaa1', 3600 );
+		aafm_updraft_stub_throw( true );
+
+		$status = aafm_exec_site_backup_status();
+		$this->assertNull( $status['last_good'] );
+		$this->assertFalse( $status['gate']['satisfied'] );
+		$this->assertSame( 'no_backup', $status['gate']['reason'] );
+
+		$list = aafm_exec_site_list_backups( array() );
+		$this->assertWPError( $list );
+		$this->assertSame( 'aafm_site_backup_no_provider', $list->get_error_code() );
+	}
+
+	public function test_without_updraftplus_status_says_none_and_the_list_is_refused(): void {
+		aafm_updraft_stub_deactivate();
+
+		$status = aafm_exec_site_backup_status();
+		$this->assertSame(
+			array(
+				'provider'   => 'none',
+				'running'    => false,
+				'stage'      => '',
+				'queued'     => false,
+				'stalled'    => false,
+				'failed_job' => false,
+				'last_good'  => null,
+				'gate'       => array(
+					'on'              => false,
+					'satisfied'       => false,
+					'reason'          => 'no_provider',
+					'verify_schedule' => 'not_scheduled',
+				),
+			),
+			$status
+		);
+
+		$list = aafm_exec_site_list_backups( array() );
+		$this->assertWPError( $list );
+		$this->assertSame( 'aafm_site_backup_no_provider', $list->get_error_code() );
+	}
+
+	public function test_the_list_pages_newest_first_and_never_hashes(): void {
+		aafm_updraft_stub_add_set( 'aaaaaaaaaaa1', 3 * DAY_IN_SECONDS );
+		aafm_updraft_stub_add_set( 'aaaaaaaaaaa2', 7200 );
+		aafm_updraft_stub_corrupt( aafm_updraft_stub_add_set( 'aaaaaaaaaaa3', 3600 ) );
+		$hashed = 0;
+		add_action(
+			'aafm_site_backup_hashed',
+			static function ( int $bytes ) use ( &$hashed ): void {
+				$hashed += $bytes;
+			}
+		);
+
+		$out = aafm_exec_site_list_backups( array( 'per_page' => 2 ) );
+
+		$this->assertSame( 3, $out['total'] );
+		$this->assertSame( 1, $out['page'] );
+		$this->assertSame( 2, $out['per_page'] );
+		$this->assertSame( array( 'pending', 'pending' ), array_column( $out['backups'], 'database_check' ), 'A corrupted set still reads pending here: the list never hashes.' );
+		$this->assertSame( gmdate( 'c', time() - 3600 ), $out['backups'][0]['started_at'] );
+		$this->assertSame( 0, $hashed );
+
+		$page_two = aafm_exec_site_list_backups(
+			array(
+				'per_page' => 2,
+				'page'     => 2,
+			)
+		);
+		$this->assertSame( array( 'not_checked' ), array_column( $page_two['backups'], 'database_check' ) );
+
+		$past = aafm_exec_site_list_backups( array( 'page' => 9 ) );
+		$this->assertSame( array(), $past['backups'] );
+		remove_all_actions( 'aafm_site_backup_hashed' );
+	}
+
+	public function test_the_list_shows_a_stored_verdict_with_its_time(): void {
+		$file = aafm_updraft_stub_add_set( 'aaaaaaaaaaa1', 3600 );
+		update_option( 'aafm_backup_verify', $this->verdict( 'aaaaaaaaaaa1', $file, 'failed' ) );
+
+		$out = aafm_exec_site_list_backups( array() );
+
+		$this->assertSame( 'failed', $out['backups'][0]['database_check'] );
+		$this->assertSame( gmdate( 'c', 1795000000 ), $out['backups'][0]['checked_at'] );
+	}
+
+	public function test_no_output_holds_a_file_name_a_path_or_a_nonce(): void {
+		aafm_updraft_stub_add_set( 'aaaaaaaaaaa1', 3600 );
+		$text = (string) wp_json_encode( array( aafm_exec_site_backup_status(), aafm_exec_site_list_backups( array() ) ) );
+
+		$this->assertStringNotContainsString( 'aaaaaaaaaaa1', $text );
+		$this->assertStringNotContainsString( '.gz', $text );
+		$this->assertStringNotContainsString( 'aafm-updraft-stub', $text );
+	}
+
+	public function test_both_output_schemas_are_the_fixed_lists(): void {
+		$status = aafm_args_site_backup_status()['output_schema']['properties'];
+		$this->assertSame( array( 'provider', 'running', 'stage', 'queued', 'stalled', 'failed_job', 'last_good', 'gate' ), array_keys( $status ) );
+		$this->assertSame( array( 'started_at', 'age_seconds', 'scope', 'storage', 'database_check', 'files_check', 'checked_at' ), array_keys( $status['last_good']['properties'] ) );
+		$this->assertSame( array( 'on', 'satisfied', 'reason', 'verify_schedule' ), array_keys( $status['gate']['properties'] ) );
+		$this->assertSame( array( 'verified', 'size_only', 'trusted_unchecked' ), $status['last_good']['properties']['database_check']['enum'] );
+
+		$list = aafm_args_site_list_backups()['output_schema']['properties'];
+		$this->assertSame( array( 'backups', 'total', 'page', 'per_page' ), array_keys( $list ) );
+		$this->assertSame(
+			array(
+				'started_at'     => 'string',
+				'scope'          => 'string',
+				'entities'       => 'array',
+				'total_bytes'    => 'integer',
+				'storage'        => 'string',
+				'database_check' => 'string',
+				'files_check'    => 'string',
+				'checked_at'     => array( 'string', 'null' ),
+			),
+			array_map( static fn( array $property ) => $property['type'], $list['backups']['items']['properties'] )
+		);
+		$this->assertSame( array( 'verified', 'pending', 'too_large', 'size_only', 'trusted_unchecked', 'not_checked', 'failed' ), $list['backups']['items']['properties']['database_check']['enum'] );
+	}
+
+	public function test_both_abilities_are_registered_reads_with_closed_inputs(): void {
+		$registry = aafm_get_abilities_registry();
+		foreach ( array( 'aafm/site-backup-status', 'aafm/site-list-backups' ) as $name ) {
+			$this->assertSame( 'read', $registry[ $name ]['risk'] ?? null, $name );
+			$this->assertSame( 'site_backups', $registry[ $name ]['subject'] ?? null, $name );
+			$args = call_user_func( $registry[ $name ]['args_builder'] );
+			$this->assertFalse( $args['input_schema']['additionalProperties'], $name );
+			$this->assertSame( 'aafm_perm_manage_options', $args['permission_callback'], $name );
+			$this->assertStringContainsString( 'Requires the manage-options capability.', $args['description'], $name );
+			$this->assertStringContainsString( 'The background check runs only while the backup gate is on.', $args['description'], $name . ': with the gate off, pending never resolves.' );
+		}
+		$this->assertSame( array( 'page', 'per_page' ), array_keys( aafm_args_site_list_backups()['input_schema']['properties'] ) );
+	}
 }

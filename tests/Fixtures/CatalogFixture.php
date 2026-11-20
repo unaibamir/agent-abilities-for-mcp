@@ -137,6 +137,8 @@ final class CatalogFixture {
 		'aafm/site-get-redirect',
 		'aafm/site-list-404s',
 		'aafm/site-test-redirect',
+		'aafm/site-backup-status',
+		'aafm/site-list-backups',
 	);
 
 	/**

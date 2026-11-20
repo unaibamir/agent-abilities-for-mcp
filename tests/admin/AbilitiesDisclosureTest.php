@@ -34,6 +34,7 @@ final class AbilitiesDisclosureTest extends TestCase {
 		add_filter( 'aafm_integration_active_geodirectory', '__return_true' );
 		add_filter( 'aafm_integration_active_site_cache', '__return_true' );
 		add_filter( 'aafm_integration_active_site_redirects', '__return_true' );
+		add_filter( 'aafm_integration_active_site_backups', '__return_true' );
 		aafm_flush_registry_cache();
 	}
 

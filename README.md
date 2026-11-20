@@ -180,9 +180,9 @@ The Model Context Protocol is an open specification that Anthropic originally de
 ### 1.13.0
 
 * **Feature:** Agents can clear one post, one URL or the whole site from the page cache of 13 cache plugins, including LiteSpeed Cache, WP Super Cache and W3 Total Cache. Each plugin's result says whether a cached copy was found and removed or the purge was only requested.
-* **Feature:** Agents can list redirects, read one, list not-found addresses and test which redirect a URL would hit in Redirection, Rank Math, Safe Redirect Manager, 301 Redirects and Slim SEO. These tools change nothing.
-* **Feature:** New read tools report UpdraftPlus backups, Site Health results, waiting updates and scheduled tasks, and send no request of their own. The backup gate under Settings, off by default, refuses the risky tools you pick unless a checked backup from the last 24 hours exists.
-* **Fix:** REST requests that are not for the MCP endpoint no longer build the tool list. wpbakery-replace-text now returns a restore point, WPBakery element settings accept an image id sent as a string of digits, and Check my connection reports WP Rocket's MCP server when both run on one site.
+* **Feature:** Agents can list redirects, read one, list not-found addresses and test which redirect a URL would hit in Redirection, Rank Math, Safe Redirect Manager, 301 Redirects and Slim SEO, without changing them. wpbakery-replace-text now returns a restore point, and Check my connection shows when WP Rocket runs its own MCP server.
+* **Feature:** Backup gate: a Settings option, off by default, that refuses the risky tools you pick unless UpdraftPlus has a checked backup from the last 24 hours. New read tools report those backups, Site Health results, waiting updates and scheduled tasks, and make no outbound requests.
+* **Fix:** REST requests that are not for the MCP endpoint no longer load the plugin's tool set, and WPBakery element settings accept an image id sent as a string of digits.
 * **Chore:** The FAQ no longer says WPBakery's Role Manager is never applied, and the admin header now says nothing from this plugin is exposed until you switch it on.
 
 ### 1.12.0

@@ -471,6 +471,14 @@ final class SiteRedirectReadTest extends TestCase {
 		);
 		$this->assertSame( 'rank_math_404_fallback', $result['chain'][0]['setting'] );
 		$this->assertSame( 'matched', $result['evaluated'][0]['result'] );
+		$this->assertFalse( $result['approximate'] );
+
+		// A match that a WordPress redirect can come before marks the whole answer approximate.
+		Stub::$fake['fake_a'] = array( 'match_return' => $setting + array( 'approximate' => true ) );
+		$this->assertSame( $setting + array( 'approximate' => true ), aafm_site_redirect_match( 'fake_a', '/gone', $cache ) );
+		$this->assertTrue( $this->chain( '/gone' )['approximate'] );
+		Stub::$fake['fake_a'] = array( 'match_return' => $setting + array( 'approximate' => 'yes' ) );
+		$this->assertSame( $setting, aafm_site_redirect_match( 'fake_a', '/gone', $cache ), 'Only true counts.' );
 
 		$setting['setting']   = 'Not a code!';
 		Stub::$fake['fake_a'] = array( 'match_return' => $setting );
@@ -550,11 +558,116 @@ final class SiteRedirectReadTest extends TestCase {
 		$this->assertSame( array( 'class' => 'not_found' ), aafm_site_redirect_path_class( '/acc-nothing-here/' ) );
 		$this->assertSame( array( 'class' => 'not_found' ), aafm_site_redirect_path_class( '/acc-private/' ), 'A private post is not found for a visitor.' );
 		$this->assertSame( array( 'class' => 'not_found' ), aafm_site_redirect_path_class( '/author/no-such-writer/' ) );
+		$this->assertSame( array( 'class' => 'not_found' ), aafm_site_redirect_path_class( '/2025/13/' ), 'A query that is a 404 by itself.' );
+		$this->assertSame(
+			array(
+				'class' => 'date',
+				'vars'  => array( 'year' => '2025' ),
+			),
+			aafm_site_redirect_path_class( '/2025/', true ),
+			'The query variables of the matching rule, on request.'
+		);
+
+		// Core's own request filter makes /type/aside/ a post format archive (the rule and the query
+		// variable are the ones core registers on init, which the test site has not run).
+		global $wp_rewrite, $wp;
+		$public                  = $wp->public_query_vars;
+		$wp->public_query_vars[] = 'post_format';
+		$wp_rewrite->rules       = array( 'type/([^/]+)/?$' => 'index.php?post_format=$matches[1]' ) + $wp_rewrite->rules;
+		set_post_format( $parent, 'aside' );
+		$this->assertSame( array( 'class' => 'other' ), aafm_site_redirect_path_class( '/type/aside/' ) );
+		$this->assertSame( array( 'class' => 'not_found' ), aafm_site_redirect_path_class( '/type/acc-none/' ) );
+		$wp->public_query_vars = $public;
+
+		// The caller is signed in; the answer is what a visitor gets. WP_Query keeps a post a visitor
+		// cannot read, and an attachment of one, for a reader who may edit it.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		foreach ( array( 'draft', 'pending', 'future', 'private' ) as $status ) {
+			$hidden = self::factory()->post->create(
+				array(
+					'post_name'   => 'acc-' . $status,
+					'post_status' => $status,
+					'post_date'   => 'future' === $status ? '2099-01-10 10:00:00' : '2025-01-10 10:00:00',
+				)
+			);
+			self::factory()->attachment->create_object(
+				array(
+					'file'           => 'acc-' . $status . '-img.png',
+					'post_parent'    => $hidden,
+					'post_name'      => 'acc-' . $status . '-img',
+					'post_mime_type' => 'image/png',
+				)
+			);
+			$this->assertSame( array( 'class' => 'not_found' ), aafm_site_redirect_path_class( '/acc-' . $status . '/acc-' . $status . '-img/' ), 'An attachment of a ' . $status . ' post.' );
+			$this->assertSame( array( 'class' => 'not_found' ), aafm_site_redirect_path_class( '/acc-' . $status . '/' ), 'A ' . $status . ' post.' );
+		}
+		$this->assertSame( 'attachment', aafm_site_redirect_path_class( '/acc-parent/acc-img/' )['class'], 'A published parent still counts.' );
+		wp_set_current_user( 0 );
 
 		update_option( 'home', 'http://example.org/sub' );
 		$this->assertSame( array( 'class' => 'date' ), aafm_site_redirect_path_class( '/sub/2025/' ), 'The home path is removed first, as WP::parse_request() removes it.' );
 		$this->assertSame( array( 'class' => 'other' ), aafm_site_redirect_path_class( '/sub/' ) );
 		$this->assertSame( 0, did_action( 'parse_request' ) - $this->parse_requests, 'The request is never parsed by WordPress itself.' );
+	}
+
+	public function test_path_class_runs_no_plugin_query_code_and_leaves_a_404_it_could_change_unclassified(): void {
+		$this->set_permalink_structure( '/%postname%/' );
+		self::factory()->post->create(
+			array(
+				'post_name'   => 'acc-found',
+				'post_author' => self::factory()->user->create(),
+			)
+		);
+
+		// A router on the main query, which also writes: a second WP_Query would not see it serve
+		// /acc-virtual/, and would run its write.
+		$ran    = 0;
+		$router = static function ( $query ) use ( &$ran ) {
+			++$ran;
+			update_option( 'aafm_test_router_ran', $ran );
+			if ( $query->is_main_query() && 'acc-virtual' === $query->get( 'name' ) ) {
+				$query->set( 'name', 'acc-found' );
+			}
+		};
+		add_action( 'pre_get_posts', $router );
+		$hooked = array(
+			'class'  => 'not_found',
+			'hooked' => true,
+		);
+		$this->assertSame( $hooked, aafm_site_redirect_path_class( '/acc-virtual/' ), 'Plugin code on the main query can serve a page WordPress alone does not find.' );
+		$this->assertSame( array( 'class' => 'other' ), aafm_site_redirect_path_class( '/acc-found/' ), 'An answer that does not hang on the 404 stays.' );
+		$this->assertSame( 0, $ran, 'No plugin query code runs in the classifier.' );
+		$this->assertFalse( get_option( 'aafm_test_router_ran' ) );
+		remove_action( 'pre_get_posts', $router );
+
+		// Every hook where a real request runs such code, before, inside or in place of the 404.
+		$noop = static function ( $value = null ) {
+			return $value;
+		};
+		foreach ( array( 'do_parse_request', 'request', 'parse_request', 'parse_query', 'parse_tax_query', 'posts_where', 'posts_pre_query', 'posts_results', 'the_posts' ) as $hook ) {
+			add_filter( $hook, $noop );
+			$this->assertSame( $hooked, aafm_site_redirect_path_class( '/acc-nothing-here/' ), $hook );
+			remove_filter( $hook, $noop );
+		}
+		$this->assertSame( array( 'class' => 'not_found' ), aafm_site_redirect_path_class( '/acc-nothing-here/' ), 'Core and this plugin hook some of them; that does not count.' );
+
+		// Both early 404 answers follow the same rule: a query that is a 404 by itself, and no rule.
+		add_filter( 'pre_handle_404', '__return_false' );
+		$this->assertSame( $hooked, aafm_site_redirect_path_class( '/2025/13/' ) );
+		global $wp_rewrite;
+		$rules             = $wp_rewrite->rules;
+		$wp_rewrite->rules = array( 'acc-only/?$' => 'index.php?pagename=acc-only' );
+		$this->assertSame( $hooked, aafm_site_redirect_path_class( '/acc-no-rule/' ) );
+		remove_filter( 'pre_handle_404', '__return_false' );
+		$this->assertSame( array( 'class' => 'not_found' ), aafm_site_redirect_path_class( '/acc-no-rule/' ) );
+		$wp_rewrite->rules = $rules;
+
+		// A callback whose source was read counts only where the path sets its query variable.
+		add_filter( 'request', 'RankMath\Rewrite::author_request' );
+		$this->assertSame( array( 'class' => 'not_found' ), aafm_site_redirect_path_class( '/acc-nothing-here/' ) );
+		$this->assertSame( $hooked, aafm_site_redirect_path_class( '/author/no-such-writer/' ), 'Rank Math maps a custom author slug.' );
+		remove_filter( 'request', 'RankMath\Rewrite::author_request' );
+		$this->assertSame( $hooked, aafm_site_redirect_path_class( '/.well-known/oauth-authorization-server' ), 'This plugin serves its OAuth discovery documents there.' );
 	}
 
 	public function test_path_class_is_unclassified_where_it_cannot_decide(): void {

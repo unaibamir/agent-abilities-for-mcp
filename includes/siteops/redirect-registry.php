@@ -22,7 +22,9 @@ defined( 'ABSPATH' ) || exit;
  * detect (symbol tests, all of which must pass, tested by aafm_site_cache_detected()); has_404
  * (false means list_404s() is never called); match_path ('full' or 'below_home': the path the
  * adapter's match() is given on a site whose home URL has a path); relative_targets ('host_root'
- * or 'home': what a stored target without a scheme is relative to).
+ * or 'home': what a stored target without a scheme is relative to); ask_when_not_ready (true when
+ * the plugin also redirects from settings outside its redirect module, so site-test-redirect asks
+ * it while that module is off; its match() then answers for those settings alone).
  *
  * @return array<string,array<string,mixed>>
  */
@@ -56,20 +58,22 @@ function aafm_site_redirect_adapters(): array {
 			'relative_targets' => 'host_root',
 		),
 		'rankmath'              => array(
-			'label'            => 'Rank Math',
-			'plugins'          => array( 'seo-by-rank-math/rank-math.php' ),
-			'detect'           => array( array( 'constant', 'RANK_MATH_VERSION' ) ),
-			'has_404'          => true,
-			'match_path'       => 'full',
-			'relative_targets' => 'home',
+			'label'              => 'Rank Math',
+			'plugins'            => array( 'seo-by-rank-math/rank-math.php' ),
+			'detect'             => array( array( 'constant', 'RANK_MATH_VERSION' ) ),
+			'has_404'            => true,
+			'match_path'         => 'full',
+			'relative_targets'   => 'home',
+			'ask_when_not_ready' => true,
 		),
 		'slim_seo'              => array(
-			'label'            => 'Slim SEO',
-			'plugins'          => array( 'slim-seo/slim-seo.php' ),
-			'detect'           => array( array( 'constant', 'SLIM_SEO_VER' ) ),
-			'has_404'          => true,
-			'match_path'       => 'below_home',
-			'relative_targets' => 'home',
+			'label'              => 'Slim SEO',
+			'plugins'            => array( 'slim-seo/slim-seo.php' ),
+			'detect'             => array( array( 'constant', 'SLIM_SEO_VER' ) ),
+			'has_404'            => true,
+			'match_path'         => 'below_home',
+			'relative_targets'   => 'home',
+			'ask_when_not_ready' => true,
 		),
 	);
 
@@ -258,6 +262,10 @@ function aafm_site_redirect_match( string $slug, string $path, array &$cache ): 
 		);
 		if ( '' !== $setting ) {
 			$matched['setting'] = $setting;
+		}
+		if ( true === ( $value['approximate'] ?? null ) ) {
+			// A WordPress redirect can answer the real request before this one.
+			$matched['approximate'] = true;
 		}
 		return $matched;
 	}

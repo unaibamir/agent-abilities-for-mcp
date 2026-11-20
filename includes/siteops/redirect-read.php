@@ -275,13 +275,13 @@ function aafm_site_redirect_is_protected( string $path ): bool {
 /**
  * Follow the stored redirects from one path, for up to ten hops.
  *
- * Every ready provider is asked at every step, in registry order. A hop is the first provider
- * that answers 'matched', provided no provider before it answered 'unknown': an unevaluated rule
- * is never read as "no redirect". A provider whose own capability the caller lacks answers
- * 'unknown'.
+ * Every provider the tool passes is asked at every step, in registry order. A hop is the first
+ * provider that answers 'matched', provided no provider before it answered 'unknown': an
+ * unevaluated rule is never read as "no redirect". A provider whose own capability the caller
+ * lacks answers 'unknown'.
  *
  * @param string            $path        Full canonical decoded path.
- * @param array<int,string> $ready_slugs The value of aafm_site_redirect_ready_slugs(), computed once by the calling tool.
+ * @param array<int,string> $ready_slugs The ready slugs, computed once by the calling tool, plus any it asks while not ready.
  * @return array{evaluated:list<array<string,string>>,first_match:?array<string,mixed>,chain:list<array<string,mixed>>,chain_ends:string,loop_detected:bool,approximate:bool}
  */
 function aafm_site_redirect_chain( string $path, array $ready_slugs ): array {
@@ -354,6 +354,9 @@ function aafm_site_redirect_chain( string $path, array $ready_slugs ): array {
 				if ( isset( $answer['setting'] ) ) {
 					// The plugin setting that redirects, where no stored rule does.
 					$hop['setting'] = (string) $answer['setting'];
+				}
+				if ( ! empty( $answer['approximate'] ) ) {
+					$approximate = true;
 				}
 				break;
 			}
@@ -544,27 +547,115 @@ function aafm_siteops_table_exists( string $table ): bool {
 }
 
 /**
+ * Whether plugin code that can turn a page WordPress alone answers with a 404 into a page is
+ * hooked where a real request runs it: before the query (do_parse_request, request,
+ * parse_request), inside it (parse_query, parse_tax_query, pre_get_posts, every posts_ filter,
+ * posts_results, the_posts) or in place of handle_404() (pre_handle_404). The classifier runs
+ * none of it, so such a 404 carries 'hooked', and a redirect that acts on pages not found cannot
+ * be told from it.
+ *
+ * A callback whose source was read and that acts only when the path sets one of its query
+ * variables does not count otherwise: core's post format filter (the classifier applies it), REST
+ * loading and old-post comment closing; Rank Math's author slug, old category base and sitemap
+ * callbacks (1.0.282: class-rewrite.php:51 and :36, sitemap/class-router.php:42); Slim SEO's old
+ * category base (4.11.6: NoCategoryBase.php:14). This plugin's OAuth discovery serves only
+ * /.well-known/ addresses.
+ *
+ * @param string              $path Full canonical decoded path.
+ * @param array<string,mixed> $vars The query variables the path's rewrite rule gives.
+ * @return bool
+ */
+function aafm_site_redirect_404_hooked( string $path, array $vars ): bool {
+	global $wp_filter;
+
+	$known = array(
+		'_post_format_request'                     => array(),
+		'rest_api_loaded'                          => array(),
+		'_close_comments_for_old_posts'            => array(),
+		'RankMath\Rewrite::author_request'         => array( 'author_name' ),
+		'RankMath\Rewrite::request'                => array( 'rank_math_category_redirect' ),
+		'RankMath\Sitemap\Router::request_sitemap' => array( 'sitemap', 'xsl' ),
+		'SlimSEO\NoCategoryBase::redirect'         => array( 'category_redirect' ),
+	);
+	$hooks = array( 'do_parse_request', 'request', 'parse_request', 'parse_query', 'parse_tax_query', 'pre_get_posts', 'posts_results', 'the_posts', 'pre_handle_404' );
+	foreach ( array_keys( (array) $wp_filter ) as $hook ) {
+		if ( 0 === strpos( (string) $hook, 'posts_' ) ) {
+			$hooks[] = (string) $hook;
+		}
+	}
+
+	foreach ( array_unique( $hooks ) as $hook ) {
+		$object = $wp_filter[ $hook ] ?? null;
+		if ( ! $object instanceof WP_Hook ) {
+			continue;
+		}
+		foreach ( $object->callbacks as $callbacks ) {
+			foreach ( $callbacks as $callback ) {
+				$function = $callback['function'] ?? null;
+				$id       = is_string( $function ) ? $function : '';
+				if ( is_array( $function ) && isset( $function[0], $function[1] ) && is_string( $function[1] ) ) {
+					$id = ( is_object( $function[0] ) ? get_class( $function[0] ) : (string) $function[0] ) . '::' . $function[1];
+				}
+				if ( 'aafm_oauth_maybe_serve_well_known' === $id ) {
+					if ( false !== strpos( $path . '/', '/.well-known/' ) ) {
+						return true;
+					}
+					continue;
+				}
+				if ( ! isset( $known[ $id ] ) ) {
+					return true;
+				}
+				foreach ( $known[ $id ] as $var ) {
+					if ( isset( $vars[ $var ] ) && '' !== $vars[ $var ] ) {
+						return true;
+					}
+				}
+			}
+		}
+	}
+
+	return false;
+}
+
+/**
  * What WordPress's own main query makes of a path, for the redirects a plugin makes from a setting
  * rather than a stored rule: attachment pages, author and date archives, pages not found.
  *
  * It copies the first half of url_to_postid() and WP::parse_request(): the same rewrite rule
- * loop, the same check of verbose page rules, the same public query variables. Then one WP_Query
- * that asks for what a visitor sees (published posts and attachments), then the rules of
- * WP::handle_404(). It never calls WP::parse_request(), whose hooks other plugins use to send
- * headers or redirect, and it writes nothing; callbacks on pre_get_posts run inside the query, as
- * they do inside url_to_postid(). A page that plugin code serves outside the rewrite rules is
- * classed as WordPress alone would class it.
+ * loop, the same check of verbose page rules, the same public query variables, and core's own
+ * post format request filter. Then one WP_Query that asks for what a visitor sees (published
+ * posts and attachments, nothing whose status a visitor cannot read even when the caller can),
+ * then the rules of WP::handle_404(). It runs no plugin code: it never calls
+ * WP::parse_request(), whose hooks other plugins use to send headers or redirect, and the query
+ * runs with its filters suppressed and with nothing on the actions suppress_filters leaves on, so
+ * it writes nothing. A page is classed as WordPress alone would class it.
+ *
+ * A 404 carries 'hooked' => true when plugin code that could serve the page is hooked where the
+ * real request runs it (aafm_site_redirect_404_hooked()): a redirect of pages not found cannot be
+ * told from it, while a setting for another kind of page still does not apply.
  *
  * Unclassified: plain permalinks, rewrite rules this request has not built, an index.php/ address,
- * a callback on pre_handle_404 when the page would otherwise be a 404 (the callback can stop the
- * 404, and the reset of the flags that comes with it), and any error.
+ * any error, and a page handle_404() would make a 404 while a callback is on pre_handle_404 (the
+ * callback can stop the 404, and the reset of the flags that comes with it, so an empty date or
+ * author archive would still be one).
  *
- * @param string $path Full canonical decoded path, home path included.
+ * @param string $path      Full canonical decoded path, home path included.
+ * @param bool   $with_vars Also return the query variables of the matching rewrite rule, as 'vars'.
  * @return array<string,mixed> 'class' is attachment (with 'id' and 'parent'), author (with
- *                             'has_posts'), date, not_found, other or unclassified.
+ *                             'has_posts'), date, not_found (with 'hooked' when true), other or
+ *                             unclassified.
  */
-function aafm_site_redirect_path_class( string $path ): array {
-	global $wp_rewrite, $wp;
+function aafm_site_redirect_path_class( string $path, bool $with_vars = false ): array {
+	global $wp_rewrite, $wp, $wp_filter;
+
+	$vars   = array();
+	$answer = static function ( array $result ) use ( &$vars, $path, $with_vars ): array {
+		if ( 'not_found' === $result['class'] && aafm_site_redirect_404_hooked( $path, $vars ) ) {
+			$result['hooked'] = true;
+		}
+
+		return $with_vars ? $result + array( 'vars' => $vars ) : $result;
+	};
 
 	try {
 		$request = trim( $path, '/' );
@@ -573,14 +664,14 @@ function aafm_site_redirect_path_class( string $path ): array {
 			$request = trim( (string) preg_replace( '|^' . preg_quote( $home, '|' ) . '|i', '', $request ), '/' );
 		}
 		if ( '' === $request || 'index.php' === $request ) {
-			return array( 'class' => 'other' );
+			return $answer( array( 'class' => 'other' ) );
 		}
 
 		// The rules this request already holds: WP::parse_request() built them for it. Building them
 		// here with wp_rewrite_rules() would store them when the option is empty.
 		$rules = ( $wp_rewrite instanceof WP_Rewrite && '' !== (string) $wp_rewrite->permalink_structure && is_array( $wp_rewrite->rules ) ) ? $wp_rewrite->rules : array();
 		if ( empty( $rules ) || ! ( $wp instanceof WP ) || 0 === strpos( $request, 'index.php/' ) ) {
-			return array( 'class' => 'unclassified' );
+			return $answer( array( 'class' => 'unclassified' ) );
 		}
 
 		$perma = null;
@@ -603,7 +694,7 @@ function aafm_site_redirect_path_class( string $path ): array {
 		}
 		if ( ! is_array( $perma ) ) {
 			// No rule matched: WordPress answers 404.
-			return array( 'class' => 'not_found' );
+			return $answer( array( 'class' => 'not_found' ) );
 		}
 
 		$type_vars = array();
@@ -612,7 +703,6 @@ function aafm_site_redirect_path_class( string $path ): array {
 				$type_vars[ $object->query_var ] = $type;
 			}
 		}
-		$vars = array();
 		foreach ( (array) $wp->public_query_vars as $var ) {
 			if ( ! isset( $perma[ $var ] ) ) {
 				continue;
@@ -626,22 +716,62 @@ function aafm_site_redirect_path_class( string $path ): array {
 		if ( isset( $vars['post_type'] ) && is_string( $vars['post_type'] ) && ! in_array( $vars['post_type'], get_post_types( array( 'publicly_queryable' => true ) ), true ) ) {
 			unset( $vars['post_type'] );
 		}
-		$vars                  = wp_resolve_numeric_slug_conflicts( $vars );
-		$vars['post_status']   = array( 'publish', 'inherit' );
-		$vars['no_found_rows'] = true;
-		$query                 = new WP_Query( $vars );
+		$vars = wp_resolve_numeric_slug_conflicts( $vars );
+		if ( false !== has_filter( 'request', '_post_format_request' ) ) {
+			// Core's own request filter, which makes /type/aside/ a post format archive.
+			$vars = _post_format_request( $vars );
+		}
+
+		// No plugin code runs in this query: suppress_filters keeps the posts filters out, and the
+		// actions it leaves on are emptied for the length of the query.
+		$detached = array();
+		foreach ( array( 'parse_query', 'parse_tax_query', 'pre_get_posts', 'posts_selection', 'posts_pre_query', 'set_404' ) as $hook ) {
+			if ( isset( $wp_filter[ $hook ] ) ) {
+				$detached[ $hook ] = $wp_filter[ $hook ];
+				unset( $wp_filter[ $hook ] );
+			}
+		}
+		try {
+			$query = new WP_Query(
+				array_merge(
+					$vars,
+					array(
+						'post_status'      => array( 'publish', 'inherit' ),
+						'no_found_rows'    => true,
+						'suppress_filters' => true,
+					)
+				)
+			);
+		} finally {
+			foreach ( $detached as $hook => $object ) {
+				$wp_filter[ $hook ] = $object; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Puts back the hook object taken out above.
+			}
+		}
 
 		if ( $query->is_404() ) {
-			return array( 'class' => 'not_found' );
+			return $answer( array( 'class' => 'not_found' ) );
 		}
+		$posts = $query->posts;
+		$post  = $query->post;
+		if ( ( $query->is_single() || $query->is_page() ) && isset( $posts[0] ) && $posts[0] instanceof WP_Post ) {
+			// WP_Query keeps a draft, pending, scheduled or private post, and an attachment of one,
+			// for a caller who may read it; a visitor gets a 404.
+			$status = (string) get_post_status( $posts[0] );
+			$object = get_post_status_object( $status );
+			if ( ! in_array( $status, array( 'publish', 'inherit' ), true ) && ( ! $object || ! $object->public ) ) {
+				$posts = array();
+				$post  = null;
+			}
+		}
+
 		$set_404 = true;
 		$page    = trim( (string) ( $vars['page'] ?? '' ), '/' );
 		if ( $query->is_robots() || $query->is_favicon() || '' !== (string) $query->get( 'sitemap' ) || '' !== (string) $query->get( 'sitemap-stylesheet' ) ) {
 			$set_404 = false;
-		} elseif ( ! empty( $query->posts ) ) {
+		} elseif ( ! empty( $posts ) ) {
 			$set_404 = false;
-			if ( '' !== $page && $query->is_singular() && $query->post instanceof WP_Post ) {
-				$next    = substr_count( $query->post->post_content, '<!--nextpage-->' );
+			if ( '' !== $page && $query->is_singular() && $post instanceof WP_Post ) {
+				$next    = substr_count( $post->post_content, '<!--nextpage-->' );
 				$set_404 = 0 === $next || (int) $page > $next + 1;
 			}
 			if ( '' !== $page && $query->is_posts_page ) {
@@ -655,24 +785,28 @@ function aafm_site_redirect_path_class( string $path ): array {
 		}
 
 		if ( $set_404 ) {
-			return array( 'class' => false !== has_filter( 'pre_handle_404' ) ? 'unclassified' : 'not_found' );
+			return $answer( array( 'class' => false !== has_filter( 'pre_handle_404' ) ? 'unclassified' : 'not_found' ) );
 		}
-		if ( $query->is_attachment() && $query->post instanceof WP_Post ) {
-			return array(
-				'class'  => 'attachment',
-				'id'     => (int) $query->post->ID,
-				'parent' => (int) $query->post->post_parent,
+		if ( $query->is_attachment() && $post instanceof WP_Post ) {
+			return $answer(
+				array(
+					'class'  => 'attachment',
+					'id'     => (int) $post->ID,
+					'parent' => (int) $post->post_parent,
+				)
 			);
 		}
 		if ( $query->is_author() ) {
-			return array(
-				'class'     => 'author',
-				'has_posts' => ! empty( $query->posts ),
+			return $answer(
+				array(
+					'class'     => 'author',
+					'has_posts' => ! empty( $posts ),
+				)
 			);
 		}
 
-		return array( 'class' => $query->is_date() ? 'date' : 'other' );
+		return $answer( array( 'class' => $query->is_date() ? 'date' : 'other' ) );
 	} catch ( \Throwable $e ) {
-		return array( 'class' => 'unclassified' );
+		return $answer( array( 'class' => 'unclassified' ) );
 	}
 }

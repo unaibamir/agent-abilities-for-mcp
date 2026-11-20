@@ -69,7 +69,7 @@ function aafm_ajax_backup_verify_now(): void {
 	$result = aafm_backup_verify_run( 20, true );
 
 	$messages = array(
-		'ran'           => __( 'The check ran. Reload to see the new status.', 'agent-abilities-for-mcp' ),
+		'ran'           => __( 'The check ran. The status above is from before the check. Reload to see the result.', 'agent-abilities-for-mcp' ),
 		'nothing_to_do' => __( 'There was nothing new to check. Reload to see the current status.', 'agent-abilities-for-mcp' ),
 		'not_stored'    => __( 'The check ran, but its result could not be saved. Flush the object cache and press Verify now again.', 'agent-abilities-for-mcp' ),
 		'not_read'      => __( "UpdraftPlus's backup list could not be read. Reload this page and try again.", 'agent-abilities-for-mcp' ),

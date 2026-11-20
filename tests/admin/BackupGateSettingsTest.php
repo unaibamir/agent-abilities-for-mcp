@@ -247,6 +247,7 @@ final class BackupGateSettingsTest extends TestCase {
 		$this->assertTrue( $json['success'] ?? false );
 		$this->assertSame( 'ran', $json['data']['result'] ?? '' );
 		$this->assertStringContainsString( 'Reload', (string) ( $json['data']['message'] ?? '' ) );
+		$this->assertStringContainsString( 'status above is from before', (string) ( $json['data']['message'] ?? '' ), 'The card does not refresh itself, and the message says which part is stale.' );
 		$this->assertSame( 'verified', aafm_backup_verify_read()['aaaaaaaaaaa1']['verdict'] );
 	}
 

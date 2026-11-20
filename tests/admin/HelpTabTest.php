@@ -34,8 +34,8 @@ final class HelpTabTest extends TestCase {
 		aafm_render_help_tab();
 		$html = (string) ob_get_clean();
 
-		// One <details> accordion per documented issue (19 total).
-		$this->assertSame( 19, substr_count( $html, '<details class="aafm-help-entry">' ) );
+		// One <details> accordion per documented issue (20 total).
+		$this->assertSame( 20, substr_count( $html, '<details class="aafm-help-entry">' ) );
 
 		// Spot-check the load-bearing technical fixes are present and accurate.
 		$this->assertStringContainsString( 'rest_route=/agent-abilities-for-mcp/mcp', $html );
@@ -84,6 +84,18 @@ final class HelpTabTest extends TestCase {
 		$this->assertStringNotContainsString( 'do not eat into each other', $html );
 		$this->assertStringContainsString( 'per agent user, not per connection', $html );
 		$this->assertStringContainsString( 'share one budget', $html );
+	}
+
+	public function test_help_tab_explains_the_backup_gate(): void {
+		$this->acting_as( 'administrator' );
+
+		ob_start();
+		aafm_render_help_tab();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'What is the backup gate?', $html );
+		$this->assertStringContainsString( 'These tools cannot start a backup.', $html );
+		$this->assertStringContainsString( 'Verify now', $html );
 	}
 
 	public function test_help_tab_documents_the_waf_cdn_unreachable_cluster(): void {

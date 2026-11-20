@@ -1316,6 +1316,7 @@ function aafm_register_privacy_policy_content(): void {
 	$content = wp_kses_post(
 		'<p>' . __( 'When an administrator exposes a content type to AI agents through Agent Abilities for MCP, an authenticated agent can read that type\'s title, slug, excerpt, status, permalink, publish/modified dates, and author id. If an administrator also exposes specific meta keys, an agent can read and change those keys\' values on any post it is allowed to edit. Protected keys (those prefixed with an underscore) and authentication-related keys can never be exposed. Only expose content types and meta keys whose values do not hold personal data.', 'agent-abilities-for-mcp' ) . '</p>'
 		. '<p>' . __( 'If user abilities are enabled, an agent can read a user\'s display name, email, roles, and post count, plus any exposed user meta. If the WooCommerce integration is enabled, an agent can read and, depending on which abilities are turned on, write customer and order data - including full billing and shipping addresses, phone number, and order/purchase history. If the ACF (or SCF) integration is enabled, an agent can read and write ACF field values directly; ACF fields are a separate surface from the meta-key allowlist above and are not filtered by it.', 'agent-abilities-for-mcp' ) . '</p>'
+		. '<p>' . __( 'If the page cache, redirect or backup tools are enabled, an agent can read the addresses visitors requested that were not found (as recorded by your redirect plugin, with query strings removed), your stored redirects, and the dates and sizes of your backups. Not-found addresses can contain personal data that visitors typed into a URL.', 'agent-abilities-for-mcp' ) . '</p>'
 		. '<p>' . aafm_privacy_policy_change_history_text() . '</p>'
 	);
 	wp_add_privacy_policy_content( __( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ), $content );
@@ -3604,6 +3605,17 @@ function aafm_render_help_tab(): void {
 			'<p>' . esc_html__( 'Yes. The Settings tab has a "Rate limit (per minute)" field. Set it to a number and each agent user can make at most that many calls per minute; set it to 0 to turn the limit off. The cap is counted per agent user, not per connection, so two connections signed in as the same agent user share one budget between them.', 'agent-abilities-for-mcp' ) . '</p>'
 			. '<p>' . esc_html__( 'On the Connection tab you can also give one OAuth connection a lower limit of its own. Each of its calls still counts against the agent user\'s limit as well.', 'agent-abilities-for-mcp' ) . '</p>'
 			. '<p>' . esc_html__( 'Calls that go over the limit are denied, and each denial is written to the Activity Log like any other blocked call, so you can see when a connection is hitting the ceiling.', 'agent-abilities-for-mcp' ) . '</p>',
+			$inline
+		)
+	);
+
+	// 11. The backup gate.
+	aafm_render_help_entry(
+		__( 'What is the backup gate?', 'agent-abilities-for-mcp' ),
+		wp_kses(
+			'<p>' . esc_html__( 'The backup gate is a setting on the Settings tab, and it starts off. When it is on, the tools you tick there are refused unless UpdraftPlus has a database backup from the last 24 hours that passed a check. Agents still see those tools, and a refused call says why.', 'agent-abilities-for-mcp' ) . '</p>'
+			. '<p>' . esc_html__( 'A small backup is compared with the checksum UpdraftPlus recorded at the moment a gated tool is called. A larger one is checked in the background about once an hour, and the gate stays closed for it until then. The card shows the newest good backup, says when a check is waiting or cannot finish, and has a Verify now button.', 'agent-abilities-for-mcp' ) . '</p>'
+			. '<p>' . esc_html__( 'These tools cannot start a backup. Run one in UpdraftPlus or let its schedule do it. Without UpdraftPlus, or on a multisite network, every ticked tool is refused while the gate is on.', 'agent-abilities-for-mcp' ) . '</p>',
 			$inline
 		)
 	);

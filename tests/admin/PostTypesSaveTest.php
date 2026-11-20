@@ -146,6 +146,11 @@ final class PostTypesSaveTest extends TestCase {
 			strtolower( (string) $entry['policy_text'] ),
 			'Suggested text must mention meta exposure.'
 		);
+		$this->assertStringContainsString(
+			'Not-found addresses can contain personal data that visitors typed into a URL.',
+			(string) $entry['policy_text'],
+			'Suggested text must disclose what the Site Ops read tools can show an agent.'
+		);
 	}
 
 	/**

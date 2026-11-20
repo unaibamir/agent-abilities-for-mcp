@@ -1780,4 +1780,224 @@ if ( ! function_exists( 'sg_cachepress_purge_cache' ) ) {
 		return null;
 	}
 }
+if ( ! defined( 'REDIRECTION_DB_VERSION' ) ) {
+	define( 'REDIRECTION_DB_VERSION', '4.2' );
+}
+
+if ( ! class_exists( 'EPS_Redirects' ) ) {
+	/**
+	 * Minimal 301 Redirects (EPS) signature for static analysis only.
+	 */
+	class EPS_Redirects {
+		/**
+		 * @param bool $active_only Only rows that are on.
+		 * @return mixed
+		 */
+		public static function get_redirects( $active_only = false ) {
+			return array();
+		}
+	}
+}
+
+if ( ! class_exists( 'Red_Options' ) ) {
+	/**
+	 * Minimal Redirection signatures for static analysis only.
+	 */
+	class Red_Options {
+		/** @return mixed */
+		public static function get() {
+			return array();
+		}
+		/** @return void */
+		public static function reset() {}
+	}
+	class Red_Item {
+		/** @var mixed */
+		public $source_flags = null;
+		/** @var mixed */
+		public $match = null;
+		/**
+		 * @param array<string,mixed> $params Filter parameters.
+		 * @return mixed
+		 */
+		public static function get_filtered( array $params ) {
+			return array();
+		}
+		/**
+		 * @param string $url URL to match.
+		 * @return array<int,mixed>
+		 */
+		public static function get_for_url( $url ) {
+			return array();
+		}
+		/** @return string */
+		public function get_url() {
+			return '';
+		}
+		/** @return int */
+		public function get_id() {
+			return 0;
+		}
+		/** @return int */
+		public function get_action_code() {
+			return 0;
+		}
+	}
+	class Red_Url_Request {
+		/** @param string $url URL. */
+		public function __construct( $url ) {}
+		/** @return string */
+		public function get_original_url() {
+			return '';
+		}
+		/** @return string */
+		public function get_decoded_url() {
+			return '';
+		}
+		/** @return bool */
+		public function is_protected_url() {
+			return false;
+		}
+	}
+	class Red_Url {
+		/** @param string $url URL. */
+		public function __construct( $url = '' ) {}
+		/**
+		 * @param string $requested_url Requested URL.
+		 * @param mixed  $flags         Source flags.
+		 * @return bool
+		 */
+		public function is_match( $requested_url, $flags ) {
+			return false;
+		}
+	}
+	class Red_404_Log {
+		/**
+		 * @param string              $group  Group column.
+		 * @param array<string,mixed> $params Query parameters.
+		 * @return mixed
+		 */
+		public static function get_grouped( $group, array $params ) {
+			return array();
+		}
+	}
+}
+
+if ( ! function_exists( 'red_is_disabled' ) ) {
+	/**
+	 * Minimal Redirection signature for static analysis only.
+	 *
+	 * @return bool
+	 */
+	function red_is_disabled() {
+		return false;
+	}
+}
+
+if ( ! function_exists( 'srm_get_redirect_data' ) ) {
+	/**
+	 * Minimal Safe Redirect Manager signatures for static analysis only.
+	 *
+	 * @param int               $redirect_id     Redirect post id.
+	 * @param array<int,string> $optional_fields Extra fields.
+	 * @return mixed
+	 */
+	function srm_get_redirect_data( $redirect_id, $optional_fields = array() ) {
+		return array();
+	}
+	/** @return mixed */
+	function srm_get_max_redirects() {
+		return 1000;
+	}
+	/** @return mixed */
+	function srm_get_valid_status_codes() {
+		return array();
+	}
+}
+
+if ( ! class_exists( 'RankMath\\Helper' ) ) {
+	/**
+	 * Minimal Rank Math signatures for static analysis only.
+	 */
+	class Aafm_Phpstan_Rank_Math_Helper {
+		/**
+		 * @param string $id Module id.
+		 * @return mixed
+		 */
+		public static function is_module_active( $id ) {
+			return false;
+		}
+		/**
+		 * @param string $field_id      Setting id, group.field.
+		 * @param mixed  $default_value Default.
+		 * @return mixed
+		 */
+		public static function get_settings( $field_id = '', $default_value = false ) {
+			return $default_value;
+		}
+	}
+	class Aafm_Phpstan_Rank_Math_Redirections_Db {
+		/**
+		 * @param array<string,mixed> $args Filters.
+		 * @return mixed
+		 */
+		public static function get_redirections( $args = array() ) {
+			return array();
+		}
+		/**
+		 * @param string $uri URI to match.
+		 * @param bool   $all Get all.
+		 * @return mixed
+		 */
+		public static function match_redirections( $uri, $all = false ) {
+			return false;
+		}
+	}
+	class Aafm_Phpstan_Rank_Math_Redirection {
+		/**
+		 * @param string $url URL to strip from.
+		 * @return string
+		 */
+		public static function strip_subdirectory( $url ) {
+			return $url;
+		}
+	}
+	class_alias( 'Aafm_Phpstan_Rank_Math_Helper', 'RankMath\\Helper' );
+	class_alias( 'Aafm_Phpstan_Rank_Math_Redirections_Db', 'RankMath\\Redirections\\DB' );
+	class_alias( 'Aafm_Phpstan_Rank_Math_Redirection', 'RankMath\\Redirections\\Redirection' );
+}
+
+if ( ! class_exists( 'SlimSEO\\Redirection\\Database\\Redirects' ) ) {
+	/**
+	 * Minimal Slim SEO redirection signatures for static analysis only.
+	 */
+	class Aafm_Phpstan_Slim_Seo_Redirects {
+		/** @return mixed */
+		public function list() {
+			return array();
+		}
+	}
+	class Aafm_Phpstan_Slim_Seo_Redirection_Helper {
+		/**
+		 * @param string $url     URL.
+		 * @param bool   $unslash Unslash first.
+		 * @return string
+		 */
+		public static function normalize_url( string $url, $unslash = true ) {
+			return $url;
+		}
+	}
+	class Aafm_Phpstan_Slim_Seo_Redirection_Settings {
+		/**
+		 * @param string $name Setting name.
+		 * @return mixed
+		 */
+		public static function get( string $name ) {
+			return false;
+		}
+	}
+	class_alias( 'Aafm_Phpstan_Slim_Seo_Redirects', 'SlimSEO\\Redirection\\Database\\Redirects' );
+	class_alias( 'Aafm_Phpstan_Slim_Seo_Redirection_Helper', 'SlimSEO\\Redirection\\Helper' );
+	class_alias( 'Aafm_Phpstan_Slim_Seo_Redirection_Settings', 'SlimSEO\\Redirection\\Settings' );
+}
 // phpcs:enable

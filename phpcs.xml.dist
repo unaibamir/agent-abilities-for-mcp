@@ -98,6 +98,11 @@
 				<element value="edit_tribe_organizers"/>
 				<element value="edit_others_tribe_organizers"/>
 				<element value="edit_published_tribe_organizers"/>
+				<!-- Rank Math's own capabilities for its Redirections and 404 Monitor screens,
+				     read at seo-by-rank-math includes/modules/redirections/class-admin.php:159 and
+				     includes/modules/404-monitor/class-admin.php:147. -->
+				<element value="rank_math_redirections"/>
+				<element value="rank_math_404_monitor"/>
 			</property>
 		</properties>
 	</rule>

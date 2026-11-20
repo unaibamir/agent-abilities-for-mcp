@@ -638,4 +638,216 @@ final class SiteRedirectAdaptersTest extends TestCase {
 		$this->assertRefused( 'aafm_site_provider_capability', aafm_exec_site_list_redirects( array( 'provider' => 'safe_redirect_manager' ) ) );
 		$this->assertRefused( 'aafm_site_no_provider', aafm_exec_site_list_404s( array() ), 'This plugin keeps no not-found log.' );
 	}
+
+	/**
+	 * One Rank Math source as the plugin stores it.
+	 *
+	 * @param string $pattern    Pattern, stored without a leading slash.
+	 * @param string $comparison Comparison type.
+	 * @return array<string,string>
+	 */
+	private function source( string $pattern, string $comparison = 'exact' ): array {
+		return array(
+			'ignore'     => '',
+			'pattern'    => $pattern,
+			'comparison' => $comparison,
+		);
+	}
+
+	/**
+	 * Overrides for a Rank Math rule with a 302 code and a hit count.
+	 *
+	 * @return array<string,string>
+	 */
+	private function counted(): array {
+		return array(
+			'header_code' => '302',
+			'hits'        => '15',
+		);
+	}
+
+	public function test_rankmath_ready_follows_the_module_not_the_class(): void {
+		$this->only( array( 'rankmath' ) );
+
+		$this->assertTrue( aafm_site_redirect_call( 'rankmath', 'ready' ) );
+
+		Stub::$vendor['rm_modules'] = array( '404-monitor' );
+		$this->assertFalse( aafm_site_redirect_call( 'rankmath', 'ready' ), 'The class exists, the module is not running.' );
+		$this->assertRefused( 'aafm_site_no_provider', aafm_exec_site_list_redirects( array() ) );
+	}
+
+	public function test_rankmath_rows_come_from_the_redirections_wrapper(): void {
+		$this->only( array( 'rankmath' ) );
+		Stub::$vendor['rm'] = array(
+			aafm_siteops_redirect_stub_rm_row( 1, array( $this->source( 'old-a' ) ), 'http://example.org/hello-world/', $this->counted() ),
+			aafm_siteops_redirect_stub_rm_row( 2, array( $this->source( 'rx-(\d+)', 'regex' ) ), 'http://example.org/t/' ),
+			aafm_siteops_redirect_stub_rm_row( 3, array( $this->source( 'a' ), $this->source( 'b' ) ), 'http://example.org/two/' ),
+			aafm_siteops_redirect_stub_rm_row( 4, array( $this->source( 'old-off' ) ), 'http://example.org/x/', array( 'status' => 'inactive' ) ),
+			aafm_siteops_redirect_stub_rm_row( 5, array( $this->source( 'binned' ) ), 'http://example.org/x/', array( 'status' => 'trashed' ) ),
+			array_merge( aafm_siteops_redirect_stub_rm_row( 6, array(), 'http://example.org/x/' ), array( 'sources' => '' ) ),
+		);
+
+		$rows = $this->rows( 'rankmath' );
+
+		$this->assertSame( 1, Stub::count( 'RankMath::get_redirections:active:1' ) );
+		$this->assertSame( 1, Stub::count( 'RankMath::get_redirections:inactive:1' ) );
+		$this->assertSame( array( '1', '2', '3', '6', '4' ), array_column( $rows, 'id' ), 'Active rules, then inactive ones; a trashed rule is never listed.' );
+		$this->assertSame(
+			array(
+				'id'      => '1',
+				'source'  => '/old-a',
+				'target'  => 'http://example.org/hello-world/',
+				'code'    => 302,
+				'enabled' => true,
+				'kind'    => 'exact',
+				'hits'    => 15,
+			),
+			$rows[0]
+		);
+		$this->assertSame( array( 'pattern', 'rx-(\d+)' ), array( $rows[1]['kind'], $rows[1]['source'] ) );
+		$this->assertSame( 'pattern', $rows[2]['kind'], 'More than one source is a pattern rule.' );
+		$this->assertSame( array( 'pattern', '' ), array( $rows[3]['kind'], $rows[3]['source'] ), 'Sources that are not a list.' );
+		$this->assertFalse( $rows[4]['enabled'] );
+
+		Stub::$vendor['rm_return'] = Stub::$vendor['rm'];
+		$this->assertTrue( aafm_exec_site_list_redirects( array() )['providers'][0]['failed'], 'A bare list is not the plugin wrapper.' );
+	}
+
+	public function test_rankmath_match_and_capability(): void {
+		$this->only( array( 'rankmath' ) );
+		Stub::$vendor['rm'] = array(
+			aafm_siteops_redirect_stub_rm_row( 2, array( $this->source( 'old-b' ) ), 'http://example.org/sample-page/', array( 'header_code' => '307' ) ),
+		);
+
+		$this->assertSame(
+			array(
+				'state'  => 'matched',
+				'id'     => '2',
+				'target' => 'http://example.org/sample-page/',
+				'code'   => 307,
+			),
+			$this->match( 'rankmath', '/old-b/' )
+		);
+		$this->assertSame( 1, Stub::count( 'RankMath::match_redirections:old-b' ), 'The plugin matcher is asked with the slashes trimmed.' );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'rankmath', '/nothing-here' ) );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'rankmath', '/' ) );
+
+		wp_get_current_user()->remove_cap( 'rank_math_redirections' );
+		$this->assertRefused( 'aafm_site_provider_capability', aafm_exec_site_list_redirects( array( 'provider' => 'rankmath' ) ) );
+		$this->assertSame( 'unknown', aafm_exec_site_test_redirect( array( 'url' => '/old-b' ) )['evaluated'][0]['result'] );
+
+		// On a site in a subfolder the plugin removes "sub/" wherever it occurs in a request: the
+		// real request /sub/sub/old-c reaches its matcher as old-c, so a rule stored as sub/old-c never fires.
+		update_option( 'home', 'http://example.org/sub' );
+		Stub::$vendor['rm'][] = aafm_siteops_redirect_stub_rm_row( 3, array( $this->source( 'sub/old-c' ) ), 'http://example.org/sub/x/' );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'rankmath', '/sub/sub/old-c' ) );
+		$this->assertSame( 1, Stub::count( 'RankMath::match_redirections:old-c' ), 'The full path goes through strip_subdirectory() of the plugin.' );
+		$this->assertSame( '2', $this->match( 'rankmath', '/sub/old-b' )['id'] ?? null );
+	}
+
+	public function test_rankmath_settings_and_filters_it_cannot_evaluate_give_unknown(): void {
+		$this->only( array( 'rankmath' ) );
+		Stub::$vendor['rm'] = array( aafm_siteops_redirect_stub_rm_row( 2, array( $this->source( 'old-b' ) ), 'http://example.org/sample-page/' ) );
+		$unknown            = static function ( string $reason ): array {
+			return array(
+				'state'  => 'unknown',
+				'reason' => $reason,
+			);
+		};
+		$settings           = Stub::$vendor['rm_settings'];
+
+		// The 404 fallback acts after the rules, so a rule still answers.
+		Stub::$vendor['rm_settings']['general.redirections_fallback'] = 'homepage';
+		$this->assertSame( $unknown( 'rank_math_404_fallback' ), $this->match( 'rankmath', '/nothing-here' ) );
+		$this->assertSame( '2', $this->match( 'rankmath', '/old-b' )['id'] ?? null );
+		Stub::$vendor['rm_settings']['general.redirections_fallback'] = 'custom';
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'rankmath', '/nothing-here' ), 'A custom fallback with no address redirects nowhere.' );
+		Stub::$vendor['rm_settings']['general.redirections_custom_url'] = 'https://example.org/gone/';
+		$this->assertSame( $unknown( 'rank_math_404_fallback' ), $this->match( 'rankmath', '/nothing-here' ) );
+
+		// Its own attachment and archive redirects, both on by default on a new install.
+		Stub::$vendor['rm_settings']                                     = $settings;
+		Stub::$vendor['rm_settings']['general.attachment_redirect_urls'] = true;
+		$this->assertSame( $unknown( 'rank_math_attachment_redirect' ), $this->match( 'rankmath', '/nothing-here' ) );
+		Stub::$vendor['rm_settings']                                 = $settings;
+		Stub::$vendor['rm_settings']['titles.disable_date_archives'] = true;
+		$this->assertSame( $unknown( 'rank_math_archive_redirect' ), $this->match( 'rankmath', '/nothing-here' ) );
+		Stub::$vendor['rm_settings']                                   = $settings;
+		Stub::$vendor['rm_settings']['titles.disable_author_archives'] = true;
+		$this->assertSame( $unknown( 'rank_math_archive_redirect' ), $this->match( 'rankmath', '/nothing-here' ) );
+		unset( Stub::$vendor['rm_settings']['general.attachment_redirect_urls'] );
+		Stub::$vendor['rm_settings']['titles.disable_author_archives'] = false;
+		$this->assertSame( $unknown( 'rank_math_attachment_redirect' ), $this->match( 'rankmath', '/nothing-here' ), 'A missing attachment setting is on, as the plugin reads it.' );
+		Stub::$vendor['rm_settings'] = $settings;
+
+		// Rank Math's own front-end class on the filter is the attachment and archive case above.
+		$own = array( new \RankMath\Frontend\Redirection(), 'pre_redirection' );
+		add_filter( 'rank_math/redirection/pre_search', $own );
+		$this->assertSame( '2', $this->match( 'rankmath', '/old-b' )['id'] ?? null );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'rankmath', '/nothing-here' ) );
+
+		// Any other callback runs before the rules and can redirect any path.
+		add_filter( 'rank_math/redirection/pre_search', '__return_null', 20 );
+		$this->assertSame( $unknown( 'rank_math_pre_search_filter' ), $this->match( 'rankmath', '/old-b' ) );
+		$this->assertSame( $unknown( 'rank_math_pre_search_filter' ), $this->match( 'rankmath', '/nothing-here' ) );
+		remove_filter( 'rank_math/redirection/pre_search', '__return_null', 20 );
+		remove_filter( 'rank_math/redirection/pre_search', $own );
+	}
+
+	public function test_rankmath_not_found_log_is_grouped_and_in_utc(): void {
+		global $wpdb;
+		$this->only( array( 'rankmath' ) );
+		update_option( 'timezone_string', 'Asia/Karachi' );
+		$table = $wpdb->prefix . 'rank_math_404_logs';
+		$wpdb->insert(
+			$table,
+			array(
+				'uri'            => 'nothing-1',
+				'accessed'       => '2026-11-18 10:00:00',
+				'times_accessed' => 3,
+				'referer'        => 'https://ref.example/page?token=abc',
+				'user_agent'     => 'LeakUA/1.0',
+			)
+		);
+		$wpdb->insert(
+			$table,
+			array(
+				'uri'            => 'nothing-1',
+				'accessed'       => '2026-11-18 12:00:00',
+				'times_accessed' => 1,
+			)
+		);
+		$wpdb->insert(
+			$table,
+			array(
+				'uri'            => 'nothing-2',
+				'times_accessed' => 9,
+			)
+		);
+
+		$out = aafm_exec_site_list_404s( array() );
+
+		$this->assertSame(
+			array(
+				array(
+					'provider'       => 'rankmath',
+					'untrusted_path' => '/nothing-2',
+					'count'          => 9,
+					'last_seen'      => null,
+				),
+				array(
+					'provider'       => 'rankmath',
+					'untrusted_path' => '/nothing-1',
+					'count'          => 4,
+					'last_seen'      => gmdate( 'c', strtotime( '2026-11-18 07:00:00 UTC' ) ),
+				),
+			),
+			$out['entries']
+		);
+		$this->assertStringNotContainsString( 'LeakUA', (string) wp_json_encode( $out ) );
+		$this->assertStringNotContainsString( 'ref.example', (string) wp_json_encode( $out ) );
+
+		Stub::$vendor['rm_modules'] = array( 'redirections' );
+		$this->assertRefused( 'aafm_site_provider_capability', aafm_exec_site_list_404s( array( 'provider' => 'rankmath' ) ), 'The 404 Monitor module is off.' );
+	}
 }

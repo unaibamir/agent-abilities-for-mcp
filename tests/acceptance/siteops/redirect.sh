@@ -299,6 +299,34 @@ switch ( $action ) {
 		echo '/acc-slug-old';
 		break;
 
+	case 'attach_draft':
+		// An image attached to a draft post: a visitor gets a 404 there, a signed-in editor would not.
+		update_option( 'wp_attachment_pages_enabled', 1 );
+		$parent = wp_insert_post( array( 'post_type' => 'post', 'post_status' => 'draft', 'post_title' => 'acc-draft', 'post_name' => 'acc-draft' ) );
+		wp_insert_attachment( array( 'post_title' => 'acc-draft-img', 'post_name' => 'acc-draft-img', 'post_mime_type' => 'image/png', 'post_status' => 'inherit' ), 'acc-draft-img.png', $parent );
+		echo '/acc-draft/acc-draft-img/';
+		break;
+
+	case 'module':
+		// module rankmath <module> on|off: one Rank Math module on this disposable site.
+		\RankMath\Helper::update_modules( array( (string) ( $args[2] ?? '' ) => (string) ( $args[3] ?? 'off' ) ) );
+		echo 'module';
+		break;
+
+	case 'slim_category':
+		// slim_category slim_seo on|off: Slim SEO's no category base feature, off by default
+		// (Settings.php is_feature_active()); on means the full default feature list.
+		$o = get_option( 'slim_seo', array() );
+		$o = is_array( $o ) ? $o : array();
+		if ( 'on' === ( $args[2] ?? 'off' ) ) {
+			$o['features'] = array( 'meta_title', 'meta_description', 'meta_robots', 'open_graph', 'twitter_cards', 'canonical_url', 'rel_links', 'sitemaps', 'images_alt', 'breadcrumbs', 'feed', 'schema', 'redirection', 'no_category_base' );
+		} else {
+			unset( $o['features'], $o['no_category_base'] );
+		}
+		update_option( 'slim_seo', $o );
+		echo 'slim_category';
+		break;
+
 	case 'broken':
 		echo aafm_acc_rule( $slug, '(unclosed', '/acc-page/', 301, 'regex' );
 		break;
@@ -559,6 +587,69 @@ run_adapter() {
 			seed set "$s" titles.disable_author_archives on >/dev/null
 			setting_case "$s" rank_math_archive_redirect /author/admin/
 			seed set "$s" titles.disable_author_archives off >/dev/null
+			# An attachment of a draft: a visitor gets a 404, though the signed-in caller could read it.
+			draft=$(seed attach_draft)
+			same_answer U1 "$s" "$draft"
+			# The old category base: the archive while the base is kept, a redirect once it is stripped.
+			same_answer U1 "$s" /category/uncategorized/
+			seed set "$s" general.strip_category_base on >/dev/null
+			W rewrite flush --quiet >/dev/null 2>&1
+			setting_case "$s" rank_math_category_redirect /category/uncategorized/
+			seed set "$s" general.strip_category_base off >/dev/null
+			W rewrite flush --quiet >/dev/null 2>&1
+			# The sitemap module, on after install, sends WordPress's own sitemap to its own. php -S hands an
+			# address with a file extension to WordPress only through a router script, so this one request
+			# goes to a server on the same port with one, as nginx's try_files would; then the plain server
+			# is back.
+			cat > /tmp/aafm_accept_router.php <<'PHP'
+<?php
+// redirect.sh case U1: every address that is not a file goes to WordPress.
+if ( is_file( $_SERVER['DOCUMENT_ROOT'] . (string) parse_url( $_SERVER['REQUEST_URI'], PHP_URL_PATH ) ) ) {
+	return false;
+}
+$_SERVER['SCRIPT_NAME'] = '/index.php';
+require $_SERVER['DOCUMENT_ROOT'] . '/index.php';
+PHP
+			pkill -f "php -S [^ ]*:8072" 2>/dev/null; sleep 1
+			(PHP_CLI_SERVER_WORKERS=4 php -S 0.0.0.0:8072 -t "$ROOT" /tmp/aafm_accept_router.php > "$ROOT/server-router.log" 2>&1 &)
+			sleep 2
+			unknown_case "$s" rank_math_sitemap_redirect /wp-sitemap.xml 1
+			pkill -f "php -S [^ ]*:8072" 2>/dev/null; sleep 1
+			(PHP_CLI_SERVER_WORKERS=4 php -S 0.0.0.0:8072 -t "$ROOT" > "$ROOT/server.log" 2>&1 &)
+			sleep 2
+			rm -f /tmp/aafm_accept_router.php
+			# With the Redirections module off, its front-end class still redirects attachment pages and
+			# switched-off archives, and the 404 fallback does not run.
+			seed module "$s" redirections off >/dev/null
+			seed set "$s" general.redirections_fallback homepage >/dev/null
+			setting_case "$s" rank_math_attachment_redirect "$attach"
+			setting_case "$s" rank_math_archive_redirect /2025/
+			same_answer U1 "$s" /acc-none
+			# A router on the main query serves /acc-virtual/ and counts its runs: the tool cannot see it,
+			# so the fallback answer is unknown, and the tool never runs it.
+			cat > "$WPROOT/wp-content/mu-plugins/aafm-accept-router.php" <<'PHP'
+<?php
+// redirect.sh case U1: a router on the main query that serves /acc-virtual/ as the post acc-a, and counts its runs.
+add_action( 'pre_get_posts', function ( $q ) {
+	update_option( 'aafm_acc_router_runs', 1 + (int) get_option( 'aafm_acc_router_runs', 0 ) );
+	if ( $q->is_main_query() && 'acc-virtual' === $q->get( 'name' ) ) {
+		$q->set( 'name', 'acc-a' );
+	}
+} );
+PHP
+			seed module "$s" redirections on >/dev/null
+			runs=$(W option get aafm_acc_router_runs 2>/dev/null || echo 0)
+			unknown_case "$s" rank_math_404_fallback /acc-virtual/ 0
+			after=$(W option get aafm_acc_router_runs 2>/dev/null || echo 0)
+			real=$(hit /acc-virtual/)
+			if [ "$runs" = "$after" ] && [ "${real%% *}" = 200 ]; then
+				pass U1 "$s /acc-virtual/: a real request is served ($real), and the router ran $runs times before and after the tool call"
+			else
+				fail U1 "$s /acc-virtual/: real $real, router runs $runs before and $after after the tool call"
+			fi
+			rm -f "$WPROOT/wp-content/mu-plugins/aafm-accept-router.php"
+			W option delete aafm_acc_router_runs >/dev/null 2>&1
+			seed set "$s" general.redirections_fallback default >/dev/null
 			cat > "$WPROOT/wp-content/mu-plugins/aafm-accept-rm-pre-search.php" <<'PHP'
 <?php
 // redirect.sh case U1: another plugin's filter on Rank Math's pre_search, which runs before its rules.
@@ -584,7 +675,19 @@ PHP
 			setting_case "$s" slim_seo_auto_redirection "$renamed"
 			seed set "$s" redirect_www non-to-www >/dev/null
 			setting_case "$s" slim_seo_www_redirect /acc-none
+			# The escapes a browser sends make the target, so a path that needs them is unknown.
+			unknown_case "$s" slim_seo_www_redirect /caf%C3%A9-www 1
 			seed set "$s" redirect_www - >/dev/null
+			# An attachment of a draft: a visitor gets a 404, though the signed-in caller could read it.
+			draft=$(seed attach_draft)
+			same_answer U1 "$s" "$draft"
+			# The old category base: the archive with the feature off (the default), a redirect with it on.
+			same_answer U1 "$s" /category/uncategorized/
+			seed slim_category "$s" on >/dev/null
+			W rewrite flush --quiet >/dev/null 2>&1
+			setting_case "$s" slim_seo_category_redirect /category/uncategorized/
+			seed slim_category "$s" off >/dev/null
+			W rewrite flush --quiet >/dev/null 2>&1
 			W rewrite structure '' --quiet >/dev/null 2>&1
 			unknown_case "$s" slim_seo_auto_redirection /acc-none 0
 			W rewrite structure '/%postname%/' --quiet >/dev/null 2>&1 ;;
@@ -599,6 +702,8 @@ PHP
 			REST='index.php?rest_route=/'
 			seed set "$s" permalinks '["/%year%/%postname%/"]' >/dev/null
 			unknown_case "$s" redirection_permalink_migration /2025/acc-a/ 1
+			# A page WordPress finds is never migrated.
+			same_answer U1 "$s" /acc-page/
 			seed set "$s" permalinks '[]' >/dev/null ;;
 	esac
 

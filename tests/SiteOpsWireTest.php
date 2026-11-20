@@ -111,7 +111,7 @@ final class SiteOpsWireTest extends TestCase {
 		}
 
 		$this->assertEqualsCanonicalizing(
-			array( 'tests', 'counts', 'debug_mode', 'debug_log_exists', 'recovery_mode', 'extensions_paused' ),
+			array( 'tests', 'counts', 'not_run', 'debug_mode', 'debug_log_exists', 'recovery_mode', 'extensions_paused' ),
 			$this->keys_of_call( $handler, 'aafm/site-health-status', array() )
 		);
 		$this->assertEqualsCanonicalizing(

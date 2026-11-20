@@ -51,9 +51,11 @@ final class SiteHealthTest extends TestCase {
 		$allowlist = aafm_site_health_allowlist();
 		$this->assertCount( 18, $allowlist );
 		$this->assertCount( 18, array_unique( $allowlist ) );
-		foreach ( array( 'update_temp_backup_writable', 'php_version', 'http_requests', 'rest_availability', 'dotorg_communication', 'background_updates', 'loopback_requests', 'https_status', 'authorization_header', 'page_cache' ) as $left_out ) {
-			$this->assertNotContains( $left_out, $allowlist );
+		$left_out = array( 'update_temp_backup_writable', 'php_version', 'http_requests', 'rest_availability', 'dotorg_communication', 'background_updates', 'loopback_requests', 'https_status', 'authorization_header', 'page_cache' );
+		foreach ( $left_out as $name ) {
+			$this->assertNotContains( $name, $allowlist );
 		}
+		$this->assertSame( $left_out, aafm_site_health_not_run(), 'The tests left out are named, so the counts are not read as the Site Health screen\'s.' );
 		$this->assertContains( 'scheduled_events', $allowlist );
 		$this->assertContains( 'persistent_object_cache', $allowlist );
 	}
@@ -63,7 +65,8 @@ final class SiteHealthTest extends TestCase {
 		$result = wp_get_ability( 'aafm/site-health-status' )->execute( array() );
 
 		$this->assertIsArray( $result );
-		$this->assertSame( array( 'tests', 'counts', 'debug_mode', 'debug_log_exists', 'recovery_mode', 'extensions_paused' ), array_keys( $result ) );
+		$this->assertSame( array( 'tests', 'counts', 'not_run', 'debug_mode', 'debug_log_exists', 'recovery_mode', 'extensions_paused' ), array_keys( $result ) );
+		$this->assertSame( aafm_site_health_not_run(), $result['not_run'] );
 		$this->assertNotEmpty( $result['tests'] );
 		foreach ( $result['tests'] as $row ) {
 			$this->assertSame( array( 'test', 'status' ), array_keys( $row ) );

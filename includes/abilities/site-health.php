@@ -26,7 +26,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_site_health_definitions' )
 function aafm_register_site_health_definitions( array $registry ): array {
 	$registry['aafm/site-health-status'] = array(
 		'label'        => __( 'Site health summary', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Runs WordPress's own Site Health checks that need no network request and returns each check's name and result (good, recommended or critical) with a count of each. Also says whether debug mode is on, whether a debug log file exists, whether WordPress is in recovery mode and whether any plugin or theme is paused after a fatal error. Outbound requests are blocked while it runs. Returns no log lines, no file paths, no version numbers and no server details; use the environment and plugin list tools for versions. Requires the manage-options capability. On a multisite network, a super admin only.", 'agent-abilities-for-mcp' ),
+		'description'  => __( "Runs WordPress's own Site Health checks that need no network request and returns each check's name and result (good, recommended or critical) with a count of each. Also says whether debug mode is on, whether a debug log file exists, whether WordPress is in recovery mode and whether any plugin or theme is paused after a fatal error. Outbound requests are blocked while it runs. Also names the checks it does not run (those that need a network request or a file system connection, and the ones the Site Health screen runs in the background), so its counts can be lower than that screen's. Returns no log lines, no file paths, no version numbers and no server details; use the environment and plugin list tools for versions. Requires the manage-options capability. On a multisite network, a super admin only.", 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
@@ -126,6 +126,11 @@ function aafm_args_site_health_status(): array {
 					'recommended' => array( 'type' => 'integer' ),
 					'critical'    => array( 'type' => 'integer' ),
 				),
+			),
+			'not_run'           => array(
+				'type'        => 'array',
+				'items'       => array( 'type' => 'string' ),
+				'description' => __( 'Site Health checks of WordPress itself that this tool does not run. Checks added by plugins are not run either.', 'agent-abilities-for-mcp' ),
 			),
 			'debug_mode'        => array( 'type' => 'boolean' ),
 			'debug_log_exists'  => array( 'type' => 'boolean' ),
@@ -252,6 +257,27 @@ function aafm_site_health_allowlist(): array {
 }
 
 /**
+ * The Site Health tests of WordPress itself that this plugin does not run, by the names the Site
+ * Health screen uses: the ones left out of the allowlist above, then every asynchronous test.
+ *
+ * @return list<string>
+ */
+function aafm_site_health_not_run(): array {
+	return array(
+		'update_temp_backup_writable',
+		'php_version',
+		'http_requests',
+		'rest_availability',
+		'dotorg_communication',
+		'background_updates',
+		'loopback_requests',
+		'https_status',
+		'authorization_header',
+		'page_cache',
+	);
+}
+
+/**
  * Whether any plugin or theme is paused after a fatal error.
  *
  * Reads the stored rows directly, because wp_paused_plugins()->get_all() is always empty outside
@@ -330,6 +356,7 @@ function aafm_exec_site_health_status(): array {
 	return array(
 		'tests'             => $tests,
 		'counts'            => $counts,
+		'not_run'           => aafm_site_health_not_run(),
 		'debug_mode'        => defined( 'WP_DEBUG' ) && (bool) constant( 'WP_DEBUG' ),
 		'debug_log_exists'  => is_file( $log ),
 		'recovery_mode'     => wp_is_recovery_mode(),

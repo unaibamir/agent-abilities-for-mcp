@@ -95,16 +95,22 @@ function aafm_redirect_slim_seo_all(): array {
  * Before all of it (4.11.6, NoCategoryBase.php:95-113), with the no category base feature on, a
  * request filter sends any address under the old category base to the same address without it
  * while WordPress parses the request. That feature is apart from the redirect module, so it is
- * the only answer while the module is off.
+ * the only answer while the module is off. The feature switch is read here and the variable from
+ * the rewrite rule, because the plugin's query variable is public only once a request has been
+ * parsed. With the module on but a class or method of it missing (another plugin version),
+ * nothing was evaluated: unknown.
  *
  * @param string              $path  The path BELOW the home path (the registry's match_path is below_home).
  * @param array<string,mixed> $cache Per-call cache; holds the rule list after the first call.
  * @return array<string,mixed> A match shape.
  */
 function aafm_redirect_slim_seo_match( string $path, array &$cache ): array {
-	global $wp;
-	$full = aafm_site_redirect_home_path() . $path;
-	if ( $wp instanceof WP && in_array( 'category_redirect', (array) $wp->public_query_vars, true ) ) {
+	$full     = aafm_site_redirect_home_path() . $path;
+	$options  = get_option( 'slim_seo' );
+	$features = is_array( $options ) && ! empty( $options['features'] ) ? (array) $options['features'] : array();
+	// An empty feature list is the plugin's default: every feature on except no category base
+	// (Settings.php:120-130).
+	if ( in_array( 'no_category_base', $features, true ) ) {
 		$base = aafm_site_redirect_path_class( $full, true );
 		if ( 'unclassified' === $base['class'] && array() === $base['vars'] ) {
 			// No rewrite rule could be followed, so the old base cannot be told apart.
@@ -132,7 +138,7 @@ function aafm_redirect_slim_seo_match( string $path, array &$cache ): array {
 		}
 	}
 	if ( ! aafm_redirect_slim_seo_ready() ) {
-		return array( 'state' => 'no_match' );
+		return ( array() === $features || in_array( 'redirection', $features, true ) ) ? array( 'state' => 'unknown' ) : array( 'state' => 'no_match' );
 	}
 
 	if ( ! isset( $cache['rows'] ) ) {
@@ -249,6 +255,10 @@ function aafm_redirect_slim_seo_match( string $path, array &$cache ): array {
 			'reason' => $auto ? 'slim_seo_auto_redirection' : 'slim_seo_404_redirect',
 		);
 	}
+	// A term archive may be a page not found, which only a term lookup could tell (4.6), so the two
+	// redirects of a page not found cannot be told for it, as for one other plugin code could serve.
+	$maybe   = 'not_found' === $class['class'] || 'term' === $class['class'];
+	$open    = ! empty( $class['hooked'] ) || 'term' === $class['class'];
 	$auto_to = '';
 	if ( $auto && 'attachment' === $class['class'] ) {
 		$auto_to = wp_validate_redirect( esc_url_raw( (string) wp_get_attachment_url( (int) $class['id'] ) ), admin_url() );
@@ -261,15 +271,16 @@ function aafm_redirect_slim_seo_match( string $path, array &$cache ): array {
 		)
 	) ) ) {
 		$auto_to = home_url( '/' );
-	} elseif ( $auto && 'not_found' === $class['class'] ) {
+	} elseif ( $auto && $maybe ) {
 		global $wpdb;
 		$request = \SlimSEO\Redirection\Helper::normalize_url( $scheme . '://' . (string) wp_parse_url( $home, PHP_URL_HOST ) . $port . $sent );
 		$found   = \SlimSEO\Redirection\Settings::get( 'case_sensitive' )
 			? aafm_wpdb_scalar( (string) $wpdb->prepare( 'SELECT post_id FROM %i WHERE meta_key = %s AND meta_value = %s LIMIT 1', $wpdb->postmeta, '_ss_old_permalink', $request ) )
 			: aafm_wpdb_scalar( (string) $wpdb->prepare( 'SELECT post_id FROM %i WHERE meta_key = %s AND LOWER( meta_value ) = LOWER( %s ) LIMIT 1', $wpdb->postmeta, '_ss_old_permalink', $request ) );
 		if ( $found['ok'] && (int) $found['value'] > 0 ) {
-			if ( ! empty( $class['hooked'] ) ) {
-				// Other plugin code could serve the page, and then nothing is redirected.
+			if ( $open ) {
+				// The page may be found (a term archive, or a page other plugin code could serve),
+				// and then nothing is redirected.
 				return array(
 					'state'  => 'unknown',
 					'reason' => 'slim_seo_auto_redirection',
@@ -281,7 +292,7 @@ function aafm_redirect_slim_seo_match( string $path, array &$cache ): array {
 	// On a page not found WordPress's own canonical redirect runs first (template_redirect priority
 	// 10, registered before the plugin's) and its guess at the page can answer instead.
 	$guess = 'not_found' === $class['class'] ? array( 'approximate' => true ) : array();
-	if ( '' === $auto_to && '' !== $to404 && ! empty( $class['hooked'] ) ) {
+	if ( '' === $auto_to && '' !== $to404 && $open ) {
 		return array(
 			'state'  => 'unknown',
 			'reason' => 'slim_seo_404_redirect',

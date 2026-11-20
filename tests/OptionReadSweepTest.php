@@ -103,6 +103,7 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/siteops/redirects/redirection.php|aafm_redirect_redirection_ready|1' => 'N',
 		'includes/siteops/redirects/rankmath.php|aafm_redirect_rankmath_match|1' => 'N',
 		'includes/siteops/redirects/slim-seo.php|aafm_redirect_slim_seo_match|1' => 'N',
+		'includes/siteops/redirects/slim-seo.php|aafm_redirect_slim_seo_match|2' => 'N',
 		'includes/siteops/redirects/slim-seo.php|aafm_redirect_slim_seo_ready|1' => 'N',
 		'includes/siteops/backup-updraft.php|aafm_site_updraft_dir|1' => 'N',
 	);
@@ -380,7 +381,7 @@ final class OptionReadSweepTest extends TestCase {
 			array(
 				'G' => 21,
 				'L' => 3,
-				'N' => 55,
+				'N' => 56,
 			),
 			array(
 				'G' => count( array_keys( self::GET_OPTION, 'G', true ) ),

@@ -126,7 +126,9 @@ function aafm_redirect_rankmath_all(): array {
  * The plugin also redirects from its settings, checked against 1.0.282, in its own order:
  * - with 'general.strip_category_base' on, its request filter sends any address under the old
  *   category base to the same address without it while WordPress parses the request, before
- *   everything below (class-rewrite.php:34-37, :146-154, :168);
+ *   everything below (class-rewrite.php:34-37, :146-154, :168); the setting is read here and the
+ *   variable from the rewrite rule, because the plugin's query variable is public only once a
+ *   request has been parsed;
  * - a callback on rank_math/redirection/pre_search other than the plugin's own front-end class
  *   runs before the rules and can redirect any path (its WooCommerce base removal adds one):
  *   unknown;
@@ -143,9 +145,10 @@ function aafm_redirect_rankmath_all(): array {
  *   class-router.php:106-124): unknown.
  * Without a connected or skipped registration the plugin loads none of this. Which kind of page a
  * path is comes from aafm_site_redirect_path_class(), asked only while one of these settings is
- * on; a page it cannot classify, or a page not found that other plugin code could serve for the
- * fallback, gives unknown with the setting's reason. A target whose spelling depends on the
- * escapes a browser sends gives unknown too.
+ * on; a page it cannot classify gives unknown with the setting's reason, and so do, for the
+ * fallback, a term archive (it may be a page not found) and a page not found that other plugin
+ * code could serve. A target whose spelling depends on the escapes a browser sends gives unknown
+ * too.
  *
  * @param string              $path  The full path, home path included (the registry's match_path is full).
  * @param array<string,mixed> $cache Per-call cache; not used by this adapter.
@@ -153,13 +156,13 @@ function aafm_redirect_rankmath_all(): array {
  */
 function aafm_redirect_rankmath_match( string $path, array &$cache ): array {
 	unset( $cache );
-	global $wp_filter, $wp;
+	global $wp_filter;
 	if ( true === \RankMath\Helper::is_invalid_registration() ) {
 		return array( 'state' => 'no_match' );
 	}
 	$module = true === \RankMath\Helper::is_module_active( 'redirections' );
 
-	$strip       = $wp instanceof WP && in_array( 'rank_math_category_redirect', (array) $wp->public_query_vars, true );
+	$strip       = (bool) \RankMath\Helper::get_settings( 'general.strip_category_base' );
 	$attachments = (bool) \RankMath\Helper::get_settings( 'general.attachment_redirect_urls', true );
 	$dates       = (bool) \RankMath\Helper::get_settings( 'titles.disable_date_archives' );
 	$authors     = true === \RankMath\Helper::get_settings( 'titles.disable_author_archives' );
@@ -270,7 +273,7 @@ function aafm_redirect_rankmath_match( string $path, array &$cache ): array {
 			}
 			if ( ! in_array( $uri, array( 'login', 'admin', 'dashboard' ), true ) ) {
 				$class = $class ?? aafm_site_redirect_path_class( $path );
-				if ( 'unclassified' === $class['class'] || ! empty( $class['hooked'] ) ) {
+				if ( 'unclassified' === $class['class'] || 'term' === $class['class'] || ! empty( $class['hooked'] ) ) {
 					return array(
 						'state'  => 'unknown',
 						'reason' => 'rank_math_404_fallback',

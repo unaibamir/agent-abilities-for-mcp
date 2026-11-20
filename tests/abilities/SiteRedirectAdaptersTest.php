@@ -856,6 +856,10 @@ final class SiteRedirectAdaptersTest extends TestCase {
 		$this->assertSame( $setting( home_url(), 'rank_math_404_fallback', 302 ), $this->match( 'rankmath', '/nothing-here' ) );
 		$this->assertSame( '2', $this->match( 'rankmath', $path )['id'] ?? null, 'A rule answers first.' );
 		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'rankmath', '/acc-parent/' ), 'A page that exists is not a 404.' );
+		// A category archive, with the rule core adds on init, which the test site has not run.
+		self::factory()->category->create( array( 'slug' => 'acc-cat' ) );
+		$GLOBALS['wp_rewrite']->rules = array( 'category/(.+?)/?$' => 'index.php?category_name=$matches[1]' ) + $GLOBALS['wp_rewrite']->rules;
+		$this->assertSame( $unknown( 'rank_math_404_fallback' ), $this->match( 'rankmath', '/category/acc-cat/' ), 'A term archive is never looked up, so it may be a page not found.' );
 		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'rankmath', '/login' ), 'The plugin keeps its fallback off login, admin and dashboard.' );
 		add_filter( 'rank_math/redirection/fallback_exclude_locations', '__return_empty_array' );
 		$this->assertSame( $unknown( 'rank_math_404_fallback' ), $this->match( 'rankmath', '/nothing-here' ), 'A filter can change where the fallback stays off.' );
@@ -873,6 +877,7 @@ final class SiteRedirectAdaptersTest extends TestCase {
 		Stub::$vendor['rm_settings'] = $settings;
 		Stub::$vendor['rm_settings']['general.attachment_redirect_urls'] = true;
 		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'rankmath', '/nothing-here' ) );
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'rankmath', '/category/acc-cat/' ), 'A term archive is never an attachment page.' );
 		remove_action( 'pre_get_posts', '__return_null' );
 		Stub::$vendor['rm_settings'] = $fallback;
 
@@ -907,10 +912,13 @@ final class SiteRedirectAdaptersTest extends TestCase {
 
 		// Strip category base on: the plugin adds a query variable and a rule for the old base, and its
 		// request filter redirects while WordPress parses the request, before the rules and every
-		// other setting, whether or not the category exists.
-		$wp->public_query_vars[] = 'rank_math_category_redirect';
-		$wp_rewrite->rules       = array( 'category/(.+)$' => 'index.php?rank_math_category_redirect=$matches[1]' ) + $wp_rewrite->rules;
-		Stub::$vendor['rm']      = array(
+		// other setting, whether or not the category exists. The setting decides, and the variable is
+		// read from the rule: the list of public query variables holds it only after a parsed request,
+		// which an ability run in PHP outside one has not had.
+		$this->assertNotContains( 'rank_math_category_redirect', $wp->public_query_vars );
+		Stub::$vendor['rm_settings']['general.strip_category_base'] = true;
+		$wp_rewrite->rules  = array( 'category/(.+)$' => 'index.php?rank_math_category_redirect=$matches[1]' ) + $wp_rewrite->rules;
+		Stub::$vendor['rm'] = array(
 			aafm_siteops_redirect_stub_rm_row( 3, array( $this->source( 'category/acc-cat' ) ), 'http://example.org/sample-page/' ),
 			aafm_siteops_redirect_stub_rm_row( 5, array( $this->source( 'category' ) ), 'http://example.org/sample-page/' ),
 		);
@@ -934,6 +942,19 @@ final class SiteRedirectAdaptersTest extends TestCase {
 			'The escapes of the address a browser sends make the target; they cannot be recovered.'
 		);
 		$this->assertSame( '5', $this->match( 'rankmath', '/category' )['id'] ?? null, 'The old base alone is not under the rule.' );
+		$rules             = $wp_rewrite->rules;
+		$wp_rewrite->rules = array();
+		$this->assertSame(
+			array(
+				'state'  => 'unknown',
+				'reason' => 'rank_math_category_redirect',
+			),
+			$this->match( 'rankmath', '/category/acc-cat/' ),
+			'With no rewrite rules built the old base cannot be told apart.'
+		);
+		$wp_rewrite->rules = $rules;
+		Stub::$vendor['rm_settings']['general.strip_category_base'] = false;
+		$this->assertSame( '3', $this->match( 'rankmath', '/category/acc-cat/' )['id'] ?? null, 'With the setting off a rule left in the rewrite rules does not redirect.' );
 
 		// The sitemap module sends WordPress's own sitemap addresses and /sitemap.xml to its own
 		// sitemaps on template_redirect, after the rules and the fallback.
@@ -1291,10 +1312,20 @@ final class SiteRedirectAdaptersTest extends TestCase {
 		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'slim_seo', '/author/acc-writer/' ), 'An author with posts on a site with several users stays.' );
 		$this->assertSame( $guessed( (string) get_permalink( $moved ), 'slim_seo_auto_redirection' ), $this->match( 'slim_seo', '/ACC-OLD/' ), 'The old address is compared without case, as the plugin compares it.' );
 		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'slim_seo', '/acc-parent/' ) );
+		// A term archive is never looked up, so it may be a page not found: with no old address for it
+		// nothing is redirected, and with one the answer cannot be told. The category rule is the one
+		// core adds on init, which the test site has not run.
+		self::factory()->category->create( array( 'slug' => 'acc-cat' ) );
+		$GLOBALS['wp_rewrite']->rules = array( 'category/(.+?)/?$' => 'index.php?category_name=$matches[1]' ) + $GLOBALS['wp_rewrite']->rules;
+		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'slim_seo', '/category/acc-cat/' ) );
+		add_post_meta( $moved, '_ss_old_permalink', 'category/acc-cat' );
+		$this->assertSame( $unknown( 'slim_seo_auto_redirection' ), $this->match( 'slim_seo', '/category/acc-cat/' ) );
+		delete_post_meta( $moved, '_ss_old_permalink', 'category/acc-cat' );
 
 		// The 404 redirect, on a page not found only.
 		Stub::$vendor['slim_settings'] = array( 'redirect_404_to' => 'homepage' );
 		$this->assertSame( $guessed( home_url(), 'slim_seo_404_redirect' ), $this->match( 'slim_seo', '/nothing' ) );
+		$this->assertSame( $unknown( 'slim_seo_404_redirect' ), $this->match( 'slim_seo', '/category/acc-cat/' ), 'A term archive may be a page not found.' );
 		$this->assertSame( $guessed( home_url(), 'slim_seo_404_redirect' ), $this->match( 'slim_seo', '/acc-old' ), 'With automatic redirects off, an old address is just a page not found.' );
 		$this->assertSame( array( 'state' => 'no_match' ), $this->match( 'slim_seo', '/acc-parent/' ) );
 		Stub::$vendor['slim_settings'] = array(
@@ -1345,9 +1376,11 @@ final class SiteRedirectAdaptersTest extends TestCase {
 
 		// No category base on: a query variable and a rule for the old base, and a request filter that
 		// redirects while WordPress parses the request (NoCategoryBase.php:95-113), before the rules.
-		$wp->public_query_vars[] = 'category_redirect';
-		$wp_rewrite->rules       = array( 'category/(.*)$' => 'index.php?category_redirect=$matches[1]' ) + $wp_rewrite->rules;
-		$expected                = array(
+		// The feature switch decides and the variable is read from the rule, as for Rank Math.
+		$this->assertNotContains( 'category_redirect', $wp->public_query_vars );
+		update_option( 'slim_seo', array( 'features' => array( 'redirection', 'no_category_base' ) ) );
+		$wp_rewrite->rules = array( 'category/(.*)$' => 'index.php?category_redirect=$matches[1]' ) + $wp_rewrite->rules;
+		$expected          = array(
 			'state'   => 'matched',
 			'id'      => '',
 			'target'  => 'http://example.org/acc-cat/',
@@ -1365,6 +1398,17 @@ final class SiteRedirectAdaptersTest extends TestCase {
 			),
 			$this->match( 'slim_seo', '/category/café/' )
 		);
+		$rules             = $wp_rewrite->rules;
+		$wp_rewrite->rules = array();
+		$this->assertSame(
+			array(
+				'state'  => 'unknown',
+				'reason' => 'slim_seo_category_redirect',
+			),
+			$this->match( 'slim_seo', '/category/acc-cat/' ),
+			'With no rewrite rules built the old base cannot be told apart.'
+		);
+		$wp_rewrite->rules = $rules;
 
 		// The redirect module off: the old category base still redirects, and nothing else is read.
 		update_option( 'slim_seo', array( 'features' => array( 'no_category_base' ) ) );

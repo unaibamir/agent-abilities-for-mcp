@@ -204,3 +204,155 @@ function aafm_cache_fake_c_purge_all() {
 function aafm_cache_fake_partial_serving() {
 	return true;
 }
+
+// ---------------------------------------------------------------------------------------------
+// Vendor stubs for the cache adapter tests (tests/SiteCacheAdaptersTest.php).
+// Nothing below defines a vendor symbol at load time. Each aafm_siteops_stub_<slug>_activate()
+// defines only what its adapter calls, and only when a test asks. Activation is permanent for the
+// process, so no test may depend on a vendor being absent.
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Call recorder and switchboard shared by every vendor stub.
+ */
+final class Aafm_Siteops_Vendor_Stub {
+
+	/** @var array<int,array{0:string,1:array<int,mixed>}> Every vendor call, in order. */
+	public static $calls = array();
+
+	/** @var array<string,callable> What a vendor call does, set by the test. Key is the call name. */
+	public static $on = array();
+
+	/** @var array<string,mixed> Per-vendor switches, set by the test. */
+	public static $state = array();
+
+	/** @var array<string,\Closure> One listener per vendor action, re-added after each test. */
+	private static $listeners = array();
+
+	/**
+	 * Record one vendor call and run what the test attached to it.
+	 *
+	 * @param string           $name Call name.
+	 * @param array<int,mixed> $args Arguments.
+	 * @return mixed What the attached callable returned, or null.
+	 */
+	public static function hit( string $name, array $args = array() ) {
+		self::$calls[] = array( $name, $args );
+		return isset( self::$on[ $name ] ) ? call_user_func_array( self::$on[ $name ], $args ) : null;
+	}
+
+	/** Forget calls, behaviours and switches. Call from set_up(). */
+	public static function reset(): void {
+		self::$calls = array();
+		self::$on    = array();
+		self::$state = array();
+	}
+
+	/**
+	 * The names of the recorded calls, in order.
+	 *
+	 * @return array<int,string>
+	 */
+	public static function names(): array {
+		return array_column( self::$calls, 0 );
+	}
+
+	/**
+	 * The argument lists of every recorded call with this name.
+	 *
+	 * @param string $name Call name.
+	 * @return array<int,array<int,mixed>>
+	 */
+	public static function args( string $name ): array {
+		$out = array();
+		foreach ( self::$calls as $call ) {
+			if ( $name === $call[0] ) {
+				$out[] = $call[1];
+			}
+		}
+		return $out;
+	}
+
+	/** Temp directory that stands in for vendor cache folders that a constant or a function names. */
+	public static function root(): string {
+		return untrailingslashit( get_temp_dir() ) . '/aafm-siteops-stub';
+	}
+
+
+	/**
+	 * Listen on a vendor action and record each firing under the action's name. Hooks are reset
+	 * between tests, so this re-adds the listener on every activate call.
+	 *
+	 * @param string $hook Action name.
+	 * @param int    $args Accepted arguments.
+	 */
+	public static function listen( string $hook, int $args = 1 ): void {
+		if ( ! isset( self::$listeners[ $hook ] ) ) {
+			self::$listeners[ $hook ] = static function () use ( $hook ) {
+				return self::hit( $hook, func_get_args() );
+			};
+		}
+		if ( false === has_action( $hook, self::$listeners[ $hook ] ) ) {
+			add_action( $hook, self::$listeners[ $hook ], 10, $args );
+		}
+	}
+
+	/**
+	 * Delete a directory tree. For test clean-up and for stubs that empty a cache.
+	 *
+	 * @param string $dir Directory.
+	 */
+	public static function rrmdir( string $dir ): void {
+		if ( ! is_dir( $dir ) ) {
+			return;
+		}
+		foreach ( (array) scandir( $dir ) as $entry ) {
+			if ( '.' === $entry || '..' === $entry ) {
+				continue;
+			}
+			$path = $dir . '/' . $entry;
+			if ( is_dir( $path ) && ! is_link( $path ) ) {
+				self::rrmdir( $path );
+			} else {
+				unlink( $path );
+			}
+		}
+		rmdir( $dir );
+	}
+}
+
+/**
+ * WP Super Cache: the four functions of its detect list plus wpsc_normalize_uri_case().
+ */
+function aafm_siteops_stub_wp_super_cache_activate(): void {
+	$GLOBALS['cache_path']    = Aafm_Siteops_Vendor_Stub::root() . '/wpsc/';
+	$GLOBALS['cache_enabled'] = true;
+	if ( function_exists( 'get_supercache_dir' ) ) {
+		return;
+	}
+	// Mirrors wp-cache-phase2.php:911-919: the home option cut at its first colon.
+	function get_supercache_dir( $blog_id = 0 ) {
+		$home = strtolower( (string) preg_replace( '/:.*$/', '', str_replace( array( 'http://', 'https://' ), '', (string) get_option( 'home' ) ) ) );
+		return trailingslashit( $GLOBALS['cache_path'] . 'supercache/' . trailingslashit( $home ) );
+	}
+	function wpsc_normalize_uri_case( $uri ) {
+		return preg_replace_callback(
+			'/%[0-9a-f]{2}/i',
+			static function ( $m ) {
+				return strtoupper( $m[0] );
+			},
+			strtolower( (string) $uri )
+		);
+	}
+	function wpsc_delete_url_cache( $url ) {
+		Aafm_Siteops_Vendor_Stub::hit( 'wpsc_delete_url_cache', array( $url ) );
+		return true;
+	}
+	function wpsc_delete_post_cache( $id ) {
+		Aafm_Siteops_Vendor_Stub::hit( 'wpsc_delete_post_cache', array( $id ) );
+		return true;
+	}
+	function wp_cache_clear_cache( $blog_id = 0 ) {
+		Aafm_Siteops_Vendor_Stub::hit( 'wp_cache_clear_cache', array( $blog_id ) );
+	}
+}

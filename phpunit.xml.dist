@@ -58,6 +58,7 @@
 			<file>tests/RoleReadSweepTest.php</file>
 			<file>tests/OptionReadSweepTest.php</file>
 			<file>tests/RouteMatchSweepTest.php</file>
+			<file>tests/SiteCacheAdaptersTest.php</file>
 		</testsuite>
 	</testsuites>
 	<!--

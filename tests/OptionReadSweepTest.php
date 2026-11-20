@@ -95,6 +95,7 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/server.php|aafm_notice_omitted_abilities|1' => 'N',
 		'includes/site-brief.php|aafm_site_brief|1'        => 'N',
 		'includes/siteops/cache-registry.php|aafm_siteops_plugin_active|1' => 'N',
+		'includes/siteops/cache/wp-super-cache.php|aafm_cache_wp_super_cache_purge_url|1' => 'N',
 	);
 
 	/**
@@ -370,7 +371,7 @@ final class OptionReadSweepTest extends TestCase {
 			array(
 				'G' => 21,
 				'L' => 3,
-				'N' => 45,
+				'N' => 46,
 			),
 			array(
 				'G' => count( array_keys( self::GET_OPTION, 'G', true ) ),

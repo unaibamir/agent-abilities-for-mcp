@@ -165,7 +165,7 @@ final class SiteCacheDispatchTest extends TestCase {
 	public function test_adapter_ready_needs_all_four_functions(): void {
 		$this->assertTrue( aafm_site_cache_adapter_ready( 'fake_a' ) );
 		$this->assertFalse( aafm_site_cache_adapter_ready( 'fake_partial' ) );
-		$this->assertFalse( aafm_site_cache_adapter_ready( 'wp_super_cache' ), 'No adapter file exists yet for a real slug.' );
+		$this->assertTrue( aafm_site_cache_adapter_ready( 'wp_super_cache' ), 'A real adapter file with its four functions.' );
 		$this->assertFalse( aafm_site_cache_adapter_ready( '../budget' ), 'A slug that is not a plain identifier is never loaded.' );
 	}
 

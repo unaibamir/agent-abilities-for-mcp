@@ -1579,4 +1579,67 @@ if ( ! function_exists( 'update_field' ) ) {
 		return false;
 	}
 }
+if ( ! function_exists( 'get_supercache_dir' ) ) {
+	/**
+	 * Minimal WP Super Cache signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @param int $blog_id Blog id. Always 0 on a single site.
+	 * @return string
+	 */
+	function get_supercache_dir( $blog_id = 0 ) {
+		return '';
+	}
+}
+
+if ( ! function_exists( 'wpsc_normalize_uri_case' ) ) {
+	/**
+	 * Minimal WP Super Cache signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @param string $uri URI.
+	 * @return string
+	 */
+	function wpsc_normalize_uri_case( $uri ) {
+		return $uri;
+	}
+}
+
+if ( ! function_exists( 'wpsc_delete_url_cache' ) ) {
+	/**
+	 * Minimal WP Super Cache signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @param string $url URL.
+	 * @return bool
+	 */
+	function wpsc_delete_url_cache( $url ) {
+		return true;
+	}
+}
+
+if ( ! function_exists( 'wpsc_delete_post_cache' ) ) {
+	/**
+	 * Minimal WP Super Cache signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @param int $id Post id.
+	 * @return bool
+	 */
+	function wpsc_delete_post_cache( $id ) {
+		return true;
+	}
+}
+
+if ( ! function_exists( 'wp_cache_clear_cache' ) ) {
+	/**
+	 * Minimal WP Super Cache signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @param int $blog_id Blog id. Always 0 on a single site.
+	 * @return void
+	 */
+	function wp_cache_clear_cache( $blog_id = 0 ) {
+	}
+}
 // phpcs:enable

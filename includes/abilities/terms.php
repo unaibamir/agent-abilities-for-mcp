@@ -326,7 +326,6 @@ function aafm_args_add_post_terms(): array {
 				),
 				'taxonomy' => array(
 					'type'        => 'string',
-					'default'     => 'category',
 					'description' => __( 'Slug of the public taxonomy the term_ids belong to. Required.', 'agent-abilities-for-mcp' ),
 				),
 				'term_ids' => array(

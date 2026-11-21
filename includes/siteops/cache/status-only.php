@@ -72,7 +72,7 @@ function aafm_site_cache_status_only(): array {
 	if ( class_exists( 'WPMedia\MCP\OAuth\Bootstrap', false ) ) {
 		$rows[] = array(
 			'provider' => 'vendor_mcp_server',
-			'label'    => 'WP Rocket MCP server',
+			'label'    => 'MCP server from another plugin',
 			'kind'     => 'vendor_mcp_server',
 		);
 	}

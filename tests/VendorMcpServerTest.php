@@ -1,6 +1,6 @@
 <?php
 /**
- * The Connection Doctor row for another plugin's MCP server on the same site (WP Rocket).
+ * The Connection Doctor row for another plugin's MCP server on the same site (WP Rocket, Rank Math).
  *
  * The row is a disclosure. It makes no request and switches nothing off. A declared class cannot
  * be removed, so this file runs at the very end of the suite and its first test covers the site
@@ -59,7 +59,24 @@ final class VendorMcpServerTest extends TestCase {
 		$this->assertSame( 'vendor_mcp', $row['id'] );
 		$this->assertSame( 'pass', $row['status'] );
 		$this->assertSame( '', $row['who'], 'A pass row names no one to fix it, so the support report prints no label.' );
-		$this->assertSame( 'WP Rocket also runs an MCP server on this site. It answers its own discovery addresses.', $row['detail'] );
+		$this->assertSame( 'Another plugin on this site, such as WP Rocket or Rank Math, also runs an MCP server. It answers its own discovery addresses.', $row['detail'] );
+	}
+
+	public function test_the_rows_do_not_name_wp_rocket_alone(): void {
+		// Rank Math 1.0.282 bundles and boots the same WPMedia\MCP\OAuth\Bootstrap (rank-math.php:268), so the
+		// class alone cannot say which plugin runs the server.
+		aafm_siteops_stub_wp_rocket_mcp_activate();
+		update_option( 'aafm_oauth_enabled', '1' );
+
+		$row = aafm_doctor_check_vendor_mcp();
+		$this->assertIsArray( $row );
+		$this->assertStringStartsWith( 'Another plugin on this site, such as WP Rocket or Rank Math, also runs an MCP server.', $row['detail'] );
+		$this->assertStringNotContainsString( "WP Rocket's server", $row['detail'] );
+
+		require_once AAFM_PLUGIN_DIR . 'includes/siteops/cache/status-only.php';
+		$status = array_values( array_filter( aafm_site_cache_status_only(), static fn( array $r ): bool => 'vendor_mcp_server' === $r['kind'] ) );
+		$this->assertCount( 1, $status );
+		$this->assertSame( 'MCP server from another plugin', $status[0]['label'] );
 	}
 
 	public function test_the_row_is_part_of_a_doctor_run_and_sends_nothing_of_its_own(): void {

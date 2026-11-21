@@ -560,6 +560,10 @@ function aafm_integration_status_note( string $slug, string $status ): string {
 			// (includes/abilities/tec/tickets.php), so Event Tickets alone cannot register them.
 			return __( 'Event Tickets is active, but its ticket abilities are gated on a parent event and need The Events Calendar active too. Install and activate The Events Calendar to use these abilities.', 'agent-abilities-for-mcp' );
 		case 'installed_inactive':
+			// The Site Ops cards are labelled by category, not by plugin, so "Activate Redirects" would name nothing.
+			if ( in_array( $slug, array( 'site_cache', 'site_redirects', 'site_backups' ), true ) ) {
+				return __( 'Installed but not active. Activate a supported plugin to use these abilities.', 'agent-abilities-for-mcp' );
+			}
 			return sprintf(
 				/* translators: %s: the integration plugin name, e.g. WooCommerce. */
 				__( 'Installed but not active. Activate %s to use these abilities.', 'agent-abilities-for-mcp' ),
@@ -567,6 +571,9 @@ function aafm_integration_status_note( string $slug, string $status ): string {
 			);
 		case 'not_installed':
 		default:
+			if ( in_array( $slug, array( 'site_cache', 'site_redirects', 'site_backups' ), true ) ) {
+				return __( 'Not installed. Install and activate a supported plugin to expose these abilities here.', 'agent-abilities-for-mcp' );
+			}
 			return __( 'Not installed. Install and activate the plugin to expose its abilities here.', 'agent-abilities-for-mcp' );
 	}
 }

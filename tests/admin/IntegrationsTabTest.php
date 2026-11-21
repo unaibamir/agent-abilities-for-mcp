@@ -625,4 +625,12 @@ final class IntegrationsTabTest extends TestCase {
 		$body = substr( $js, (int) $start, (int) strpos( $js, "\n\t\t#", (int) $start + 1 ) - (int) $start );
 		$this->assertStringContainsString( 'btn.dataset.confirm', $body );
 	}
+
+	public function test_site_ops_cards_name_a_supported_plugin_not_their_category(): void {
+		foreach ( array( 'site_cache', 'site_redirects', 'site_backups' ) as $slug ) {
+			$this->assertSame( 'Installed but not active. Activate a supported plugin to use these abilities.', aafm_integration_status_note( $slug, 'installed_inactive' ), $slug );
+			$this->assertSame( 'Not installed. Install and activate a supported plugin to expose these abilities here.', aafm_integration_status_note( $slug, 'not_installed' ), $slug );
+		}
+		$this->assertSame( 'Installed but not active. Activate WooCommerce to use these abilities.', aafm_integration_status_note( 'woocommerce', 'installed_inactive' ) );
+	}
 }

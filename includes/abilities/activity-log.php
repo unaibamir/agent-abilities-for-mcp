@@ -27,7 +27,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_activity_log_definitions' 
 function aafm_register_activity_log_definitions( array $registry ): array {
 	$registry['aafm/get-activity-log'] = array(
 		'label'        => __( 'Get activity log', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Reads this plugin's own audit log: each row's ability name, status (started, success, error, denied), acting user id and login, whether the caller is flagged as an agent identity, the argument keys passed, the timestamp, and a short identifier-only detail (an object id or slug, a WP_Error code, or a crashed call's exception class and throw site; a code returned by another plugin's bridged ability is prefixed with foreign:). Most recent first. Response includes total (the count for the status filter). Never free-text argument content or network addresses. Requires the manage-options capability.", 'agent-abilities-for-mcp' ),
+		'description'  => __( "Reads this plugin's own audit log: each row's ability name, status (started, success, error, denied), acting user id and login, whether the caller is flagged as an agent identity, the argument keys passed, the timestamp, and a short identifier-only detail (an object id or slug, a WP_Error code, or a crashed call's exception class and throw site; a code returned by another plugin's bridged ability is prefixed with foreign:). Most recent first. Response includes total (the count for the status filter). Never argument values, free text or network addresses (an error code another plugin builds from its input can carry a short fragment of that input). Requires the manage-options capability.", 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',

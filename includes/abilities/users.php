@@ -59,7 +59,7 @@ function aafm_register_users_definitions( array $registry ): array {
 	);
 	$registry['aafm/create-user'] = array(
 		'label'        => __( 'Create user', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Create a new user with the site default role (never a caller-chosen role). Requires the create-users capability. Off by default.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Create a new user with the site default role, or subscriber when the default is administrator or a role the caller cannot assign (never a caller-chosen role). Requires the create-users capability. Off by default.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'users',

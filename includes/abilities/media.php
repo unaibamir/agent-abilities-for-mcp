@@ -1051,7 +1051,7 @@ function aafm_args_upload_media_from_url(): array {
 				'url'      => array(
 					'type'        => 'string',
 					'format'      => 'uri',
-					'description' => __( 'HTTPS URL of an image to fetch and upload. Must resolve to a public IP address; private, loopback, and link-local ranges are refused, and redirects are not followed into them either.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'HTTPS URL of an image to fetch and upload. Must resolve to a public IP address; private, loopback, and link-local ranges are refused, and redirects are never followed, so a URL that redirects fails; give the final URL. Only ports 80, 443 and 8080 are allowed by default, and a bare IP address is refused as the host.', 'agent-abilities-for-mcp' ),
 				),
 				'filename' => array(
 					'type'        => 'string',

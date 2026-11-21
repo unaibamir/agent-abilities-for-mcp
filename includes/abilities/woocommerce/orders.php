@@ -1668,7 +1668,7 @@ function aafm_args_wc_update_order(): array {
 	// wc-create-order request has no existing order to add to.
 	$properties['add_line_items'] = array(
 		'type'        => 'array',
-		'description' => __( 'Products to add as NEW line items on the existing order, each given as a product_id and quantity pair. Items are always ADDED; this ability has no way to modify, replace, or remove an existing line item. If any product_id cannot be resolved to a real product, the whole request fails with no partial write. Sending the deprecated line_items field at the same time combines both lists -- every item in either is added.', 'agent-abilities-for-mcp' ),
+		'description' => __( 'Products to add as NEW line items on the existing order, each given as a product_id and quantity pair. Items are always ADDED; this ability has no way to modify, replace, or remove an existing line item. If any product_id cannot be resolved to a real product, the whole request fails with no partial write. Sending the deprecated line_items field at the same time combines both lists, so every item in either is added.', 'agent-abilities-for-mcp' ),
 		'items'       => aafm_wc_order_line_item_schema(),
 	);
 	// line_items predates add_line_items and its original name reads as if it replaces an order's

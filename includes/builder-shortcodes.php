@@ -46,7 +46,7 @@ function aafm_builder_error( string $code, array $extra = array() ): WP_Error {
 		'aafm_builder_invalid_move'           => array( 400, __( 'An element cannot be moved into itself or into one of its own children. Nothing was changed.', 'agent-abilities-for-mcp' ) ),
 		'aafm_builder_remove_irreversible'    => array( 409, __( 'Revisions are off for this post, so a removed element could not be brought back. Nothing was changed.', 'agent-abilities-for-mcp' ) ),
 		'aafm_builder_remove_last_root'       => array( 409, __( 'The last top level element of a page cannot be removed. Nothing was changed.', 'agent-abilities-for-mcp' ) ),
-		'aafm_builder_unknown_template'       => array( 404, __( 'No template with that id was found. Nothing was changed.', 'agent-abilities-for-mcp' ) ),
+		'aafm_builder_unknown_template'       => array( 404, __( 'No template or library item with that id was found for this user. Nothing was changed.', 'agent-abilities-for-mcp' ) ),
 	);
 	$row   = $codes[ $code ] ?? array( 400, __( 'The request could not be completed. Nothing was changed.', 'agent-abilities-for-mcp' ) );
 	return new WP_Error( $code, $row[1], array_merge( array( 'status' => $row[0] ), $extra ) );

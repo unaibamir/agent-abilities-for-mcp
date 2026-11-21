@@ -106,7 +106,7 @@ function aafm_args_get_terms(): array {
 					),
 					'search'   => array(
 						'type'        => 'string',
-						'description' => __( 'Free-text search term matched against the term name.', 'agent-abilities-for-mcp' ),
+						'description' => __( 'Free-text search term matched against the term name or slug.', 'agent-abilities-for-mcp' ),
 					),
 				),
 				aafm_pagination_schema_props(
@@ -327,7 +327,7 @@ function aafm_args_add_post_terms(): array {
 				'taxonomy' => array(
 					'type'        => 'string',
 					'default'     => 'category',
-					'description' => __( 'Slug of the public taxonomy the term_ids belong to. Defaults to category.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'Slug of the public taxonomy the term_ids belong to. Required.', 'agent-abilities-for-mcp' ),
 				),
 				'term_ids' => array(
 					'type'        => 'array',

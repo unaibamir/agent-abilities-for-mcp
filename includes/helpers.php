@@ -3361,7 +3361,7 @@ function aafm_paired_write_partial_failure_message( string $saved_label, string 
 function aafm_mixed_write_partial_failure_message( string $saved_label, string $failed_label ): string {
 	return sprintf(
 		/* translators: 1: name of the value that saved, 2: name of the value that could not be. */
-		__( '%1$s was saved, but %2$s could not be changed: the site\'s persistent object cache is still returning the old value. Some of your changes did not take - re-check your settings rather than assuming this save either fully applied or fully failed. Flush the object cache (Redis, Memcached, or your host\'s cache) and save again.', 'agent-abilities-for-mcp' ),
+		__( '%1$s was saved, but %2$s could not be changed: the site\'s persistent object cache is still returning the old value. Some of your changes did not take, so re-check your settings rather than assuming this save either fully applied or fully failed. Flush the object cache (Redis, Memcached, or your host\'s cache) and save again.', 'agent-abilities-for-mcp' ),
 		$saved_label,
 		$failed_label
 	);

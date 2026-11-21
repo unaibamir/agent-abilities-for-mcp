@@ -43,7 +43,7 @@ function aafm_register_revisions_definitions( array $registry ): array {
 		'label'        => __( 'Restore revision', 'agent-abilities-for-mcp' ),
 		'description'  => sprintf(
 			/* translators: %s: page builder names, for example Elementor and Divi. */
-			__( 'Restore a post to one of its revisions. The current state is first saved as a fresh revision, so the restore is reversible. Refused when revisions are disabled for the post, since the current state could not be preserved and the restore would be irreversible. Also refused when the post is owned by a page builder (%s), since the restore would either have no visible effect or corrupt the builder\'s stored markup, except an Avada or WPBakery page while that builder is active: those keep the whole layout in the post content. An Avada or WPBakery restore, including one of a builder\'s own content types, is refused when saving the revision as this user would change it or the current page, for example by removing an element or an embed the user may not keep. So is a revision made with the other builder, for example a WPBakery revision of a page Avada owns now. After a WPBakery restore the page\'s generated CSS is rebuilt; if that fails the tool says the CSS may be stale.', 'agent-abilities-for-mcp' ),
+			__( 'Restore a post to one of its revisions. This call takes no snapshot of its own: the current state stays recoverable only if WordPress already kept it as the post\'s latest revision, which is normal while revisions are on. Refused when revisions are disabled for the post, since the current state could then not be kept and the restore would be irreversible. Also refused when the post is owned by a page builder (%s), since the restore would either have no visible effect or corrupt the builder\'s stored markup, except an Avada or WPBakery page while that builder is active: those keep the whole layout in the post content. An Avada or WPBakery restore, including one of a builder\'s own content types, is refused when saving the revision as this user would change it or the current page, for example by removing an element or an embed the user may not keep. So is a revision made with the other builder, for example a WPBakery revision of a page Avada owns now. After a WPBakery restore the page\'s generated CSS is rebuilt; if that fails the tool says the CSS may be stale.', 'agent-abilities-for-mcp' ),
 			aafm_page_builder_names()
 		),
 		'group'        => 'writes',
@@ -53,7 +53,7 @@ function aafm_register_revisions_definitions( array $registry ): array {
 	);
 	$registry['aafm/delete-revision']  = array(
 		'label'        => __( 'Delete revision', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Permanently delete a single revision from a post's history. This cannot be undone (unlike trashing a post, there is no Trash for revisions). The live post is not changed. Requires edit access to the parent post.", 'agent-abilities-for-mcp' ),
+		'description'  => __( "Permanently delete a single revision from a post's history. This cannot be undone (unlike trashing a post, there is no Trash for revisions). The live post is not changed. Requires edit and delete access to the parent post.", 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'content',
@@ -280,7 +280,7 @@ function aafm_args_restore_revision(): array {
 				'revision_id' => array(
 					'type'        => 'integer',
 					'minimum'     => 1,
-					'description' => __( 'ID of the revision to restore the post to. The post\'s current state is saved as a fresh revision first, so this restore is itself reversible.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'ID of the revision to restore the post to. This call takes no snapshot of the post\'s current state; it stays recoverable only if it is already the post\'s latest revision.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id', 'revision_id' ),
@@ -367,7 +367,7 @@ function aafm_exec_restore_revision( array $input ) {
 		|| ! wp_revisions_enabled( $parent ) ) {
 		return new WP_Error(
 			'aafm_restore_irreversible',
-			__( 'Revisions are disabled for this post, so the current state cannot be saved before restoring and the restore would be irreversible. Refusing. Enable revisions for this post type to restore.', 'agent-abilities-for-mcp' )
+			__( 'Revisions are disabled for this post, so the current state could not be kept and the restore would be irreversible. Refusing. Enable revisions for this post type to restore.', 'agent-abilities-for-mcp' )
 		);
 	}
 	$revision = aafm_exact_object( 'post', $revision_id );
@@ -501,7 +501,7 @@ function aafm_args_delete_revision(): array {
 				'post_id'     => array(
 					'type'        => 'integer',
 					'minimum'     => 1,
-					'description' => __( 'ID of the parent post. The caller must be able to edit it, and the revision must genuinely belong to it.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'ID of the parent post. The caller must be able to edit and delete it, and the revision must genuinely belong to it.', 'agent-abilities-for-mcp' ),
 				),
 				'revision_id' => array(
 					'type'        => 'integer',

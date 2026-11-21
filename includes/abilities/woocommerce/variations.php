@@ -96,7 +96,7 @@ function aafm_wc_variations_registry_definitions(): array {
 
 		'aafm/wc-delete-product-variation' => array(
 			'label'        => __( 'Delete WooCommerce product variation', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Permanently deletes a product variation by id. This bypasses the Trash and cannot be undone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Permanently deletes a product variation by id. This bypasses the Trash and cannot be undone. Requires the manage-WooCommerce capability and permission to delete that variation.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'destructive',
 			'subject'      => 'woocommerce',

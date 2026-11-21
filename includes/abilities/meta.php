@@ -175,7 +175,7 @@ function aafm_args_get_all_post_meta(): array {
 				'post_id' => array(
 					'type'        => 'integer',
 					'minimum'     => 1,
-					'description' => __( "ID of the post whose allowlisted meta to read. The current user must have edit access to it. Only keys on the operator\'s post-meta allowlist (or every stored key under the allow-all wildcard) are returned; protected, denied, and hard-blocked keys are silently excluded from this bulk read rather than causing an error.", 'agent-abilities-for-mcp' ),
+					'description' => __( "ID of the post whose allowlisted meta to read. The current user must have edit access to it. Only keys on the operator's post-meta allowlist (or every stored key under the allow-all wildcard) are returned; protected, denied, and hard-blocked keys are silently excluded from this bulk read rather than causing an error.", 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id' ),

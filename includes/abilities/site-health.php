@@ -26,7 +26,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_site_health_definitions' )
 function aafm_register_site_health_definitions( array $registry ): array {
 	$registry['aafm/site-health-status'] = array(
 		'label'        => __( 'Site health summary', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Runs WordPress's own Site Health checks that need no network request and returns each check's name and result (good, recommended or critical) with a count of each. Also says whether debug mode is on, whether a debug log file exists, whether WordPress is in recovery mode and whether any plugin or theme is paused after a fatal error. Outbound requests are blocked while it runs. Also names the checks it does not run (those that need a network request or a file system connection, and the ones the Site Health screen runs in the background), so its counts can be lower than that screen's. Returns no log lines, no file paths, no version numbers and no server details; use the environment and plugin list tools for versions. Requires the manage-options capability. On a multisite network, a super admin only.", 'agent-abilities-for-mcp' ),
+		'description'  => __( "Runs WordPress's own Site Health checks that need no network request and returns each check's name and result (good, recommended or critical) with a count of each. Also says whether debug mode is on, whether a debug log file exists, whether WordPress is in recovery mode and whether any plugin or theme is paused after a fatal error. Outbound requests are blocked while it runs. Also names the checks it does not run (those that need a network request or a file system connection, and the ones the Site Health screen runs in the background), so its counts can be lower than that screen's. Returns no log lines, no file paths, no version numbers and no server details; use the plugin list tool for plugin versions. Requires the manage-options capability. On a multisite network, a super admin only.", 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
@@ -34,7 +34,7 @@ function aafm_register_site_health_definitions( array $registry ): array {
 	);
 	$registry['aafm/site-list-updates']  = array(
 		'label'        => __( 'List waiting updates', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Lists the updates WordPress already knows are waiting: whether a core update is available and its version, and each plugin and theme with a newer version. It reads the result of WordPress's last update check and says when that check ran; it never starts a check, and outbound requests are blocked while it runs, so the list can be up to a day old. Never returns download addresses. It installs nothing. Requires the manage-options capability. On a multisite network, a super admin only.", 'agent-abilities-for-mcp' ),
+		'description'  => __( "Lists the updates WordPress already knows are waiting: whether a core update is available and its version, and each plugin and theme with a newer version. It reads the result of WordPress's last update check and says when that check ran; it never starts a check, and outbound requests are blocked while it runs, so the list can be out of date; last_checked says how old it is. Never returns download addresses. It installs nothing. Requires the manage-options capability. On a multisite network, a super admin only.", 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
@@ -42,7 +42,7 @@ function aafm_register_site_health_definitions( array $registry ): array {
 	);
 	$registry['aafm/site-cron-status']   = array(
 		'label'        => __( 'Scheduled task status', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Summarises WordPress's scheduled tasks: whether WP-Cron is switched off in configuration, how many tasks are scheduled, how many are due now and how many are more than five minutes late, how late the oldest one is, and the 50 tasks due soonest by hook name with their schedule. Hook names are identifiers chosen by plugin code; names with unusual characters are shown as other. Task arguments are never returned. It runs nothing and changes nothing. Requires the manage-options capability. On a multisite network, a super admin only.", 'agent-abilities-for-mcp' ),
+		'description'  => __( "Summarises WordPress's scheduled tasks: whether WP-Cron is switched off in configuration, how many tasks are scheduled, how many are due now and how many are more than five minutes late, how late the oldest one is, and the 50 hooks with the soonest next run, each with its schedule and how many events it has. Hook names are identifiers chosen by plugin code; names with unusual characters are shown as other. Task arguments are never returned. It runs nothing and changes nothing. Requires the manage-options capability. On a multisite network, a super admin only.", 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',

@@ -93,7 +93,7 @@ function aafm_wc_products_registry_definitions(): array {
 
 		'aafm/wc-delete-product' => array(
 			'label'        => __( 'Delete WooCommerce product', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Permanently deletes a WooCommerce product by id. This bypasses the Trash and cannot be undone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Permanently deletes a WooCommerce product by id. This bypasses the Trash and cannot be undone. Requires the manage-WooCommerce capability and permission to delete that product.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'destructive',
 			'subject'      => 'woocommerce',
@@ -1430,7 +1430,7 @@ function aafm_wc_product_type_mismatch_error( string $current_type, string $requ
 		'aafm_wc_product_type_mismatch',
 		sprintf(
 			/* translators: 1: the product's actual current type. 2: the type the caller requested. */
-			__( 'This product is a %1$s product and cannot be changed to %2$s -- converting a product between types is not supported. Omit type, or send its current value, to leave it unchanged.', 'agent-abilities-for-mcp' ),
+			__( 'This product is a %1$s product and cannot be changed to %2$s, because converting a product between types is not supported. Omit type, or send its current value, to leave it unchanged.', 'agent-abilities-for-mcp' ),
 			$current_type,
 			$requested_type
 		)

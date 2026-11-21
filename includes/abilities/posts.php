@@ -72,7 +72,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/create-post']      = array(
 		'label'        => __( 'Create post', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Create a new post, published by default (requires publish capability to call this ability at all). An explicit draft, pending, or private status is also accepted. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Create a new post, published by default unless the operator\'s force-draft setting holds it as a draft (requires publish capability to call this ability at all). An explicit draft, pending, or private status is also accepted. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -116,7 +116,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/replace-sitewide'] = array(
 		'label'        => __( 'Replace sitewide', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Literal find-and-replace across multiple posts, scoped by post type and status. Skips pages, products, events, venues, organizers and listings while that type\'s own update tool is off. Dry-run by default (previews the match count and which posts would change, writes nothing); pass dry_run:false to apply. Each candidate post is guarded by the same structure-preserving check as replace-in-post, so a match landing inside markup is skipped and reported, not applied. A candidate owned by a foreign page builder is likewise skipped and counted in skipped_builder_owned, not applied. One call changes at most 50 posts. If the response says truncated:true, run the call again, since changed posts stop matching. Skipped posts keep matching, and so do posts whose new text contains the search text, so stop when a call changes nothing rather than repeating blindly.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Literal find-and-replace across multiple posts, scoped by post type and status. Skips pages, products, events, venues, organizers and listings while that type\'s own update tool is off. Dry-run by default (returns counts only, never a list of posts, and writes nothing); pass dry_run:false to apply. Each candidate post is guarded by the same structure-preserving check as replace-in-post, so a match landing inside markup is skipped and reported, not applied. A candidate owned by a foreign page builder is likewise skipped and counted in skipped_builder_owned, not applied. One call changes at most 50 posts. If the response says truncated:true, run the call again, since changed posts stop matching. Skipped posts keep matching, and so do posts whose new text contains the search text, so stop when a call changes nothing rather than repeating blindly.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -1478,7 +1478,7 @@ function aafm_args_replace_in_post(): array {
 				),
 				'replace' => array(
 					'type'        => 'string',
-					'description' => __( 'Literal text to substitute for every match of search. Sanitized the same way as a full content update.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'Literal text to substitute for every match of search. Plain text. It is sanitized with wp_kses_post, and a replacement that introduces markup is refused.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id', 'search', 'replace' ),

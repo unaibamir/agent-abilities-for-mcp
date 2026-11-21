@@ -122,7 +122,7 @@ function aafm_register_menus_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-navigation'] = array(
 		'label'        => __( 'Update navigation', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Replaces the links of one block-theme navigation menu by id with the list you send: each item a label and a URL, with optional children up to three levels deep and 100 items in all. The whole navigation is replaced, including any blocks list-navigations names under other_blocks. Each link is saved as a plain custom link, so per-link settings such as open in a new tab, rel, CSS classes and a link\'s binding to a page or post are not kept. URLs must be http, https, mailto or tel links, a path starting with /, or an anchor starting with #. A navigation owned by a page builder is refused. Navigation edits are not recorded in change history, so this cannot be undone here; When the site keeps revisions, WordPress saves the new version as a revision, so the earlier version can be restored only if it was already kept as a revision; restoring one brings back the links it holds. Requires the edit-theme-options capability. Off by default.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Replaces the links of one block-theme navigation menu by id with the list you send: each item a label and a URL, with optional children up to three levels deep and 100 items in all. The whole navigation is replaced, including any blocks list-navigations names under other_blocks. Each link is saved as a plain custom link, so per-link settings such as open in a new tab, rel, CSS classes and a link\'s binding to a page or post are not kept. URLs must be http, https, mailto or tel links, a path starting with /, or an anchor starting with #. A navigation owned by a page builder is refused. Navigation edits are not recorded in change history, so this cannot be undone here. When the site keeps revisions, WordPress saves the new version as a revision, so the earlier version survives only if it was already kept as a revision. No tool in this plugin restores it, because restore-revision does not reach navigation posts. Requires the edit-theme-options capability. Off by default.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'site',
@@ -276,7 +276,7 @@ function aafm_args_list_menu_items(): array {
 			'properties'           => array(
 				'menu_id' => array(
 					'type'        => 'integer',
-					'description' => __( 'ID of the navigation menu whose items to list. An unknown or empty menu returns an empty items list rather than an error.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'ID of the navigation menu whose items to list. An unknown ID, or a term that is not a nav menu, returns a generic error. A menu with no items returns an empty items list.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'menu_id' ),
@@ -651,7 +651,7 @@ function aafm_args_create_menu_item(): array {
 				),
 				'parent'    => array(
 					'type'        => 'integer',
-					'description' => __( 'ID of an existing menu item this one should nest under, or omit for a top-level item. Not verified to exist or to belong to this menu before being applied.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'ID of an existing menu item this one should nest under, or omit for a top-level item. The parent must be an item of this same menu; any other id is refused and nothing is created.', 'agent-abilities-for-mcp' ),
 				),
 				'object_id' => array(
 					'type'        => 'integer',
@@ -1397,7 +1397,7 @@ function aafm_navigation_item_schema( int $level ): array {
 			),
 			'url'      => array(
 				'type'        => 'string',
-				'description' => __( 'Where the link goes: an http, https, mailto or tel link, a path starting with /, or an anchor starting with #. Anything else is refused.', 'agent-abilities-for-mcp' ),
+				'description' => __( 'Where the link goes: an http, https, mailto or tel link, a path starting with /, or an anchor starting with #. Other schemes, such as javascript:, data: or ftp:, are refused.', 'agent-abilities-for-mcp' ),
 			),
 			'children' => $children,
 		),

@@ -655,9 +655,9 @@ function aafm_exec_site_list_404s( array $input ) {
  */
 function aafm_site_redirect_unsupported_plugins(): array {
 	return array(
-		array( 'redirect-redirection/redirect-redirection.php', 'Redirection by Inisev' ),
+		array( 'redirect-redirection/redirect-redirection.php', 'Redirect Redirection' ),
 		array( 'simple-301-redirects/wp-simple-301-redirects.php', 'Simple 301 Redirects' ),
-		array( '301-redirects/301-redirects.php', '301 Redirects by WebFactory' ),
+		array( '301-redirects/301-redirects.php', '301 Redirects (the older 301-redirects plugin)' ),
 		array( 'seo-redirection/seo-redirection.php', 'SEO Redirection' ),
 		array( '404-solution/404-solution.php', '404 Solution' ),
 		array( 'all-404-redirect-to-homepage/all-404-redirect-to-homepage.php', 'All 404 Redirect to Homepage' ),

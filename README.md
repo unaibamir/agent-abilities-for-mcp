@@ -182,7 +182,7 @@ The Model Context Protocol is an open specification that Anthropic originally de
 * **Feature:** Agents can clear one post, one URL or the whole site from the page cache of 13 cache plugins, including LiteSpeed Cache, WP Super Cache and W3 Total Cache. Each plugin's result says whether a cached copy was found and removed or the purge was only requested.
 * **Feature:** Agents can list redirects, read one, list not-found addresses and test which redirect a URL would hit in Redirection, Rank Math, Safe Redirect Manager, 301 Redirects and Slim SEO, without changing them. wpbakery-replace-text now returns a restore point, and Check my connection shows when WP Rocket runs its own MCP server.
 * **Feature:** Backup gate: a Settings option, off by default, that refuses the risky tools you pick unless UpdraftPlus has a checked backup from the last 24 hours. New read tools report those backups, Site Health results, waiting updates and scheduled tasks, and make no outbound requests.
-* **Fix:** REST requests that are not for the MCP endpoint no longer load the plugin's tool set, and WPBakery element settings accept an image id sent as a string of digits.
+* **Fix:** Codex and other clients that send a client title could fail to connect with an "Expected object, got array" error; they now connect. REST requests that are not for the MCP endpoint no longer load the plugin's tool set, and WPBakery element settings accept an image id sent as a string of digits.
 * **Chore:** The FAQ no longer says WPBakery's Role Manager is never applied, and the admin header now says nothing from this plugin is exposed until you switch it on.
 
 ### 1.12.0

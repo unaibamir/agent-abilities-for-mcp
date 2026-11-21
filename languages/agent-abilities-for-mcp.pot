@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-21T04:26:21+05:00\n"
+"POT-Creation-Date: 2026-11-21T05:03:37+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -5912,152 +5912,152 @@ msgstr ""
 msgid "The backup gate tool list could not be read. Reload this page and try again."
 msgstr ""
 
-#: includes/admin/backup-gate.php:151
+#: includes/admin/backup-gate.php:152
 msgid "The backup gate"
 msgstr ""
 
-#: includes/admin/backup-gate.php:152
+#: includes/admin/backup-gate.php:153
 msgid "Backup gate turned on"
 msgstr ""
 
-#: includes/admin/backup-gate.php:153
+#: includes/admin/backup-gate.php:154
 msgid "Backup gate turned off"
 msgstr ""
 
-#: includes/admin/backup-gate.php:158
-#: includes/admin/backup-gate.php:449
+#: includes/admin/backup-gate.php:159
+#: includes/admin/backup-gate.php:450
 msgid "Off-site backups"
 msgstr ""
 
-#: includes/admin/backup-gate.php:159
+#: includes/admin/backup-gate.php:160
 msgid "Off-site backups accepted"
 msgstr ""
 
-#: includes/admin/backup-gate.php:160
+#: includes/admin/backup-gate.php:161
 msgid "Off-site backups no longer accepted"
 msgstr ""
 
-#: includes/admin/backup-gate.php:165
-#: includes/admin/backup-gate.php:461
+#: includes/admin/backup-gate.php:166
+#: includes/admin/backup-gate.php:462
 msgid "Large backups"
 msgstr ""
 
-#: includes/admin/backup-gate.php:166
+#: includes/admin/backup-gate.php:167
 msgid "Large backups accepted on size alone"
 msgstr ""
 
-#: includes/admin/backup-gate.php:167
+#: includes/admin/backup-gate.php:168
 msgid "Large backups no longer accepted on size alone"
 msgstr ""
 
 #. translators: %d: how many tools are behind the backup gate.
-#: includes/admin/backup-gate.php:195
+#: includes/admin/backup-gate.php:196
 #, php-format
 msgid "Backup gate tools changed: %d chosen"
 msgstr ""
 
-#: includes/admin/backup-gate.php:197
+#: includes/admin/backup-gate.php:198
 msgid "The backup gate tool list"
 msgstr ""
 
-#: includes/admin/backup-gate.php:274
+#: includes/admin/backup-gate.php:275
 msgid "destructive"
 msgstr ""
 
-#: includes/admin/backup-gate.php:275
+#: includes/admin/backup-gate.php:276
 #: includes/admin/bridge-directory.php:842
-#: includes/admin/integrations.php:728
+#: includes/admin/integrations.php:724
 #: includes/admin/page.php:2373
 msgid "high-risk"
 msgstr ""
 
-#: includes/admin/backup-gate.php:319
+#: includes/admin/backup-gate.php:320
 msgid "Not available on multisite"
 msgstr ""
 
-#: includes/admin/backup-gate.php:320
+#: includes/admin/backup-gate.php:321
 msgid "The backup check does not run on a multisite network in this version. While the gate is on, every chosen tool is refused unless a developer vouches for a backup with the aafm_backup_gate_vouch filter."
 msgstr ""
 
-#: includes/admin/backup-gate.php:323
+#: includes/admin/backup-gate.php:324
 msgid "No backup provider detected"
 msgstr ""
 
-#: includes/admin/backup-gate.php:324
+#: includes/admin/backup-gate.php:325
 msgid "This check reads UpdraftPlus only. With no supported backup plugin, every chosen tool is refused while the gate is on. Host backups and other backup plugins are not visible to it; a developer can vouch for them with the aafm_backup_gate_vouch filter."
 msgstr ""
 
-#: includes/admin/backup-gate.php:327
+#: includes/admin/backup-gate.php:328
 msgid "UpdraftPlus detected"
 msgstr ""
 
-#: includes/admin/backup-gate.php:332
+#: includes/admin/backup-gate.php:333
 msgid "It matched its checksum when it was checked."
 msgstr ""
 
-#: includes/admin/backup-gate.php:333
+#: includes/admin/backup-gate.php:334
 msgid "Size checked only; its contents were not compared."
 msgstr ""
 
-#: includes/admin/backup-gate.php:334
+#: includes/admin/backup-gate.php:335
 msgid "Kept off-site and not checked here."
 msgstr ""
 
 #. translators: 1: how long ago, for example "3 hours", 2: "database only" or "database and files", 3: a sentence saying which check was made.
-#: includes/admin/backup-gate.php:339
+#: includes/admin/backup-gate.php:340
 #, php-format
 msgid "Newest good backup: %1$s ago, %2$s. %3$s"
 msgstr ""
 
-#: includes/admin/backup-gate.php:341
+#: includes/admin/backup-gate.php:342
 msgid "database and files"
 msgstr ""
 
-#: includes/admin/backup-gate.php:341
+#: includes/admin/backup-gate.php:342
 msgid "database only"
 msgstr ""
 
-#: includes/admin/backup-gate.php:346
+#: includes/admin/backup-gate.php:347
 msgid "No good backup found in the last 24 hours."
 msgstr ""
 
-#: includes/admin/backup-gate.php:353
+#: includes/admin/backup-gate.php:354
 msgid "A recent backup is too large to check on this server in the time one check is allowed. The gate stays closed for it. You can press Verify now to try once more, or switch on Large backups below to accept it on its size alone."
 msgstr ""
 
-#: includes/admin/backup-gate.php:354
+#: includes/admin/backup-gate.php:355
 msgid "A recent backup is too large to check on this server in the time one check is allowed. Switch on Large backups below to accept it on its size alone."
 msgstr ""
 
-#: includes/admin/backup-gate.php:358
+#: includes/admin/backup-gate.php:359
 msgid "The check runs within the hour."
 msgstr ""
 
-#: includes/admin/backup-gate.php:359
+#: includes/admin/backup-gate.php:360
 msgid "The check is not scheduled yet. Reload this page."
 msgstr ""
 
-#: includes/admin/backup-gate.php:360
+#: includes/admin/backup-gate.php:361
 msgid "WP-Cron is switched off in this site's configuration, so the check runs only when your server's own scheduler calls WordPress. Press Verify now to run it."
 msgstr ""
 
-#: includes/admin/backup-gate.php:361
+#: includes/admin/backup-gate.php:362
 msgid "Scheduled tasks on this site are running late, so the check has not run. Press Verify now to run it."
 msgstr ""
 
-#: includes/admin/backup-gate.php:363
+#: includes/admin/backup-gate.php:364
 msgid "Backups are checked once the gate is on."
 msgstr ""
 
-#: includes/admin/backup-gate.php:364
+#: includes/admin/backup-gate.php:365
 msgid "A recent backup is waiting to be checked."
 msgstr ""
 
-#: includes/admin/backup-gate.php:369
+#: includes/admin/backup-gate.php:370
 msgid "Verify now"
 msgstr ""
 
-#: includes/admin/backup-gate.php:385
+#: includes/admin/backup-gate.php:386
 #: includes/admin/page.php:176
 #: includes/admin/page.php:353
 #: includes/admin/playbooks.php:76
@@ -6068,33 +6068,33 @@ msgstr ""
 msgid "Off"
 msgstr ""
 
-#: includes/admin/backup-gate.php:387
+#: includes/admin/backup-gate.php:388
 msgid "Backup found"
 msgstr ""
 
-#: includes/admin/backup-gate.php:389
+#: includes/admin/backup-gate.php:390
 msgid "Checking backup"
 msgstr ""
 
-#: includes/admin/backup-gate.php:391
+#: includes/admin/backup-gate.php:392
 msgid "Backup too large to check"
 msgstr ""
 
-#: includes/admin/backup-gate.php:393
+#: includes/admin/backup-gate.php:394
 msgid "No recent backup"
 msgstr ""
 
-#: includes/admin/backup-gate.php:402
+#: includes/admin/backup-gate.php:403
 msgid "The gate is on and no tool is chosen, so nothing is held back."
 msgstr ""
 
-#: includes/admin/backup-gate.php:407
+#: includes/admin/backup-gate.php:408
 msgid "Require a recent backup"
 msgstr ""
 
-#: includes/admin/backup-gate.php:408
-#: includes/admin/backup-gate.php:450
-#: includes/admin/backup-gate.php:462
+#: includes/admin/backup-gate.php:409
+#: includes/admin/backup-gate.php:451
+#: includes/admin/backup-gate.php:463
 #: includes/admin/quickconnect.php:632
 #: includes/admin/settings.php:1107
 #: includes/admin/settings.php:1159
@@ -6102,70 +6102,70 @@ msgstr ""
 msgid "Off by default"
 msgstr ""
 
-#: includes/admin/backup-gate.php:409
+#: includes/admin/backup-gate.php:410
 msgid "Refuse the chosen tools unless a good backup from the last 24 hours exists."
 msgstr ""
 
-#: includes/admin/backup-gate.php:415
+#: includes/admin/backup-gate.php:416
 msgid "Backup plugin"
 msgstr ""
 
-#: includes/admin/backup-gate.php:432
+#: includes/admin/backup-gate.php:433
 msgid "This plugin's tools"
 msgstr ""
 
-#: includes/admin/backup-gate.php:433
+#: includes/admin/backup-gate.php:434
 #: includes/admin/page.php:1672
 #: includes/audit/log-query.php:103
 msgid "Plugins' own tools"
 msgstr ""
 
-#: includes/admin/backup-gate.php:434
+#: includes/admin/backup-gate.php:435
 msgid "Not available right now"
 msgstr ""
 
-#: includes/admin/backup-gate.php:436
+#: includes/admin/backup-gate.php:437
 msgid "No destructive or high-risk tools are available on this site."
 msgstr ""
 
-#: includes/admin/backup-gate.php:438
-#: includes/admin/backup-gate.php:442
+#: includes/admin/backup-gate.php:439
+#: includes/admin/backup-gate.php:443
 msgid "Tools that need a backup"
 msgstr ""
 
-#: includes/admin/backup-gate.php:451
+#: includes/admin/backup-gate.php:452
 msgid "Accept backups stored off-site that this site cannot check."
 msgstr ""
 
-#: includes/admin/backup-gate.php:453
+#: includes/admin/backup-gate.php:454
 msgid "See more about off-site backups"
 msgstr ""
 
-#: includes/admin/backup-gate.php:454
+#: includes/admin/backup-gate.php:455
 msgid "A backup kept only in remote storage has no file on this server to look at. With this on, the gate trusts UpdraftPlus's own record of that backup."
 msgstr ""
 
-#: includes/admin/backup-gate.php:463
+#: includes/admin/backup-gate.php:464
 msgid "Accept a large backup on its size alone when its contents have not been checked yet."
 msgstr ""
 
-#: includes/admin/backup-gate.php:465
+#: includes/admin/backup-gate.php:466
 msgid "See more about large backups"
 msgstr ""
 
-#: includes/admin/backup-gate.php:466
+#: includes/admin/backup-gate.php:467
 msgid "A backup the site cannot check on the spot is checked in the background, about once an hour. Until that check has run, the gate stays closed for it, and a backup too large to check on this server keeps it closed. With this on, the gate opens as soon as the file is there with the size UpdraftPlus recorded. That catches a missing or cut-short file. It does not catch a file that was damaged without changing size."
 msgstr ""
 
-#: includes/admin/backup-gate.php:471
+#: includes/admin/backup-gate.php:472
 msgid "A database-only backup counts, and so does a backup kept on this server. A database backup does not protect files such as plugins, themes or uploads, and a backup on the same server is lost if the server is. Only the database file is checked. These tools cannot start a backup; run one in UpdraftPlus or let its schedule do it. Tools offered by other plugins' own MCP servers are outside this gate."
 msgstr ""
 
-#: includes/admin/backup-gate.php:477
+#: includes/admin/backup-gate.php:478
 msgid "Backup gate"
 msgstr ""
 
-#: includes/admin/backup-gate.php:478
+#: includes/admin/backup-gate.php:479
 msgid "Hold back the tools you choose until this site has a recent backup that has been checked. When it is on, a chosen tool is refused unless a good backup from the last 24 hours exists. Agents still see the tool; calling it returns a clear refusal."
 msgstr ""
 
@@ -6305,7 +6305,7 @@ msgid "Disable all"
 msgstr ""
 
 #: includes/admin/bridge-directory.php:599
-#: includes/admin/integrations.php:650
+#: includes/admin/integrations.php:646
 #: includes/admin/page.php:2269
 msgid "Enable all reads"
 msgstr ""
@@ -8960,25 +8960,17 @@ msgstr ""
 msgid "These abilities can empty your whole page cache, and pages load slower until it fills again. Turn all of them on?"
 msgstr ""
 
-#: includes/admin/integrations.php:605
-msgid "These abilities can read your redirect rules and the addresses visitors asked for that were not found. Turn all of them on?"
-msgstr ""
-
-#: includes/admin/integrations.php:607
-msgid "These abilities can read the dates and sizes of your backups. Turn all of them on?"
-msgstr ""
-
-#: includes/admin/integrations.php:649
+#: includes/admin/integrations.php:645
 #: includes/admin/page.php:2268
 msgid "Enable all / Disable all"
 msgstr ""
 
-#: includes/admin/integrations.php:722
+#: includes/admin/integrations.php:718
 #: includes/admin/page.php:2366
 msgid "read-only"
 msgstr ""
 
-#: includes/admin/integrations.php:732
+#: includes/admin/integrations.php:728
 msgid "Saved, currently unavailable"
 msgstr ""
 
@@ -14258,7 +14250,7 @@ msgstr ""
 msgid "The site owner requires a checked backup from the last 24 hours before this tool can run, and this site has none that passed. The Backup gate card under Settings says why. This connection cannot start a backup."
 msgstr ""
 
-#: includes/siteops/backup-updraft.php:759
+#: includes/siteops/backup-updraft.php:760
 msgid "The backup check results"
 msgstr ""
 

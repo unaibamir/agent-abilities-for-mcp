@@ -48,7 +48,7 @@ final class HelpTabTest extends TestCase {
 
 		// The rate-limit answer points at the shipped Settings control, not the old "not yet" copy.
 		$this->assertStringNotContainsString( 'Not in this release', $html );
-		$this->assertStringContainsString( 'Rate limit (per minute)', $html );
+		$this->assertStringContainsString( 'has a &quot;Rate limit&quot; field, set per minute', $html, 'The field is labelled Rate limit (settings.php).' );
 		$this->assertStringContainsString( 'per agent user', $html );
 	}
 
@@ -182,7 +182,7 @@ final class HelpTabTest extends TestCase {
 		$this->assertStringNotContainsString( 'records only the argument KEYS', $html );
 		// The heading claims free text is not logged, not that every value is absent, and the foreign
 		// code is described as kept only when it has the key shape, never as trimmed to it.
-		$this->assertStringContainsString( 'Everything is logged, free text is not.', $html );
+		$this->assertStringContainsString( 'Tool calls are logged, free text is not.', $html );
 		$this->assertStringNotContainsString( 'values are not', $html );
 		$this->assertStringNotContainsString( 'trimmed to a short key-shaped string', $html );
 		$this->assertStringContainsString( 'kept only when it is a short key-shaped string of letters, digits, underscore and hyphen', $html );

@@ -391,7 +391,7 @@ function aafm_bound_mcp_initialize_params( $result, $server = null, $request = n
 	// same path and every element is bounded on its own.
 	$is_batch = array_keys( $body ) === range( 0, count( $body ) - 1 );
 	$calls    = $is_batch ? $body : array( $body );
-	$changed  = false;
+	$rewrites = array();
 
 	foreach ( $calls as $index => $call ) {
 		if ( ! is_array( $call ) || 'initialize' !== ( $call['method'] ?? '' ) || ! isset( $call['params'] ) || ! is_array( $call['params'] ) ) {
@@ -407,15 +407,23 @@ function aafm_bound_mcp_initialize_params( $result, $server = null, $request = n
 			);
 		}
 
+		// Bounding only ever changes clientInfo, so that is the only node a rewrite replaces.
 		if ( $bounded !== $call['params'] ) {
-			$calls[ $index ]['params'] = $bounded;
-			$changed                   = true;
+			$rewrites[ $index ] = $bounded['clientInfo'];
 		}
 	}
 
-	if ( $changed ) {
+	if ( array() !== $rewrites ) {
+		// Re-encoding the associative copy turned every empty JSON object into `[]`, and the adapter
+		// refuses `[]` where the schema says object (-32602, issue 123). So the rewrite works on the
+		// body decoded as objects and swaps in only clientInfo, cast so an emptied one stays `{}`.
+		$raw   = json_decode( $request->get_body() );
+		$nodes = is_array( $raw ) ? $raw : ( $is_batch ? get_object_vars( $raw ) : array( $raw ) );
+		foreach ( $rewrites as $index => $client ) {
+			$nodes[ $index ]->params->clientInfo = (object) $client;
+		}
 		// set_body() clears the parsed-JSON cache, so the adapter reads the bounded version.
-		$request->set_body( (string) wp_json_encode( $is_batch ? $calls : $calls[0] ) );
+		$request->set_body( (string) wp_json_encode( $raw ) );
 	}
 
 	return $result;

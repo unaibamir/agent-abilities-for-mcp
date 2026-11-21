@@ -235,4 +235,100 @@ final class InitializeClientInfoBoundTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $result );
 		$this->assertSame( 'aafm_initialize_params_too_large', $result->get_error_code() );
 	}
+
+	/**
+	 * The handshake from issue 123: a client that sends clientInfo.title alongside empty capability
+	 * objects. Dropping the title forces a rewrite, and the rewrite must keep every `{}` an object,
+	 * because the adapter refuses `[]` where the schema says object (-32602).
+	 */
+	private const CODEX_HANDSHAKE = '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{"elicitation":{"form":{},"url":{}},"experimental":{"codex/auth-change":{}}},"clientInfo":{"name":"codex-mcp-client","title":"Codex","version":"0.171.0-alpha.13"}}}';
+
+	/**
+	 * Build a request on the MCP route from a raw JSON body, so empty objects survive into it.
+	 *
+	 * @param string $json The raw body.
+	 * @return WP_REST_Request
+	 */
+	private function raw_request( string $json ): WP_REST_Request {
+		$request = new WP_REST_Request( 'POST', aafm_mcp_rest_route() );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body( $json );
+		return $request;
+	}
+
+	/**
+	 * Assert the rewritten params kept every empty object as an object and lost the title.
+	 *
+	 * @param mixed $params The params node, decoded as objects.
+	 */
+	private function assert_handshake_kept_its_objects( $params ): void {
+		$this->assertInstanceOf( \stdClass::class, $params->capabilities->elicitation->form );
+		$this->assertInstanceOf( \stdClass::class, $params->capabilities->elicitation->url );
+		$this->assertInstanceOf( \stdClass::class, $params->capabilities->experimental->{'codex/auth-change'} );
+		$this->assertEquals(
+			json_decode( '{"elicitation":{"form":{},"url":{}},"experimental":{"codex/auth-change":{}}}' ),
+			$params->capabilities
+		);
+		$this->assertEquals(
+			(object) array(
+				'name'    => 'codex-mcp-client',
+				'version' => '0.171.0-alpha.13',
+			),
+			$params->clientInfo, // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- MCP field name.
+			'The title is still stripped.'
+		);
+	}
+
+	public function test_a_rewrite_keeps_empty_capability_objects_as_objects(): void {
+		$request = $this->raw_request( self::CODEX_HANDSHAKE );
+
+		$this->assertNull( aafm_bound_mcp_initialize_params( null, null, $request ) );
+
+		$body = json_decode( $request->get_body() );
+		$this->assertInstanceOf( \stdClass::class, $body );
+		$this->assert_handshake_kept_its_objects( $body->params );
+	}
+
+	public function test_a_batch_rewrite_keeps_empty_capability_objects_as_objects(): void {
+		$request = $this->raw_request( '[{"jsonrpc":"2.0","id":5,"method":"tools/list","params":{}},' . self::CODEX_HANDSHAKE . ']' );
+
+		$this->assertNull( aafm_bound_mcp_initialize_params( null, null, $request ) );
+
+		$body = json_decode( $request->get_body() );
+		$this->assertIsArray( $body );
+		$this->assertCount( 2, $body );
+		$this->assertInstanceOf( \stdClass::class, $body[0]->params, 'The untouched sibling keeps its {} too.' );
+		$this->assert_handshake_kept_its_objects( $body[1]->params );
+	}
+
+	public function test_an_emptied_client_info_stays_an_object(): void {
+		$request = $this->raw_request( '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{},"clientInfo":{"title":"Only a title"}}}' );
+
+		$this->assertNull( aafm_bound_mcp_initialize_params( null, null, $request ) );
+
+		$body = json_decode( $request->get_body() );
+		$this->assertInstanceOf( \stdClass::class, $body->params->clientInfo );
+		$this->assertSame( array(), get_object_vars( $body->params->clientInfo ) );
+		$this->assertInstanceOf( \stdClass::class, $body->params->capabilities );
+	}
+
+	public function test_an_oversized_handshake_with_empty_objects_is_still_refused(): void {
+		$request = $this->raw_request(
+			'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"experimental":{"x":{}}},"clientInfo":{"name":"probe","title":"t"},"padding":"' . str_repeat( 'B', 2000000 ) . '"}}'
+		);
+
+		$result = aafm_bound_mcp_initialize_params( null, null, $request );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'aafm_initialize_params_too_large', $result->get_error_code() );
+		$this->assertSame( 400, $result->get_error_data()['status'] ?? 0 );
+	}
+
+	public function test_a_handshake_needing_no_rewrite_is_left_byte_identical(): void {
+		$json    = '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{"elicitation":{"form":{},"url":{}},"experimental":{"codex/auth-change":{}}},"clientInfo":{"name":"codex-mcp-client","version":"0.171.0-alpha.13"}}}';
+		$request = $this->raw_request( $json );
+
+		$this->assertNull( aafm_bound_mcp_initialize_params( null, null, $request ) );
+		$this->assertSame( $json, $request->get_body() );
+	}
 }

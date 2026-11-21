@@ -83,7 +83,7 @@ function aafm_site_cache_adapters(): array {
 				array( 'function', 'w3tc_flush_post' ),
 			),
 			'ops'           => $all,
-			'confirm'       => 'file',
+			'confirm'       => 'none',
 			'vendor_http'   => true,
 			'recursive_url' => false,
 			'rewarms'       => false,

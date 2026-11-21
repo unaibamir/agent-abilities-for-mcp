@@ -117,7 +117,7 @@ final class SiteCacheDispatchTest extends TestCase {
 			$this->assertCount( 1, $entry['plugins'], $slug );
 			$this->assertNotEmpty( $entry['detect'], $slug );
 		}
-		$this->assertSame( array( 'litespeed', 'proxy_cache_purge' ), $flag( 'confirm', 'none' ) );
+		$this->assertSame( array( 'w3_total_cache', 'litespeed', 'proxy_cache_purge' ), $flag( 'confirm', 'none' ), 'W3 Total Cache never reports a purge as purged, so cache-status must not say it can confirm one.' );
 		$this->assertSame( array( 'wp_optimize', 'hummingbird', 'jetpack_boost', 'speedycache', 'litespeed' ), $flag( 'cli', false ) );
 		$this->assertSame( array( 'wp_super_cache', 'cache_enabler', 'jetpack_boost', 'litespeed' ), $flag( 'vendor_http', false ) );
 		$this->assertSame( array( 'jetpack_boost' ), $flag( 'recursive_url', true ) );

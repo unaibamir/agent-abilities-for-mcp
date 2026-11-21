@@ -479,7 +479,7 @@ final class SiteCacheAdaptersTest extends TestCase {
 			'w3_total_cache',
 			'w3-total-cache/w3-total-cache.php',
 			array( array( 'constant', 'W3TC' ), array( 'function', 'w3tc_config' ), array( 'function', 'w3tc_flush_post' ) ),
-			'file',
+			'none',
 			array(
 				'cli'           => true,
 				'vendor_http'   => true,

@@ -174,7 +174,10 @@ function aafm_args_site_list_redirects(): array {
 				'total'     => array( 'type' => 'integer' ),
 				'page'      => array( 'type' => 'integer' ),
 				'per_page'  => array( 'type' => 'integer' ),
-				'truncated' => array( 'type' => 'boolean' ),
+				'truncated' => array(
+					'type'        => 'boolean',
+					'description' => __( 'True when a plugin holds more than 5,000 redirects and only the first 5,000 were read.', 'agent-abilities-for-mcp' ),
+				),
 				'dropped'   => array( 'type' => 'integer' ),
 				'providers' => array(
 					'type'  => 'array',

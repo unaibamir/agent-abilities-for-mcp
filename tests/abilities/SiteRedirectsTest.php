@@ -679,4 +679,9 @@ final class SiteRedirectsTest extends TestCase {
 		$this->assertSame( 1, Stub::count( 'fake_b.match:/' ) );
 		$this->assertSame( 1, Stub::count( 'fake_a.match:/sub/' ) );
 	}
+
+	public function test_the_truncated_output_says_what_it_means(): void {
+		$props = aafm_args_site_list_redirects()['output_schema']['properties'];
+		$this->assertSame( 'True when a plugin holds more than 5,000 redirects and only the first 5,000 were read.', $props['truncated']['description'] ?? null );
+	}
 }

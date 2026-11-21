@@ -161,7 +161,7 @@ function aafm_backup_gate_state(): array {
 	$accept_remote = aafm_backup_gate_permissive_on( 'aafm_backup_gate_accept_remote' );
 	$accept_size   = aafm_backup_gate_permissive_on( 'aafm_backup_gate_accept_size' );
 
-	$call = aafm_siteops_vendor_call(
+	$call = aafm_siteops_no_http_call(
 		static function () use ( $verdicts, $accept_remote, $accept_size ): array {
 			return aafm_site_updraft_window_walk( $verdicts, $accept_remote, $accept_size );
 		}

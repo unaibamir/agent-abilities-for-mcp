@@ -7,8 +7,9 @@
  * a file, and nothing here starts, resumes or changes a backup. No UpdraftPlus method is called
  * except UpdraftPlus_Backup_History::get_history(), which is a read.
  *
- * Callers wrap these functions in aafm_siteops_vendor_call(), so a vendor error ends as a closed
- * gate or an empty answer, never as a fatal error.
+ * Callers wrap these functions in aafm_siteops_vendor_call(), or in aafm_siteops_no_http_call() on
+ * the read paths, so a vendor error ends as a closed gate or an empty answer, never as a fatal
+ * error.
  *
  * @package AgentAbilitiesForMCP
  */

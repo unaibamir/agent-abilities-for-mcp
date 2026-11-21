@@ -185,7 +185,7 @@ function aafm_site_redirect_call( string $slug, string $name, array $args = arra
 
 	aafm_siteops_redirect_load();
 	$args   = array_values( $args );
-	$result = aafm_siteops_vendor_call(
+	$result = aafm_siteops_no_http_call(
 		static function () use ( $function, $args ) {
 			return $function( ...$args );
 		}
@@ -225,7 +225,7 @@ function aafm_site_redirect_match( string $slug, string $path, array &$cache ): 
 	}
 
 	aafm_siteops_redirect_load();
-	$result = aafm_siteops_vendor_call(
+	$result = aafm_siteops_no_http_call(
 		static function () use ( $function, $path, &$cache ) {
 			return $function( $path, $cache );
 		}

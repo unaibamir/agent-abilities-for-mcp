@@ -20,7 +20,7 @@ declare( strict_types=1 );
 final class Aafm_Siteops_Redirect_Stub {
 
 	/**
-	 * Per fake slug: ready, can, rows, truncated, log404, throw.
+	 * Per fake slug: ready, can, rows, truncated, log404, throw, during (a callable run inside every call).
 	 *
 	 * @var array<string,array<string,mixed>>
 	 */
@@ -122,6 +122,9 @@ final class Aafm_Siteops_Redirect_Stub {
 	public static function fake( string $slug, string $name, array $args = array() ) {
 		$conf          = self::$fake[ $slug ] ?? array();
 		self::$calls[] = $slug . '.' . $name . ( isset( $args[0] ) && is_string( $args[0] ) ? ':' . $args[0] : '' );
+		if ( isset( $conf['during'] ) && is_callable( $conf['during'] ) ) {
+			( $conf['during'] )();
+		}
 		if ( in_array( $name, (array) ( $conf['throw'] ?? array() ), true ) ) {
 			throw new \RuntimeException( 'fake adapter failure' );
 		}
@@ -156,6 +159,9 @@ final class Aafm_Siteops_Redirect_Stub {
 	public static function fake_match( string $slug, string $path, array &$cache ) {
 		$conf          = self::$fake[ $slug ] ?? array();
 		self::$calls[] = $slug . '.match:' . $path;
+		if ( isset( $conf['during'] ) && is_callable( $conf['during'] ) ) {
+			( $conf['during'] )();
+		}
 		if ( in_array( 'match', (array) ( $conf['throw'] ?? array() ), true ) ) {
 			throw new \RuntimeException( 'fake adapter failure' );
 		}

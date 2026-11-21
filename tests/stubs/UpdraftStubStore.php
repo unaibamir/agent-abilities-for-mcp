@@ -43,6 +43,9 @@ namespace {
 				public static function get_history( $timestamp = false ) {
 					unset( $timestamp );
 					++$GLOBALS['aafm_updraft_stub']['reads'];
+					if ( isset( $GLOBALS['aafm_updraft_stub']['during_read'] ) && is_callable( $GLOBALS['aafm_updraft_stub']['during_read'] ) ) {
+						( $GLOBALS['aafm_updraft_stub']['during_read'] )();
+					}
 					if ( $GLOBALS['aafm_updraft_stub']['throw'] ) {
 						throw new \RuntimeException( 'stub history reader failure' );
 					}

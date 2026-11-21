@@ -243,7 +243,7 @@ function aafm_exec_site_backup_status() {
 		);
 	}
 
-	$call = aafm_siteops_vendor_call( 'aafm_site_updraft_jobs' );
+	$call = aafm_siteops_no_http_call( 'aafm_site_updraft_jobs' );
 	if ( ! $call['ok'] || ! is_array( $call['value'] ) ) {
 		$out['stage'] = 'other';
 		return $out;
@@ -348,7 +348,7 @@ function aafm_exec_site_list_backups( array $input ) {
 	$accept_remote = aafm_backup_gate_permissive_on( 'aafm_backup_gate_accept_remote' );
 	$accept_size   = aafm_backup_gate_permissive_on( 'aafm_backup_gate_accept_size' );
 
-	$call = aafm_siteops_vendor_call(
+	$call = aafm_siteops_no_http_call(
 		static function () use ( $paging, $verdicts, $accept_remote, $accept_size ): array {
 			$history = aafm_site_updraft_history();
 			$rows    = array();

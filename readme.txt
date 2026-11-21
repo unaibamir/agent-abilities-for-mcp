@@ -277,15 +277,15 @@ With WooCommerce active, 52 abilities cover products and variations, orders with
 
 = Can an AI agent clear my page cache, check redirects or see my backups? =
 
-Yes, with 13 tools that start switched off and need a user who can manage options. Four work with your page cache plugin: one reports which supported cache plugins are active, and three clear one post, one URL or the whole site. Each result says, per plugin, whether a cached copy was found and removed or the purge was only requested. Supported: WP Super Cache, WP Fastest Cache, W3 Total Cache, WP-Optimize, Cache Enabler, Hummingbird, Jetpack Boost, SpeedyCache, Breeze, SiteGround Speed Optimizer, LiteSpeed Cache, Nginx Helper and Proxy Cache Purge.
+Yes, with 13 tools that start switched off and need a user who can manage options. Four work with your page cache plugin: one reports which supported cache plugins are active, and three clear one post, one URL or the whole site. Each result says, per plugin, whether a cached copy was found and removed, the purge was only requested, or it failed or was skipped. LiteSpeed Cache, W3 Total Cache and Proxy Cache Purge can't confirm a removal, so their results say requested. A CDN, Cloudflare, Varnish or a host's own cache in front of the site isn't cleared. Supported: WP Super Cache, WP Fastest Cache, W3 Total Cache, WP-Optimize, Cache Enabler, Hummingbird, Jetpack Boost, SpeedyCache, Breeze, SiteGround Speed Optimizer, LiteSpeed Cache, Nginx Helper and Proxy Cache Purge.
 
-Four read redirects from Redirection, Rank Math, Safe Redirect Manager, 301 Redirects and Slim SEO: list them, read one, list not-found addresses and test which redirect a URL would hit. They change nothing. Two report UpdraftPlus backups, and three report Site Health results, waiting updates and scheduled tasks.
+Four more tools read redirects from Redirection, Rank Math, Safe Redirect Manager, 301 Redirects and Slim SEO. They list redirects, read one and test which redirect a URL would hit, and they list not-found addresses for every plugin except Safe Redirect Manager, which keeps no such log. They change nothing. Two tools report UpdraftPlus backups, and three report Site Health results, waiting updates and scheduled tasks. On a multisite network the purge and backup tools are refused and the health tools need a super admin.
 
-These tools call the other plugin's own purge and read functions, and this plugin sends no request of its own for them. Some purges make the cache plugin contact its own proxy or CDN, the same as when you press its purge button.
+These tools call the other plugin's own purge and read functions, and this plugin sends no request of its own for them. Some cache plugins send requests of their own while they purge, to your site or to a proxy.
 
 = What is the backup gate? =
 
-A setting on the Settings tab that starts off. You tick the risky tools it covers, and each one is then refused unless UpdraftPlus has a database backup from the last 24 hours that passed a check. A small backup is compared with the checksum UpdraftPlus recorded when the tool is called, and a larger one is checked in the background about once an hour. No tool can start a backup, so run one in UpdraftPlus or let its schedule do it.
+A setting on the Settings tab that starts off. You tick the risky tools it covers, and each one is then refused unless UpdraftPlus has a database backup from the last 24 hours that passed a check. A small backup is compared with the checksum UpdraftPlus recorded when the tool is called, and a larger one is checked in the background about once an hour. A backup too large to check in time keeps those tools refused unless you switch on Large backups to accept it on its size alone, and without UpdraftPlus every ticked tool is refused. The gate covers tools run through this plugin, not tools another plugin serves from its own MCP server. No tool can start a backup, so run one in UpdraftPlus or let its schedule do it.
 
 = Do I need to install the MCP Adapter? Does it work with the Abilities API? =
 
@@ -372,11 +372,11 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 
 = 1.13.0 =
 
-* **Feature:** Agents can clear one post, one URL or the whole site from the page cache of 13 cache plugins, including LiteSpeed Cache, WP Super Cache and W3 Total Cache. Each plugin's result says whether a cached copy was found and removed or the purge was only requested.
-* **Feature:** Agents can list redirects, read one, list not-found addresses and test which redirect a URL would hit in Redirection, Rank Math, Safe Redirect Manager, 301 Redirects and Slim SEO, without changing them. wpbakery-replace-text now returns a restore point, and Check my connection shows when WP Rocket runs its own MCP server.
+* **Feature:** Agents can clear one post, one URL or the whole site from the page cache of 13 cache plugins, including LiteSpeed Cache, WP Super Cache and W3 Total Cache. Each plugin's result says whether a cached copy was found and removed, the purge was only requested, or it failed or was skipped.
+* **Feature:** Agents can list redirects, read one and test which redirect a URL would hit in Redirection, Rank Math, Safe Redirect Manager, 301 Redirects and Slim SEO, and see not-found addresses in all of them but Safe Redirect Manager. None of it changes anything. wpbakery-replace-text now returns a restore point when the site keeps revisions, and Check my connection shows when WP Rocket runs its own MCP server.
 * **Feature:** Backup gate: a Settings option, off by default, that refuses the risky tools you pick unless UpdraftPlus has a checked backup from the last 24 hours. New read tools report those backups, Site Health results, waiting updates and scheduled tasks, and make no outbound requests.
 * **Fix:** Codex and other clients that send a client title could fail to connect with an "Expected object, got array" error; they now connect. REST requests that are not for the MCP endpoint no longer load the plugin's tool set, and WPBakery element settings accept an image id sent as a string of digits.
-* **Chore:** The FAQ no longer says WPBakery's Role Manager is never applied, and the admin header now says nothing from this plugin is exposed until you switch it on.
+* **Chore:** The FAQ now says where WPBakery's Role Manager still limits an agent (custom JS and an empty post's first element), and the admin header says nothing from this plugin is exposed until you switch it on.
 
 = 1.12.0 =
 

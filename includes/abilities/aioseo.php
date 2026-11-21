@@ -127,7 +127,7 @@ function aafm_aioseo_registry_definitions(): array {
 		),
 		'aafm/aioseo-update-post' => array(
 			'label'        => __( 'Update post SEO (All in One SEO)', 'agent-abilities-for-mcp' ),
-			'description'  => __( "Writes a post's SEO fields through All in One SEO's own data store (not post meta). URL fields are sanitized as URLs. Setting a Twitter field turns off the use-OpenGraph fallback so the Twitter title, description, and image render on their own. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+			'description'  => __( "Writes a post's SEO fields through All in One SEO's own data store (not post meta). URL fields are checked as URLs, and a value that would need rewriting is refused. Setting a non-empty Twitter field turns off the use-OpenGraph fallback so the Twitter title, description, and image render on their own. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'aioseo',
@@ -418,13 +418,13 @@ function aafm_args_aioseo_update_post(): array {
 	$aioseo_field_descriptions = array(
 		'title'               => __( 'SEO title override for the post.', 'agent-abilities-for-mcp' ),
 		'description'         => __( 'Meta description override for the post.', 'agent-abilities-for-mcp' ),
-		'canonical'           => __( 'Canonical URL override for the post, sanitized as a URL.', 'agent-abilities-for-mcp' ),
+		'canonical'           => __( 'Canonical URL override for the post, checked as a URL; a value that would need rewriting is refused.', 'agent-abilities-for-mcp' ),
 		'og_title'            => __( 'Open Graph (Facebook) title override for the post.', 'agent-abilities-for-mcp' ),
 		'og_description'      => __( 'Open Graph (Facebook) description override for the post.', 'agent-abilities-for-mcp' ),
 		'og_image'            => __( "Open Graph (Facebook) share image URL. A non-empty value switches AIOSEO's image source to custom so this URL actually renders instead of its default source; clearing the value resets that source only when it was already set to custom.", 'agent-abilities-for-mcp' ),
-		'twitter_title'       => __( "Twitter Card title override. Setting any twitter_* field turns off AIOSEO's use-OpenGraph fallback so this value renders instead of the Facebook/OG title.", 'agent-abilities-for-mcp' ),
-		'twitter_description' => __( "Twitter Card description override. Setting any twitter_* field turns off AIOSEO's use-OpenGraph fallback so this value renders instead of the Facebook/OG description.", 'agent-abilities-for-mcp' ),
-		'twitter_image'       => __( 'Twitter Card share image URL (same custom-source switch as og_image). Setting any twitter_* field also turns off the use-OpenGraph fallback.', 'agent-abilities-for-mcp' ),
+		'twitter_title'       => __( "Twitter Card title override. Setting any non-empty twitter_* field turns off AIOSEO's use-OpenGraph fallback so this value renders instead of the Facebook/OG title.", 'agent-abilities-for-mcp' ),
+		'twitter_description' => __( "Twitter Card description override. Setting any non-empty twitter_* field turns off AIOSEO's use-OpenGraph fallback so this value renders instead of the Facebook/OG description.", 'agent-abilities-for-mcp' ),
+		'twitter_image'       => __( 'Twitter Card share image URL (same custom-source switch as og_image). Setting any non-empty twitter_* field also turns off the use-OpenGraph fallback.', 'agent-abilities-for-mcp' ),
 	);
 	foreach ( array_keys( aafm_aioseo_fields() ) as $field ) {
 		$properties[ $field ] = array(

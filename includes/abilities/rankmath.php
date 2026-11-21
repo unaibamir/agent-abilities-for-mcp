@@ -152,7 +152,7 @@ function aafm_rankmath_registry_definitions(): array {
 		),
 		'aafm/rankmath-update-post'   => array(
 			'label'        => __( 'Update post SEO (Rank Math)', 'agent-abilities-for-mcp' ),
-			'description'  => __( "Writes a post's Rank Math SEO fields to its rank_math_* post meta. URL fields are sanitized as URLs and robots is stored as Rank Math's serialized directive array. Social images (og_image, twitter_image) must be URLs of existing media-library attachments so Rank Math can render them; a URL with no matching attachment is refused. Setting a Twitter field turns off the Facebook fallback so the Twitter values render. Requires edit access to that post. The response returns each field's old value when it is plain text or a number.", 'agent-abilities-for-mcp' ),
+			'description'  => __( "Writes a post's Rank Math SEO fields to its rank_math_* post meta. URL fields are checked as URLs, and a value that would need rewriting is refused. Robots is stored as Rank Math's serialized directive array. Social images (og_image, twitter_image) must be URLs of existing media-library attachments so Rank Math can render them; a URL with no matching attachment is refused. Setting a non-empty Twitter field turns off the Facebook fallback so the Twitter values render. Requires edit access to that post. The response returns each field's old value when it is plain text or a number.", 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'rankmath',
@@ -418,13 +418,13 @@ function aafm_args_rankmath_update_post(): array {
 		'title'               => __( 'SEO title override for the post. Empty clears it and lets Rank Math fall back to its title template.', 'agent-abilities-for-mcp' ),
 		'description'         => __( 'Meta description override for the post. Empty clears it and lets Rank Math fall back to its description template.', 'agent-abilities-for-mcp' ),
 		'focus_keyword'       => __( "Rank Math's target focus keyword, used to score this post's on-page SEO.", 'agent-abilities-for-mcp' ),
-		'canonical'           => __( 'Canonical URL override for the post, sanitized as a URL.', 'agent-abilities-for-mcp' ),
+		'canonical'           => __( 'Canonical URL override for the post, checked as a URL; a value that would need rewriting is refused.', 'agent-abilities-for-mcp' ),
 		'og_title'            => __( 'Open Graph (Facebook) title override for the post.', 'agent-abilities-for-mcp' ),
 		'og_description'      => __( 'Open Graph (Facebook) description override for the post.', 'agent-abilities-for-mcp' ),
 		'og_image'            => __( 'Open Graph (Facebook) share image. Must be the URL of an existing media-library attachment; a URL that does not resolve to one is refused, because Rank Math renders the image from the attachment ID rather than the URL itself.', 'agent-abilities-for-mcp' ),
-		'twitter_title'       => __( "Twitter Card title override. Setting any twitter_* field turns off Rank Math's Twitter-to-Facebook fallback so this value actually renders.", 'agent-abilities-for-mcp' ),
-		'twitter_description' => __( "Twitter Card description override. Setting any twitter_* field turns off Rank Math's Twitter-to-Facebook fallback so this value actually renders.", 'agent-abilities-for-mcp' ),
-		'twitter_image'       => __( 'Twitter Card share image. Must be the URL of an existing media-library attachment (same rule as og_image); setting any twitter_* field also turns off the Twitter-to-Facebook fallback.', 'agent-abilities-for-mcp' ),
+		'twitter_title'       => __( "Twitter Card title override. Setting any non-empty twitter_* field turns off Rank Math's Twitter-to-Facebook fallback so this value actually renders.", 'agent-abilities-for-mcp' ),
+		'twitter_description' => __( "Twitter Card description override. Setting any non-empty twitter_* field turns off Rank Math's Twitter-to-Facebook fallback so this value actually renders.", 'agent-abilities-for-mcp' ),
+		'twitter_image'       => __( 'Twitter Card share image. Must be the URL of an existing media-library attachment (same rule as og_image); setting any non-empty twitter_* field also turns off the Twitter-to-Facebook fallback.', 'agent-abilities-for-mcp' ),
 	);
 	foreach ( array_keys( aafm_rankmath_fields() ) as $field ) {
 		$properties[ $field ] = array(
@@ -439,7 +439,7 @@ function aafm_args_rankmath_update_post(): array {
 
 	return array(
 		'label'               => aafm_ability_label( 'aafm/rankmath-update-post' ),
-		'description'         => __( "Writes a post's Rank Math SEO fields. URL fields are sanitized as URLs and robots is stored as the serialized directive array. Social images (og_image, twitter_image) must be URLs of existing media-library attachments so Rank Math can render them; a URL with no matching attachment is refused. Setting a Twitter field turns off the Facebook fallback so the Twitter values render. Requires edit access to that post. The response returns each field's old value when it is plain text or a number.", 'agent-abilities-for-mcp' ),
+		'description'         => aafm_ability_description( 'aafm/rankmath-update-post' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',

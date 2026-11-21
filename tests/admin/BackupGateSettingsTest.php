@@ -338,7 +338,7 @@ final class BackupGateSettingsTest extends TestCase {
 		$this->assertSame( $rows, $this->rows() );
 	}
 
-	public function test_restrictive_changes_are_written_before_the_list_and_the_gate_turning_on(): void {
+	public function test_restrictive_changes_and_the_list_are_written_before_the_gate_turns_on(): void {
 		$this->stored( false, true, true, array( 'aafm/delete-post' ) );
 		$this->record_writes();
 
@@ -350,7 +350,7 @@ final class BackupGateSettingsTest extends TestCase {
 			)
 		);
 
-		$this->assertSame( array( 'aafm_backup_gate_accept_remote', 'aafm_backup_gate_accept_size', 'aafm_backup_gate', 'aafm_backup_gate_abilities' ), $this->written );
+		$this->assertSame( array( 'aafm_backup_gate_accept_remote', 'aafm_backup_gate_accept_size', 'aafm_backup_gate_abilities', 'aafm_backup_gate' ), $this->written );
 	}
 
 	public function test_permissive_changes_are_written_after_the_list_and_the_gate_turns_off_last(): void {
@@ -370,7 +370,7 @@ final class BackupGateSettingsTest extends TestCase {
 	}
 
 	/**
-	 * Each of the seven writes, failing in turn. Scenario A makes writes 1 to 4, scenario B writes 4 to 7.
+	 * Each of the seven writes, failing in turn. Scenario A makes writes 1 to 4, scenario B writes 3 and 5 to 7.
 	 *
 	 * @return array<string,array{0:string,1:string,2:string}>
 	 */
@@ -378,9 +378,9 @@ final class BackupGateSettingsTest extends TestCase {
 		return array(
 			'1 off-site off' => array( 'A', 'aafm_backup_gate_accept_remote', 'Off-site backups' ),
 			'2 large off'    => array( 'A', 'aafm_backup_gate_accept_size', 'Large backups' ),
-			'3 gate on'      => array( 'A', 'aafm_backup_gate', 'The backup gate' ),
-			'4 list'         => array( 'A', 'aafm_backup_gate_abilities', 'The backup gate tool list' ),
-			'4 list again'   => array( 'B', 'aafm_backup_gate_abilities', 'The backup gate tool list' ),
+			'3 list'         => array( 'A', 'aafm_backup_gate_abilities', 'The backup gate tool list' ),
+			'4 gate on'      => array( 'A', 'aafm_backup_gate', 'The backup gate' ),
+			'3 list again'   => array( 'B', 'aafm_backup_gate_abilities', 'The backup gate tool list' ),
 			'5 off-site on'  => array( 'B', 'aafm_backup_gate_accept_remote', 'Off-site backups' ),
 			'6 large on'     => array( 'B', 'aafm_backup_gate_accept_size', 'Large backups' ),
 			'7 gate off'     => array( 'B', 'aafm_backup_gate', 'The backup gate' ),
@@ -399,7 +399,7 @@ final class BackupGateSettingsTest extends TestCase {
 	public function test_a_write_that_does_not_persist_stops_the_block_and_names_the_setting( string $scenario, string $failing, string $label ): void {
 		if ( 'A' === $scenario ) {
 			$this->stored( false, true, true, array( 'aafm/delete-post' ) );
-			$order  = array( 'aafm_backup_gate_accept_remote', 'aafm_backup_gate_accept_size', 'aafm_backup_gate', 'aafm_backup_gate_abilities' );
+			$order  = array( 'aafm_backup_gate_accept_remote', 'aafm_backup_gate_accept_size', 'aafm_backup_gate_abilities', 'aafm_backup_gate' );
 			$fields = array(
 				'aafm_backup_gate_present'   => '1',
 				'aafm_backup_gate'           => '1',
@@ -448,6 +448,25 @@ final class BackupGateSettingsTest extends TestCase {
 				$this->assertSame( $expect, $after[ $option ], "{$option} after a failed write of {$failing}." );
 			}
 		}
+	}
+
+	public function test_a_first_enable_whose_list_does_not_persist_leaves_the_gate_off(): void {
+		$this->stored( false, false, false, array() );
+		delete_option( 'aafm_backup_gate_abilities' );
+		$this->make_unpersistable( 'aafm_backup_gate_abilities' );
+
+		$json = $this->save(
+			array(
+				'aafm_backup_gate_present'   => '1',
+				'aafm_backup_gate'           => '1',
+				'aafm_backup_gate_abilities' => array( 'aafm/delete-post' ),
+			)
+		);
+
+		$this->assertFalse( $json['success'] ?? true );
+		$this->assertStringContainsString( 'The backup gate tool list', (string) ( $json['data']['message'] ?? '' ) );
+		$this->assertNull( $this->row( 'aafm_backup_gate_abilities' ), 'The list did not persist.' );
+		$this->assertNull( $this->row( 'aafm_backup_gate' ), 'A gate with no stored list governs nothing, so it must stay off.' );
 	}
 
 	public function test_each_change_is_logged(): void {

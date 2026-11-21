@@ -135,10 +135,11 @@ function aafm_sanitize_backup_gate_input( array $posted ): ?array {
 /**
  * Write the gate settings that changed, restrictive changes first, and log each change.
  *
- * Order: stop accepting off-site backups, stop accepting size alone, turn the gate on, the tool
- * list, accept off-site backups, accept size alone, turn the gate off. The first write that does
- * not take stops the rest, so no setting has moved in the permissive direction unless every
- * restrictive change and the list were stored.
+ * Order: stop accepting off-site backups, stop accepting size alone, the tool list, turn the gate
+ * on, accept off-site backups, accept size alone, turn the gate off. The list goes before the gate
+ * turns on because a gate with no stored list governs nothing; while the gate is still off the new
+ * list has no effect. The first write that does not take stops the rest, so no setting has moved
+ * in the permissive direction unless every restrictive change and the list were stored.
  *
  * @param array{on:bool,tools:list<string>,accept_remote:bool,accept_size:bool} $clean aafm_sanitize_backup_gate_input().
  * @return string|null The message for the first setting that did not save, or null when all did.
@@ -175,8 +176,8 @@ function aafm_backup_gate_save( array $clean ): ?string {
 	$steps    = array(
 		array( 'accept_remote', false ),
 		array( 'accept_size', false ),
-		array( 'on', true ),
 		array( 'tools', true ),
+		array( 'on', true ),
 		array( 'accept_remote', true ),
 		array( 'accept_size', true ),
 		array( 'on', false ),

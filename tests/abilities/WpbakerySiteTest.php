@@ -1636,4 +1636,9 @@ final class WpbakerySiteTest extends TestCase {
 		}
 		$this->assertStringContainsString( 'Only while WPBakery Page Builder is active', $row['description'] );
 	}
+
+	public function test_editor_post_types_says_it_is_per_user(): void {
+		$props = aafm_args_wpbakery_get_settings()['output_schema']['properties'];
+		$this->assertSame( "The post types WPBakery's editor is on for the calling user.", $props['editor_post_types']['description'] ?? null );
+	}
 }

@@ -737,8 +737,9 @@ function aafm_args_wpbakery_get_settings(): array {
 					'description' => __( 'Listed settings with no stored value; WPBakery\'s default applies.', 'agent-abilities-for-mcp' ),
 				),
 				'editor_post_types' => array(
-					'type'  => 'array',
-					'items' => array( 'type' => 'string' ),
+					'type'        => 'array',
+					'items'       => array( 'type' => 'string' ),
+					'description' => __( 'The post types WPBakery\'s editor is on for the calling user.', 'agent-abilities-for-mcp' ),
 				),
 				'version'           => array( 'type' => 'string' ),
 			),

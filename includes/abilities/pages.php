@@ -316,8 +316,9 @@ function aafm_args_create_page(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'post'       => array( 'type' => 'object' ),
-				'enrichment' => aafm_write_enrichment_output_schema(),
+				'post'             => array( 'type' => 'object' ),
+				'enrichment'       => aafm_write_enrichment_output_schema(),
+				'content_warnings' => array( 'type' => 'array' ),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_create_page',
@@ -498,8 +499,9 @@ function aafm_args_update_page(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'post'       => array( 'type' => 'object' ),
-				'enrichment' => aafm_write_enrichment_output_schema(),
+				'post'             => array( 'type' => 'object' ),
+				'enrichment'       => aafm_write_enrichment_output_schema(),
+				'content_warnings' => array( 'type' => 'array' ),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_update_page',

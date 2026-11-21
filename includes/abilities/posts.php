@@ -750,8 +750,9 @@ function aafm_args_create_draft(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'post'       => array( 'type' => 'object' ),
-				'enrichment' => aafm_write_enrichment_output_schema(),
+				'post'             => array( 'type' => 'object' ),
+				'enrichment'       => aafm_write_enrichment_output_schema(),
+				'content_warnings' => array( 'type' => 'array' ),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_create_draft',
@@ -1106,8 +1107,9 @@ function aafm_args_create_post(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'post'       => array( 'type' => 'object' ),
-				'enrichment' => aafm_write_enrichment_output_schema(),
+				'post'             => array( 'type' => 'object' ),
+				'enrichment'       => aafm_write_enrichment_output_schema(),
+				'content_warnings' => array( 'type' => 'array' ),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_create_post',
@@ -1146,8 +1148,9 @@ function aafm_args_create_cpt_item(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'post'       => array( 'type' => 'object' ),
-				'enrichment' => aafm_write_enrichment_output_schema(),
+				'post'             => array( 'type' => 'object' ),
+				'enrichment'       => aafm_write_enrichment_output_schema(),
+				'content_warnings' => array( 'type' => 'array' ),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_create_cpt_item',
@@ -1255,8 +1258,9 @@ function aafm_args_update_post(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'post'       => array( 'type' => 'object' ),
-				'enrichment' => aafm_write_enrichment_output_schema(),
+				'post'             => array( 'type' => 'object' ),
+				'enrichment'       => aafm_write_enrichment_output_schema(),
+				'content_warnings' => array( 'type' => 'array' ),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_update_post',
@@ -1487,8 +1491,9 @@ function aafm_args_replace_in_post(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'post'         => array( 'type' => 'object' ),
-				'replacements' => array( 'type' => 'integer' ),
+				'post'             => array( 'type' => 'object' ),
+				'replacements'     => array( 'type' => 'integer' ),
+				'content_warnings' => array( 'type' => 'array' ),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_replace_in_post',
@@ -2466,8 +2471,9 @@ function aafm_args_update_cpt_item(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'post'       => array( 'type' => 'object' ),
-				'enrichment' => aafm_write_enrichment_output_schema(),
+				'post'             => array( 'type' => 'object' ),
+				'enrichment'       => aafm_write_enrichment_output_schema(),
+				'content_warnings' => array( 'type' => 'array' ),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_update_cpt_item',

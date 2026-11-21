@@ -750,4 +750,23 @@ final class OutputSchemaFidelityTest extends TestCase {
 			'wp_get_attachment_image_src() never returns truthy for a non-image attachment, so sizes stays array() - it must still encode as {} not [], the same class as issue #81.'
 		);
 	}
+
+	/**
+	 * Every content write that can return content_warnings declares it in its output schema. The
+	 * GeoDirectory listing writes return it too, but their output schema declares no properties at all.
+	 */
+	public function test_content_warnings_is_declared_wherever_it_is_returned(): void {
+		$registry = aafm_get_abilities_registry_full();
+		$names    = array( 'create-draft', 'create-post', 'create-cpt-item', 'update-post', 'update-cpt-item', 'replace-in-post', 'replace-block', 'create-page', 'update-page', 'create-block', 'update-block', 'update-template', 'tec-create-event', 'tec-update-event' );
+		$missing  = array();
+		foreach ( $names as $name ) {
+			$builder = $registry[ 'aafm/' . $name ]['args_builder'] ?? '';
+			$this->assertTrue( is_string( $builder ) && function_exists( $builder ), $name );
+			$schema = $builder()['output_schema'] ?? array();
+			if ( array( 'type' => 'array' ) !== ( $schema['properties']['content_warnings'] ?? null ) ) {
+				$missing[] = $name;
+			}
+		}
+		$this->assertSame( array(), $missing );
+	}
 }

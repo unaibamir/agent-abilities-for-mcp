@@ -7,7 +7,11 @@
  * Registers ONLY while WPBakery Page Builder is active (aafm_integration_active('wpbakery')).
  * WPBakery keeps its whole layout as shortcodes in post_content, so both abilities gate on the
  * ordinary edit access check every other content ability uses (aafm_perm_avada_post_object(),
- * which is builder neutral). WPBakery's own Role Manager is not consulted.
+ * which is builder neutral). WPBakery's own Role Manager is not consulted for that access. It is
+ * consulted in two places elsewhere: the custom JS fields of wpbakery-update-page-code
+ * (vc_user_access(), wpbakery-site.php) and the first element inserted into an empty post, which
+ * needs WPBakery's editor on for that post type for the calling user (vc_editor_post_types(),
+ * wpbakery-elements.php).
  *
  * Vendor facts were read from WPBakery Page Builder 9.1 (plugin folder js_composer); see design
  * doc 322 section 4.2. Add-ons map their own tags under any name, so the tag list each call

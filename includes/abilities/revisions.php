@@ -324,8 +324,8 @@ function aafm_perm_restore_revision( array $input ): bool {
 /**
  * Execute aafm/restore-revision.
  *
- * Restores the post to the named revision via wp_restore_post_revision(), which first
- * snapshots the current state as a fresh revision - making the restore reversible. The
+ * Restores the post to the named revision via wp_restore_post_revision(). No snapshot is taken
+ * here: the current state is recoverable only as the latest revision core already kept. The
  * validator guarantees the revision belongs to the named parent before any write.
  *
  * On failure, wp_restore_post_revision() may return null/false (nothing restored) OR the
@@ -356,11 +356,11 @@ function aafm_exec_restore_revision( array $input ) {
 	if ( false !== $owning_builder && ! ( in_array( $owning_builder, array( 'avada', 'wpbakery' ), true ) && aafm_integration_active( $owning_builder ) ) ) {
 		return aafm_page_builder_owned_error( $owning_builder );
 	}
-	// Reversibility guard: the fresh pre-restore snapshot is taken by core's
-	// wp_save_post_revision() hook, which bails when revisions are disabled for this post
-	// (WP_POST_REVISIONS false / the wp_revisions_to_keep filter returning 0) or the type
-	// dropped 'revisions' support. Restoring in that state would silently destroy the
-	// current state under a "reversible" promise, so refuse with an actionable error.
+	// Reversibility guard: this call takes no snapshot of its own. The current state survives only
+	// as the latest revision core already kept (wp_save_post_revision() on every save), which never
+	// happens when revisions are disabled for this post (WP_POST_REVISIONS false / the
+	// wp_revisions_to_keep filter returning 0) or the type dropped 'revisions' support. Restoring in
+	// that state would silently destroy the current state, so refuse with an actionable error.
 	$parent = aafm_exact_object_chain( 'post', $post_id );
 	if ( ! $parent instanceof WP_Post
 		|| ! post_type_supports( $parent->post_type, 'revisions' )

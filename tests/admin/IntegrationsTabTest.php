@@ -588,13 +588,11 @@ final class IntegrationsTabTest extends TestCase {
 		$this->assertStringContainsString( '> .aafm-pill { margin-inline-start: 0; }', $block );
 	}
 
-	public function test_each_site_ops_card_confirms_with_its_own_text_not_the_personal_data_line(): void {
+	public function test_the_page_cache_card_confirms_with_its_own_text_not_the_personal_data_line(): void {
 		$this->acting_as( 'administrator' );
 		$personal = 'personal data';
 		$expected = array(
-			'site_cache'     => 'page cache',
-			'site_redirects' => 'redirect',
-			'site_backups'   => 'backups',
+			'site_cache' => 'page cache',
 		);
 		foreach ( $expected as $slug => $needle ) {
 			$text = aafm_integration_toggle_confirm( $slug );

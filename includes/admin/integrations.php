@@ -591,20 +591,16 @@ function aafm_render_integration_filter( string $slug ): void {
 /**
  * The text of the confirmation raised before "Enable all" turns on a card that holds a sensitive tool.
  *
- * Each Site Ops card says what its own tools do. An empty string means the card has no text of its
- * own, and the script falls back to the shared line about personal data.
+ * The page cache card says what its purge does. An empty string means the card has no text of its
+ * own, and the script falls back to the shared line about personal data. Only a card holding a
+ * destructive tool raises the confirmation, which is why the read-only Site Ops cards have none.
  *
  * @param string $slug Integration slug.
  * @return string
  */
 function aafm_integration_toggle_confirm( string $slug ): string {
-	switch ( $slug ) {
-		case 'site_cache':
-			return __( 'These abilities can empty your whole page cache, and pages load slower until it fills again. Turn all of them on?', 'agent-abilities-for-mcp' );
-		case 'site_redirects':
-			return __( 'These abilities can read your redirect rules and the addresses visitors asked for that were not found. Turn all of them on?', 'agent-abilities-for-mcp' );
-		case 'site_backups':
-			return __( 'These abilities can read the dates and sizes of your backups. Turn all of them on?', 'agent-abilities-for-mcp' );
+	if ( 'site_cache' === $slug ) {
+		return __( 'These abilities can empty your whole page cache, and pages load slower until it fills again. Turn all of them on?', 'agent-abilities-for-mcp' );
 	}
 	return '';
 }

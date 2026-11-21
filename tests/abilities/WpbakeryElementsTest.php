@@ -2742,6 +2742,9 @@ final class WpbakeryElementsTest extends TestCase {
 		}
 		$this->assertStringContainsString( 'WPBakery\'s own setting', $registry['aafm/wpbakery-insert-element']['description'] );
 		$this->assertStringContainsString( 'unfiltered HTML', $registry['aafm/wpbakery-insert-element']['description'] );
+		// The empty-post insert asks WPBakery's editor post types, which follow the user's Role Manager.
+		$this->assertStringNotContainsString( 'Role Manager settings are not applied', $registry['aafm/wpbakery-insert-element']['description'] );
+		$this->assertStringContainsString( 'editor is on for that post type and user', $registry['aafm/wpbakery-insert-element']['description'] );
 	}
 
 	/**

@@ -625,6 +625,9 @@ final class WpbakerySiteTest extends TestCase {
 			}
 		}
 		$this->assertStringContainsString( 'Only while WPBakery Page Builder is active', $row['description'] );
+		// The empty-post insert asks WPBakery's editor post types, which follow the user's Role Manager.
+		$this->assertStringNotContainsString( 'Role Manager settings are not applied', $row['description'] );
+		$this->assertStringContainsString( 'editor is on for that post type and user', $row['description'] );
 	}
 
 	/**

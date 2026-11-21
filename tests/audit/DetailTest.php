@@ -1772,4 +1772,17 @@ final class DetailTest extends TestCase {
 			$this->assertSame( 'Attempted: ' . $detail, aafm_build_activity_detail( $ability, array( 'post_id' => 7 ), 'error' ) );
 		}
 	}
+	/**
+	 * A fixed template with no args and no result_id still logs its text. Only a template with a
+	 * placeholder needs args, and a result_id row is built from the return value instead.
+	 */
+	public function test_a_fixed_template_without_args_logs_its_text(): void {
+		$this->assertSame( 'Ran a page cache purge for one URL', aafm_build_activity_detail( 'aafm/site-purge-url-cache', array( 'url' => 'https://example.org/secret?token=x' ) ) );
+		$this->assertSame( 'Ran a whole-site page cache purge', aafm_build_activity_detail( 'aafm/site-purge-site-cache', array() ) );
+		$this->assertSame( 'Attempted: Ran a whole-site page cache purge', aafm_build_activity_detail( 'aafm/site-purge-site-cache', array(), 'denied' ) );
+		$this->assertSame( 'Ran a page cache purge for post #7', aafm_build_activity_detail( 'aafm/site-purge-post-cache', array( 'post_id' => 7 ) ) );
+		// A result_id row has no args either, and must still wait for the return value.
+		$this->assertNull( aafm_build_activity_detail( 'aafm/create-post', array( 'title' => 'x' ) ) );
+		$this->assertNull( aafm_build_activity_detail( 'aafm/wc-create-tax-class', array( 'name' => 'x' ) ) );
+	}
 }

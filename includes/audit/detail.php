@@ -1559,8 +1559,16 @@ function aafm_activity_order_statuses(): array {
  */
 function aafm_build_activity_detail( string $ability, array $args, string $status = 'started' ): ?string {
 	$entry = aafm_activity_detail_map()[ $ability ] ?? null;
-	if ( null === $entry || empty( $entry['args'] ) ) {
+	if ( null === $entry ) {
 		return null;
+	}
+	if ( empty( $entry['args'] ) ) {
+		// No args: a result_id row is built from the return value, and a template with a
+		// placeholder has nothing to fill it. Only a fixed template is logged as it stands.
+		if ( isset( $entry['result_id'] ) || false !== strpos( (string) $entry['template'], '%' ) ) {
+			return null;
+		}
+		$entry['args'] = array();
 	}
 
 	$values   = array();

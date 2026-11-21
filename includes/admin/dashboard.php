@@ -588,7 +588,7 @@ function aafm_render_dashboard_tab(): void {
 	}
 	printf(
 		'<dt>%1$s</dt><dd>%2$s</dd>',
-		esc_html__( 'Bundled adapter', 'agent-abilities-for-mcp' ),
+		esc_html__( 'MCP adapter', 'agent-abilities-for-mcp' ),
 		esc_html( $adapter_label )
 	);
 	echo '</dl>';

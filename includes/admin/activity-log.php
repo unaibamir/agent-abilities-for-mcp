@@ -192,6 +192,6 @@ function aafm_render_activity_filters( array $filters ): void {
 	echo '<button type="button" class="aafm-btn aafm-btn-primary" id="aafm-log-apply">' . esc_html__( 'Apply', 'agent-abilities-for-mcp' ) . '</button> ';
 	echo '<button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-log-reset">' . esc_html__( 'Reset', 'agent-abilities-for-mcp' ) . '</button>';
 	echo '</div>';
-	echo '<p class="help">' . esc_html__( 'Search and user have no index: add a date range on a very large log. The IP is the address the request came from, so behind a proxy or CDN it is the proxy. Duration is the time inside the tool, not what the agent experienced.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="help">' . esc_html__( 'Search and user have no index: add a date range on a very large log. The IP is the address the request came from, so behind a proxy or CDN it is the proxy unless you turn on "Real visitor address behind a proxy or CDN" in Settings. Duration is the time inside the tool, not what the agent experienced.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div>';
 }

@@ -52,7 +52,7 @@ function aafm_missing_tools_data(): array {
 	return array(
 		'id'    => 'missing-tools',
 		'title' => __( 'Why is my tool missing?', 'agent-abilities-for-mcp' ),
-		'rule'  => __( 'These tools are switched on, but agents cannot see them right now. Each line says why.', 'agent-abilities-for-mcp' ),
+		'rule'  => __( 'These tools are switched on, but agents cannot see them right now. Each line says why. Tools the backup gate refuses are not listed here: agents still see them, and each refused call says why.', 'agent-abilities-for-mcp' ),
 		'rows'  => $rows,
 	);
 }

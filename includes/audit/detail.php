@@ -1484,7 +1484,7 @@ function aafm_activity_detail_map(): array {
 		),
 		'aafm/site-purge-post-cache'        => array(
 			/* translators: %s: the post's numeric ID. */
-			'template' => __( 'Purged the page cache for post #%s', 'agent-abilities-for-mcp' ),
+			'template' => __( 'Ran a page cache purge for post #%s', 'agent-abilities-for-mcp' ),
 			'args'     => array(
 				array(
 					'key'  => 'post_id',
@@ -1495,10 +1495,10 @@ function aafm_activity_detail_map(): array {
 		),
 		// A URL is free text, not an identifier, so it is never logged: no args.
 		'aafm/site-purge-url-cache'         => array(
-			'template' => __( 'Purged the page cache for one URL', 'agent-abilities-for-mcp' ),
+			'template' => __( 'Ran a page cache purge for one URL', 'agent-abilities-for-mcp' ),
 		),
 		'aafm/site-purge-site-cache'        => array(
-			'template' => __( 'Purged the whole page cache', 'agent-abilities-for-mcp' ),
+			'template' => __( 'Ran a whole-site page cache purge', 'agent-abilities-for-mcp' ),
 		),
 	);
 }

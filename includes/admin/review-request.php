@@ -494,7 +494,7 @@ function aafm_render_review_request_notice(): void {
 		),
 		number_format_i18n( $count )
 	);
-	$body = __( 'That means Agent Abilities for MCP is doing its job. If it\'s been useful, would you take two minutes to leave a review on wordpress.org? Reviews are the main way other site owners find the plugin.', 'agent-abilities-for-mcp' );
+	$body = __( 'That means Agent Abilities for MCP is doing its job. If it\'s been useful, would you take two minutes to leave a review on wordpress.org? Reviews help other site owners find the plugin.', 'agent-abilities-for-mcp' );
 	?>
 	<div class="notice notice-info is-dismissible aafm-review-request"
 		<?php // Its own action, not the shared aafm_admin one. This notice renders on every admin screen, so printing the shared nonce would hand every page in wp-admin a token good for all eighteen of the plugin's other AJAX actions. This one opens exactly one door. ?>

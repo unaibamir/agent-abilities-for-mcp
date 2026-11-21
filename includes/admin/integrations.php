@@ -328,7 +328,7 @@ function aafm_render_integrations_tab(): void {
 	echo '<div class="aafm-integrations">';
 
 	// Intro lede + the security disclaimer (humanized copy).
-	echo '<p class="aafm-page-lede">' . esc_html__( 'Connect AI agents to the plugins you already run. An integration\'s abilities show up here only while its plugin is active, and each one stays off until you turn it on.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="aafm-page-lede">' . esc_html__( 'Connect AI agents to the plugins you already run. An integration\'s abilities can be switched on only while its plugin is active, and each one stays off until you turn it on.', 'agent-abilities-for-mcp' ) . '</p>';
 
 	echo '<div class="aafm-integrations-disclaimer">';
 	echo wp_kses(

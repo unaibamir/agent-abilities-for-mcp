@@ -27,7 +27,7 @@ defined( 'ABSPATH' ) || exit;
 function aafm_render_bridge_directory(): void {
 	echo '<div class="aafm-bridge aafm-integrations">';
 
-	echo '<p class="aafm-page-lede">' . esc_html__( 'Other plugins can register their own WordPress Abilities. Any you turn on here becomes a governed MCP tool, wrapped in the same audit log, rate limit, and permission checks as everything else on this site. Each one stays off until you switch it on.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="aafm-page-lede">' . esc_html__( 'Other plugins can register their own WordPress Abilities. Any you turn on here becomes an MCP tool under this plugin\'s audit log, rate limit, allowlists and read-only mode, but its permission check is the other plugin\'s own. Each one stays off until you switch it on.', 'agent-abilities-for-mcp' ) . '</p>';
 
 	// WP < 6.9 has no Abilities registry to read.
 	if ( ! function_exists( 'wp_get_abilities' ) ) {
@@ -80,7 +80,7 @@ function aafm_render_bridge_directory(): void {
 	echo wp_kses(
 		aafm_get_notice_html(
 			'warning',
-			'<p>' . esc_html__( 'These abilities are written by other plugins, so what they read and change is up to them, and their output is not filtered or redacted here. They can only touch what the connected account\'s WordPress role allows, and every call is recorded in the activity log. Turn on only what you trust the connected agent to run.', 'agent-abilities-for-mcp' ) . '</p>'
+			'<p>' . esc_html__( 'These abilities are written by other plugins, so what they read and change is up to them, and their output is not filtered or redacted here. What each one can touch is decided by that plugin\'s own permission check, which is not reviewed here, and every call is recorded in this plugin\'s activity log. Turn on only what you trust the connected agent to run.', 'agent-abilities-for-mcp' ) . '</p>'
 				. aafm_get_set_more_html( __( 'See more about tools from other plugins', 'agent-abilities-for-mcp' ), $disclaimer_more ),
 			array( 'html' => true )
 		),
@@ -651,7 +651,7 @@ function aafm_render_bridge_orphan_group( array $orphans ): void {
 		$rows[] = array(
 			'slug'        => $slug,
 			'label'       => $slug,
-			'description' => __( 'Unavailable - the plugin that provides this ability is not active.', 'agent-abilities-for-mcp' ),
+			'description' => __( 'Unavailable: the plugin that provides this ability is not active.', 'agent-abilities-for-mcp' ),
 			'risk'        => 'write',
 			'readonly'    => false,
 			'destructive' => false,

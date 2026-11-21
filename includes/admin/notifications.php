@@ -35,7 +35,7 @@ function aafm_render_notifications_section(): void {
 	$s = aafm_notifications_settings();
 
 	ob_start();
-	echo '<p class="aafm-card-desc">' . esc_html__( 'The daily email depends on WP-Cron, which only runs when your site gets visits and does not run at all if DISABLE_WP_CRON is set. On a quiet site, point a real cron job at wp-cron.php (or run "wp cron event run --due-now"). On hosts that cannot finish the page before sending, alerts emailed as they happen also go through WP-Cron, so an email can wait for the next visit, or an hour or more where WP-Cron cannot run; with DISABLE_WP_CRON set it is sent at once. The admin notice never depends on cron. If email is unreliable on your host, the admin notice still shows every alert.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="aafm-card-desc">' . esc_html__( 'The daily email depends on WP-Cron, which only runs when your site gets visits and does not run at all if DISABLE_WP_CRON is set. On a quiet site, point a real cron job at wp-cron.php (or run "wp cron event run --due-now"). On hosts that cannot finish the page before sending, alerts emailed as they happen also go through WP-Cron, so an email can wait for the next visit, or an hour or more where WP-Cron cannot run; with DISABLE_WP_CRON set it is sent at once. The admin notice never depends on cron. If email is unreliable on your host, the admin notice still shows your most recent alerts.', 'agent-abilities-for-mcp' ) . '</p>';
 	$select = '<select id="aafm-notify-mode" name="aafm_notify_mode" aria-label="' . esc_attr__( 'How to be told', 'agent-abilities-for-mcp' ) . '">';
 	foreach ( aafm_notify_modes() as $mode => $mode_label ) {
 		$select .= '<option value="' . esc_attr( $mode ) . '"' . selected( $s['mode'], $mode, false ) . '>' . esc_html( $mode_label ) . '</option>';
@@ -60,7 +60,7 @@ function aafm_render_notifications_section(): void {
 				esc_attr__( 'Email address for alerts', 'agent-abilities-for-mcp' ),
 				esc_html__( 'Send a test email', 'agent-abilities-for-mcp' )
 			),
-			'help'    => __( 'One address, needed for the two email modes. The grey example is your site admin address; it is not used unless you type it here. Emails say what happened and link to the Activity Log. They never include the content of a call, a user name or an IP address.', 'agent-abilities-for-mcp' ),
+			'help'    => __( 'One address, needed for the two email modes. The grey example is your site admin address; it is not used unless you type it here. Emails say what happened and link to where you can review it. They never include the content of a call, a user name or an IP address.', 'agent-abilities-for-mcp' ),
 		)
 	);
 
@@ -332,7 +332,7 @@ function aafm_ajax_notify_test(): void {
 	if ( $sent ) {
 		wp_send_json_success( array( 'message' => __( 'Test email sent. Check the inbox, and the spam folder.', 'agent-abilities-for-mcp' ) ) );
 	}
-	wp_send_json_error( array( 'message' => __( 'WordPress could not send the email. Your host may block mail; the admin notice will still show every alert.', 'agent-abilities-for-mcp' ) ) );
+	wp_send_json_error( array( 'message' => __( 'WordPress could not send the email. Your host may block mail; the admin notice will still show your most recent alerts.', 'agent-abilities-for-mcp' ) ) );
 }
 
 /**

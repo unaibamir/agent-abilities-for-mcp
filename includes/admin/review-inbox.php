@@ -252,7 +252,7 @@ function aafm_render_review_inbox_card(): void {
 	echo '<div class="aafm-card-pad">';
 
 	if ( array() === $rows ) {
-		echo '<p class="description">' . esc_html__( 'Nothing is waiting. Drafts and pending posts an agent writes show up here so you can look them over before they go live.', 'agent-abilities-for-mcp' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Nothing is waiting. Drafts and pending posts an agent creates show up here so you can look them over before they go live.', 'agent-abilities-for-mcp' ) . '</p>';
 	} else {
 		echo '<ul class="aafm-review-list">';
 		foreach ( $rows as $row ) {

@@ -335,6 +335,11 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'allowlistRoleLabel'       => __( 'Role: %s', 'agent-abilities-for-mcp' ),
 				/* translators: %s: OAuth client id or display name. */
 				'allowlistConnectionLabel' => __( 'Connection: %s', 'agent-abilities-for-mcp' ),
+				'allowlistScope'           => __( 'Scope', 'agent-abilities-for-mcp' ),
+				'allowlistAllowedHeading'  => __( 'Allowed abilities', 'agent-abilities-for-mcp' ),
+				'allowlistRemove'          => __( 'Remove', 'agent-abilities-for-mcp' ),
+				'allowlistSaved'           => __( 'Saved.', 'agent-abilities-for-mcp' ),
+				'allowlistSaveFailed'      => __( 'Could not save. Please try again.', 'agent-abilities-for-mcp' ),
 				'pagerPrevious'            => __( 'Previous', 'agent-abilities-for-mcp' ),
 				'pagerNext'                => __( 'Next', 'agent-abilities-for-mcp' ),
 				/* translators: 1: first row number shown, 2: last row number shown, 3: total rows. */

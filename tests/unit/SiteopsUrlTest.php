@@ -62,6 +62,8 @@ final class SiteopsUrlTest extends TestCase {
 			'encoded two dots'       => array( '/%2e%2e/b', 'traversal' ),
 			'double encoded dots'    => array( '/%252e%252e/b', 'characters' ),
 			'dots then encoded sep'  => array( '/a/..%2fb', 'traversal' ),
+			'encoded slash'          => array( '/a%2Fb/', 'characters' ),
+			'encoded slash in a url' => array( 'https://example.com/a%2fb', 'characters' ),
 			'trailing single dot'    => array( '/a/.', 'traversal' ),
 			'two dots in a segment'  => array( '/a..b', 'traversal' ),
 			'star'                   => array( '/a/*', 'characters' ),

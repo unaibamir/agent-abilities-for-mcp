@@ -112,8 +112,10 @@ function aafm_siteops_canonical_url( string $input, bool $permalink_slash = fals
 		$raw_path = isset( $parts['path'] ) && '' !== $parts['path'] ? (string) $parts['path'] : '/';
 	}
 
-	// 5. Decode once. A percent sign left over means the input was encoded twice.
-	$path = rawurldecode( $raw_path );
+	// 5. Decode once. A percent sign left over means the input was encoded twice. An encoded slash is
+	// part of a segment, not a separator, so decoding it would name a different path (refused at 7).
+	$encoded_slash = 1 === preg_match( '/%2f/i', $raw_path );
+	$path          = rawurldecode( $raw_path );
 	if ( false !== strpos( $path, '%' ) ) {
 		return aafm_siteops_bad_url( 'characters' );
 	}
@@ -138,6 +140,9 @@ function aafm_siteops_canonical_url( string $input, bool $permalink_slash = fals
 		if ( 1 !== preg_match( '/^[\p{L}\p{M}\p{N}._~-]+$/u', $segment ) ) {
 			return aafm_siteops_bad_url( 'characters' );
 		}
+	}
+	if ( $encoded_slash ) {
+		return aafm_siteops_bad_url( 'characters' );
 	}
 
 	// 8. Home path.

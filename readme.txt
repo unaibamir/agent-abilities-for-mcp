@@ -362,7 +362,7 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 9. The Activity Log with a 7-day summary, filters, the connection and IP of each call, duration, a Live view and a CSV export that follows the filters.
 10. The Dashboard after setup: the Needs review card with two drafts from agents, and the Why is my tool missing card, which lists tools that are switched on but that agents cannot see right now, each with the reason.
 11. Site Brief: a few plain rules every connected agent reads when its session starts, such as spelling and what to leave alone.
-12. Connection Doctor checks the connection from your own server and says what to fix. Each finding says whether you or your host can fix it, and some come with a snippet to paste.
+12. Check my connection tests the connection from your own server and says what to fix. Each finding says who can fix it, and some come with a snippet to paste.
 13. Needs review: drafts and pending posts your agents wrote, with Preview, Open in editor, Publish and Discard.
 14. Notifications, off until you choose "Admin notice only", "Email alerts as they happen" or "One email a day" for the events you tick.
 15. Active grants: each approved connection with its access, last use, optional end date and rate limit, and its status, with Pause or Resume next to Revoke.

@@ -36,7 +36,7 @@ function aafm_register_pages_definitions( array $registry ): array {
 	);
 	$registry['aafm/create-page'] = array(
 		'label'        => __( 'Create page', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Create a new page, published by default unless the operator\'s force-draft setting holds it as a draft (requires publish_pages to call this ability at all). An explicit draft, pending, or private status is also accepted. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). parent_id puts the page under another page and template picks one of the theme\'s page templates or "default". Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Create a new page, published by default unless the operator\'s force-draft setting holds every new page as a draft, whatever status is requested (requires publish_pages to call this ability at all). An explicit draft, pending, or private status is also accepted. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). parent_id puts the page under another page and template picks one of the theme\'s page templates or "default". Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -90,7 +90,7 @@ function aafm_args_get_pages(): array {
 					'status' => array(
 						'type'        => 'string',
 						'default'     => 'publish',
-						'description' => __( 'Post status to filter by. Defaults to publish. A non-public status (draft, pending, future, private) is only returned when the caller can read private pages; any, trash, auto-draft, inherit, and unrecognized values are rejected.', 'agent-abilities-for-mcp' ),
+						'description' => __( 'Post status to filter by. Defaults to publish. A non-public status (draft, pending, future, private) is only returned when the caller can read private pages, and someone else\'s draft, pending or scheduled page only when the caller can also edit other people\'s pages; any, trash, auto-draft, inherit, and unrecognized values are rejected.', 'agent-abilities-for-mcp' ),
 					),
 					'search' => array(
 						'type'        => 'string',

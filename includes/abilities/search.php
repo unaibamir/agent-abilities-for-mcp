@@ -56,7 +56,7 @@ function aafm_args_search_content(): array {
 					'status'     => array(
 						'type'        => 'string',
 						'default'     => 'publish',
-						'description' => __( 'A single post status to search within. Public statuses (publish and any custom public status) are always allowed; the non-public statuses draft, pending, future, and private are accepted only when the caller can read private content. Aggregate values (any, trash, auto-draft, inherit) are rejected.', 'agent-abilities-for-mcp' ),
+						'description' => __( 'A single post status to search within. Public statuses (publish and any custom public status) are always allowed; the non-public statuses draft, pending, future, and private are accepted only when the caller can read private content, and in each type someone else\'s draft, pending or scheduled item is found only when the caller can edit other people\'s items of that type. Aggregate values (any, trash, auto-draft, inherit) are rejected.', 'agent-abilities-for-mcp' ),
 					),
 				),
 				aafm_pagination_schema_props(

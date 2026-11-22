@@ -296,7 +296,7 @@ function aafm_exec_get_posts( array $input ) {
 			// author__in, not author: an author of 0 would drop the condition instead of matching nothing.
 			$args['author__in'] = array( get_current_user_id() );
 		}
-		return new WP_Query( $args );
+		return new WP_Query( aafm_tec_unfiltered_query_args( $args ) );
 	};
 
 	$format          = isset( $input['content_format'] ) ? (string) $input['content_format'] : 'rendered';
@@ -2257,14 +2257,16 @@ function aafm_exec_replace_sitewide( array $input ) {
 		// no_found_rows is false, regardless of posts_per_page, so a 1-row probe query gets the
 		// real total without ever fetching the matching ids themselves.
 		$count_probe   = new WP_Query(
-			array(
-				'post_type'         => $type,
-				'post_status'       => $status,
-				'fields'            => 'ids',
-				'posts_per_page'    => 1,
-				'no_found_rows'     => false,
-				'aafm_query_marker' => $query_marker,
-			) + $own_scope
+			aafm_tec_unfiltered_query_args(
+				array(
+					'post_type'         => $type,
+					'post_status'       => $status,
+					'fields'            => 'ids',
+					'posts_per_page'    => 1,
+					'no_found_rows'     => false,
+					'aafm_query_marker' => $query_marker,
+				) + $own_scope
+			)
 		);
 		$total_matches = (int) $count_probe->found_posts;
 		$truncated     = $total_matches > AAFM_REPLACE_SITEWIDE_MAX_POSTS;
@@ -2294,16 +2296,18 @@ function aafm_exec_replace_sitewide( array $input ) {
 		add_filter( 'posts_pre_query', $scan_filter, PHP_INT_MAX, 2 );
 		try {
 			$scan_query = new WP_Query(
-				array(
-					'post_type'         => $type,
-					'post_status'       => $status,
-					'fields'            => 'ids',
-					'posts_per_page'    => $max_scan,
-					'orderby'           => 'ID',
-					'order'             => 'ASC',
-					'no_found_rows'     => true,
-					'aafm_query_marker' => $query_marker,
-				) + $own_scope
+				aafm_tec_unfiltered_query_args(
+					array(
+						'post_type'         => $type,
+						'post_status'       => $status,
+						'fields'            => 'ids',
+						'posts_per_page'    => $max_scan,
+						'orderby'           => 'ID',
+						'order'             => 'ASC',
+						'no_found_rows'     => true,
+						'aafm_query_marker' => $query_marker,
+					) + $own_scope
+				)
 			);
 		} finally {
 			remove_filter( 'posts_pre_query', $scan_filter, PHP_INT_MAX );

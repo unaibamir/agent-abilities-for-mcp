@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-23T03:00:32+05:00\n"
+"POT-Creation-Date: 2026-11-23T03:25:52+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -1016,7 +1016,7 @@ msgid "This post is not an Avada page. Use replace-in-post for an ordinary post,
 msgstr ""
 
 #: includes/abilities/avada.php:1239
-msgid "This page's shortcodes cannot be read safely, so its text cannot be replaced here; avada-get-page-content with include_structure reports structure_status unparseable for it. Nothing was changed."
+msgid "This page's shortcodes cannot be read safely, so its text cannot be replaced here; avada-get-page-content with include_structure shows the same, as structure_status unparseable. Change the text in Avada instead. Nothing was changed."
 msgstr ""
 
 #: includes/abilities/avada.php:1250
@@ -2029,7 +2029,7 @@ msgid "Create page"
 msgstr ""
 
 #: includes/abilities/pages.php:39
-msgid "Create a new page, published by default unless the operator's force-draft setting holds it as a draft (requires publish_pages to call this ability at all). An explicit draft, pending, or private status is also accepted. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). parent_id puts the page under another page and template picks one of the theme's page templates or \"default\". Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid."
+msgid "Create a new page, published by default unless the operator's force-draft setting holds every new page as a draft, whatever status is requested (requires publish_pages to call this ability at all). An explicit draft, pending, or private status is also accepted. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). parent_id puts the page under another page and template picks one of the theme's page templates or \"default\". Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid."
 msgstr ""
 
 #: includes/abilities/pages.php:46
@@ -2059,7 +2059,7 @@ msgid "Permanently delete a page, bypassing the Trash. This cannot be undone. Us
 msgstr ""
 
 #: includes/abilities/pages.php:93
-msgid "Post status to filter by. Defaults to publish. A non-public status (draft, pending, future, private) is only returned when the caller can read private pages; any, trash, auto-draft, inherit, and unrecognized values are rejected."
+msgid "Post status to filter by. Defaults to publish. A non-public status (draft, pending, future, private) is only returned when the caller can read private pages, and someone else's draft, pending or scheduled page only when the caller can also edit other people's pages; any, trash, auto-draft, inherit, and unrecognized values are rejected."
 msgstr ""
 
 #: includes/abilities/pages.php:97
@@ -2199,7 +2199,7 @@ msgid "Create post"
 msgstr ""
 
 #: includes/abilities/posts.php:75
-msgid "Create a new post, published by default unless the operator's force-draft setting holds it as a draft (requires publish capability to call this ability at all). An explicit draft, pending, or private status is also accepted. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid."
+msgid "Create a new post, published by default unless the operator's force-draft setting holds every new post as a draft, whatever status is requested (requires publish capability to call this ability at all). An explicit draft, pending, or private status is also accepted. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid."
 msgstr ""
 
 #: includes/abilities/posts.php:82
@@ -2279,7 +2279,7 @@ msgid "Slug of an allowlisted content type to list. Defaults to post. Types outs
 msgstr ""
 
 #: includes/abilities/posts.php:186
-msgid "Post status to filter by. Defaults to publish. A non-public status (draft, pending, future, private) is only returned when the caller can read private content for this type; any, trash, auto-draft, inherit, and unrecognized values are rejected."
+msgid "Post status to filter by. Defaults to publish. A non-public status (draft, pending, future, private) is only returned when the caller can read private content for this type, and someone else's draft, pending or scheduled item only when the caller can also edit other people's items of this type; any, trash, auto-draft, inherit, and unrecognized values are rejected."
 msgstr ""
 
 #: includes/abilities/posts.php:190
@@ -2667,7 +2667,7 @@ msgid "Content type slugs to narrow the search to. Only types already on the ope
 msgstr ""
 
 #: includes/abilities/search.php:59
-msgid "A single post status to search within. Public statuses (publish and any custom public status) are always allowed; the non-public statuses draft, pending, future, and private are accepted only when the caller can read private content. Aggregate values (any, trash, auto-draft, inherit) are rejected."
+msgid "A single post status to search within. Public statuses (publish and any custom public status) are always allowed; the non-public statuses draft, pending, future, and private are accepted only when the caller can read private content, and in each type someone else's draft, pending or scheduled item is found only when the caller can edit other people's items of that type. Aggregate values (any, trash, auto-draft, inherit) are rejected."
 msgstr ""
 
 #: includes/abilities/search.php:64
@@ -5635,7 +5635,7 @@ msgid "This page uses more distinct shortcode names than can be checked safely, 
 msgstr ""
 
 #: includes/abilities/wpbakery.php:688
-msgid "This page's shortcodes cannot be read safely, so its text cannot be replaced here; wpbakery-get-page-content with include_structure reports structure_status unparseable for it. Nothing was changed."
+msgid "This page's shortcodes cannot be read safely, so its text cannot be replaced here; wpbakery-get-page-content with include_structure shows the same, as structure_status unparseable. Change the text in WPBakery instead. Nothing was changed."
 msgstr ""
 
 #: includes/abilities/wpbakery.php:696
@@ -10384,7 +10384,7 @@ msgid "My client won't connect, or the endpoint looks unreachable"
 msgstr ""
 
 #: includes/admin/page.php:3340
-msgid "Start on the Connection tab: run Step 3 \"Check the endpoint is reachable\". If that fails, look at the checks listed under it and confirm \"MCP adapter active and compatible\" and \"MCP REST endpoint registered\" both show green."
+msgid "Start on the Connection tab: click \"Check my connection\". If you connect with an Application Password, also run Step 3 \"Check the endpoint is reachable\" on the Application Passwords tab, then look at the checks listed under it and confirm \"MCP adapter active and compatible\" and \"MCP REST endpoint registered\" both show green."
 msgstr ""
 
 #: includes/admin/page.php:3341
@@ -10718,7 +10718,7 @@ msgid "ChatGPT:"
 msgstr ""
 
 #: includes/admin/page.php:3566
-msgid "on ChatGPT web, open Plugins, select the plus button, then Add custom MCP server, paste the endpoint URL under Connection, choose OAuth, and approve the sign-in. You don't need to turn on Developer Mode first."
+msgid "on ChatGPT web, open Plugins, select the plus button, then Add custom MCP server. Name it, paste the endpoint URL under Connection, choose OAuth, tick the risk acknowledgment, select Create as a plugin, and approve the sign-in. You don't need to turn on Developer Mode first."
 msgstr ""
 
 #: includes/admin/page.php:3567
@@ -10842,7 +10842,7 @@ msgid "What does the plugin log, and does it call out to anything?"
 msgstr ""
 
 #: includes/admin/page.php:3601
-msgid "The plugin never sends your content, credentials, or other site data anywhere. It can make two outbound requests of its own: the Connection tab's same-origin reachability check, and, only if you turn on the \"Upload media from URL\" ability, a fetch of the URL your AI client supplies so that file can be added to your media library. Like any HTTP request, that fetch reveals the URL, your site's IP, and its timing to whatever server answers it."
+msgid "The plugin never sends your content, credentials, or other site data anywhere. It can make two outbound requests of its own: the Connection tab's checks, which only request this site's own address, and, only if you turn on the \"Upload media from URL\" ability, a fetch of the URL your AI client supplies so that file can be added to your media library. Like any HTTP request, that fetch reveals the URL, your site's IP, and its timing to whatever server answers it."
 msgstr ""
 
 #: includes/admin/page.php:3602

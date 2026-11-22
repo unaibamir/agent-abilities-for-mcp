@@ -129,6 +129,13 @@ $has_duration = aafm_activity_log_has_column( aafm_activity_log_table(), 'durati
 if ( function_exists( 'aafm_backfill_agent_user_marker' ) ) {
 	aafm_backfill_agent_user_marker();
 }
+// The same for the Bridge review baseline, which stores aafm_bridge_review on the first admin load. It
+// only runs for a user who can manage options, so run it as the site's admin.
+if ( function_exists( 'aafm_bridge_review_sync' ) ) {
+	wp_set_current_user( 1 );
+	aafm_bridge_review_sync();
+	wp_set_current_user( 0 );
+}
 aafm_clear_activity_log();
 $table   = aafm_activity_log_table();
 $rows    = array();

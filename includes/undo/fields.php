@@ -399,7 +399,7 @@ function aafm_undo_certify( string $object_type, int $object_id, array $values, 
  * Put AIOSEO columns back through its own model, the way the forward tool writes them.
  *
  * The model's savePost() reads the title and description of its patch unconditionally, so when the restore does not
- * carry them the current values go along and are written back unchanged.
+ * carry them the current values go along and are written back unchanged. A NULL current value stays out of the patch.
  *
  * @param int                 $post_id Post id.
  * @param array<string,mixed> $columns Column to the value that was there (strings, or null for SQL NULL).
@@ -421,7 +421,11 @@ function aafm_undo_write_aioseo( int $post_id, array $columns ): bool {
 			if ( null === $now ) {
 				return false;
 			}
-			$data[ $key ] = (string) $now['values'][ 'aioseo:' . $key ];
+			// A NULL column is left out: AIOSEO stores a missing title or description as NULL either
+			// way, and sending '' would make it mirror an empty _aioseo_* meta row that was not there.
+			if ( null !== $now['values'][ 'aioseo:' . $key ] ) {
+				$data[ $key ] = (string) $now['values'][ 'aioseo:' . $key ];
+			}
 		}
 	}
 	aafm_aioseo_write( $post_id, $data );

@@ -9,9 +9,12 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Undo;
 
+use AAFM\Tests\IntegrationStubs;
 use AAFM\Tests\Support\QueryFaultInjector;
 
 final class UndoHonestyTest extends UndoTestCase {
+
+	use IntegrationStubs;
 
 	public function set_up(): void {
 		parent::set_up();
@@ -408,6 +411,26 @@ final class UndoHonestyTest extends UndoTestCase {
 		$wrote = QueryFaultInjector::fail_query( 'FROM `' . aafm_undo_aioseo_table() . '`', static fn() => aafm_undo_write_aioseo( $post, array( 'robots_noindex' => '1' ) ) );
 
 		$this->assertFalse( $wrote, 'A failed companion read aborts before the vendor save, which would otherwise write a guessed title.' );
+	}
+
+	/**
+	 * A companion title that is NULL in the table is left out of the save: sending it as '' made
+	 * AIOSEO mirror an empty _aioseo_title meta row that was absent before the change.
+	 */
+	public function test_an_aioseo_restore_does_not_carry_a_null_companion_title(): void {
+		$post = self::factory()->post->create();
+		$this->aioseo_table_with( $post, null );
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$wpdb->query( $wpdb->prepare( 'ALTER TABLE %i ADD COLUMN description TEXT NULL', aafm_undo_aioseo_table() ) );
+		$this->stub_aioseo();
+
+		$this->assertTrue( aafm_undo_write_aioseo( $post, array( 'description' => 'first' ) ) );
+
+		$calls = \AAFM\Tests\AioseoStubStore::$save_post_calls;
+		$this->reset_integration_stubs();
+		$this->assertCount( 1, $calls );
+		$this->assertSame( array( 'description' => 'first' ), $calls[0]['data'] );
 	}
 
 	public function test_aioseo_post_without_a_row_flags_every_field_as_no_vendor_row(): void {

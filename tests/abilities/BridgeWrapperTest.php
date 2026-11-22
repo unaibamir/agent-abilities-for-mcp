@@ -292,6 +292,40 @@ final class BridgeWrapperTest extends TestCase {
 		}
 	}
 
+	public function test_a_polluted_option_never_bridges_the_adapter_namespace(): void {
+		// The adapter's own meta tools (discover, get-info, execute) would run any public foreign
+		// ability past the bridged enable list and the high-risk lock, so a stored mcp-adapter/*
+		// slug must register nothing, the same as the catalog never offering it.
+		$this->register_foreign( true );
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				wp_register_ability(
+					'mcp-adapter/aafm-test-probe',
+					array(
+						'label'               => 'Probe',
+						'description'         => 'Adapter namespace fixture.',
+						'category'            => 'demo-things',
+						'execute_callback'    => '__return_true',
+						'permission_callback' => '__return_true',
+					)
+				);
+			}
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( 'demo/echo', 'mcp-adapter/aafm-test-probe', 'mcp-adapter/execute-ability' ) );
+
+		$this->assertSame( array( 'demo/echo' ), aafm_get_enabled_bridged_abilities() );
+		$this->register_wrappers();
+		wp_unregister_ability( 'mcp-adapter/aafm-test-probe' );
+
+		$this->assertTrue( wp_has_ability( 'aafm-bridge/demo-echo' ) );
+		foreach ( array_keys( wp_get_abilities() ) as $slug ) {
+			$this->assertStringStartsNotWith( 'aafm-bridge/mcp-adapter', (string) $slug );
+		}
+		$catalog = aafm_discover_foreign_abilities();
+		$this->assertArrayNotHasKey( 'mcp-adapter', $catalog );
+	}
+
 	public function test_bridge_pass_is_hooked_after_late_foreign_registrations(): void {
 		// A foreign plugin may register its ability at a later-than-native priority (e.g. 20).
 		// The bridge pass must run AFTER those, so the whole foreign registry exists when it

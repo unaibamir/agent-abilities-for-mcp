@@ -1231,6 +1231,16 @@ function aafm_exec_avada_replace_text( array $input ) {
 		);
 	}
 
+	// A page whose own shortcodes cannot be read fails the structure check whatever the search
+	// term is, so say that instead of blaming the term.
+	if ( null === aafm_fusion_shortcode_walk( $content, 0 ) ) {
+		return new WP_Error(
+			'aafm_builder_unparseable',
+			__( 'This page\'s shortcodes cannot be read safely, so its text cannot be replaced here; avada-get-page-content with include_structure reports structure_status unparseable for it. Nothing was changed.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 409 )
+		);
+	}
+
 	$inserted = wp_kses_post( $replace );
 	$new      = str_replace( $search, $inserted, $content );
 

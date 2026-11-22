@@ -407,6 +407,17 @@ WPB;
 		$this->assertStringContainsString( 'heading', strtolower( $out->get_error_message() ) );
 	}
 
+	public function test_replace_on_an_unreadable_page_points_to_structure_status(): void {
+		$page = '[vc_row][vc_column][vc_column_text el_class="a[1]"]<p>Opening paragraph alpha.</p>[/vc_column_text][/vc_column][/vc_row]';
+		$id   = $this->make_page( $page );
+		$this->acting_as( 'editor' );
+
+		$out = $this->replace( $id, 'Opening paragraph alpha.', 'Opening paragraph changed.' );
+
+		$this->assert_refused( $out, 'aafm_builder_unparseable', $id, $page, 409 );
+		$this->assertStringContainsString( 'structure_status unparseable', $out->get_error_message() );
+	}
+
 	public function test_replace_refuses_part_of_a_tag_name(): void {
 		$id = $this->make_page( self::PAGE );
 		$this->acting_as( 'editor' );

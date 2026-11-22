@@ -292,6 +292,26 @@ final class AvadaTest extends TestCase {
 		$this->assertStringContainsString( 'title="Bob\'s title"', $post->post_content );
 	}
 
+	public function test_replace_text_on_an_unreadable_page_points_to_structure_status(): void {
+		$content = '[fusion_builder_container][fusion_text title="a[1]"]Hello world[/fusion_text][/fusion_builder_container]';
+		$id      = $this->make_avada_post( $content );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+
+		$out = aafm_exec_avada_replace_text(
+			array(
+				'post_id' => $id,
+				'search'  => 'Hello world',
+				'replace' => 'Hi world',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_builder_unparseable', $out->get_error_code() );
+		$this->assertSame( 409, $out->get_error_data()['status'] ?? null );
+		$this->assertStringContainsString( 'structure_status unparseable', $out->get_error_message() );
+		$this->assertSame( $content, get_post( $id )->post_content );
+	}
+
 	public function test_replace_text_refuses_an_edit_that_would_alter_a_self_closing_element(): void {
 		$content = '[fusion_builder_container]Text[fusion_separator /]More[/fusion_builder_container]';
 		$id      = $this->make_avada_post( $content );
@@ -332,7 +352,7 @@ final class AvadaTest extends TestCase {
 		);
 
 		$this->assertInstanceOf( WP_Error::class, $out );
-		$this->assertSame( 'aafm_replace_inside_shortcode', $out->get_error_code() );
+		$this->assertSame( 'aafm_builder_unparseable', $out->get_error_code() );
 	}
 
 	/**

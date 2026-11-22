@@ -680,6 +680,16 @@ function aafm_exec_wpbakery_replace_text( array $input ) {
 		);
 	}
 
+	// A page whose own shortcodes cannot be read fails the structure check whatever the search
+	// term is, so say that instead of blaming the term.
+	if ( null === aafm_fusion_shortcode_walk( $content, 0, $tags ) ) {
+		return new WP_Error(
+			'aafm_builder_unparseable',
+			__( 'This page\'s shortcodes cannot be read safely, so its text cannot be replaced here; wpbakery-get-page-content with include_structure reports structure_status unparseable for it. Nothing was changed.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 409 )
+		);
+	}
+
 	if ( ! aafm_fusion_shortcode_structure_preserved( $content, $new, $tags ) || aafm_wpbakery_text_closes_a_tag( $inserted, $tags ) ) {
 		return new WP_Error(
 			'aafm_replace_inside_shortcode',

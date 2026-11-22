@@ -611,7 +611,7 @@ function aafm_oauth_client_note( string $client ): string {
 		case 'gemini-cli':
 			return __( 'Add the endpoint under httpUrl in your Gemini CLI settings.json mcpServers block.', 'agent-abilities-for-mcp' );
 		case 'manus':
-			return __( 'In Manus, add a custom MCP connector, paste the endpoint URL as the server URL, and approve the OAuth sign-in. Manus runs in the cloud, so it connects by URL - there is no local bridge to install.', 'agent-abilities-for-mcp' );
+			return __( 'In Manus, add a custom MCP connector, paste the endpoint URL as the server URL, and approve the OAuth sign-in. Manus runs in the cloud, so it connects by URL and there is no local bridge to install.', 'agent-abilities-for-mcp' );
 		case 'generic':
 			return __( 'Use the bridge snippet below with any MCP client that runs a local stdio server.', 'agent-abilities-for-mcp' );
 		default:
@@ -1051,7 +1051,7 @@ function aafm_render_connection_tab(): void {
 	echo '<div class="aafm-card-pad">';
 
 	if ( $oauth_on ) {
-		echo '<p class="aafm-card-desc">' . esc_html__( 'Paste your site\'s MCP endpoint URL into your agent. It opens a browser tab for approval - no secret to put in your config file.', 'agent-abilities-for-mcp' ) . '</p>';
+		echo '<p class="aafm-card-desc">' . esc_html__( 'Paste your site\'s MCP endpoint URL into your agent. It opens a browser tab for approval, so there is no secret to put in your config file.', 'agent-abilities-for-mcp' ) . '</p>';
 
 		// REST-lockdown diagnostic. The OAuth /register and /token endpoints must answer BEFORE a
 		// client has any credential, so a security or membership plugin that restricts the whole
@@ -1181,7 +1181,7 @@ function aafm_render_connection_tab(): void {
 			echo '<p class="aafm-card-desc aafm-oauth-off-hosted">' . esc_html(
 				sprintf(
 					/* translators: %s: comma-separated list of hosted client names, e.g. "ChatGPT, Claude, and Manus". */
-					__( '%s connect over OAuth only, so they need OAuth turned on - the Application Password path below will not work for them.', 'agent-abilities-for-mcp' ),
+					__( '%s connect over OAuth only, so they need OAuth turned on. The Application Password path below will not work for them.', 'agent-abilities-for-mcp' ),
 					wp_sprintf_l( '%l', $hosted_labels )
 				)
 			) . '</p>';
@@ -1314,7 +1314,7 @@ function aafm_render_app_password_steps(): void {
 	aafm_render_snippet_block( $windows_snippet, 'windows' );
 
 	// Windows / certificate notices.
-	$windows_note = __( 'On Windows the launcher is wrapped in <code>cmd /c</code> so the <code>npx</code> command resolves - use the Windows tab above.', 'agent-abilities-for-mcp' );
+	$windows_note = __( 'On Windows the launcher is wrapped in <code>cmd /c</code> so the <code>npx</code> command resolves. Use the Windows tab above.', 'agent-abilities-for-mcp' );
 
 	$cert_note = __( 'If your site uses a self-signed or locally-trusted certificate (DDEV, Local, Valet), Node rejects it by default; add <code>"NODE_TLS_REJECT_UNAUTHORIZED": "0"</code> to <code>env</code> for local testing only, never on a production site.', 'agent-abilities-for-mcp' );
 	if ( $is_local ) {
@@ -1369,7 +1369,7 @@ function aafm_render_app_password_steps(): void {
 	echo '<div class="aafm-step aafm-conn-step">';
 	echo '<div class="aafm-step-head"><span class="aafm-sidx">3</span><div>';
 	echo '<h3>' . esc_html__( 'Check the endpoint is reachable', 'agent-abilities-for-mcp' ) . '</h3>';
-	echo '<p class="sub">' . esc_html__( 'This confirms the endpoint answers from your server. It checks as the current admin, so the tool count shown is your view - your agent connects as the low-privilege user above and will usually see fewer tools.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="sub">' . esc_html__( 'This confirms the endpoint answers from your server. It checks as the current admin, so the tool count shown is your view. Your agent connects as the low-privilege user above and will usually see fewer tools.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div></div>';
 
 	echo '<div class="aafm-step-rail">';

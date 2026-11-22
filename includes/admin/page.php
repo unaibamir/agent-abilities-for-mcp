@@ -216,7 +216,7 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'settingsNotSaved'         => __( 'Could not save. Your previous settings are still in effect.', 'agent-abilities-for-mcp' ),
 				'allowlistEmptied'         => __( 'Saved, but every line was dropped as invalid. The allowlist is now empty, so connections from anywhere are allowed.', 'agent-abilities-for-mcp' ),
 				/* translators: %d: number of allowlist lines that were dropped as invalid. */
-				'allowlistDropped'         => __( 'Saved. Dropped %d line(s) that were not a valid IP or range - check the allowlist.', 'agent-abilities-for-mcp' ),
+				'allowlistDropped'         => __( 'Saved. Dropped %d line(s) that were not a valid IP or range. Check the allowlist.', 'agent-abilities-for-mcp' ),
 				/* translators: %d: the new agent user's numeric ID. */
 				'userCreated'              => __( 'Created user #%d. Now create its Application Password under Users → Profile.', 'agent-abilities-for-mcp' ),
 				'editUser'                 => __( 'Edit user', 'agent-abilities-for-mcp' ),
@@ -235,7 +235,7 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'summaryUnavailable'       => __( 'Summary unavailable.', 'agent-abilities-for-mcp' ),
 				'liveNeedsRange'           => __( 'Live view needs a date range when a search or user filter is applied.', 'agent-abilities-for-mcp' ),
 				/* translators: 1: HTTP status code, 2: number of tools visible in the admin view. */
-				'connectionOk'             => __( 'Reachable (HTTP %1$s) - %2$s tool(s) in your admin view.', 'agent-abilities-for-mcp' ),
+				'connectionOk'             => __( 'Reachable (HTTP %1$s): %2$s tool(s) in your admin view.', 'agent-abilities-for-mcp' ),
 				/* translators: %s: HTTP status code returned by the endpoint. */
 				'connectionNoTools'        => __( 'Endpoint answered HTTP %s but did not return a tool list.', 'agent-abilities-for-mcp' ),
 				'connectionNoLogin'        => __( 'The endpoint is on a different address, so this test ran without your login.', 'agent-abilities-for-mcp' ),
@@ -1321,7 +1321,7 @@ function aafm_register_privacy_policy_content(): void {
 	}
 	$content = wp_kses_post(
 		'<p>' . __( 'When an administrator exposes a content type to AI agents through Agent Abilities for MCP, an authenticated agent can read that type\'s title, slug, excerpt, status, permalink, publish/modified dates, and author id. If an administrator also exposes specific meta keys, an agent can read and change those keys\' values on any post it is allowed to edit. Protected keys (those prefixed with an underscore) and authentication-related keys can never be exposed. Only expose content types and meta keys whose values do not hold personal data.', 'agent-abilities-for-mcp' ) . '</p>'
-		. '<p>' . __( 'If user abilities are enabled, an agent can read a user\'s display name, email, roles, and post count, plus any exposed user meta. If the WooCommerce integration is enabled, an agent can read and, depending on which abilities are turned on, write customer and order data - including full billing and shipping addresses, phone number, and order/purchase history. If the ACF (or SCF) integration is enabled, an agent can read and write ACF field values directly; ACF fields are a separate surface from the meta-key allowlist above and are not filtered by it.', 'agent-abilities-for-mcp' ) . '</p>'
+		. '<p>' . __( 'If user abilities are enabled, an agent can read a user\'s display name, email, roles, and post count, plus any exposed user meta. If the WooCommerce integration is enabled, an agent can read and, depending on which abilities are turned on, write customer and order data, including full billing and shipping addresses, phone number, and order/purchase history. If the ACF (or SCF) integration is enabled, an agent can read and write ACF field values directly; ACF fields are a separate surface from the meta-key allowlist above and are not filtered by it.', 'agent-abilities-for-mcp' ) . '</p>'
 		. '<p>' . __( 'If the redirect tools are enabled, an agent can read your stored redirects and the addresses visitors requested that were not found, as recorded by your redirect plugin, with query strings removed and anything that looks like a secret token replaced. Not-found addresses can contain personal data that visitors typed into a URL. If the backup tools are enabled, an agent can read the dates, sizes, storage locations and check results of your UpdraftPlus backups, never file names or paths. When a backup tool runs or the backup gate is on, the plugin reads the database backup file on this server to compute a checksum, keeps only the result, and sends nothing anywhere. If the page cache tools are enabled, an agent can ask your cache plugins to purge one post, one URL or the whole cache, and those plugins may send requests of their own. The activity log records, for each tool call, the tool, the acting user and the source IP address, for the number of days set under Settings (30 by default).', 'agent-abilities-for-mcp' ) . '</p>'
 		. '<p>' . aafm_privacy_policy_change_history_text() . '</p>'
 	);
@@ -2305,7 +2305,7 @@ function aafm_enable_writes_button_html( string $slug, array $rows ): string {
 			' <button type="button" class="aafm-btn aafm-btn-secondary aafm-enable-writes" aria-describedby="%1$s">%2$s</button> <span class="aafm-section-toggle-note" id="%1$s">%3$s</span>',
 			esc_attr( 'aafm-write-note-' . sanitize_key( $slug ) ),
 			esc_html__( 'Enable all writes', 'agent-abilities-for-mcp' ),
-			esc_html__( 'Writes only - this leaves deletes and high-risk abilities switched off.', 'agent-abilities-for-mcp' )
+			esc_html__( 'Writes only. Deletes and high-risk abilities stay switched off.', 'agent-abilities-for-mcp' )
 		);
 	}
 	return '';
@@ -2526,7 +2526,7 @@ function aafm_render_post_types_selector(): void {
 			esc_html( $type ),
 			$mapped
 				? esc_html__( 'Allowed', 'agent-abilities-for-mcp' )
-				: '<span class="aafm-badge aafm-badge-read">' . esc_html__( 'read-only - writes need map_meta_cap', 'agent-abilities-for-mcp' ) . '</span>',
+				: '<span class="aafm-badge aafm-badge-read">' . esc_html__( 'read-only (writes need map_meta_cap)', 'agent-abilities-for-mcp' ) . '</span>',
 			$rest ? esc_html__( 'yes', 'agent-abilities-for-mcp' ) : esc_html__( 'no', 'agent-abilities-for-mcp' ),
 			esc_attr(
 				sprintf(
@@ -2540,7 +2540,7 @@ function aafm_render_post_types_selector(): void {
 
 	echo '</tbody></table>';
 	echo '</div>'; // .aafm-table-wrap
-	aafm_render_notice( 'warning', __( 'Exposed types are still gated by that type\'s capabilities and your low-privilege agent user. Only expose types whose title, slug, and excerpt are not sensitive - for example, a type that stores a person\'s name in the title would make that name readable.', 'agent-abilities-for-mcp' ) );
+	aafm_render_notice( 'warning', __( 'Exposed types are still gated by that type\'s capabilities and your low-privilege agent user. Only expose types whose title, slug, and excerpt are not sensitive. For example, a type that stores a person\'s name in the title would make that name readable.', 'agent-abilities-for-mcp' ) );
 	echo '<p class="aafm-section-result aafm-post-types-status" hidden></p>';
 	echo '</div></div>';
 }
@@ -2991,7 +2991,7 @@ function aafm_csv_cell( string $value ): string {
  * @return void
  */
 function aafm_write_export_failure_row( $out ): void {
-	$message = __( 'EXPORT INCOMPLETE - a database read failed partway through. Rows after this point were NOT exported. Re-run the export.', 'agent-abilities-for-mcp' );
+	$message = __( 'EXPORT INCOMPLETE: a database read failed partway through. Rows after this point were NOT exported. Re-run the export.', 'agent-abilities-for-mcp' );
 	fputcsv(
 		$out,
 		array( 'EXPORT INCOMPLETE', 'export_failed', 'EXPORT INCOMPLETE', $message, 'error', '', '', '', '', '', '', '', '' ),
@@ -3383,7 +3383,7 @@ function aafm_render_help_tab(): void {
 		aafm_render_help_entry(
 			__( 'A redirect is breaking the request (trailing slash or http to https)', 'agent-abilities-for-mcp' ),
 			wp_kses(
-				'<p>' . esc_html__( 'A 301 redirect - adding or removing a trailing slash, or forcing http to https - can drop the POST body or the Authorization header on the way through, so the request that finally reaches WordPress is empty or unauthenticated. This is the request not arriving intact, not a credentials problem.', 'agent-abilities-for-mcp' ) . '</p>'
+				'<p>' . esc_html__( 'A 301 redirect (adding or removing a trailing slash, or forcing http to https) can drop the POST body or the Authorization header on the way through, so the request that finally reaches WordPress is empty or unauthenticated. This is the request not arriving intact, not a credentials problem.', 'agent-abilities-for-mcp' ) . '</p>'
 				. '<p>' . esc_html__( 'Use the exact endpoint URL the Connection tab shows, with the right scheme (https) and no extra trailing slash, so no redirect is triggered. If your server force-redirects http to https, make sure the config URL already starts with https so the POST is never redirected.', 'agent-abilities-for-mcp' ) . '</p>',
 				$inline
 			)
@@ -3393,17 +3393,17 @@ function aafm_render_help_tab(): void {
 		aafm_render_help_entry(
 			__( 'Test the endpoint yourself with curl', 'agent-abilities-for-mcp' ),
 			wp_kses(
-				'<p>' . esc_html__( 'This one-liner sends a real MCP "initialize" call to your endpoint with the agent user\'s Application Password. It tells you in one shot whether the endpoint is reachable, whether auth works, and - if it fails - which layer to blame. Replace the host, the username, and the Application Password (the password is the one shown once when you created it; keep its spaces):', 'agent-abilities-for-mcp' ) . '</p>'
+				'<p>' . esc_html__( 'This one-liner sends a real MCP "initialize" call to your endpoint with the agent user\'s Application Password. It tells you in one shot whether the endpoint is reachable, whether auth works, and, if it fails, which layer to blame. Replace the host, the username, and the Application Password (the password is the one shown once when you created it; keep its spaces):', 'agent-abilities-for-mcp' ) . '</p>'
 				. aafm_help_copy_line( 'curl -i -X POST "https://example.com/wp-json/agent-abilities-for-mcp/mcp" -u "mcp-agent:XXXX XXXX XXXX XXXX XXXX XXXX" -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -d \'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl-probe","version":"1.0"}}}\'' )
 				. '<p>' . esc_html__( 'If your permalinks are plain, use the index.php form instead:', 'agent-abilities-for-mcp' ) . '</p>'
 				. aafm_help_copy_line( 'curl -i -X POST "https://example.com/index.php?rest_route=/agent-abilities-for-mcp/mcp" -u "mcp-agent:XXXX XXXX XXXX XXXX XXXX XXXX" -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -d \'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl-probe","version":"1.0"}}}\'' )
 				. '<p><strong>' . esc_html__( 'How to read the result (the HTTP status on the first line):', 'agent-abilities-for-mcp' ) . '</strong></p>'
 				. '<ul>'
-				. '<li><strong>' . esc_html__( '200', 'agent-abilities-for-mcp' ) . '</strong> - ' . esc_html__( 'reachable and authenticated; the body is a JSON-RPC result. Everything is working - if the AI client still fails, the block is on its side (see the 403/406/429 entry above).', 'agent-abilities-for-mcp' ) . '</li>'
-				. '<li><strong>' . esc_html__( '401', 'agent-abilities-for-mcp' ) . '</strong> - ' . esc_html__( 'reached WordPress but auth failed: wrong or expired Application Password, or the Authorization header is being stripped (see the Authentication section). A membership or security plugin that keeps the REST API to signed-in members stops OAuth sign-in, not a correct Application Password; the Connection Doctor on the Connection tab names the plugins it recognises.', 'agent-abilities-for-mcp' ) . '</li>'
-				. '<li><strong>' . esc_html__( '403 / 406 / 429', 'agent-abilities-for-mcp' ) . '</strong> - ' . esc_html__( 'a WAF, CDN, or host security rule is blocking the request before WordPress (see the 403/406/429 entry above).', 'agent-abilities-for-mcp' ) . '</li>'
-				. '<li><strong>' . esc_html__( '404', 'agent-abilities-for-mcp' ) . '</strong> - ' . esc_html__( 'the route is not registered for this URL: flush permalinks (Settings → Permalinks → Save) and confirm you copied the endpoint exactly from the Connection tab.', 'agent-abilities-for-mcp' ) . '</li>'
-				. '<li><strong>' . esc_html__( '5xx', 'agent-abilities-for-mcp' ) . '</strong> - ' . esc_html__( 'a server-side error: check your PHP error log and the host status.', 'agent-abilities-for-mcp' ) . '</li>'
+				. '<li><strong>' . esc_html__( '200', 'agent-abilities-for-mcp' ) . '</strong>: ' . esc_html__( 'reachable and authenticated; the body is a JSON-RPC result. Everything is working. If the AI client still fails, the block is on its side (see the 403/406/429 entry above).', 'agent-abilities-for-mcp' ) . '</li>'
+				. '<li><strong>' . esc_html__( '401', 'agent-abilities-for-mcp' ) . '</strong>: ' . esc_html__( 'reached WordPress but auth failed: wrong or expired Application Password, or the Authorization header is being stripped (see the Authentication section). A membership or security plugin that keeps the REST API to signed-in members stops OAuth sign-in, not a correct Application Password; the Connection Doctor on the Connection tab names the plugins it recognises.', 'agent-abilities-for-mcp' ) . '</li>'
+				. '<li><strong>' . esc_html__( '403 / 406 / 429', 'agent-abilities-for-mcp' ) . '</strong>: ' . esc_html__( 'a WAF, CDN, or host security rule is blocking the request before WordPress (see the 403/406/429 entry above).', 'agent-abilities-for-mcp' ) . '</li>'
+				. '<li><strong>' . esc_html__( '404', 'agent-abilities-for-mcp' ) . '</strong>: ' . esc_html__( 'the route is not registered for this URL: flush permalinks (Settings → Permalinks → Save) and confirm you copied the endpoint exactly from the Connection tab.', 'agent-abilities-for-mcp' ) . '</li>'
+				. '<li><strong>' . esc_html__( '5xx', 'agent-abilities-for-mcp' ) . '</strong>: ' . esc_html__( 'a server-side error: check your PHP error log and the host status.', 'agent-abilities-for-mcp' ) . '</li>'
 				. '</ul>',
 				$inline
 			)
@@ -3414,7 +3414,7 @@ function aafm_render_help_tab(): void {
 			__( 'Windows: my client config won\'t start', 'agent-abilities-for-mcp' ),
 			wp_kses(
 				'<p>' . esc_html__( 'Windows MCP clients cannot spawn the npx shim by its name alone. The launcher has to be wrapped so the command resolves:', 'agent-abilities-for-mcp' ) . ' <code>cmd /c npx …</code></p>'
-				. '<p>' . esc_html__( 'You do not need to hand-edit anything - switch to the "Windows" tab in Connection → Step 2 and copy the config it generates. It already wraps the launcher correctly.', 'agent-abilities-for-mcp' ) . '</p>',
+				. '<p>' . esc_html__( 'You do not need to hand-edit anything. Switch to the "Windows" tab in Connection → Step 2 and copy the config it generates. It already wraps the launcher correctly.', 'agent-abilities-for-mcp' ) . '</p>',
 				$inline
 			)
 		);
@@ -3424,9 +3424,9 @@ function aafm_render_help_tab(): void {
 		__( 'My local or staging site won\'t connect (self-signed certificate)', 'agent-abilities-for-mcp' ),
 		wp_kses(
 			'<p>' . esc_html__( 'Local stacks (DDEV, Local, Valet) serve a certificate Node does not trust, so the proxy refuses the TLS handshake. For local testing only, you can tell Node to accept it. The Connection tab already adds this for you when it detects a local site.', 'agent-abilities-for-mcp' ) . '</p>'
-			. '<p>' . esc_html__( 'Quick (least safe) - add this to the config env block:', 'agent-abilities-for-mcp' ) . '</p>'
+			. '<p>' . esc_html__( 'The quickest way, and the least safe, is to add this to the config env block:', 'agent-abilities-for-mcp' ) . '</p>'
 			. aafm_help_copy_line( '"NODE_TLS_REJECT_UNAUTHORIZED": "0"' )
-			. '<p>' . esc_html__( 'Better - point Node at your local CA instead of disabling verification entirely (for example mkcert\'s rootCA.pem):', 'agent-abilities-for-mcp' ) . '</p>'
+			. '<p>' . esc_html__( 'A better way is to point Node at your local CA instead of disabling verification entirely (for example mkcert\'s rootCA.pem):', 'agent-abilities-for-mcp' ) . '</p>'
 			. aafm_help_copy_line( '"NODE_EXTRA_CA_CERTS": "/path/to/rootCA.pem"' )
 			. aafm_help_copy_line( '"NODE_USE_SYSTEM_CA": "1"' )
 			. '<p><strong>' . esc_html__( 'Never use any of these on a production site.', 'agent-abilities-for-mcp' ) . '</strong></p>',
@@ -3466,7 +3466,7 @@ function aafm_render_help_tab(): void {
 		__( 'The "Authorization header reaches WordPress" diagnostic fails', 'agent-abilities-for-mcp' ),
 		wp_kses(
 			'<p>' . esc_html__( 'Some hosts and reverse proxies strip the Authorization header before it reaches PHP, so the Application Password never arrives and auth silently fails. Forward the header at the web-server layer.', 'agent-abilities-for-mcp' ) . '</p>'
-			. '<p><strong>' . esc_html__( 'Apache (.htaccess) - either of these:', 'agent-abilities-for-mcp' ) . '</strong></p>'
+			. '<p><strong>' . esc_html__( 'For Apache (.htaccess), use either of these:', 'agent-abilities-for-mcp' ) . '</strong></p>'
 			. $apache_lines
 			. '<p><strong>' . esc_html__( 'Nginx / FastCGI:', 'agent-abilities-for-mcp' ) . '</strong></p>'
 			. $nginx_lines
@@ -3479,9 +3479,9 @@ function aafm_render_help_tab(): void {
 	aafm_render_help_entry(
 		__( 'The Application Passwords option is missing from my profile', 'agent-abilities-for-mcp' ),
 		wp_kses(
-			'<p>' . esc_html__( 'WordPress core only offers Application Passwords over a secure (https) connection. Behind a TLS-terminating proxy or load balancer, WordPress can see the request as plain HTTP even though the browser is on https - so it hides the option.', 'agent-abilities-for-mcp' ) . '</p>'
+			'<p>' . esc_html__( 'WordPress core only offers Application Passwords over a secure (https) connection. Behind a TLS-terminating proxy or load balancer, WordPress can see the request as plain HTTP even though the browser is on https, so it hides the option.', 'agent-abilities-for-mcp' ) . '</p>'
 			. '<p>' . esc_html__( 'Fix the proxy or HTTPS headers (or your site URL) so WordPress correctly detects https. Forwarding the standard X-Forwarded-Proto header from the proxy is the usual fix.', 'agent-abilities-for-mcp' ) . '</p>'
-			. '<p><strong>' . esc_html__( 'Do not enable Application Passwords over genuine plaintext HTTP in production - the credential would travel unencrypted.', 'agent-abilities-for-mcp' ) . '</strong></p>',
+			. '<p><strong>' . esc_html__( 'Do not enable Application Passwords over genuine plaintext HTTP in production. The credential would travel unencrypted.', 'agent-abilities-for-mcp' ) . '</strong></p>',
 			$inline
 		)
 	);
@@ -3497,7 +3497,7 @@ function aafm_render_help_tab(): void {
 		__( 'My agent sees fewer tools than I expected', 'agent-abilities-for-mcp' ),
 		wp_kses(
 			'<p>' . esc_html__( 'This is intentional least-privilege behaviour. Each connection is filtered by the agent user\'s own capabilities, so the agent only ever sees abilities its role allows: reads need read capabilities; writes need the matching edit, publish, moderate, or manage capabilities.', 'agent-abilities-for-mcp' ) . '</p>'
-			. '<p>' . esc_html__( 'To expose more tools, grant the agent user the role or capabilities those abilities require. Granting more, of course, widens what the agent can do - keep it to what the agent genuinely needs.', 'agent-abilities-for-mcp' ) . '</p>',
+			. '<p>' . esc_html__( 'To expose more tools, grant the agent user the role or capabilities those abilities require. Granting more widens what the agent can do, so keep it to what the agent genuinely needs.', 'agent-abilities-for-mcp' ) . '</p>',
 			$inline
 		)
 	);
@@ -3571,7 +3571,7 @@ function aafm_render_help_tab(): void {
 			. '<li><strong>' . esc_html__( 'Windsurf:', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'add it under its MCP config (mcp_config.json) and refresh the server list.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'Gemini CLI:', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'add it to the mcpServers block in your settings.json.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '</ul>'
-			. '<p>' . esc_html__( 'For the proxy clients, copy the config straight from Connection → Step 2 - do not hand-build it. On Windows, use that tab\'s "Windows" view (it wraps the launcher in cmd /c); for a local or staging site, it adds the certificate handling. Both are covered in the Connecting section above.', 'agent-abilities-for-mcp' ) . '</p>'
+			. '<p>' . esc_html__( 'For the proxy clients, copy the config straight from Connection → Step 2 instead of building it by hand. On Windows, use that tab\'s "Windows" view (it wraps the launcher in cmd /c); for a local or staging site, it adds the certificate handling. Both are covered in the Connecting section above.', 'agent-abilities-for-mcp' ) . '</p>'
 			. '<p><strong>' . esc_html__( 'The Gemini app:', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'We have not found a way to add a custom MCP server in the Gemini app, so there are no steps for it here. Gemini CLI can connect: it runs as a proxy client, like Claude Code, and the Connection tab has a ready-made quickstart for it.', 'agent-abilities-for-mcp' ) . '</p>',
 			$inline
 		)
@@ -3583,9 +3583,9 @@ function aafm_render_help_tab(): void {
 		wp_kses(
 			'<p>' . esc_html__( 'The plugin is built to be safe by default. In plain terms:', 'agent-abilities-for-mcp' ) . '</p>'
 			. '<ul>'
-			. '<li><strong>' . esc_html__( 'No phoning home.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'It never contacts an AI provider or a telemetry service, and your credentials never leave the site - the AI client connects in to you, not the other way round. The one exception is the off-by-default "Upload media from URL" ability: turn it on and it will fetch the exact URL your AI client gives it so that file can be added to your media library.', 'agent-abilities-for-mcp' ) . '</li>'
-			. '<li><strong>' . esc_html__( 'A dedicated low-privilege user.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'The agent authenticates as its own separate WordPress user via an Application Password - not as you, and not as an administrator. You choose that user\'s role, so you set its ceiling.', 'agent-abilities-for-mcp' ) . '</li>'
-			. '<li><strong>' . esc_html__( 'Two locks on every ability.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'An ability works only if you explicitly enabled it on the Abilities tab AND the agent user\'s capabilities allow it. The default is nothing enabled - the agent starts with zero abilities until you turn them on.', 'agent-abilities-for-mcp' ) . '</li>'
+			. '<li><strong>' . esc_html__( 'No phoning home.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'It never contacts an AI provider or a telemetry service, and your credentials never leave the site. The AI client connects in to you, not the other way round. The one exception is the off-by-default "Upload media from URL" ability: turn it on and it will fetch the exact URL your AI client gives it so that file can be added to your media library.', 'agent-abilities-for-mcp' ) . '</li>'
+			. '<li><strong>' . esc_html__( 'A dedicated low-privilege user.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'The agent authenticates as its own separate WordPress user via an Application Password, not as you and not as an administrator. You choose that user\'s role, so you set its ceiling.', 'agent-abilities-for-mcp' ) . '</li>'
+			. '<li><strong>' . esc_html__( 'Two locks on every ability.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'An ability works only if you explicitly enabled it on the Abilities tab AND the agent user\'s capabilities allow it. Nothing is enabled by default, so the agent starts with zero abilities until you turn them on.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'Trash and permanent delete are different abilities.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'Trash abilities (trash a post or page) move content to the Trash, where you can restore it, and the Changes tab lets you revert what agents edited in the last 30 days. Delete abilities erase for good and cannot be undone: deleting a post or page outright, and every media or user deletion, is permanent.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'Tool calls are logged, free text is not.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'Every call to this plugin\'s tools, including denied ones, is recorded on the Activity Log tab. Refusals before a tool is reached, such as repeated failed sign-ins or blocked addresses, are recorded at most 5 times per address in 10 minutes, and tools another plugin publishes to the MCP Adapter\'s default server are not logged. The arguments column holds the argument KEYS only, never the values, and a separate short identifier-only note holds something like an object id or an error code. When another plugin\'s bridged ability fails, its error code is recorded behind a "foreign:" prefix, kept only when it is a short key-shaped string of letters, digits, underscore and hyphen, and never its message or error data. A plugin that builds that code from its own input can put a short fragment of that input there. You can see what was attempted without the log keeping free-text content.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'Optional extra guardrails.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'The Settings tab adds limits you can turn on, such as a per-minute rate limit, an IP allowlist, a force-to-draft switch and a maximum title length. They are off by default, so you turn on only the ones you want.', 'agent-abilities-for-mcp' ) . '</li>'
@@ -3598,7 +3598,7 @@ function aafm_render_help_tab(): void {
 	aafm_render_help_entry(
 		__( 'What does the plugin log, and does it call out to anything?', 'agent-abilities-for-mcp' ),
 		wp_kses(
-			'<p>' . esc_html__( 'The plugin never sends your content, credentials, or other site data anywhere. It can make two outbound requests of its own: the Connection tab\'s same-origin reachability check, and, only if you turn on the "Upload media from URL" ability, a fetch of the URL your AI client supplies so that file can be added to your media library - like any HTTP request, that fetch reveals the URL, your site\'s IP, and its timing to whatever server answers it.', 'agent-abilities-for-mcp' ) . '</p>'
+			'<p>' . esc_html__( 'The plugin never sends your content, credentials, or other site data anywhere. It can make two outbound requests of its own: the Connection tab\'s same-origin reachability check, and, only if you turn on the "Upload media from URL" ability, a fetch of the URL your AI client supplies so that file can be added to your media library. Like any HTTP request, that fetch reveals the URL, your site\'s IP, and its timing to whatever server answers it.', 'agent-abilities-for-mcp' ) . '</p>'
 			. '<p>' . esc_html__( 'The activity log records the argument KEYS of each call (the arguments column never holds the values), a short identifier-only note such as an object id or an error code, and the source IP address of the request. It also records how long a call spent inside the tool, and a denied call records why it was refused. An error code returned by another plugin\'s bridged ability is recorded behind a "foreign:" prefix, kept only when it is a short key-shaped string of letters, digits, underscore and hyphen, and never with its message or error data; a plugin that builds that code from its own input can put a short fragment of that input there. You can clear the log any time from the Activity Log tab. Switch alerts on under Settings, Notifications.', 'agent-abilities-for-mcp' ) . '</p>',
 			$inline
 		)

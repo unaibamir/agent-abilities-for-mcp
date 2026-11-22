@@ -2062,7 +2062,7 @@
 							status.textContent = this.#format(
 								this.#t(
 									'allowlistDropped',
-									'Saved. Dropped %d line(s) that were not a valid IP or range - check the allowlist.'
+									'Saved. Dropped %d line(s) that were not a valid IP or range. Check the allowlist.'
 								),
 								dropped
 							);
@@ -2180,7 +2180,7 @@
 					status.textContent = this.#format(
 						this.#t(
 							'connectionOk',
-							'Reachable (HTTP %1$s) - %2$s tool(s) in your admin view.'
+							'Reachable (HTTP %1$s): %2$s tool(s) in your admin view.'
 						),
 						json.data.http_code,
 						json.data.admin_tool_count

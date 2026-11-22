@@ -219,6 +219,25 @@ function aafm_undo_perm_input_json( array $surface, array $input ): string {
 }
 
 /**
+ * The tool input with its schema's top-level defaults filled in, so the capture reads the object the
+ * ability itself writes: update-term with no taxonomy writes a category, not a term of taxonomy ''.
+ *
+ * @param string              $ability Ability name.
+ * @param array<string,mixed> $input   Tool input.
+ * @return array<string,mixed>
+ */
+function aafm_undo_input_with_defaults( string $ability, array $input ): array {
+	$registered = wp_has_ability( $ability ) ? wp_get_ability( $ability ) : null;
+	$schema     = $registered instanceof \WP_Ability ? $registered->get_input_schema() : array();
+	foreach ( (array) ( $schema['properties'] ?? array() ) as $key => $property ) {
+		if ( ! array_key_exists( $key, $input ) && is_array( $property ) && array_key_exists( 'default', $property ) ) {
+			$input[ $key ] = $property['default'];
+		}
+	}
+	return $input;
+}
+
+/**
  * Read a change's fields, apply the value rules and store the write-ahead pending row.
  *
  * @param array<string,mixed> $base Base handle: ability, row_id, object_type, object_id, field_ids, context, undo_op, perm_input, group_id.
@@ -325,6 +344,7 @@ function aafm_undo_begin_inner( string $ability, array $input, int $row_id ): ?a
 	}
 
 	$surface = $surfaces[ $ability ];
+	$input   = aafm_undo_input_with_defaults( $ability, $input );
 	$base    = array(
 		'ability'     => $ability,
 		'row_id'      => $row_id,

@@ -2174,7 +2174,7 @@
 				if ( json?.success && json.data.redirected ) {
 					status.textContent = this.#t(
 						'connectionRedirected',
-						'The endpoint redirected, so the test stopped before sending your login anywhere else. Run the Connection Doctor to see where it goes.'
+						'The endpoint redirected, so the test stopped before sending your login anywhere else. Run "Check my connection" to see where it goes.'
 					);
 				} else if ( json?.success && json.data.reachable ) {
 					status.textContent = this.#format(

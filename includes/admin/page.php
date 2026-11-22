@@ -239,7 +239,7 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				/* translators: %s: HTTP status code returned by the endpoint. */
 				'connectionNoTools'        => __( 'Endpoint answered HTTP %s but did not return a tool list.', 'agent-abilities-for-mcp' ),
 				'connectionNoLogin'        => __( 'The endpoint is on a different address, so this test ran without your login.', 'agent-abilities-for-mcp' ),
-				'connectionRedirected'     => __( 'The endpoint redirected, so the test stopped before sending your login anywhere else. Run the Connection Doctor to see where it goes.', 'agent-abilities-for-mcp' ),
+				'connectionRedirected'     => __( 'The endpoint redirected, so the test stopped before sending your login anywhere else. Run "Check my connection" to see where it goes.', 'agent-abilities-for-mcp' ),
 				// Connection Doctor.
 				'doctorPass'               => __( 'Pass', 'agent-abilities-for-mcp' ),
 				'doctorWarn'               => __( 'Warning', 'agent-abilities-for-mcp' ),
@@ -3337,7 +3337,7 @@ function aafm_render_help_tab(): void {
 	aafm_render_help_entry(
 		__( 'My client won\'t connect, or the endpoint looks unreachable', 'agent-abilities-for-mcp' ),
 		wp_kses(
-			'<p>' . esc_html__( 'Start on the Connection tab: run Step 3 "Check the endpoint is reachable". If that fails, open Diagnostics on the same tab and confirm "MCP adapter active and compatible" and "MCP REST endpoint registered" both show green.', 'agent-abilities-for-mcp' ) . '</p>'
+			'<p>' . esc_html__( 'Start on the Connection tab: run Step 3 "Check the endpoint is reachable". If that fails, look at the checks listed under it and confirm "MCP adapter active and compatible" and "MCP REST endpoint registered" both show green.', 'agent-abilities-for-mcp' ) . '</p>'
 			. '<p>' . esc_html__( 'The endpoint URL depends on your permalink mode. With pretty permalinks it is the /wp-json/ form; with plain permalinks it is the index.php?rest_route= form. Always copy whatever the Connection tab shows under "Endpoint" rather than typing it by hand:', 'agent-abilities-for-mcp' ) . '</p>'
 			. '<ul>'
 			. '<li><strong>' . esc_html__( 'Pretty:', 'agent-abilities-for-mcp' ) . '</strong> <code>/wp-json/agent-abilities-for-mcp/mcp</code></li>'
@@ -3400,7 +3400,7 @@ function aafm_render_help_tab(): void {
 				. '<p><strong>' . esc_html__( 'How to read the result (the HTTP status on the first line):', 'agent-abilities-for-mcp' ) . '</strong></p>'
 				. '<ul>'
 				. '<li><strong>' . esc_html__( '200', 'agent-abilities-for-mcp' ) . '</strong>: ' . esc_html__( 'reachable and authenticated; the body is a JSON-RPC result. Everything is working. If the AI client still fails, the block is on its side (see the 403/406/429 entry above).', 'agent-abilities-for-mcp' ) . '</li>'
-				. '<li><strong>' . esc_html__( '401', 'agent-abilities-for-mcp' ) . '</strong>: ' . esc_html__( 'reached WordPress but auth failed: wrong or expired Application Password, or the Authorization header is being stripped (see the Authentication section). A membership or security plugin that keeps the REST API to signed-in members stops OAuth sign-in, not a correct Application Password; the Connection Doctor on the Connection tab names the plugins it recognises.', 'agent-abilities-for-mcp' ) . '</li>'
+				. '<li><strong>' . esc_html__( '401', 'agent-abilities-for-mcp' ) . '</strong>: ' . esc_html__( 'reached WordPress but auth failed: wrong or expired Application Password, or the Authorization header is being stripped (see the Authentication section). A membership or security plugin that keeps the REST API to signed-in members stops OAuth sign-in, not a correct Application Password; "Check my connection" on the Connection tab names the plugins it recognises.', 'agent-abilities-for-mcp' ) . '</li>'
 				. '<li><strong>' . esc_html__( '403 / 406 / 429', 'agent-abilities-for-mcp' ) . '</strong>: ' . esc_html__( 'a WAF, CDN, or host security rule is blocking the request before WordPress (see the 403/406/429 entry above).', 'agent-abilities-for-mcp' ) . '</li>'
 				. '<li><strong>' . esc_html__( '404', 'agent-abilities-for-mcp' ) . '</strong>: ' . esc_html__( 'the route is not registered for this URL: flush permalinks (Settings → Permalinks → Save) and confirm you copied the endpoint exactly from the Connection tab.', 'agent-abilities-for-mcp' ) . '</li>'
 				. '<li><strong>' . esc_html__( '5xx', 'agent-abilities-for-mcp' ) . '</strong>: ' . esc_html__( 'a server-side error: check your PHP error log and the host status.', 'agent-abilities-for-mcp' ) . '</li>'

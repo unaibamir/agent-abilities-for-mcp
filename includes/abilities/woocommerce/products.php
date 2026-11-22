@@ -302,12 +302,12 @@ function aafm_wc_product_output_properties(): array {
 					'name'     => array( 'type' => 'string' ),
 					'taxonomy' => array(
 						'type'        => 'boolean',
-						'description' => 'True when this is a global (taxonomy-backed) attribute shared across products, false when it is a custom attribute defined on this product alone. The two behave differently on write: a custom attribute\'s options can be edited through wc-update-product, a global one\'s cannot.',
+						'description' => __( 'True when this is a global (taxonomy-backed) attribute shared across products, false when it is a custom attribute defined on this product alone. The two behave differently on write: a custom attribute\'s options can be edited through wc-update-product, a global one\'s cannot.', 'agent-abilities-for-mcp' ),
 					),
 					'options'  => array(
 						'type'        => 'array',
 						'items'       => array( 'type' => 'string' ),
-						'description' => 'The attribute\'s declared values, always in the form every write path here accepts. For a global attribute these are term SLUGS (the form wc-create-product-variation expects), not term ids or display names; for a custom attribute they are the literal option strings.',
+						'description' => __( 'The attribute\'s declared values, always in the form every write path here accepts. For a global attribute these are term SLUGS (the form wc-create-product-variation expects), not term ids or display names; for a custom attribute they are the literal option strings.', 'agent-abilities-for-mcp' ),
 					),
 				),
 			),
@@ -341,7 +341,7 @@ function aafm_args_wc_list_products(): array {
 				array(
 					'status' => array(
 						'type'        => 'string',
-						'description' => "Status filter; 'any' returns all states.",
+						'description' => __( "Status filter; 'any' returns all states.", 'agent-abilities-for-mcp' ),
 						'enum'        => array( 'any', 'publish', 'draft', 'pending', 'private' ),
 					),
 				),
@@ -546,7 +546,7 @@ function aafm_wc_product_write_properties(): array {
 		),
 		'status'            => array(
 			'type'        => 'string',
-			'description' => "The product's publish state.",
+			'description' => __( "The product's publish state.", 'agent-abilities-for-mcp' ),
 			'enum'        => array( 'publish', 'draft', 'pending', 'private' ),
 		),
 		'description'       => array(
@@ -570,14 +570,14 @@ function aafm_wc_product_write_properties(): array {
 			// `_regular_price` by sending exactly that. A pattern that only matched a populated
 			// decimal made that documented route impossible to call.
 			'pattern'     => '^$|^\\d+(\\.\\d{1,2})?$',
-			'description' => 'A decimal price as a string, e.g. "19.99" (no currency symbol or thousands separator), or an empty string to clear the price.',
+			'description' => __( 'A decimal price as a string, e.g. "19.99" (no currency symbol or thousands separator), or an empty string to clear the price.', 'agent-abilities-for-mcp' ),
 		),
 		'sale_price'        => array(
 			'type'        => 'string',
 			// Same reasoning as regular_price above: an empty string is the normal way to end a
 			// sale (clear the sale price) rather than an invalid one.
 			'pattern'     => '^$|^\\d+(\\.\\d{1,2})?$',
-			'description' => 'A decimal price as a string, e.g. "14.99" (must be at or below regular_price to take effect), or an empty string to clear the sale price.',
+			'description' => __( 'A decimal price as a string, e.g. "14.99" (must be at or below regular_price to take effect), or an empty string to clear the sale price.', 'agent-abilities-for-mcp' ),
 		),
 		'stock_status'      => array(
 			'type'        => 'string',
@@ -587,7 +587,7 @@ function aafm_wc_product_write_properties(): array {
 		'stock_quantity'    => array(
 			'type'        => 'integer',
 			'minimum'     => 0,
-			'description' => 'On-hand quantity (only applied when manage_stock is true).',
+			'description' => __( 'On-hand quantity (only applied when manage_stock is true).', 'agent-abilities-for-mcp' ),
 		),
 		'manage_stock'      => array(
 			'type'        => 'boolean',

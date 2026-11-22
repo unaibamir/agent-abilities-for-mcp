@@ -624,7 +624,7 @@ function aafm_args_wc_update_payment_gateway(): array {
 				),
 				'enabled'     => array(
 					'type'        => 'boolean',
-					'description' => 'Whether the gateway is enabled, as a boolean (true/false). Note: this differs from the shipping-method abilities, where the equivalent enabled flag is the string "yes"/"no".',
+					'description' => __( 'Whether the gateway is enabled, as a boolean (true/false). Note: this differs from the shipping-method abilities, where the equivalent enabled flag is the string "yes"/"no".', 'agent-abilities-for-mcp' ),
 				),
 				'title'       => array(
 					'type'        => 'string',

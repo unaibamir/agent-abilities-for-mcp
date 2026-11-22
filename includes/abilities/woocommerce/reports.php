@@ -115,11 +115,11 @@ function aafm_args_wc_get_sales_report(): array {
 			'properties'           => array(
 				'start_date' => array(
 					'type'        => 'string',
-					'description' => 'Start date in Y-m-d format. Defaults to the first day of the current month.',
+					'description' => __( 'Start date in Y-m-d format. Defaults to the first day of the current month.', 'agent-abilities-for-mcp' ),
 				),
 				'end_date'   => array(
 					'type'        => 'string',
-					'description' => 'End date in Y-m-d format. Defaults to today.',
+					'description' => __( 'End date in Y-m-d format. Defaults to today.', 'agent-abilities-for-mcp' ),
 				),
 			),
 		),

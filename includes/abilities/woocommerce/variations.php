@@ -265,7 +265,7 @@ function aafm_args_wc_list_product_variations(): array {
 					'product_id' => array(
 						'type'        => 'integer',
 						'minimum'     => 1,
-						'description' => 'The parent (variable) product id.',
+						'description' => __( 'The parent (variable) product id.', 'agent-abilities-for-mcp' ),
 					),
 				),
 				aafm_pagination_schema_props(
@@ -433,7 +433,7 @@ function aafm_wc_variation_write_properties(): array {
 	return array(
 		'status'         => array(
 			'type'        => 'string',
-			'description' => "The variation's publish state.",
+			'description' => __( "The variation's publish state.", 'agent-abilities-for-mcp' ),
 			'enum'        => array( 'publish', 'private' ),
 		),
 		'description'    => array(
@@ -447,13 +447,13 @@ function aafm_wc_variation_write_properties(): array {
 		'regular_price'  => array(
 			'type'        => 'string',
 			'pattern'     => '^\\d+(\\.\\d{1,2})?$',
-			'description' => 'A decimal price as a string, e.g. "19.99" (no currency symbol or thousands separator).',
+			'description' => __( 'A decimal price as a string, e.g. "19.99" (no currency symbol or thousands separator).', 'agent-abilities-for-mcp' ),
 		),
 		'sale_price'     => array(
 			'type'        => 'string',
 			// An empty string ends the sale, the same as on wc-update-product.
 			'pattern'     => '^$|^\\d+(\\.\\d{1,2})?$',
-			'description' => 'A decimal price as a string, e.g. "14.99" (must be at or below regular_price to take effect), or an empty string to clear the sale price.',
+			'description' => __( 'A decimal price as a string, e.g. "14.99" (must be at or below regular_price to take effect), or an empty string to clear the sale price.', 'agent-abilities-for-mcp' ),
 		),
 		'stock_status'   => array(
 			'type'        => 'string',
@@ -463,7 +463,7 @@ function aafm_wc_variation_write_properties(): array {
 		'stock_quantity' => array(
 			'type'        => 'integer',
 			'minimum'     => 0,
-			'description' => 'On-hand quantity (only applied when manage_stock is true).',
+			'description' => __( 'On-hand quantity (only applied when manage_stock is true).', 'agent-abilities-for-mcp' ),
 		),
 		'manage_stock'   => array(
 			'type'        => 'boolean',
@@ -921,7 +921,7 @@ function aafm_args_wc_create_product_variation(): array {
 	$properties['product_id'] = array(
 		'type'        => 'integer',
 		'minimum'     => 1,
-		'description' => 'The parent (variable) product id the variation attaches to.',
+		'description' => __( 'The parent (variable) product id the variation attaches to.', 'agent-abilities-for-mcp' ),
 	);
 
 	return array(

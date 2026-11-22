@@ -315,7 +315,7 @@ function aafm_args_wc_list_orders(): array {
 					'status' => array(
 						'type'        => 'string',
 						'enum'        => array( 'any', 'pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed', 'checkout-draft' ),
-						'description' => "Order status to filter by; 'any' (the default) covers every registered order status (including custom ones) but never the internal checkout-draft status, which must be requested explicitly. Uses the short form without the wc- prefix.",
+						'description' => __( "Order status to filter by; 'any' (the default) covers every registered order status (including custom ones) but never the internal checkout-draft status, which must be requested explicitly. Uses the short form without the wc- prefix.", 'agent-abilities-for-mcp' ),
 					),
 				)
 			),
@@ -501,7 +501,7 @@ function aafm_wc_order_write_properties(): array {
 	return array(
 		'status'        => array(
 			'type'        => 'string',
-			'description' => 'Order status slug (e.g. processing, completed, on-hold). Must match a key returned by wc_get_order_statuses().',
+			'description' => __( 'Order status slug (e.g. processing, completed, on-hold). Must match a key returned by wc_get_order_statuses().', 'agent-abilities-for-mcp' ),
 		),
 		'customer_id'   => array(
 			'type'        => 'integer',

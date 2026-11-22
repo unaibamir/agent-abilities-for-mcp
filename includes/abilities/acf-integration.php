@@ -1902,7 +1902,7 @@ function aafm_args_acf_get_post_fields(): array {
 					// Keys are the site-defined ACF field names/keys, so the map is open; values follow
 					// each field's ACF Return Format and are therefore not individually typed here (A3).
 					'additionalProperties' => true,
-					'description'          => 'A map of ACF field name (or field key) to its hydrated value. Keys are defined by the site\'s ACF field groups; each value follows that field\'s ACF Return Format.',
+					'description'          => __( 'A map of ACF field name (or field key) to its hydrated value. Keys are defined by the site\'s ACF field groups; each value follows that field\'s ACF Return Format.', 'agent-abilities-for-mcp' ),
 				),
 			),
 		),
@@ -1978,7 +1978,7 @@ function aafm_args_acf_update_post_fields(): array {
 					// Keys are the site-defined ACF field names/keys, so the map is open; values follow
 					// each field's ACF Return Format and are therefore not individually typed here (A3).
 					'additionalProperties' => true,
-					'description'          => 'A map of ACF field name (or field key) to its hydrated value. Keys are defined by the site\'s ACF field groups; each value follows that field\'s ACF Return Format.',
+					'description'          => __( 'A map of ACF field name (or field key) to its hydrated value. Keys are defined by the site\'s ACF field groups; each value follows that field\'s ACF Return Format.', 'agent-abilities-for-mcp' ),
 				),
 			),
 		),
@@ -2075,7 +2075,7 @@ function aafm_args_acf_get_term_fields(): array {
 					// Keys are the site-defined ACF field names/keys, so the map is open; values follow
 					// each field's ACF Return Format and are therefore not individually typed here (A3).
 					'additionalProperties' => true,
-					'description'          => 'A map of ACF field name (or field key) to its hydrated value. Keys are defined by the site\'s ACF field groups; each value follows that field\'s ACF Return Format.',
+					'description'          => __( 'A map of ACF field name (or field key) to its hydrated value. Keys are defined by the site\'s ACF field groups; each value follows that field\'s ACF Return Format.', 'agent-abilities-for-mcp' ),
 				),
 			),
 		),
@@ -2145,7 +2145,7 @@ function aafm_args_acf_update_term_fields(): array {
 					// Keys are the site-defined ACF field names/keys, so the map is open; values follow
 					// each field's ACF Return Format and are therefore not individually typed here (A3).
 					'additionalProperties' => true,
-					'description'          => 'A map of ACF field name (or field key) to its hydrated value. Keys are defined by the site\'s ACF field groups; each value follows that field\'s ACF Return Format.',
+					'description'          => __( 'A map of ACF field name (or field key) to its hydrated value. Keys are defined by the site\'s ACF field groups; each value follows that field\'s ACF Return Format.', 'agent-abilities-for-mcp' ),
 				),
 			),
 		),
@@ -2248,7 +2248,7 @@ function aafm_args_acf_get_user_fields(): array {
 					// Keys are the site-defined ACF field names/keys, so the map is open; values follow
 					// each field's ACF Return Format and are therefore not individually typed here (A3).
 					'additionalProperties' => true,
-					'description'          => 'A map of ACF field name (or field key) to its hydrated value. Keys are defined by the site\'s ACF field groups; each value follows that field\'s ACF Return Format.',
+					'description'          => __( 'A map of ACF field name (or field key) to its hydrated value. Keys are defined by the site\'s ACF field groups; each value follows that field\'s ACF Return Format.', 'agent-abilities-for-mcp' ),
 				),
 			),
 		),
@@ -2322,7 +2322,7 @@ function aafm_args_acf_update_user_fields(): array {
 					// Keys are the site-defined ACF field names/keys, so the map is open; values follow
 					// each field's ACF Return Format and are therefore not individually typed here (A3).
 					'additionalProperties' => true,
-					'description'          => 'A map of ACF field name (or field key) to its hydrated value. Keys are defined by the site\'s ACF field groups; each value follows that field\'s ACF Return Format.',
+					'description'          => __( 'A map of ACF field name (or field key) to its hydrated value. Keys are defined by the site\'s ACF field groups; each value follows that field\'s ACF Return Format.', 'agent-abilities-for-mcp' ),
 				),
 			),
 		),

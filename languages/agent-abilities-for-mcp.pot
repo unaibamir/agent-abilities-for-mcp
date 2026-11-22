@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-22T04:54:19+05:00\n"
+"POT-Creation-Date: 2026-11-23T03:00:32+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -86,7 +86,7 @@ msgid "Get user ACF fields"
 msgstr ""
 
 #: includes/abilities/acf-integration.php:105
-msgid "Reads all of a user's ACF field values as a hydrated map keyed by field name. A field of the user_email type returns the real email address under the integration disclaimer. Requires edit access to that user."
+msgid "Reads all of a user's ACF field values as a hydrated map keyed by field name. A field of the user_email type returns the real email address under the integration disclaimer. Requires the edit-users capability and edit access to that user."
 msgstr ""
 
 #: includes/abilities/acf-integration.php:112
@@ -94,7 +94,7 @@ msgid "Update user ACF fields"
 msgstr ""
 
 #: includes/abilities/acf-integration.php:113
-msgid "Writes ACF field values on a user by field key, each value sanitized for its field type. Requires edit access to that user."
+msgid "Writes ACF field values on a user by field key, each value sanitized for its field type. Requires the edit-users capability and edit access to that user."
 msgstr ""
 
 #: includes/abilities/acf-integration.php:1028
@@ -163,6 +163,15 @@ msgstr ""
 msgid "ID of the post whose ACF field values to read. The current user must have edit access to it."
 msgstr ""
 
+#: includes/abilities/acf-integration.php:1905
+#: includes/abilities/acf-integration.php:1981
+#: includes/abilities/acf-integration.php:2078
+#: includes/abilities/acf-integration.php:2148
+#: includes/abilities/acf-integration.php:2251
+#: includes/abilities/acf-integration.php:2325
+msgid "A map of ACF field name (or field key) to its hydrated value. Keys are defined by the site's ACF field groups; each value follows that field's ACF Return Format."
+msgstr ""
+
 #: includes/abilities/acf-integration.php:1961
 msgid "ID of the post whose ACF field values to write. The current user must have edit access to it."
 msgstr ""
@@ -217,7 +226,7 @@ msgstr ""
 
 #: includes/abilities/activity-log.php:66
 #: includes/abilities/avada-elements.php:716
-#: includes/abilities/avada.php:1660
+#: includes/abilities/avada.php:1670
 #: includes/abilities/blocks.php:153
 #: includes/abilities/blocks.php:258
 #: includes/abilities/comments.php:104
@@ -346,7 +355,7 @@ msgid "Update an Avada element"
 msgstr ""
 
 #: includes/abilities/avada-elements.php:64
-msgid "Changes the settings or the inner text of one element on an Avada page, layout section, library item, form or off canvas panel, named by its index and by the tag and fingerprint avada-get-page-content returned with include_structure. set_atts sets settings by the names avada-list-elements gives, each value in the input form of its kind (an image as an attachment id under image_id, which writes the id and the URL together; a padding side such as padding_top as a CSS length); remove_atts takes settings off the element so Avada uses their default; text replaces the inner content of an element with no child elements. A double quote, a square bracket, two spaces in a row or a non-breaking space in a text setting is refused, because Avada's builder drops or changes it on its next save. Only a user who may post unfiltered HTML can put square brackets, percent-encoded brackets or data-* attributes in body text. Refused: a stale index or fingerprint, an element that shows a global library item (edit the item itself), a setting driven by dynamic data, a setting the element does not have or that cannot be written (typography and dynamic data cannot), a value its kind does not accept, and any change that would add or remove an element. Code blocks and settings that can carry script, such as link_attributes and custom attributes, need a user who may post unfiltered HTML. A save that would change other content for this user is refused, and nothing is saved. When a revision is kept, restore_revision_id brings the page back through restore-revision; the response also returns the element's new fingerprint and the page fingerprint. The outline stops at 2,000 elements. Not undoable from this plugin's change history. Requires edit access to the post, and for a layout section a user who can manage site options; Avada's Role Manager settings are not applied. Only while Avada is active."
+msgid "Changes the settings or the inner text of one element on an Avada page, layout section, library item, form or off canvas panel, named by its index and by the tag and fingerprint avada-get-page-content returned with include_structure. set_atts sets settings by the names avada-list-elements gives, each value in the input form of its kind (an image as an attachment id under image_id, which writes the id and the URL together; a padding side such as padding_top as a CSS length); remove_atts takes settings off the element so Avada uses their default; text replaces the inner content of an element with no child elements. A double quote, a square bracket, two spaces in a row or a non-breaking space in a text setting is refused, because Avada's builder drops or changes it on its next save. Only a user who may post unfiltered HTML can put square brackets, percent-encoded brackets or data-* attributes in body text. Refused: a stale index or fingerprint, an element that shows a global library item (edit the item itself), a setting driven by dynamic data, a setting the element does not have or that cannot be written (typography and dynamic data cannot), a value its kind does not accept, and any change that would add or remove an element. Code blocks and settings that can carry script, such as link_attributes and custom attributes, need a user who may post unfiltered HTML. A save that would change other content for this user is refused, and nothing is saved. When a revision is kept, restore_revision_id brings the page back through restore-revision; the response also returns the element's new fingerprint and the page fingerprint. The outline stops at 2,000 elements. Not undoable from this plugin's change history. Requires edit access to the post, for a layout section a user who can manage site options, and for a global library item the edit_private_posts capability; Avada's Role Manager settings are not applied. Only while Avada is active."
 msgstr ""
 
 #: includes/abilities/avada-elements.php:71
@@ -354,7 +363,7 @@ msgid "Insert an Avada element"
 msgstr ""
 
 #: includes/abilities/avada-elements.php:72
-msgid "Adds one element, with its children, to an Avada page, layout section, library item, form or off canvas panel: before or after an element named by its index and fingerprint from avada-get-page-content with include_structure, or as that element's first or last child. element takes tag, atts (setting names and input forms from avada-list-elements), text and children. Every setting the element has is written with its default, as Avada's builder writes a new element; empty ones are left out when Avada's remove empty attributes setting is on. A container takes rows, a row takes columns, a column takes elements or a Nested Columns element, a Nested Columns element takes Nested Column elements, and a parent element such as tabs takes only its own child element; a column needs type, its width, such as 1_2. Refused: an element type Avada's element map does not list, a place inside an element that shows a global library item, and a setting or value avada-update-element would refuse. A double quote, a square bracket, two spaces in a row or a non-breaking space in a text setting is refused. Code blocks and settings that can carry script need a user who may post unfiltered HTML, and so do square brackets, percent-encoded brackets and data-* attributes in body text. page_fingerprint must be the one from the last read or write; the response returns the new one with the new element's index and fingerprint. An empty post takes an insert with no anchor and is then marked as an Avada page. At most 50 elements, nested at most 6 deep. A save that would change other content for this user is refused, and nothing is saved. When a revision is kept, restore_revision_id brings the page back through restore-revision. Not undoable from this plugin's change history. Requires edit access to the post, and for a layout section a user who can manage site options; Avada's Role Manager settings are not applied. Only while Avada is active."
+msgid "Adds one element, with its children, to an Avada page, layout section, library item, form or off canvas panel: before or after an element named by its index and fingerprint from avada-get-page-content with include_structure, or as that element's first or last child. element takes tag, atts (setting names and input forms from avada-list-elements), text and children. Every setting the element has is written with its default, as Avada's builder writes a new element; empty ones are left out when Avada's remove empty attributes setting is on. A container takes rows, a row takes columns, a column takes elements or a Nested Columns element, a Nested Columns element takes Nested Column elements, and a parent element such as tabs takes only its own child element; a column needs type, its width, such as 1_2. Refused: an element type Avada's element map does not list, a place inside an element that shows a global library item, and a setting or value avada-update-element would refuse. A double quote, a square bracket, two spaces in a row or a non-breaking space in a text setting is refused. Code blocks and settings that can carry script need a user who may post unfiltered HTML, and so do square brackets, percent-encoded brackets and data-* attributes in body text. page_fingerprint must be the one from the last read or write; the response returns the new one with the new element's index and fingerprint. An empty post takes an insert with no anchor and is then marked as an Avada page. At most 50 elements, nested at most 6 deep. A save that would change other content for this user is refused, and nothing is saved. When a revision is kept, restore_revision_id brings the page back through restore-revision. Not undoable from this plugin's change history. Requires edit access to the post, for a layout section a user who can manage site options, and for a global library item the edit_private_posts capability; Avada's Role Manager settings are not applied. Only while Avada is active."
 msgstr ""
 
 #: includes/abilities/avada-elements.php:79
@@ -362,7 +371,7 @@ msgid "Move an Avada element"
 msgstr ""
 
 #: includes/abilities/avada-elements.php:80
-msgid "Moves one element, with its children, to a new place on the same Avada page, layout section, library item, form or off canvas panel: before or after another element, or as its first or last child. The element and the anchor are each named by index and fingerprint from avada-get-page-content with include_structure. The element's stored text moves byte for byte; nothing is rewritten. A move to a new parent follows Avada's nesting (a container takes rows, a row takes columns, a column takes elements or a Nested Columns element, a Nested Columns element takes Nested Column elements, a parent element such as tabs takes only its own child element), and a reorder under the same parent is always allowed. Refused: a move into the element itself or one of its children, an element type Avada's element map does not list, a place inside an element that shows a global library item, and a move that would leave a container with no row or a row with no column. A move to the place the element already has saves nothing and returns moved false. page_fingerprint must be the one from the last read or write; the response returns the new one with the element's new index and fingerprint. A save that would change other content for this user is refused, and nothing is saved. When a revision is kept, restore_revision_id brings the page back through restore-revision. Not undoable from this plugin's change history. Requires edit access to the post, and for a layout section a user who can manage site options; Avada's Role Manager settings are not applied. Only while Avada is active."
+msgid "Moves one element, with its children, to a new place on the same Avada page, layout section, library item, form or off canvas panel: before or after another element, or as its first or last child. The element and the anchor are each named by index and fingerprint from avada-get-page-content with include_structure. The element's stored text moves byte for byte; nothing is rewritten. A move to a new parent follows Avada's nesting (a container takes rows, a row takes columns, a column takes elements or a Nested Columns element, a Nested Columns element takes Nested Column elements, a parent element such as tabs takes only its own child element), and a reorder under the same parent is always allowed. Refused: a move into the element itself or one of its children, an element type Avada's element map does not list, a place inside an element that shows a global library item, and a move that would leave a container with no row or a row with no column. A move to the place the element already has saves nothing and returns moved false. page_fingerprint must be the one from the last read or write; the response returns the new one with the element's new index and fingerprint. A save that would change other content for this user is refused, and nothing is saved. When a revision is kept, restore_revision_id brings the page back through restore-revision. Not undoable from this plugin's change history. Requires edit access to the post, for a layout section a user who can manage site options, and for a global library item the edit_private_posts capability; Avada's Role Manager settings are not applied. Only while Avada is active."
 msgstr ""
 
 #: includes/abilities/avada-elements.php:87
@@ -370,7 +379,7 @@ msgid "Remove an Avada element"
 msgstr ""
 
 #: includes/abilities/avada-elements.php:88
-msgid "Removes one element, with its children, from an Avada page, layout section or library item, named by its index and fingerprint from avada-get-page-content with include_structure. Every other byte of the page stays as it was. Refused before anything is saved when no revision could bring the element back: a form or an off canvas panel (they keep no revisions), revisions switched off, or a site that keeps only 1 revision per post. Also refused: the page's last top level container, or a library item's only top level element, an element inside an element that shows a global library item, and a removal that would leave a container with no row or a row with no column. page_fingerprint must be the one from the last read or write; the response returns the new one and the number of elements removed. A save that would change other content for this user is refused, and nothing is saved. restore_revision_id brings the page back through restore-revision. Not undoable from this plugin's change history. Requires edit access to the post, and for a layout section a user who can manage site options; Avada's Role Manager settings are not applied. Only while Avada is active."
+msgid "Removes one element, with its children, from an Avada page, layout section or library item, named by its index and fingerprint from avada-get-page-content with include_structure. Every other byte of the page stays as it was. Refused before anything is saved when no revision could bring the element back: a form or an off canvas panel (they keep no revisions), revisions switched off, or a site that keeps only 1 revision per post. Also refused: the page's last top level container, or a library item's only top level element, an element inside an element that shows a global library item, and a removal that would leave a container with no row or a row with no column. page_fingerprint must be the one from the last read or write; the response returns the new one and the number of elements removed. A save that would change other content for this user is refused, and nothing is saved. restore_revision_id brings the page back through restore-revision. Not undoable from this plugin's change history. Requires edit access to the post, for a layout section a user who can manage site options, and for a global library item the edit_private_posts capability; Avada's Role Manager settings are not applied. Only while Avada is active."
 msgstr ""
 
 #: includes/abilities/avada-elements.php:105
@@ -610,7 +619,7 @@ msgid "Update Avada page CSS"
 msgstr ""
 
 #: includes/abilities/avada-site.php:63
-msgid "Sets the custom CSS of one Avada page, layout section or library item, the CSS field of Avada's builder settings for that page. The value given replaces the page's existing CSS, and an empty string removes it; previous returns the old CSS, which is the way back; previous_restorable is false when the earlier CSS holds a form this tool refuses, so it cannot be sent back. CSS that holds markup is refused, as WordPress refuses it in custom CSS, and so is a \"<\" or a percent-encoded sequence such as %20, which Avada rewrites or removes when it prints page CSS; any other CSS is stored exactly as sent. A value equal to what is stored is left alone and changed is false. No revision is kept, and the change is not undoable from this plugin's change history. Requires edit access to the post and a user who may post unfiltered HTML; Avada's Role Manager is not applied. Only while Avada is active."
+msgid "Sets the custom CSS of one Avada page, layout section or library item, the CSS field of Avada's builder settings for that page. The value given replaces the page's existing CSS, and an empty string removes it; previous returns the old CSS, which is the way back; previous_restorable is false when the earlier CSS holds a form this tool refuses, so it cannot be sent back. CSS that holds markup is refused, as WordPress refuses it in custom CSS, and so is a \"<\" or a percent-encoded sequence such as %20, which Avada rewrites or removes when it prints page CSS; any other CSS is stored exactly as sent. A value equal to what is stored is left alone and changed is false. No revision is kept, and the change is not undoable from this plugin's change history. Requires edit access to the post and a user who may post unfiltered HTML; a layout section also needs a user who can manage site options, and a global library item the edit_private_posts capability. Avada's Role Manager is not applied. Only while Avada is active."
 msgstr ""
 
 #: includes/abilities/avada-site.php:70
@@ -618,7 +627,7 @@ msgid "Update Avada page options"
 msgstr ""
 
 #: includes/abilities/avada-site.php:71
-msgid "Sets or removes Avada page options on one post, the settings of Avada's page options panel: layout, title bar, sidebars, slider, header, footer, off canvas, form appearance, steps and confirmation, SEO and template settings from the fixed list avada-get-page-content returns with include_page_options. set maps option ids to values and remove lists ids to drop, so Avada's default applies; give at least one. Every other stored option is kept. A choice is its stored value, a color a hex, rgba, hsla or Avada color variable, an image an attachment id, and a multi choice a list. Text may hold no straight double quote or square bracket; for a user who may not post unfiltered HTML, a text or text area value WordPress would filter is refused, never stored altered. Option groups stored as several sub-values (dimensions, typography, sortable lists, media and display conditions) are not writable, and form notification, submission and privacy settings and code fields are never reachable. An empty value or default removes the option, as Avada's own save does. The old value of every option that changed comes back in previous, null where none was stored; send it back as set to undo the change. That brings back every value as Avada reads it, but not always the same stored data: an option stored as default comes back as no stored option, which Avada treats the same, and options restored after a remove may be stored in another order. A value equal to what is stored is left alone and not listed in changed. No revision is kept, and the change is not undoable from this plugin's change history. Needs the Avada theme active and a post Avada owns, one of Avada's own types, or a page, post, portfolio item, Avada Slider slide or Elastic Slider slide that no other builder owns; a portfolio item or slide also needs its content type exposed in the Content sub-tab of the Abilities tab first. Requires edit access to the post; layout sections need a user who can manage site options. Avada's Role Manager is not applied. Only while Avada is active."
+msgid "Sets or removes Avada page options on one post, the settings of Avada's page options panel: layout, title bar, sidebars, slider, header, footer, off canvas, form appearance, steps and confirmation, SEO and template settings from the fixed list avada-get-page-content returns with include_page_options. set maps option ids to values and remove lists ids to drop, so Avada's default applies; give at least one. Every other stored option is kept. A choice is its stored value, a color a hex, rgba, hsla or Avada color variable, an image an attachment id, and a multi choice a list. Text may hold no straight double quote or square bracket; for a user who may not post unfiltered HTML, a text or text area value WordPress would filter is refused, never stored altered. Option groups stored as several sub-values (dimensions, typography, sortable lists, media and display conditions) are not writable, and form notification, submission and privacy settings and code fields are never reachable. An empty value or default removes the option, as Avada's own save does. The old value of every option that changed comes back in previous, null where none was stored; send it back as set to undo the change. That brings back every value as Avada reads it, but not always the same stored data: an option stored as default comes back as no stored option, which Avada treats the same, and options restored after a remove may be stored in another order. A value equal to what is stored is left alone and not listed in changed. No revision is kept, and the change is not undoable from this plugin's change history. Needs the Avada theme active and a post Avada owns, one of Avada's own types, or a page, post, portfolio item, Avada Slider slide or Elastic Slider slide that no other builder owns; a portfolio item or slide also needs its content type exposed in the Content sub-tab of the Abilities tab first. Requires edit access to the post; layout sections need a user who can manage site options, and a global library item the edit_private_posts capability. Avada's Role Manager is not applied. Only while Avada is active."
 msgstr ""
 
 #: includes/abilities/avada-site.php:78
@@ -1006,81 +1015,85 @@ msgstr ""
 msgid "This post is not an Avada page. Use replace-in-post for an ordinary post, and edit a page built with another builder in that builder. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada.php:1240
+#: includes/abilities/avada.php:1239
+msgid "This page's shortcodes cannot be read safely, so its text cannot be replaced here; avada-get-page-content with include_structure reports structure_status unparseable for it. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/avada.php:1250
 msgid "That replacement would change the Fusion Builder shortcode structure rather than its text. Choose a search term that appears in plain text between or inside elements, not one that would alter a shortcode tag, its self-closing form, or an attribute. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/avada.php:1296
+#: includes/abilities/avada.php:1306
 #: includes/abilities/posts.php:1857
-#: includes/abilities/wpbakery.php:746
+#: includes/abilities/wpbakery.php:756
 msgid "The replacement could not be confirmed as saved."
 msgstr ""
 
-#: includes/abilities/avada.php:1344
+#: includes/abilities/avada.php:1354
 msgid "When false, each layout is returned without its conditions."
 msgstr ""
 
-#: includes/abilities/avada.php:1359
+#: includes/abilities/avada.php:1369
 msgid "The layout post id, or \"global\" for the Global Layout."
 msgstr ""
 
-#: includes/abilities/avada.php:1365
+#: includes/abilities/avada.php:1375
 msgid "Position in the order Avada checks layouts, from 0. Avada checks them all and uses the last layout whose conditions match; the Global Layout applies only when none match."
 msgstr ""
 
-#: includes/abilities/avada.php:1370
+#: includes/abilities/avada.php:1380
 msgid "unparseable: Avada cannot read this layout's stored data, so no sections or conditions are returned for it."
 msgstr ""
 
-#: includes/abilities/avada.php:1374
+#: includes/abilities/avada.php:1384
 msgid "Keyed by section type (header, page_title_bar, content, footer). Only when parse_status is ok."
 msgstr ""
 
-#: includes/abilities/avada.php:1379
+#: includes/abilities/avada.php:1389
 msgid "The stored conditions, unchanged: mode (include or exclude), type, the value under the key named by type, and parent for a child condition. Only when parse_status is ok and include_conditions is true."
 msgstr ""
 
-#: includes/abilities/avada.php:1469
+#: includes/abilities/avada.php:1479
 msgid "Global Layout"
 msgstr ""
 
-#: includes/abilities/avada.php:1558
+#: includes/abilities/avada.php:1568
 msgid "Only these options. Omit for the whole list."
 msgstr ""
 
-#: includes/abilities/avada.php:1569
+#: includes/abilities/avada.php:1579
 msgid "Option key to its stored value, unchanged."
 msgstr ""
 
-#: includes/abilities/avada.php:1574
+#: includes/abilities/avada.php:1584
 msgid "Requested keys with no stored value. Avada's built-in default applies to them."
 msgstr ""
 
-#: includes/abilities/avada.php:1604
+#: includes/abilities/avada.php:1614
 msgid "The Avada theme is not active, so there are no Avada Global Options to read."
 msgstr ""
 
-#: includes/abilities/avada.php:1614
+#: includes/abilities/avada.php:1624
 msgid "Avada has not stored its Global Options yet. Open Avada > Options in wp-admin once, then try again."
 msgstr ""
 
-#: includes/abilities/avada.php:1621
+#: includes/abilities/avada.php:1631
 msgid "The Avada Global Options could not be read."
 msgstr ""
 
-#: includes/abilities/avada.php:1659
+#: includes/abilities/avada.php:1669
 msgid "Number of items per page, clamped to the 1-100 range regardless of the value requested. Defaults to 20 when omitted."
 msgstr ""
 
-#: includes/abilities/avada.php:1667
+#: includes/abilities/avada.php:1677
 msgid "Only one library category, or templates for full-page templates. Defaults to all."
 msgstr ""
 
-#: includes/abilities/avada.php:1671
+#: includes/abilities/avada.php:1681
 msgid "Free-text search using WordPress's normal post search, matched against the item's title and content."
 msgstr ""
 
-#: includes/abilities/avada.php:1676
+#: includes/abilities/avada.php:1686
 msgid "When true, each item also carries content, its raw Fusion Builder markup, unrendered. A global item is listed without its content unless the user can edit private posts."
 msgstr ""
 
@@ -1207,7 +1220,7 @@ msgstr ""
 
 #: includes/abilities/changes.php:35
 #: includes/admin/disclosures.php:68
-msgid "Reverts one change this connection made in the last 24 hours, by the id list-changes gave. It puts back the earlier value of the fields that change touched, only if nothing else has edited them since, and it checks again that this connection may still make that edit. Undoing a create moves the item to the Trash. An undo cannot itself be undone from here, and notifications, webhooks and anything already read are not recalled. One change per call, 30 calls an hour. Off by default."
+msgid "Reverts one change this connection made in the last 24 hours, by the id list-changes gave. It puts back the earlier value of the fields that change touched, only if nothing else has edited them since, and it checks again that this connection may still make that edit. Undoing a create moves the item to the Trash. An undo cannot itself be undone from here, and notifications, webhooks and anything already read are not recalled. One change per call, 30 calls an hour."
 msgstr ""
 
 #: includes/abilities/changes.php:60
@@ -1416,7 +1429,7 @@ msgid "Get media"
 msgstr ""
 
 #: includes/abilities/media.php:24
-msgid "List media library items (URL, alt, mime, dimensions). Response includes total (the full match count)."
+msgid "List media library items (URL, alt, mime, dimensions). Response includes total (the full match count). Without the edit-others-posts capability, only the caller's own uploads are listed."
 msgstr ""
 
 #: includes/abilities/media.php:31
@@ -1424,7 +1437,7 @@ msgid "Get media item"
 msgstr ""
 
 #: includes/abilities/media.php:32
-msgid "Read one media item by id: caption, description, date, filesize, parent, and all image sizes."
+msgid "Read one media item by id: caption, description, date, filesize, parent, and all image sizes. Without the edit-others-posts capability, only the caller's own uploads can be read."
 msgstr ""
 
 #: includes/abilities/media.php:39
@@ -1432,7 +1445,7 @@ msgid "Count media"
 msgstr ""
 
 #: includes/abilities/media.php:40
-msgid "Count media library items, total and broken down by mime type."
+msgid "Count media library items, total and broken down by mime type. Without the edit-others-posts capability, only the caller's own uploads are counted."
 msgstr ""
 
 #: includes/abilities/media.php:47
@@ -1712,7 +1725,7 @@ msgid "Update navigation"
 msgstr ""
 
 #: includes/abilities/menus.php:125
-msgid "Replaces the links of one block-theme navigation menu by id with the list you send: each item a label and a URL, with optional children up to three levels deep and 100 items in all. The whole navigation is replaced, including any blocks list-navigations names under other_blocks. Each link is saved as a plain custom link, so per-link settings such as open in a new tab, rel, CSS classes and a link's binding to a page or post are not kept. URLs must be http, https, mailto or tel links, a path starting with /, or an anchor starting with #. A navigation owned by a page builder is refused. Navigation edits are not recorded in change history, so this cannot be undone here. When the site keeps revisions, WordPress saves the new version as a revision, so the earlier version survives only if it was already kept as a revision. No tool in this plugin restores it, because restore-revision does not reach navigation posts. Requires the edit-theme-options capability. Off by default."
+msgid "Replaces the links of one block-theme navigation menu by id with the list you send: each item a label and a URL, with optional children up to three levels deep and 100 items in all. The whole navigation is replaced, including any blocks list-navigations names under other_blocks. Each link is saved as a plain custom link, so per-link settings such as open in a new tab, rel, CSS classes and a link's binding to a page or post are not kept. URLs must be http, https, mailto or tel links, a path starting with /, or an anchor starting with #. A navigation owned by a page builder is refused. Navigation edits are not recorded in change history, so this cannot be undone here. When the site keeps revisions, WordPress saves the new version as a revision, so the earlier version survives only if it was already kept as a revision. No tool in this plugin restores it, because restore-revision does not reach navigation posts. Requires the edit-theme-options capability."
 msgstr ""
 
 #: includes/abilities/menus.php:217
@@ -2000,7 +2013,7 @@ msgid "Get pages"
 msgstr ""
 
 #: includes/abilities/pages.php:23
-msgid "List pages filtered by status and search term. Each item returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per item. Response includes total."
+msgid "List pages filtered by status and search term. Each item returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per item. Response includes total. Someone else's draft, pending or scheduled item is listed only for a user who can edit other people's items of that type."
 msgstr ""
 
 #: includes/abilities/pages.php:30
@@ -2016,7 +2029,7 @@ msgid "Create page"
 msgstr ""
 
 #: includes/abilities/pages.php:39
-msgid "Create a new page, published by default (requires publish_pages to call this ability at all). An explicit draft, pending, or private status is also accepted. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). parent_id puts the page under another page and template picks one of the theme's page templates or \"default\". Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid."
+msgid "Create a new page, published by default unless the operator's force-draft setting holds it as a draft (requires publish_pages to call this ability at all). An explicit draft, pending, or private status is also accepted. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). parent_id puts the page under another page and template picks one of the theme's page templates or \"default\". Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid."
 msgstr ""
 
 #: includes/abilities/pages.php:46
@@ -2154,7 +2167,7 @@ msgid "Get posts"
 msgstr ""
 
 #: includes/abilities/posts.php:43
-msgid "List posts filtered by type, status, and search term. Each item returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per item; content_format (rendered or raw) only takes effect when include_content is true. Response includes total."
+msgid "List posts filtered by type, status, and search term. Each item returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per item; content_format (rendered or raw) only takes effect when include_content is true. Response includes total. Someone else's draft, pending or scheduled item is listed only for a user who can edit other people's items of that type."
 msgstr ""
 
 #: includes/abilities/posts.php:50
@@ -2642,7 +2655,7 @@ msgid "Search content"
 msgstr ""
 
 #: includes/abilities/search.php:23
-msgid "Search across the exposed content types in one query. Each result returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per result. Response includes total."
+msgid "Search across the exposed content types in one query. Each result returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per result. Response includes total. Someone else's draft, pending or scheduled item is found only in the types where the user can edit other people's items."
 msgstr ""
 
 #: includes/abilities/search.php:49
@@ -2686,7 +2699,7 @@ msgid "Update site settings"
 msgstr ""
 
 #: includes/abilities/settings.php:44
-msgid "Write a small allowlist of site settings, passed as a settings object whose keys are the setting names and values the new values. Accepted keys: blogname (site name), blogdescription (tagline), timezone_string, date_format, time_format, start_of_week (0-6), posts_per_page (1-100), and the static homepage: show_on_front (posts or page), page_on_front and page_for_posts (a published page id, or 0 for none). String values are sanitized; the two integer settings are clamped into their legal ranges. Any unrecognized key rejects the entire call with nothing written. The homepage keys are checked together before anything is written (the front page and posts page must differ, and show_on_front page needs a front page), then written in the order page_on_front, page_for_posts, show_on_front; if one does not land, the call returns an error listing the keys that landed, were unchanged and failed. It can never change the site URL, admin email, default role, or open registration. Requires manage-options. Off by default."
+msgid "Write a small allowlist of site settings, passed as a settings object whose keys are the setting names and values the new values. Accepted keys: blogname (site name), blogdescription (tagline), timezone_string, date_format, time_format, start_of_week (0-6), posts_per_page (1-100), and the static homepage: show_on_front (posts or page), page_on_front and page_for_posts (a published page id, or 0 for none). String values are sanitized; the two integer settings are clamped into their legal ranges. Any unrecognized key rejects the entire call with nothing written. The homepage keys are checked together before anything is written (the front page and posts page must differ, and show_on_front page needs a front page), then written in the order page_on_front, page_for_posts, show_on_front; if one does not land, the call returns an error listing the keys that landed, were unchanged and failed. It can never change the site URL, admin email, default role, or open registration. Requires manage-options."
 msgstr ""
 
 #: includes/abilities/settings.php:140
@@ -2775,7 +2788,7 @@ msgid "List backups"
 msgstr ""
 
 #: includes/abilities/site-backups.php:60
-msgid "Lists the backup sets UpdraftPlus has on record, newest first: when each started, whether it holds the database only or files too, which parts it holds, its total size, whether it is kept on this server, off-site or both, and the result of two checks. The database check: verified means the database file on this server has the recorded size and matched its checksum when the background check last looked, at the time given; pending means a backup of the last 24 hours that has not been checked yet; too_large means the background check could not finish it; size_only means one of those two on a site whose owner accepts large backups on size alone; not_checked means a backup older than 24 hours with the right size, which is not checked; trusted_unchecked means the set is kept only off-site and the site owner chose to trust UpdraftPlus's record of it; failed means none of these. The background check runs only while the backup gate is on. This tool never computes a checksum itself, so a small backup can show as pending here while backup-status, which compares small files on the spot, already reports it as verified. The files check compares sizes only: size_ok, failed, not_local, or not_included for a database-only set. It changes nothing. Never returns file names, download links, storage settings or credentials. Refused on multisite. Requires the manage-options capability."
+msgid "Lists the backup sets UpdraftPlus has on record, newest first: when each started, whether it holds the database only or files too, which parts it holds, its total size, whether it is kept on this server, off-site or both, and the result of two checks. The database check: verified means the database file on this server has the recorded size and matched its checksum when the background check last looked, at the time given; pending means a backup of the last 24 hours that has not been checked yet; too_large means the background check could not finish it; size_only means one of those two on a site whose owner accepts large backups on size alone; not_checked means a backup older than 24 hours with the right size, which is not checked; trusted_unchecked means the set is kept only off-site and the site owner chose to trust UpdraftPlus's record of it; failed means none of these. The background check runs only while the backup gate is on. This tool never computes a checksum itself, so a small backup can show as pending here while site-backup-status, which compares small files on the spot, already reports it as verified. The files check compares sizes only: size_ok, failed, not_local, or not_included for a database-only set. It changes nothing. Never returns file names, download links, storage settings or credentials. Refused on multisite. Requires the manage-options capability."
 msgstr ""
 
 #: includes/abilities/site-backups.php:75
@@ -2807,7 +2820,7 @@ msgid "Purge a post from the page cache"
 msgstr ""
 
 #: includes/abilities/site-cache.php:62
-msgid "Removes one published post or page from the page cache of every supported cache plugin that is serving cached pages on this site, and reports each plugin separately: purged (the standard cached copy was found where the plugin keeps it and no copy from before the purge is left; when the reason is recached the plugin has already cached the page again, which SiteGround Speed Optimizer does straight away when its preheat option is on), requested (the purge was sent and removal could not be proven, which includes the case where no cached copy was found), failed, or skipped with a reason. The page URL is worked out from the post id; it cannot be supplied. Some plugins also clear the home page, archives or pages under the same address, some send their own requests to the site or to a proxy when they purge, and some request or queue the page again afterwards; cache-status shows which plugins remove pages under a URL and which send requests of their own. A plugin that fetches the page again while it purges can make this call take several seconds. Counts against a site-wide purge budget shared with the other purge tools. Does not touch the object cache. It does not itself purge a CDN, Cloudflare, Varnish or a cache run by the host in front of the site, though Proxy Cache Purge, Nginx Helper, SiteGround Speed Optimizer, W3 Total Cache and WP Fastest Cache can pass the purge on to one they are set up for; cache-status names the layers it can see. Refused on multisite. Requires the manage-options capability."
+msgid "Removes one published post or page from the page cache of every supported cache plugin that is serving cached pages on this site, and reports each plugin separately: purged (the standard cached copy was found where the plugin keeps it and no copy from before the purge is left; when the reason is recached the plugin has already cached the page again, which SiteGround Speed Optimizer does straight away when its preheat option is on), requested (the purge was sent and removal could not be proven, which includes the case where no cached copy was found), failed, or skipped with a reason. The page URL is worked out from the post id; it cannot be supplied. Some plugins also clear the home page, archives or pages under the same address, some send their own requests to the site or to a proxy when they purge, and some request or queue the page again afterwards; site-cache-status shows which plugins remove pages under a URL and which send requests of their own. A plugin that fetches the page again while it purges can make this call take several seconds. Counts against a site-wide purge budget shared with the other purge tools. Does not touch the object cache. It does not itself purge a CDN, Cloudflare, Varnish or a cache run by the host in front of the site, though Proxy Cache Purge, Nginx Helper, SiteGround Speed Optimizer, W3 Total Cache and WP Fastest Cache can pass the purge on to one they are set up for; site-cache-status names the layers it can see. Refused on multisite. Requires the manage-options capability."
 msgstr ""
 
 #: includes/abilities/site-cache.php:69
@@ -2815,7 +2828,7 @@ msgid "Purge a URL from the page cache"
 msgstr ""
 
 #: includes/abilities/site-cache.php:70
-msgid "Removes one URL of this site from the page cache of every supported cache plugin that is serving cached pages, and reports each plugin separately as purged, requested, failed or skipped, with the same meanings as purge-post-cache. The URL must be on this site's own address, with no query string and no fragment; wildcards, relative steps and addresses on other sites are refused before any cache plugin is called. The address is put into the form this site serves (with or without a final slash) and the result shows the address used. Some plugins also remove pages under that URL; cache-status says which. A plugin for which the home URL means the whole site is skipped here; use purge-site-cache for that. Some plugins send their own requests when they purge, and one that fetches the page again while it purges can make this call take several seconds. Counts against the site-wide purge budget. It does not itself purge a CDN, Cloudflare, Varnish or a cache run by the host in front of the site, though Proxy Cache Purge, Nginx Helper, SiteGround Speed Optimizer and W3 Total Cache can pass the purge on to one they are set up for; cache-status names the layers it can see. Refused on multisite. Requires the manage-options capability."
+msgid "Removes one URL of this site from the page cache of every supported cache plugin that is serving cached pages, and reports each plugin separately as purged, requested, failed or skipped, with the same meanings as site-purge-post-cache. The URL must be on this site's own address, with no query string and no fragment; wildcards, relative steps and addresses on other sites are refused before any cache plugin is called. The address is put into the form this site serves (with or without a final slash) and the result shows the address used. Some plugins also remove pages under that URL; site-cache-status says which. A plugin for which the home URL means the whole site is skipped here; use site-purge-site-cache for that. Some plugins send their own requests when they purge, and one that fetches the page again while it purges can make this call take several seconds. Counts against the site-wide purge budget. It does not itself purge a CDN, Cloudflare, Varnish or a cache run by the host in front of the site, though Proxy Cache Purge, Nginx Helper, SiteGround Speed Optimizer and W3 Total Cache can pass the purge on to one they are set up for; site-cache-status names the layers it can see. Refused on multisite. Requires the manage-options capability."
 msgstr ""
 
 #: includes/abilities/site-cache.php:77
@@ -2823,7 +2836,7 @@ msgid "Purge the whole page cache"
 msgstr ""
 
 #: includes/abilities/site-cache.php:78
-msgid "Removes every cached page of this site from each supported cache plugin that is serving cached pages, and reports each plugin separately as purged, requested, failed or skipped, with the same meanings as purge-post-cache. It does not flush the object cache. It does not itself purge a CDN, Cloudflare, Varnish or a cache run by the host in front of the site, though Proxy Cache Purge, Nginx Helper, SiteGround Speed Optimizer, W3 Total Cache and WP Fastest Cache can pass the purge on to one they are set up for; cache-status names the layers it can see. Some plugins remove other generated files with their page cache (SpeedyCache also removes its critical CSS files) and some restart their preload or send their own requests. The site is slower until pages are cached again. Allowed once every 15 minutes for the whole site, and it uses a large share of the site-wide purge budget. Refused on multisite. Requires the manage-options capability. Off by default."
+msgid "Removes every cached page of this site from each supported cache plugin that is serving cached pages, and reports each plugin separately as purged, requested, failed or skipped, with the same meanings as site-purge-post-cache. It does not flush the object cache. It does not itself purge a CDN, Cloudflare, Varnish or a cache run by the host in front of the site, though Proxy Cache Purge, Nginx Helper, SiteGround Speed Optimizer, W3 Total Cache and WP Fastest Cache can pass the purge on to one they are set up for; site-cache-status names the layers it can see. Some plugins remove other generated files with their page cache (SpeedyCache also removes its critical CSS files) and some restart their preload or send their own requests. The site is slower until pages are cached again. Allowed once every 15 minutes for the whole site, and it uses a large share of the site-wide purge budget. Refused on multisite. Requires the manage-options capability."
 msgstr ""
 
 #: includes/abilities/site-cache.php:101
@@ -2831,7 +2844,7 @@ msgid "purged: a cached copy was found before the call and none from before the 
 msgstr ""
 
 #: includes/abilities/site-cache.php:106
-msgid "recached, with purged only: the old copy is gone and the plugin has already cached the page again. variant_still_cached: the plugin removed the copy stored under one spelling of the address and left another; calling the same purge again will not help, and purge-site-cache clears the surviving copy."
+msgid "recached, with purged only: the old copy is gone and the plugin has already cached the page again. variant_still_cached: the plugin removed the copy stored under one spelling of the address and left another; calling the same purge again will not help, and site-purge-site-cache clears the surviving copy."
 msgstr ""
 
 #: includes/abilities/site-cache.php:202
@@ -2907,7 +2920,7 @@ msgid "Get a redirect"
 msgstr ""
 
 #: includes/abilities/site-redirects.php:63
-msgid "Reads one redirect by the id that list-redirects gave: source, target, status code, whether it is on, and whether it is an exact address or a pattern. When more than one supported redirect plugin is active, the plugin must be named. It changes nothing. Requires the manage-options capability."
+msgid "Reads one redirect by the id that site-list-redirects gave: source, target, status code, whether it is on, and whether it is an exact address or a pattern. When more than one supported redirect plugin is active, the plugin must be named. It changes nothing. Requires the manage-options capability."
 msgstr ""
 
 #: includes/abilities/site-redirects.php:70
@@ -2957,7 +2970,7 @@ msgid "Required when more than one redirect plugin is active."
 msgstr ""
 
 #: includes/abilities/site-redirects.php:226
-msgid "The redirect's id from list-redirects."
+msgid "The redirect's id from site-list-redirects."
 msgstr ""
 
 #: includes/abilities/site-redirects.php:266
@@ -3057,7 +3070,7 @@ msgid "Get event"
 msgstr ""
 
 #: includes/abilities/tec/events.php:75
-msgid "Read a single event by ID, including its start/end dates, venue, organizers, and description (the stored body, blank for a password-protected event)."
+msgid "Read a single event by ID, including its start/end dates, venue, organizers, and description (the stored body, blank for a password-protected event). An event that is not published needs edit access to it."
 msgstr ""
 
 #: includes/abilities/tec/events.php:82
@@ -3187,7 +3200,7 @@ msgid "Get organizer"
 msgstr ""
 
 #: includes/abilities/tec/organizers.php:64
-msgid "Read a single organizer by ID."
+msgid "Read a single organizer by ID. An organizer that is not published needs edit access to it."
 msgstr ""
 
 #: includes/abilities/tec/organizers.php:71
@@ -3298,7 +3311,7 @@ msgid "Get venue"
 msgstr ""
 
 #: includes/abilities/tec/venues.php:63
-msgid "Read a single venue by ID."
+msgid "Read a single venue by ID. A venue that is not published needs edit access to it."
 msgstr ""
 
 #: includes/abilities/tec/venues.php:70
@@ -3686,7 +3699,7 @@ msgid "Create user"
 msgstr ""
 
 #: includes/abilities/users.php:62
-msgid "Create a new user with the site default role, or subscriber when the default is administrator or a role the caller cannot assign (never a caller-chosen role). Requires the create-users capability. Off by default."
+msgid "Create a new user with the site default role, or subscriber when the default is administrator or a role the caller cannot assign (never a caller-chosen role). Requires the create-users capability."
 msgstr ""
 
 #: includes/abilities/users.php:69
@@ -3702,7 +3715,7 @@ msgid "Delete user"
 msgstr ""
 
 #: includes/abilities/users.php:78
-msgid "Permanently delete a user and reassign their content to another user. Never deletes you or the last administrator. Requires the delete-users capability. Off by default. On multisite this removes the user from the current site only; the network account and its logins remain."
+msgid "Permanently delete a user and reassign their content to another user. Never deletes you or the last administrator. Requires the delete-users capability. On multisite this removes the user from the current site only; the network account and its logins remain."
 msgstr ""
 
 #: includes/abilities/users.php:103
@@ -3833,6 +3846,14 @@ msgstr ""
 msgid "Attribute taxonomy slug. When omitted, WooCommerce derives one from name. Do not include the pa_ prefix; WooCommerce adds it automatically when building the taxonomy name."
 msgstr ""
 
+#: includes/abilities/woocommerce/attributes.php:241
+msgid "Attribute input type. The accepted values are sourced from wc_get_attribute_types(); WooCommerce core supports only \"select\" (terms chosen from a predefined list). Defaults to select."
+msgstr ""
+
+#: includes/abilities/woocommerce/attributes.php:246
+msgid "Default term sort order for this attribute: menu_order (custom), name, name_num (name treated numerically), or id. Defaults to menu_order."
+msgstr ""
+
 #: includes/abilities/woocommerce/attributes.php:250
 msgid "Whether values of this attribute get their own public archive page (like a taxonomy term archive). New attributes default to false when omitted; on update, an omitted value leaves the existing setting unchanged."
 msgstr ""
@@ -3884,8 +3905,16 @@ msgstr ""
 msgid "The discount amount as a decimal string, e.g. \"10\" for a 10% discount when discount_type is percent, or a currency amount for fixed_cart / fixed_product."
 msgstr ""
 
+#: includes/abilities/woocommerce/coupons.php:219
+msgid "How the coupon discounts: percent (a percentage of the cart), fixed_cart (a fixed amount off the whole cart), or fixed_product (a fixed amount off each matching product)."
+msgstr ""
+
 #: includes/abilities/woocommerce/coupons.php:223
 msgid "A description of the coupon, for admin reference."
+msgstr ""
+
+#: includes/abilities/woocommerce/coupons.php:227
+msgid "Expiry date as a YYYY-MM-DD string (the coupon expires at the start of that day, site timezone). Pass null or an empty string for no expiry."
 msgstr ""
 
 #: includes/abilities/woocommerce/coupons.php:232
@@ -4113,6 +4142,10 @@ msgstr ""
 msgid "The payment gateway's id slug (e.g. \"bacs\", \"cod\", \"stripe\"), from wc-list-payment-gateways. Must reference an existing gateway or the request fails."
 msgstr ""
 
+#: includes/abilities/woocommerce/gateways.php:627
+msgid "Whether the gateway is enabled, as a boolean (true/false). Note: this differs from the shipping-method abilities, where the equivalent enabled flag is the string \"yes\"/\"no\"."
+msgstr ""
+
 #: includes/abilities/woocommerce/gateways.php:631
 msgid "Customer-facing gateway name shown at checkout, overriding the gateway's default title."
 msgstr ""
@@ -4224,8 +4257,16 @@ msgstr ""
 msgid "Number of orders to return per page, from 1 to 100. Defaults to 20."
 msgstr ""
 
+#: includes/abilities/woocommerce/orders.php:318
+msgid "Order status to filter by; 'any' (the default) covers every registered order status (including custom ones) but never the internal checkout-draft status, which must be requested explicitly. Uses the short form without the wc- prefix."
+msgstr ""
+
 #: includes/abilities/woocommerce/orders.php:447
 msgid "The order's post ID. Must reference an existing order or the request fails."
+msgstr ""
+
+#: includes/abilities/woocommerce/orders.php:504
+msgid "Order status slug (e.g. processing, completed, on-hold). Must match a key returned by wc_get_order_statuses()."
 msgstr ""
 
 #: includes/abilities/woocommerce/orders.php:509
@@ -4462,6 +4503,14 @@ msgstr ""
 msgid "Permanently deletes a WooCommerce product by id. This bypasses the Trash and cannot be undone. Requires the manage-WooCommerce capability and permission to delete that product."
 msgstr ""
 
+#: includes/abilities/woocommerce/products.php:305
+msgid "True when this is a global (taxonomy-backed) attribute shared across products, false when it is a custom attribute defined on this product alone. The two behave differently on write: a custom attribute's options can be edited through wc-update-product, a global one's cannot."
+msgstr ""
+
+#: includes/abilities/woocommerce/products.php:310
+msgid "The attribute's declared values, always in the form every write path here accepts. For a global attribute these are term SLUGS (the form wc-create-product-variation expects), not term ids or display names; for a custom attribute they are the literal option strings."
+msgstr ""
+
 #: includes/abilities/woocommerce/products.php:318
 msgid "Ids of this product's variations. Populated only for variable products; every other type (including grouped, whose children are separate products, not variations) reports an empty list."
 msgstr ""
@@ -4474,8 +4523,16 @@ msgstr ""
 msgid "Page number of products to return, 1-indexed. Defaults to 1."
 msgstr ""
 
+#: includes/abilities/woocommerce/products.php:344
+msgid "Status filter; 'any' returns all states."
+msgstr ""
+
 #: includes/abilities/woocommerce/products.php:495
 msgid "The WooCommerce product id to read."
+msgstr ""
+
+#: includes/abilities/woocommerce/products.php:549
+msgid "The product's publish state."
 msgstr ""
 
 #: includes/abilities/woocommerce/products.php:554
@@ -4490,8 +4547,22 @@ msgstr ""
 msgid "The product's SKU (stock keeping unit). WooCommerce requires SKUs to be unique across products."
 msgstr ""
 
+#: includes/abilities/woocommerce/products.php:573
+msgid "A decimal price as a string, e.g. \"19.99\" (no currency symbol or thousands separator), or an empty string to clear the price."
+msgstr ""
+
+#: includes/abilities/woocommerce/products.php:580
+#: includes/abilities/woocommerce/variations.php:456
+msgid "A decimal price as a string, e.g. \"14.99\" (must be at or below regular_price to take effect), or an empty string to clear the sale price."
+msgstr ""
+
 #: includes/abilities/woocommerce/products.php:585
 msgid "Whether the product is in stock, out of stock, or on backorder."
+msgstr ""
+
+#: includes/abilities/woocommerce/products.php:590
+#: includes/abilities/woocommerce/variations.php:466
+msgid "On-hand quantity (only applied when manage_stock is true)."
 msgstr ""
 
 #: includes/abilities/woocommerce/products.php:594
@@ -4647,6 +4718,14 @@ msgstr ""
 msgid "Returns product counts broken down by post status (publish, draft, private, pending, trash) plus a total of active (non-trash) products. Requires the manage-WooCommerce capability."
 msgstr ""
 
+#: includes/abilities/woocommerce/reports.php:118
+msgid "Start date in Y-m-d format. Defaults to the first day of the current month."
+msgstr ""
+
+#: includes/abilities/woocommerce/reports.php:122
+msgid "End date in Y-m-d format. Defaults to today."
+msgstr ""
+
 #: includes/abilities/woocommerce/reports.php:177
 msgid "start_date or end_date is not a valid date."
 msgstr ""
@@ -4764,6 +4843,10 @@ msgstr ""
 msgid "The shipping zone's id the method instance belongs to. Use 0 for the \"Rest of the World\" zone."
 msgstr ""
 
+#: includes/abilities/woocommerce/shipping.php:808
+msgid "The shipping method INSTANCE id within the zone (a method added to a zone, not the method type). Get it from wc-list-shipping-methods for the zone, or from the instance_id returned by wc-create-shipping-method."
+msgstr ""
+
 #: includes/abilities/woocommerce/shipping.php:839
 #: includes/abilities/woocommerce/shipping.php:918
 #: includes/abilities/woocommerce/shipping.php:996
@@ -4774,8 +4857,20 @@ msgstr ""
 msgid "The shipping zone's id to add the method to. Use 0 for the \"Rest of the World\" zone."
 msgstr ""
 
+#: includes/abilities/woocommerce/shipping.php:871
+msgid "The WooCommerce shipping method type to add to the zone: flat_rate, free_shipping, or local_pickup."
+msgstr ""
+
+#: includes/abilities/woocommerce/shipping.php:951
+msgid "The shipping method INSTANCE id within the zone (from wc-list-shipping-methods or the instance_id returned by wc-create-shipping-method)."
+msgstr ""
+
 #: includes/abilities/woocommerce/shipping.php:955
 msgid "Display name shown for this method instance at checkout, overriding the shipping method type's generic label (e.g. \"Flat rate\"). Falls back to the method type's own title when never set."
+msgstr ""
+
+#: includes/abilities/woocommerce/shipping.php:960
+msgid "Whether the shipping method is enabled, as the string \"yes\" or \"no\". This differs from the payment-gateway abilities, where the equivalent enabled flag is a boolean (true/false); shipping keeps a string to match WooCommerce's own shipping-method storage."
 msgstr ""
 
 #: includes/abilities/woocommerce/shipping.php:1027
@@ -4857,6 +4952,21 @@ msgstr ""
 #: includes/abilities/woocommerce/tax.php:353
 #: includes/abilities/woocommerce/tax.php:677
 msgid "Tax rate not found."
+msgstr ""
+
+#: includes/abilities/woocommerce/tax.php:380
+#: includes/abilities/woocommerce/tax.php:599
+msgid "Tax rate percentage as a decimal string, up to 4 decimal places (e.g. \"8.25\")."
+msgstr ""
+
+#: includes/abilities/woocommerce/tax.php:384
+#: includes/abilities/woocommerce/tax.php:603
+msgid "ISO 3166-1 alpha-2 country code (e.g. \"US\", \"GB\"). An empty string means the rate applies to all countries."
+msgstr ""
+
+#: includes/abilities/woocommerce/tax.php:388
+#: includes/abilities/woocommerce/tax.php:607
+msgid "WooCommerce state/region code (e.g. the 2-letter US state code \"CA\"). An empty string means the rate applies to all states within the country."
 msgstr ""
 
 #: includes/abilities/woocommerce/tax.php:392
@@ -4978,6 +5088,10 @@ msgstr ""
 msgid "Permanently deletes a product variation by id. This bypasses the Trash and cannot be undone. Requires the manage-WooCommerce capability and permission to delete that variation."
 msgstr ""
 
+#: includes/abilities/woocommerce/variations.php:268
+msgid "The parent (variable) product id."
+msgstr ""
+
 #: includes/abilities/woocommerce/variations.php:273
 msgid "Number of variations per page, 1 to 100. Defaults to 20."
 msgstr ""
@@ -4996,12 +5110,20 @@ msgstr ""
 msgid "The variation's own product id (not the parent product's id)."
 msgstr ""
 
+#: includes/abilities/woocommerce/variations.php:436
+msgid "The variation's publish state."
+msgstr ""
+
 #: includes/abilities/woocommerce/variations.php:441
 msgid "The variation's own description. Shown instead of the parent product's description when this variation is selected."
 msgstr ""
 
 #: includes/abilities/woocommerce/variations.php:445
 msgid "The variation's own SKU. WooCommerce requires SKUs to be unique across products and variations."
+msgstr ""
+
+#: includes/abilities/woocommerce/variations.php:450
+msgid "A decimal price as a string, e.g. \"19.99\" (no currency symbol or thousands separator)."
 msgstr ""
 
 #: includes/abilities/woocommerce/variations.php:461
@@ -5066,6 +5188,10 @@ msgstr ""
 msgid "These attribute values are not options the parent product declares, so setting them would apply nothing: %s. Use one of the listed options exactly (the match is case-sensitive), or send an empty string to leave the attribute as \"Any\"."
 msgstr ""
 
+#: includes/abilities/woocommerce/variations.php:924
+msgid "The parent (variable) product id the variation attaches to."
+msgstr ""
+
 #: includes/abilities/woocommerce/variations.php:1012
 msgid "The variation id to update."
 msgstr ""
@@ -5080,6 +5206,10 @@ msgstr ""
 
 #: includes/abilities/woocommerce/_shared.php:110
 msgid "The billing email is not a valid email address."
+msgstr ""
+
+#: includes/abilities/woocommerce/_shared.php:134
+msgid "Which values inside `settings` were withheld as credentials. Each entry is a path given as an ARRAY OF KEY SEGMENTS from the root of `settings`: [\"advanced\",\"live\",\"passcode\"] means settings.advanced.live.passcode. Segments rather than a joined string because a settings key may itself contain any character, so a joined path could not be parsed back to the exact key. This list is authoritative: a value inside `settings` may itself read \"[redacted]\" without having been withheld, so check membership here rather than comparing values."
 msgstr ""
 
 #: includes/abilities/woocommerce/_shared.php:168
@@ -5327,7 +5457,7 @@ msgid "Update WPBakery page code"
 msgstr ""
 
 #: includes/abilities/wpbakery-site.php:70
-msgid "Sets the custom CSS, header JS and footer JS of one WPBakery page, the fields of the page settings in WPBakery's editor; give at least one of custom_css, custom_js_header and custom_js_footer. Each field given replaces the page's existing code for that field, and an empty string removes it; previous returns the old value of every field that changed, which is the way back. CSS that holds markup is refused, as WordPress refuses it in custom CSS, and so is a \"<\" followed by another character, such as a <= range query, where WPBakery cuts the CSS off when it prints it; any other CSS is stored exactly as sent. JS containing a closing script tag is refused, and the JS fields are refused when WPBakery's own Role Manager would not save custom JS for this user. A field equal to what is stored is left alone and not listed in changed. No revision is kept, and the change is not undoable from this plugin's change history. Requires edit access to the post and a user who may post unfiltered HTML. Only while WPBakery Page Builder is active."
+msgid "Sets the custom CSS, header JS and footer JS of one WPBakery page, the fields of the page settings in WPBakery's editor; give at least one of custom_css, custom_js_header and custom_js_footer. Each field given replaces the page's existing code for that field, and an empty string removes it; previous returns the old value of every field that changed, which is the way back. CSS that holds markup is refused, as WordPress refuses it in custom CSS, and so is a \"<\" that is not followed by whitespace, such as a <= range query, where WPBakery cuts the CSS off when it prints it; any other CSS is stored exactly as sent. JS containing a closing script tag is refused, and the JS fields are refused when WPBakery's own Role Manager would not save custom JS for this user. A field equal to what is stored is left alone and not listed in changed. No revision is kept, and the change is not undoable from this plugin's change history. Requires edit access to the post and a user who may post unfiltered HTML. Only while WPBakery Page Builder is active."
 msgstr ""
 
 #: includes/abilities/wpbakery-site.php:77
@@ -5343,7 +5473,7 @@ msgid "Update WPBakery settings"
 msgstr ""
 
 #: includes/abilities/wpbakery-site.php:86
-msgid "Overwrites site-wide WPBakery Page Builder settings from wpbakery-get-settings: not_responsive_css, local_google_fonts and shortcuts (true or false), google_fonts_subsets (a list), css_loading and js_loading (hybrid, optimized or legacy), and the global custom_css, custom_js_header and custom_js_footer, which also need a user who may post unfiltered HTML. Each value goes through WPBakery's own sanitize callback for that field, and a value it would change is refused. The global custom_css is the exception: it is refused when it holds markup or a \"<\" followed by another character, where WPBakery cuts custom.css off, and otherwise stored exactly as sent. WPBakery points each url(../ in the global CSS at its own assets folder in the custom.css file it builds; the setting itself keeps the CSS as sent. A setting whose callback cannot be found, and the Gutenberg switch, auto save and Design Options use, are not writable. The change applies to the whole site at once; previous returns the old value of every setting that changed, null where none was stored, which is the way back. A value equal to what is stored is left alone. Writing custom_css rebuilds WPBakery's custom.css file, and the call reports an error when the file does not match afterwards. Not undoable from this plugin's change history. Requires a user who can manage site options (manage_options). Only while WPBakery Page Builder is active."
+msgid "Overwrites site-wide WPBakery Page Builder settings from wpbakery-get-settings: not_responsive_css, local_google_fonts and shortcuts (true or false), google_fonts_subsets (a list), css_loading and js_loading (hybrid, optimized or legacy), and the global custom_css, custom_js_header and custom_js_footer, which also need a user who may post unfiltered HTML. Each value goes through WPBakery's own sanitize callback for that field, and a value it would change is refused. The global custom_css is the exception: it is refused when it holds markup or a \"<\" that is not followed by whitespace, where WPBakery cuts custom.css off, and otherwise stored exactly as sent. WPBakery points each url(../ in the global CSS at its own assets folder in the custom.css file it builds; the setting itself keeps the CSS as sent. A setting whose callback cannot be found, and the Gutenberg switch, auto save and Design Options use, are not writable. The change applies to the whole site at once; previous returns the old value of every setting that changed, null where none was stored, which is the way back. A value equal to what is stored is left alone. Writing custom_css rebuilds WPBakery's custom.css file, and the call reports an error when the file does not match afterwards. Not undoable from this plugin's change history. Requires a user who can manage site options (manage_options). Only while WPBakery Page Builder is active."
 msgstr ""
 
 #: includes/abilities/wpbakery-site.php:220
@@ -5504,15 +5634,19 @@ msgstr ""
 msgid "This page uses more distinct shortcode names than can be checked safely, so its text cannot be replaced here. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/wpbakery.php:686
+#: includes/abilities/wpbakery.php:688
+msgid "This page's shortcodes cannot be read safely, so its text cannot be replaced here; wpbakery-get-page-content with include_structure reports structure_status unparseable for it. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/wpbakery.php:696
 msgid "That replacement would change a WPBakery element rather than the text between elements. WPBakery keeps heading text, button labels and other element settings inside the element itself, so change that text in WPBakery. Choose a search term that appears only in plain text, such as a text block. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/wpbakery.php:694
+#: includes/abilities/wpbakery.php:704
 msgid "Saving this page as the current user would change content outside the requested text, for example by removing embedded HTML or WPBakery elements this user is not allowed to keep. Ask a user with fuller rights to make the edit, or make it in WPBakery. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/wpbakery.php:704
+#: includes/abilities/wpbakery.php:714
 msgid "Saving the new text would remove or change WPBakery elements on this page, so the replacement was not saved. Nothing was changed."
 msgstr ""
 
@@ -7346,7 +7480,7 @@ msgid "Add the endpoint under httpUrl in your Gemini CLI settings.json mcpServer
 msgstr ""
 
 #: includes/admin/connection.php:614
-msgid "In Manus, add a custom MCP connector, paste the endpoint URL as the server URL, and approve the OAuth sign-in. Manus runs in the cloud, so it connects by URL - there is no local bridge to install."
+msgid "In Manus, add a custom MCP connector, paste the endpoint URL as the server URL, and approve the OAuth sign-in. Manus runs in the cloud, so it connects by URL and there is no local bridge to install."
 msgstr ""
 
 #: includes/admin/connection.php:616
@@ -7430,7 +7564,7 @@ msgid "Recommended"
 msgstr ""
 
 #: includes/admin/connection.php:1054
-msgid "Paste your site's MCP endpoint URL into your agent. It opens a browser tab for approval - no secret to put in your config file."
+msgid "Paste your site's MCP endpoint URL into your agent. It opens a browser tab for approval, so there is no secret to put in your config file."
 msgstr ""
 
 #: includes/admin/connection.php:1064
@@ -7458,7 +7592,7 @@ msgstr ""
 #. translators: %s: comma-separated list of hosted client names, e.g. "ChatGPT, Claude, and Manus".
 #: includes/admin/connection.php:1184
 #, php-format
-msgid "%s connect over OAuth only, so they need OAuth turned on - the Application Password path below will not work for them."
+msgid "%s connect over OAuth only, so they need OAuth turned on. The Application Password path below will not work for them."
 msgstr ""
 
 #: includes/admin/connection.php:1215
@@ -7513,7 +7647,7 @@ msgid "Generate an Application Password for the agent user (Users → Profile �
 msgstr ""
 
 #: includes/admin/connection.php:1317
-msgid "On Windows the launcher is wrapped in <code>cmd /c</code> so the <code>npx</code> command resolves - use the Windows tab above."
+msgid "On Windows the launcher is wrapped in <code>cmd /c</code> so the <code>npx</code> command resolves. Use the Windows tab above."
 msgstr ""
 
 #: includes/admin/connection.php:1319
@@ -7537,7 +7671,7 @@ msgid "Check the endpoint is reachable"
 msgstr ""
 
 #: includes/admin/connection.php:1372
-msgid "This confirms the endpoint answers from your server. It checks as the current admin, so the tool count shown is your view - your agent connects as the low-privilege user above and will usually see fewer tools."
+msgid "This confirms the endpoint answers from your server. It checks as the current admin, so the tool count shown is your view. Your agent connects as the low-privilege user above and will usually see fewer tools."
 msgstr ""
 
 #: includes/admin/connection.php:1379
@@ -8080,7 +8214,7 @@ msgid "Updates a menu item's title, URL, parent item or position by id. A parent
 msgstr ""
 
 #: includes/admin/disclosures.php:148
-msgid "Replaces the links of one block-theme navigation menu with a plain list of labels and URLs, up to three levels and 100 items. Everything else in that navigation is replaced too, and each link is saved without its own settings such as open in a new tab, rel, CSS classes or a binding to a page. An empty list is refused. URLs are checked and a page-builder-owned navigation is refused. This cannot be undone from the Changes tab. When revisions are on, WordPress keeps the earlier version only if it was already saved as a revision. Requires the edit-theme-options capability. Off by default."
+msgid "Replaces the links of one block-theme navigation menu with a plain list of labels and URLs, up to three levels and 100 items. Everything else in that navigation is replaced too, and each link is saved without its own settings such as open in a new tab, rel, CSS classes or a binding to a page. An empty list is refused. URLs are checked and a page-builder-owned navigation is refused. This cannot be undone from the Changes tab. When revisions are on, WordPress keeps the earlier version only if it was already saved as a revision. Requires the edit-theme-options capability."
 msgstr ""
 
 #: includes/admin/disclosures.php:150
@@ -8168,11 +8302,11 @@ msgid "Permanently deletes a comment. This bypasses the Trash and cannot be undo
 msgstr ""
 
 #: includes/admin/disclosures.php:177
-msgid "Creates a new user with the site default role only (never an admin or a caller-chosen role). Requires the create-users capability. Off by default."
+msgid "Creates a new user with the site default role only (never an admin or a caller-chosen role). Requires the create-users capability."
 msgstr ""
 
 #: includes/admin/disclosures.php:178
-msgid "Permanently deletes a user and reassigns their content to another user. Never deletes you or the last administrator. Requires the delete-users capability. Off by default. On multisite this removes the user from the current site only; the network account and its logins remain."
+msgid "Permanently deletes a user and reassigns their content to another user. Never deletes you or the last administrator. Requires the delete-users capability. On multisite this removes the user from the current site only; the network account and its logins remain."
 msgstr ""
 
 #: includes/admin/disclosures.php:179
@@ -8180,15 +8314,15 @@ msgid "Removes an allowlisted user meta key from a user the agent can edit. This
 msgstr ""
 
 #: includes/admin/disclosures.php:180
-msgid "Permanently deletes a post, bypassing the Trash. This cannot be undone. Use trash-post to remove a post recoverably instead. Requires delete access to that post. Reaches a page or product only while that type's own tool is on. Off by default."
+msgid "Permanently deletes a post, bypassing the Trash. This cannot be undone. Use trash-post to remove a post recoverably instead. Requires delete access to that post. Reaches a page or product only while that type's own tool is on."
 msgstr ""
 
 #: includes/admin/disclosures.php:181
-msgid "Permanently deletes a page, bypassing the Trash. This cannot be undone. Use trash-page to remove a page recoverably instead. Requires delete access to that page. Off by default."
+msgid "Permanently deletes a page, bypassing the Trash. This cannot be undone. Use trash-page to remove a page recoverably instead. Requires delete access to that page."
 msgstr ""
 
 #: includes/admin/disclosures.php:182
-msgid "Writes a small allowlist of site settings only (name, tagline, timezone, formats, posts per page, and the static front page and posts page, which must be published pages). If one homepage setting does not save, it says which did. It can never change the site URL, admin email, default role, or open registration. Requires manage-options. Off by default."
+msgid "Writes a small allowlist of site settings only (name, tagline, timezone, formats, posts per page, and the static front page and posts page, which must be published pages). If one homepage setting does not save, it says which did. It can never change the site URL, admin email, default role, or open registration. Requires manage-options."
 msgstr ""
 
 #: includes/admin/disclosures.php:183
@@ -8200,11 +8334,11 @@ msgid "Permanently removes one item from a navigation menu. This cannot be undon
 msgstr ""
 
 #: includes/admin/disclosures.php:185
-msgid "Permanently deletes a WooCommerce product, bypassing the Trash. This cannot be undone. Requires the manage-WooCommerce capability. Off by default."
+msgid "Permanently deletes a WooCommerce product, bypassing the Trash. This cannot be undone. Requires the manage-WooCommerce capability."
 msgstr ""
 
 #: includes/admin/disclosures.php:186
-msgid "Permanently deletes a product variation, bypassing the Trash. This cannot be undone. Requires the manage-WooCommerce capability. Off by default."
+msgid "Permanently deletes a product variation, bypassing the Trash. This cannot be undone. Requires the manage-WooCommerce capability."
 msgstr ""
 
 #: includes/admin/disclosures.php:189
@@ -9349,7 +9483,7 @@ msgstr ""
 #. translators: %d: number of allowlist lines that were dropped as invalid.
 #: includes/admin/page.php:219
 #, php-format
-msgid "Saved. Dropped %d line(s) that were not a valid IP or range - check the allowlist."
+msgid "Saved. Dropped %d line(s) that were not a valid IP or range. Check the allowlist."
 msgstr ""
 
 #. translators: %d: the new agent user's numeric ID.
@@ -9399,7 +9533,7 @@ msgstr ""
 #. translators: 1: HTTP status code, 2: number of tools visible in the admin view.
 #: includes/admin/page.php:238
 #, php-format
-msgid "Reachable (HTTP %1$s) - %2$s tool(s) in your admin view."
+msgid "Reachable (HTTP %1$s): %2$s tool(s) in your admin view."
 msgstr ""
 
 #. translators: %s: HTTP status code returned by the endpoint.
@@ -9413,7 +9547,7 @@ msgid "The endpoint is on a different address, so this test ran without your log
 msgstr ""
 
 #: includes/admin/page.php:242
-msgid "The endpoint redirected, so the test stopped before sending your login anywhere else. Run the Connection Doctor to see where it goes."
+msgid "The endpoint redirected, so the test stopped before sending your login anywhere else. Run \"Check my connection\" to see where it goes."
 msgstr ""
 
 #: includes/admin/page.php:244
@@ -9857,7 +9991,7 @@ msgid "When an administrator exposes a content type to AI agents through Agent A
 msgstr ""
 
 #: includes/admin/page.php:1324
-msgid "If user abilities are enabled, an agent can read a user's display name, email, roles, and post count, plus any exposed user meta. If the WooCommerce integration is enabled, an agent can read and, depending on which abilities are turned on, write customer and order data - including full billing and shipping addresses, phone number, and order/purchase history. If the ACF (or SCF) integration is enabled, an agent can read and write ACF field values directly; ACF fields are a separate surface from the meta-key allowlist above and are not filtered by it."
+msgid "If user abilities are enabled, an agent can read a user's display name, email, roles, and post count, plus any exposed user meta. If the WooCommerce integration is enabled, an agent can read and, depending on which abilities are turned on, write customer and order data, including full billing and shipping addresses, phone number, and order/purchase history. If the ACF (or SCF) integration is enabled, an agent can read and write ACF field values directly; ACF fields are a separate surface from the meta-key allowlist above and are not filtered by it."
 msgstr ""
 
 #: includes/admin/page.php:1325
@@ -10086,7 +10220,7 @@ msgid "Enable all writes"
 msgstr ""
 
 #: includes/admin/page.php:2308
-msgid "Writes only - this leaves deletes and high-risk abilities switched off."
+msgid "Writes only. Deletes and high-risk abilities stay switched off."
 msgstr ""
 
 #: includes/admin/page.php:2494
@@ -10114,7 +10248,7 @@ msgid "Allowed"
 msgstr ""
 
 #: includes/admin/page.php:2529
-msgid "read-only - writes need map_meta_cap"
+msgid "read-only (writes need map_meta_cap)"
 msgstr ""
 
 #: includes/admin/page.php:2530
@@ -10132,7 +10266,7 @@ msgid "Expose %s to agents"
 msgstr ""
 
 #: includes/admin/page.php:2543
-msgid "Exposed types are still gated by that type's capabilities and your low-privilege agent user. Only expose types whose title, slug, and excerpt are not sensitive - for example, a type that stores a person's name in the title would make that name readable."
+msgid "Exposed types are still gated by that type's capabilities and your low-privilege agent user. Only expose types whose title, slug, and excerpt are not sensitive. For example, a type that stores a person's name in the title would make that name readable."
 msgstr ""
 
 #: includes/admin/page.php:2598
@@ -10234,7 +10368,7 @@ msgid "%1$s, %2$s"
 msgstr ""
 
 #: includes/admin/page.php:2994
-msgid "EXPORT INCOMPLETE - a database read failed partway through. Rows after this point were NOT exported. Re-run the export."
+msgid "EXPORT INCOMPLETE: a database read failed partway through. Rows after this point were NOT exported. Re-run the export."
 msgstr ""
 
 #: includes/admin/page.php:3330
@@ -10250,7 +10384,7 @@ msgid "My client won't connect, or the endpoint looks unreachable"
 msgstr ""
 
 #: includes/admin/page.php:3340
-msgid "Start on the Connection tab: run Step 3 \"Check the endpoint is reachable\". If that fails, open Diagnostics on the same tab and confirm \"MCP adapter active and compatible\" and \"MCP REST endpoint registered\" both show green."
+msgid "Start on the Connection tab: run Step 3 \"Check the endpoint is reachable\". If that fails, look at the checks listed under it and confirm \"MCP adapter active and compatible\" and \"MCP REST endpoint registered\" both show green."
 msgstr ""
 
 #: includes/admin/page.php:3341
@@ -10332,7 +10466,7 @@ msgid "A redirect is breaking the request (trailing slash or http to https)"
 msgstr ""
 
 #: includes/admin/page.php:3386
-msgid "A 301 redirect - adding or removing a trailing slash, or forcing http to https - can drop the POST body or the Authorization header on the way through, so the request that finally reaches WordPress is empty or unauthenticated. This is the request not arriving intact, not a credentials problem."
+msgid "A 301 redirect (adding or removing a trailing slash, or forcing http to https) can drop the POST body or the Authorization header on the way through, so the request that finally reaches WordPress is empty or unauthenticated. This is the request not arriving intact, not a credentials problem."
 msgstr ""
 
 #: includes/admin/page.php:3387
@@ -10344,7 +10478,7 @@ msgid "Test the endpoint yourself with curl"
 msgstr ""
 
 #: includes/admin/page.php:3396
-msgid "This one-liner sends a real MCP \"initialize\" call to your endpoint with the agent user's Application Password. It tells you in one shot whether the endpoint is reachable, whether auth works, and - if it fails - which layer to blame. Replace the host, the username, and the Application Password (the password is the one shown once when you created it; keep its spaces):"
+msgid "This one-liner sends a real MCP \"initialize\" call to your endpoint with the agent user's Application Password. It tells you in one shot whether the endpoint is reachable, whether auth works, and, if it fails, which layer to blame. Replace the host, the username, and the Application Password (the password is the one shown once when you created it; keep its spaces):"
 msgstr ""
 
 #: includes/admin/page.php:3398
@@ -10360,7 +10494,7 @@ msgid "200"
 msgstr ""
 
 #: includes/admin/page.php:3402
-msgid "reachable and authenticated; the body is a JSON-RPC result. Everything is working - if the AI client still fails, the block is on its side (see the 403/406/429 entry above)."
+msgid "reachable and authenticated; the body is a JSON-RPC result. Everything is working. If the AI client still fails, the block is on its side (see the 403/406/429 entry above)."
 msgstr ""
 
 #: includes/admin/page.php:3403
@@ -10368,7 +10502,7 @@ msgid "401"
 msgstr ""
 
 #: includes/admin/page.php:3403
-msgid "reached WordPress but auth failed: wrong or expired Application Password, or the Authorization header is being stripped (see the Authentication section). A membership or security plugin that keeps the REST API to signed-in members stops OAuth sign-in, not a correct Application Password; the Connection Doctor on the Connection tab names the plugins it recognises."
+msgid "reached WordPress but auth failed: wrong or expired Application Password, or the Authorization header is being stripped (see the Authentication section). A membership or security plugin that keeps the REST API to signed-in members stops OAuth sign-in, not a correct Application Password; \"Check my connection\" on the Connection tab names the plugins it recognises."
 msgstr ""
 
 #: includes/admin/page.php:3404
@@ -10404,7 +10538,7 @@ msgid "Windows MCP clients cannot spawn the npx shim by its name alone. The laun
 msgstr ""
 
 #: includes/admin/page.php:3417
-msgid "You do not need to hand-edit anything - switch to the \"Windows\" tab in Connection → Step 2 and copy the config it generates. It already wraps the launcher correctly."
+msgid "You do not need to hand-edit anything. Switch to the \"Windows\" tab in Connection → Step 2 and copy the config it generates. It already wraps the launcher correctly."
 msgstr ""
 
 #: includes/admin/page.php:3424
@@ -10416,11 +10550,11 @@ msgid "Local stacks (DDEV, Local, Valet) serve a certificate Node does not trust
 msgstr ""
 
 #: includes/admin/page.php:3427
-msgid "Quick (least safe) - add this to the config env block:"
+msgid "The quickest way, and the least safe, is to add this to the config env block:"
 msgstr ""
 
 #: includes/admin/page.php:3429
-msgid "Better - point Node at your local CA instead of disabling verification entirely (for example mkcert's rootCA.pem):"
+msgid "A better way is to point Node at your local CA instead of disabling verification entirely (for example mkcert's rootCA.pem):"
 msgstr ""
 
 #: includes/admin/page.php:3432
@@ -10456,7 +10590,7 @@ msgid "Some hosts and reverse proxies strip the Authorization header before it r
 msgstr ""
 
 #: includes/admin/page.php:3469
-msgid "Apache (.htaccess) - either of these:"
+msgid "For Apache (.htaccess), use either of these:"
 msgstr ""
 
 #: includes/admin/page.php:3471
@@ -10472,7 +10606,7 @@ msgid "The Application Passwords option is missing from my profile"
 msgstr ""
 
 #: includes/admin/page.php:3482
-msgid "WordPress core only offers Application Passwords over a secure (https) connection. Behind a TLS-terminating proxy or load balancer, WordPress can see the request as plain HTTP even though the browser is on https - so it hides the option."
+msgid "WordPress core only offers Application Passwords over a secure (https) connection. Behind a TLS-terminating proxy or load balancer, WordPress can see the request as plain HTTP even though the browser is on https, so it hides the option."
 msgstr ""
 
 #: includes/admin/page.php:3483
@@ -10480,7 +10614,7 @@ msgid "Fix the proxy or HTTPS headers (or your site URL) so WordPress correctly 
 msgstr ""
 
 #: includes/admin/page.php:3484
-msgid "Do not enable Application Passwords over genuine plaintext HTTP in production - the credential would travel unencrypted."
+msgid "Do not enable Application Passwords over genuine plaintext HTTP in production. The credential would travel unencrypted."
 msgstr ""
 
 #: includes/admin/page.php:3493
@@ -10496,7 +10630,7 @@ msgid "This is intentional least-privilege behaviour. Each connection is filtere
 msgstr ""
 
 #: includes/admin/page.php:3500
-msgid "To expose more tools, grant the agent user the role or capabilities those abilities require. Granting more, of course, widens what the agent can do - keep it to what the agent genuinely needs."
+msgid "To expose more tools, grant the agent user the role or capabilities those abilities require. Granting more widens what the agent can do, so keep it to what the agent genuinely needs."
 msgstr ""
 
 #: includes/admin/page.php:3507
@@ -10636,7 +10770,7 @@ msgid "add it to the mcpServers block in your settings.json."
 msgstr ""
 
 #: includes/admin/page.php:3574
-msgid "For the proxy clients, copy the config straight from Connection → Step 2 - do not hand-build it. On Windows, use that tab's \"Windows\" view (it wraps the launcher in cmd /c); for a local or staging site, it adds the certificate handling. Both are covered in the Connecting section above."
+msgid "For the proxy clients, copy the config straight from Connection → Step 2 instead of building it by hand. On Windows, use that tab's \"Windows\" view (it wraps the launcher in cmd /c); for a local or staging site, it adds the certificate handling. Both are covered in the Connecting section above."
 msgstr ""
 
 #: includes/admin/page.php:3575
@@ -10660,7 +10794,7 @@ msgid "No phoning home."
 msgstr ""
 
 #: includes/admin/page.php:3586
-msgid "It never contacts an AI provider or a telemetry service, and your credentials never leave the site - the AI client connects in to you, not the other way round. The one exception is the off-by-default \"Upload media from URL\" ability: turn it on and it will fetch the exact URL your AI client gives it so that file can be added to your media library."
+msgid "It never contacts an AI provider or a telemetry service, and your credentials never leave the site. The AI client connects in to you, not the other way round. The one exception is the off-by-default \"Upload media from URL\" ability: turn it on and it will fetch the exact URL your AI client gives it so that file can be added to your media library."
 msgstr ""
 
 #: includes/admin/page.php:3587
@@ -10668,7 +10802,7 @@ msgid "A dedicated low-privilege user."
 msgstr ""
 
 #: includes/admin/page.php:3587
-msgid "The agent authenticates as its own separate WordPress user via an Application Password - not as you, and not as an administrator. You choose that user's role, so you set its ceiling."
+msgid "The agent authenticates as its own separate WordPress user via an Application Password, not as you and not as an administrator. You choose that user's role, so you set its ceiling."
 msgstr ""
 
 #: includes/admin/page.php:3588
@@ -10676,7 +10810,7 @@ msgid "Two locks on every ability."
 msgstr ""
 
 #: includes/admin/page.php:3588
-msgid "An ability works only if you explicitly enabled it on the Abilities tab AND the agent user's capabilities allow it. The default is nothing enabled - the agent starts with zero abilities until you turn them on."
+msgid "An ability works only if you explicitly enabled it on the Abilities tab AND the agent user's capabilities allow it. Nothing is enabled by default, so the agent starts with zero abilities until you turn them on."
 msgstr ""
 
 #: includes/admin/page.php:3589
@@ -10708,7 +10842,7 @@ msgid "What does the plugin log, and does it call out to anything?"
 msgstr ""
 
 #: includes/admin/page.php:3601
-msgid "The plugin never sends your content, credentials, or other site data anywhere. It can make two outbound requests of its own: the Connection tab's same-origin reachability check, and, only if you turn on the \"Upload media from URL\" ability, a fetch of the URL your AI client supplies so that file can be added to your media library - like any HTTP request, that fetch reveals the URL, your site's IP, and its timing to whatever server answers it."
+msgid "The plugin never sends your content, credentials, or other site data anywhere. It can make two outbound requests of its own: the Connection tab's same-origin reachability check, and, only if you turn on the \"Upload media from URL\" ability, a fetch of the URL your AI client supplies so that file can be added to your media library. Like any HTTP request, that fetch reveals the URL, your site's IP, and its timing to whatever server answers it."
 msgstr ""
 
 #: includes/admin/page.php:3602
@@ -13108,7 +13242,7 @@ msgstr ""
 #. translators: %s: the CSS field.
 #: includes/builder-shortcodes.php:98
 #, php-format
-msgid "%s holds a \"<\" followed by another character, such as a <= range query, and WPBakery cuts the CSS off there when it prints it. Use min-width or max-width instead. Nothing was changed."
+msgid "%s holds a \"<\" that is not followed by whitespace, such as a <= range query, and WPBakery cuts the CSS off there when it prints it. Use min-width or max-width instead. Nothing was changed."
 msgstr ""
 
 #. translators: %d: the maximum depth.
@@ -13811,13 +13945,13 @@ msgid "Starter playbook added: %s"
 msgstr ""
 
 #: includes/playbooks.php:471
-msgid "Playbooks the site owner wrote for this site. When a task matches one, load it with get-playbook and follow it:"
+msgid "Playbooks the site owner wrote for this site. When a task matches one, load it with aafm-get-playbook and follow it:"
 msgstr ""
 
 #. translators: %d: how many playbooks are not listed.
 #: includes/playbooks.php:475
 #, php-format
-msgid "- and %d more: call list-playbooks."
+msgid "- and %d more: call aafm-list-playbooks."
 msgstr ""
 
 #: includes/playbooks.php:506
@@ -14294,11 +14428,11 @@ msgid "The purge budget could not be read. Nothing was purged."
 msgstr ""
 
 #: includes/siteops/budget.php:112
-msgid "The site-wide purge budget is used up for now. The cache-status tool shows how much is left. The cache plugin's own screen is not limited."
+msgid "The site-wide purge budget is used up for now. The site-cache-status tool shows how much is left. The cache plugin's own screen is not limited."
 msgstr ""
 
 #: includes/siteops/budget.php:122
-msgid "The whole page cache was purged a short time ago. The cache-status tool shows when a whole-site purge is allowed again."
+msgid "The whole page cache was purged a short time ago. The site-cache-status tool shows when a whole-site purge is allowed again."
 msgstr ""
 
 #: includes/siteops/cache/status-only.php:52

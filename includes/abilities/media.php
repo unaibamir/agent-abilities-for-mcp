@@ -205,7 +205,7 @@ function aafm_exec_get_media( array $input ) {
 
 		if ( '' === $search ) {
 			$args['s'] = '';
-			return new WP_Query( $args );
+			return aafm_paged_query( $args );
 		}
 
 		// Core 's' search and meta_query combine with implicit AND, so an OR across title,
@@ -251,7 +251,7 @@ function aafm_exec_get_media( array $input ) {
 
 		add_filter( 'posts_where', $where_filter, 10, 2 );
 		try {
-			return new WP_Query( $args );
+			return aafm_paged_query( $args );
 		} finally {
 			remove_filter( 'posts_where', $where_filter, 10 );
 		}

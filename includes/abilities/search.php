@@ -235,7 +235,7 @@ function aafm_exec_search_content( array $input ) {
 			add_filter( 'posts_where', $own_filter, 10, 2 );
 		}
 		try {
-			return new WP_Query( aafm_tec_unfiltered_query_args( $args ) );
+			return aafm_paged_query( aafm_tec_unfiltered_query_args( $args ) );
 		} finally {
 			remove_filter( 'posts_where', $own_filter, 10 );
 		}

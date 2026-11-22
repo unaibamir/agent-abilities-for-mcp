@@ -296,7 +296,7 @@ function aafm_exec_get_posts( array $input ) {
 			// author__in, not author: an author of 0 would drop the condition instead of matching nothing.
 			$args['author__in'] = array( get_current_user_id() );
 		}
-		return new WP_Query( aafm_tec_unfiltered_query_args( $args ) );
+		return aafm_paged_query( aafm_tec_unfiltered_query_args( $args ) );
 	};
 
 	$format          = isset( $input['content_format'] ) ? (string) $input['content_format'] : 'rendered';

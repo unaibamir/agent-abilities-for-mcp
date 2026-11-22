@@ -27,26 +27,26 @@ final class ReplaceSitewideScanSweepTest extends TestCase {
 	private const CALLS = array(
 		'includes/siteops/redirect-read.php|aafm_site_redirect_path_class|1' => 'READ',
 		'includes/siteops/redirects/safe-redirect-manager.php|aafm_redirect_safe_redirect_manager_all|1' => 'READ',
-		'includes/wpml.php|aafm_wpml_count_posts_by_status|1'           => 'READ',
-		'includes/helpers.php|aafm_with_seo_render_scope|1'             => 'READ',
-		'includes/abilities/blocks.php|aafm_exec_list_blocks|1'         => 'READ',
-		'includes/abilities/avada.php|aafm_exec_avada_list_layouts|1'   => 'READ',
-		'includes/abilities/avada.php|aafm_exec_avada_list_library|1'   => 'READ',
-		'includes/abilities/search.php|aafm_exec_search_content|1'      => 'READ',
+		'includes/wpml.php|aafm_wpml_count_posts_by_status|1' => 'READ',
+		'includes/helpers.php|aafm_with_seo_render_scope|1' => 'READ',
+		// The paged list query and its one-row count probe. READ because its only callers are the
+		// get-posts, search-content and get-media lists (pinned by test_the_paged_query_serves_list_reads_only).
+		'includes/helpers.php|aafm_paged_query|1' => 'READ',
+		'includes/helpers.php|aafm_paged_query|2' => 'READ',
+		'includes/abilities/blocks.php|aafm_exec_list_blocks|1' => 'READ',
+		'includes/abilities/avada.php|aafm_exec_avada_list_layouts|1' => 'READ',
+		'includes/abilities/avada.php|aafm_exec_avada_list_library|1' => 'READ',
 		'includes/abilities/wpbakery-site.php|aafm_templatera_templates|1' => 'READ',
 		'includes/abilities/geodirectory.php|aafm_exec_geodirectory_get_listings|1' => 'READ',
 		'includes/abilities/geodirectory.php|aafm_exec_geodirectory_get_listings|2' => 'READ',
-		'includes/abilities/media.php|aafm_exec_get_media|1'            => 'READ',
-		'includes/abilities/media.php|aafm_exec_get_media|2'            => 'READ',
 		'includes/abilities/media.php|aafm_query_attachment_counts_by_mime|1' => 'READ',
-		'includes/abilities/menus.php|aafm_exec_list_navigations|1'     => 'READ',
-		'includes/abilities/posts.php|aafm_exec_get_posts|1'            => 'READ',
+		'includes/abilities/menus.php|aafm_exec_list_navigations|1' => 'READ',
 		'includes/abilities/woocommerce/coupons.php|aafm_exec_wc_list_coupons|1' => 'READ',
 		// Draft and pending variation ids, read only to refuse removing an attribute a variation uses.
 		'includes/abilities/woocommerce/products.php|aafm_wc_attributes_without|1' => 'READ',
-		'includes/abilities/posts.php|aafm_exec_replace_sitewide|1'     => 'READ',
-		'includes/abilities/posts.php|aafm_exec_replace_sitewide|2'     => 'WRITE-FEED',
-		'includes/admin/review-inbox.php|aafm_review_inbox_ids|1'       => 'READ',
+		'includes/abilities/posts.php|aafm_exec_replace_sitewide|1' => 'READ',
+		'includes/abilities/posts.php|aafm_exec_replace_sitewide|2' => 'WRITE-FEED',
+		'includes/admin/review-inbox.php|aafm_review_inbox_ids|1' => 'READ',
 	);
 
 	/**
@@ -190,6 +190,35 @@ final class ReplaceSitewideScanSweepTest extends TestCase {
 		$expected = array_keys( self::CALLS );
 		sort( $expected );
 		$this->assertSame( $expected, $this->call_keys(), 'A WP_Query or get_posts() call was added, moved or removed; class it here.' );
+	}
+
+	/**
+	 * The paged list query, aafm_paged_query(), is classed READ on the strength of its callers, so a new caller (say a write
+	 * that pages its ids) must be classed here before it can lean on that.
+	 */
+	public function test_the_paged_query_serves_list_reads_only(): void {
+		$root    = dirname( __DIR__, 2 ) . '/';
+		$files   = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $root . 'includes', \FilesystemIterator::SKIP_DOTS ) );
+		$callers = array();
+		foreach ( $files as $file ) {
+			if ( 'php' !== $file->getExtension() ) {
+				continue;
+			}
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading local source.
+			$count = preg_match_all( '/(?<!function )\baafm_paged_query\(/', (string) file_get_contents( $file->getPathname() ) );
+			if ( $count > 0 ) {
+				$callers[ substr( $file->getPathname(), strlen( $root ) ) ] = $count;
+			}
+		}
+		ksort( $callers );
+		$this->assertSame(
+			array(
+				'includes/abilities/media.php'  => 2, // aafm_exec_get_media, plain and searched.
+				'includes/abilities/posts.php'  => 1, // aafm_exec_get_posts.
+				'includes/abilities/search.php' => 1, // aafm_exec_search_content.
+			),
+			$callers
+		);
 	}
 
 	/**

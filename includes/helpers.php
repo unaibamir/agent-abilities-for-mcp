@@ -2796,6 +2796,34 @@ function aafm_validate_revision( int $revision_id, int $post_id ) {
 }
 
 /**
+ * Run a paged list query whose found_posts is the real total even on a page past the last one.
+ *
+ * Core skips its count when the page holds no rows and leaves found_posts at 0, so a caller paging
+ * to the end by total would read the whole collection as empty. Call it where the query's own
+ * scoping filters are attached: the one-row probe must see the same WHERE.
+ *
+ * @param array<string,mixed> $args WP_Query args with no_found_rows false.
+ * @return WP_Query
+ */
+function aafm_paged_query( array $args ): WP_Query {
+	$query = new WP_Query( $args );
+	if ( array() === $query->posts && (int) ( $args['paged'] ?? 1 ) > 1 ) {
+		$probe              = new WP_Query(
+			array_merge(
+				$args,
+				array(
+					'paged'          => 1,
+					'posts_per_page' => 1,
+					'fields'         => 'ids',
+				)
+			)
+		);
+		$query->found_posts = (int) $probe->found_posts;
+	}
+	return $query;
+}
+
+/**
  * Bound page/per_page arguments.
  *
  * The page is clamped to AAFM_LIST_PAGE_MAX server-side, matching the `maximum` every list

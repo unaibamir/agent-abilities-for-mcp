@@ -20,7 +20,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_pages_definitions' );
 function aafm_register_pages_definitions( array $registry ): array {
 	$registry['aafm/get-pages']   = array(
 		'label'        => __( 'Get pages', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'List pages filtered by status and search term. Each item returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per item. Response includes total.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'List pages filtered by status and search term. Each item returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per item. Response includes total. Someone else\'s draft, pending or scheduled item is listed only for a user who can edit other people\'s items of that type.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',
@@ -36,7 +36,7 @@ function aafm_register_pages_definitions( array $registry ): array {
 	);
 	$registry['aafm/create-page'] = array(
 		'label'        => __( 'Create page', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Create a new page, published by default (requires publish_pages to call this ability at all). An explicit draft, pending, or private status is also accepted. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). parent_id puts the page under another page and template picks one of the theme\'s page templates or "default". Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Create a new page, published by default unless the operator\'s force-draft setting holds it as a draft (requires publish_pages to call this ability at all). An explicit draft, pending, or private status is also accepted. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). parent_id puts the page under another page and template picks one of the theme\'s page templates or "default". Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',

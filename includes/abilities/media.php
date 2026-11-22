@@ -21,7 +21,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_media_definitions' );
 function aafm_register_media_definitions( array $registry ): array {
 	$registry['aafm/get-media']             = array(
 		'label'        => __( 'Get media', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'List media library items (URL, alt, mime, dimensions). Response includes total (the full match count).', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'List media library items (URL, alt, mime, dimensions). Response includes total (the full match count). Without the edit-others-posts capability, only the caller\'s own uploads are listed.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'media',
@@ -29,7 +29,7 @@ function aafm_register_media_definitions( array $registry ): array {
 	);
 	$registry['aafm/get-media-item']        = array(
 		'label'        => __( 'Get media item', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Read one media item by id: caption, description, date, filesize, parent, and all image sizes.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Read one media item by id: caption, description, date, filesize, parent, and all image sizes. Without the edit-others-posts capability, only the caller\'s own uploads can be read.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'media',
@@ -37,7 +37,7 @@ function aafm_register_media_definitions( array $registry ): array {
 	);
 	$registry['aafm/count-media']           = array(
 		'label'        => __( 'Count media', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Count media library items, total and broken down by mime type.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Count media library items, total and broken down by mime type. Without the edit-others-posts capability, only the caller\'s own uploads are counted.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'media',

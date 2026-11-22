@@ -61,7 +61,7 @@ function aafm_tec_organizers_registry_definitions(): array {
 		),
 		'aafm/tec-get-organizer'    => array(
 			'label'        => __( 'Get organizer', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Read a single organizer by ID.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Read a single organizer by ID. An organizer that is not published needs edit access to it.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'tec',

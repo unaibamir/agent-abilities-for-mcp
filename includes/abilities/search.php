@@ -20,7 +20,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_search_definitions' );
 function aafm_register_search_definitions( array $registry ): array {
 	$registry['aafm/search-content'] = array(
 		'label'        => __( 'Search content', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Search across the exposed content types in one query. Each result returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per result. Response includes total.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Search across the exposed content types in one query. Each result returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per result. Response includes total. Someone else\'s draft, pending or scheduled item is found only in the types where the user can edit other people\'s items.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',

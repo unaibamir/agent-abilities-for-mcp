@@ -468,11 +468,11 @@ function aafm_playbook_index(): string {
 		}
 	}
 
-	$lines = array( __( 'Playbooks the site owner wrote for this site. When a task matches one, load it with get-playbook and follow it:', 'agent-abilities-for-mcp' ) );
+	$lines = array( __( 'Playbooks the site owner wrote for this site. When a task matches one, load it with aafm-get-playbook and follow it:', 'agent-abilities-for-mcp' ) );
 	$total = count( $active );
 	$more  = static function ( int $left ): string {
 		/* translators: %d: how many playbooks are not listed. */
-		return sprintf( __( '- and %d more: call list-playbooks.', 'agent-abilities-for-mcp' ), $left );
+		return sprintf( __( '- and %d more: call aafm-list-playbooks.', 'agent-abilities-for-mcp' ), $left );
 	};
 	foreach ( $active as $i => $playbook ) {
 		$line      = '- ' . $playbook['slug'] . ': ' . ( '' !== $playbook['description'] ? $playbook['description'] : $playbook['title'] );

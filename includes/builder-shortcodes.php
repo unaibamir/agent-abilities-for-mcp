@@ -95,7 +95,7 @@ function aafm_builder_css_vendor_alters( string $builder, string $field, string 
 		$message = __( '%s holds a "<" character, which Avada rewrites when it prints page CSS. Use min-width or max-width instead of a <= range query. Nothing was changed.', 'agent-abilities-for-mcp' );
 	} elseif ( 'wpbakery' === $builder && 1 === preg_match( '/<(?!\s)/', $css ) ) {
 		/* translators: %s: the CSS field. */
-		$message = __( '%s holds a "<" followed by another character, such as a <= range query, and WPBakery cuts the CSS off there when it prints it. Use min-width or max-width instead. Nothing was changed.', 'agent-abilities-for-mcp' );
+		$message = __( '%s holds a "<" that is not followed by whitespace, such as a <= range query, and WPBakery cuts the CSS off there when it prints it. Use min-width or max-width instead. Nothing was changed.', 'agent-abilities-for-mcp' );
 	} else {
 		return null;
 	}

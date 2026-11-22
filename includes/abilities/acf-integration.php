@@ -102,7 +102,7 @@ function aafm_acf_registry_definitions(): array {
 		),
 		'aafm/acf-get-user-fields'    => array(
 			'label'        => __( 'Get user ACF fields', 'agent-abilities-for-mcp' ),
-			'description'  => __( "Reads all of a user's ACF field values as a hydrated map keyed by field name. A field of the user_email type returns the real email address under the integration disclaimer. Requires edit access to that user.", 'agent-abilities-for-mcp' ),
+			'description'  => __( "Reads all of a user's ACF field values as a hydrated map keyed by field name. A field of the user_email type returns the real email address under the integration disclaimer. Requires the edit-users capability and edit access to that user.", 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'acf',
@@ -110,7 +110,7 @@ function aafm_acf_registry_definitions(): array {
 		),
 		'aafm/acf-update-user-fields' => array(
 			'label'        => __( 'Update user ACF fields', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Writes ACF field values on a user by field key, each value sanitized for its field type. Requires edit access to that user.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Writes ACF field values on a user by field key, each value sanitized for its field type. Requires the edit-users capability and edit access to that user.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'acf',

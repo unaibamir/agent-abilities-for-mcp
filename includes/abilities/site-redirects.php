@@ -60,7 +60,7 @@ function aafm_site_redirects_registry_definitions(): array {
 		),
 		'aafm/site-get-redirect'   => array(
 			'label'        => __( 'Get a redirect', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads one redirect by the id that list-redirects gave: source, target, status code, whether it is on, and whether it is an exact address or a pattern. When more than one supported redirect plugin is active, the plugin must be named. It changes nothing. Requires the manage-options capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Reads one redirect by the id that site-list-redirects gave: source, target, status code, whether it is on, and whether it is an exact address or a pattern. When more than one supported redirect plugin is active, the plugin must be named. It changes nothing. Requires the manage-options capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'site_redirects',
@@ -223,7 +223,7 @@ function aafm_args_site_get_redirect(): array {
 					'minLength'   => 1,
 					'maxLength'   => 64,
 					'pattern'     => '^[A-Za-z0-9_.-]+$',
-					'description' => __( "The redirect's id from list-redirects.", 'agent-abilities-for-mcp' ),
+					'description' => __( "The redirect's id from site-list-redirects.", 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'id' ),

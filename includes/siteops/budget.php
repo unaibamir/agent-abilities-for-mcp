@@ -109,7 +109,7 @@ function aafm_site_purge_budget_check( string $op ) {
 
 	$used = $counts['small'] + $counts['site'] * $settings['site_cost'];
 	if ( $used > $settings['limit'] ) {
-		return new WP_Error( 'aafm_site_purge_budget', __( 'The site-wide purge budget is used up for now. The cache-status tool shows how much is left. The cache plugin\'s own screen is not limited.', 'agent-abilities-for-mcp' ) );
+		return new WP_Error( 'aafm_site_purge_budget', __( 'The site-wide purge budget is used up for now. The site-cache-status tool shows how much is left. The cache plugin\'s own screen is not limited.', 'agent-abilities-for-mcp' ) );
 	}
 
 	if ( 'all' === $op ) {
@@ -119,7 +119,7 @@ function aafm_site_purge_budget_check( string $op ) {
 			return $unreadable;
 		}
 		if ( (int) $recent['value'] > 1 ) {
-			return new WP_Error( 'aafm_site_purge_cooldown', __( 'The whole page cache was purged a short time ago. The cache-status tool shows when a whole-site purge is allowed again.', 'agent-abilities-for-mcp' ) );
+			return new WP_Error( 'aafm_site_purge_cooldown', __( 'The whole page cache was purged a short time ago. The site-cache-status tool shows when a whole-site purge is allowed again.', 'agent-abilities-for-mcp' ) );
 		}
 	}
 

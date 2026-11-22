@@ -40,7 +40,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_posts_definitions' );
 function aafm_register_posts_definitions( array $registry ): array {
 	$registry['aafm/get-posts']        = array(
 		'label'        => __( 'Get posts', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'List posts filtered by type, status, and search term. Each item returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per item; content_format (rendered or raw) only takes effect when include_content is true. Response includes total.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'List posts filtered by type, status, and search term. Each item returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per item; content_format (rendered or raw) only takes effect when include_content is true. Response includes total. Someone else\'s draft, pending or scheduled item is listed only for a user who can edit other people\'s items of that type.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',

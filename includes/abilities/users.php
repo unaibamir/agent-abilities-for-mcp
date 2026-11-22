@@ -59,7 +59,7 @@ function aafm_register_users_definitions( array $registry ): array {
 	);
 	$registry['aafm/create-user'] = array(
 		'label'        => __( 'Create user', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Create a new user with the site default role, or subscriber when the default is administrator or a role the caller cannot assign (never a caller-chosen role). Requires the create-users capability. Off by default.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Create a new user with the site default role, or subscriber when the default is administrator or a role the caller cannot assign (never a caller-chosen role). Requires the create-users capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'users',
@@ -75,7 +75,7 @@ function aafm_register_users_definitions( array $registry ): array {
 	);
 	$registry['aafm/delete-user'] = array(
 		'label'        => __( 'Delete user', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Permanently delete a user and reassign their content to another user. Never deletes you or the last administrator. Requires the delete-users capability. Off by default. On multisite this removes the user from the current site only; the network account and its logins remain.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Permanently delete a user and reassign their content to another user. Never deletes you or the last administrator. Requires the delete-users capability. On multisite this removes the user from the current site only; the network account and its logins remain.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'users',

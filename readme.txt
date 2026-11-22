@@ -358,7 +358,7 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 5. WooCommerce tools that change orders, issue refunds or touch payment settings stay locked behind a second switch on the Settings tab.
 6. Each integration has a card showing whether its plugin is active and how many of its abilities are on. Here WooCommerce and Yoast SEO are active, and Rank Math, All in One SEO, ACF and Slim SEO are not installed.
 7. Abilities that other plugins register, grouped by plugin and off until you turn them on. A warning says this plugin does not filter what they return.
-8. The Connection tab: the Pause all access button, then Connect with OAuth, where you pick your client and get its steps and your endpoint address, with the token lifetimes card below.
+8. The Connection tab: the Pause all access button, then Connect with OAuth, where you pick your client and get its steps and your endpoint address.
 9. The Activity Log with a 7-day summary, filters, the connection and IP of each call, duration, a Live view and a CSV export that follows the filters.
 10. The Dashboard after setup: the Needs review card with two drafts from agents, and the Why is my tool missing card, which lists tools that are switched on but that agents cannot see right now, each with the reason.
 11. Site Brief: a few plain rules every connected agent reads when its session starts, such as spelling and what to leave alone.

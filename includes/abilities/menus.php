@@ -98,7 +98,7 @@ function aafm_register_menus_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-menu-item']  = array(
 		'label'        => __( 'Update menu item', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Updates a menu item by id: its title, URL, parent item (to nest it, or 0 for the top level) or stored position. A parent must be another item of the same menu and cannot be the item itself or one of its own descendants. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Updates a menu item by id: its title, a custom link\'s URL, parent item (to nest it, or 0 for the top level) or stored position. A parent must be another item of the same menu and cannot be the item itself or one of its own descendants. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'site',

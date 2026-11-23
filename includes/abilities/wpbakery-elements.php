@@ -342,6 +342,7 @@ function aafm_wpbakery_script_gate( string $kind ) {
  * @return WP_Error
  */
 function aafm_wpbakery_setting_error( string $code, string $name ): WP_Error {
+	$name  = aafm_builder_shown_key( $name );
 	$error = aafm_builder_error( $code, array( 'setting' => $name ) );
 	return new WP_Error(
 		$code,
@@ -352,6 +353,17 @@ function aafm_wpbakery_setting_error( string $code, string $name ): WP_Error {
 }
 
 /**
+ * A setting key a caller sent, as a refusal may repeat it: plain text, at most 100 characters. Every
+ * builder refusal that names a key goes through this, so a key of any length or markup comes back safe.
+ *
+ * @param string $key The key sent.
+ * @return string
+ */
+function aafm_builder_shown_key( string $key ): string {
+	return mb_substr( aafm_sanitize_plain_text( $key ), 0, 100 );
+}
+
+/**
  * The refusal of a settings tool (wpbakery-update-settings, avada-update-slider-settings) for a key it does not
  * change: the key named, with the same code as an element setting that cannot be written.
  *
@@ -359,8 +371,7 @@ function aafm_wpbakery_setting_error( string $code, string $name ): WP_Error {
  * @return WP_Error
  */
 function aafm_builder_unknown_setting_error( string $key ): WP_Error {
-	// The key is the caller's: repeated as plain text and at most 100 characters.
-	$shown = mb_substr( aafm_sanitize_plain_text( $key ), 0, 100 );
+	$shown = aafm_builder_shown_key( $key );
 	return new WP_Error(
 		'aafm_builder_attribute_not_writable',
 		/* translators: %s: the setting key the caller sent. */

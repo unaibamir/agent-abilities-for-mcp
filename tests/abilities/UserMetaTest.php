@@ -125,6 +125,54 @@ final class UserMetaTest extends TestCase {
 		$this->assertSame( '', (string) get_user_meta( $uid, 'twitter', true ) );
 	}
 
+	public function test_user_meta_tools_take_meta_key_as_well_as_key(): void {
+		add_filter( 'aafm_allowed_user_meta_keys', static fn() => array( 'twitter', 'mastodon' ) );
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		$uid = self::factory()->user->create( array( 'role' => 'author' ) );
+
+		$set = wp_get_ability( 'aafm/update-user-meta' )->execute(
+			array(
+				'user_id'  => $uid,
+				'meta_key' => 'twitter', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- tool argument.
+				'value'    => '@handle',
+			)
+		);
+		$this->assertIsArray( $set );
+		$get = wp_get_ability( 'aafm/get-user-meta' )->execute(
+			array(
+				'user_id'  => $uid,
+				'meta_key' => 'twitter', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- tool argument.
+			)
+		);
+		$this->assertSame( '@handle', $get['value'] ?? null );
+
+		$both = wp_get_ability( 'aafm/delete-user-meta' )->execute(
+			array(
+				'user_id'  => $uid,
+				'key'      => 'twitter',
+				'meta_key' => 'mastodon', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- tool argument.
+			)
+		);
+		$this->assertWPError( $both );
+		$this->assertSame( 'aafm_user_meta_key_conflict', $both->get_error_code() );
+		$this->assertSame( '@handle', get_user_meta( $uid, 'twitter', true ), 'Nothing was deleted.' );
+
+		$neither = wp_get_ability( 'aafm/get-user-meta' )->execute( array( 'user_id' => $uid ) );
+		$this->assertWPError( $neither );
+		$this->assertSame( 'aafm_user_meta_key_missing', $neither->get_error_code() );
+
+		$del = wp_get_ability( 'aafm/delete-user-meta' )->execute(
+			array(
+				'user_id'  => $uid,
+				'key'      => 'twitter',
+				'meta_key' => 'twitter', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- tool argument.
+			)
+		);
+		$this->assertIsArray( $del, 'The same key under both names is fine.' );
+		$this->assertSame( '', (string) get_user_meta( $uid, 'twitter', true ) );
+	}
+
 	public function test_user_meta_refuses_blocked_key_even_if_targeted(): void {
 		$this->register_all();
 		$this->acting_as( 'administrator' );

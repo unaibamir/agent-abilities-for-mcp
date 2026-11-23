@@ -68,8 +68,31 @@ function aafm_can_access_user_meta( array $input ): bool {
 	if ( $id < 1 || ! current_user_can( 'edit_users' ) || ! aafm_user_can_checked( 'edit_user', $id, 'user' ) ) {
 		return false;
 	}
-	$key = isset( $input['key'] ) ? (string) $input['key'] : '';
-	return ! is_wp_error( aafm_validate_user_meta_key( $key ) );
+	// Every key the call names has to pass; a call naming none, or two different ones, is refused by
+	// execute with a named error (aafm_user_meta_key()), never by a silent permission denial.
+	foreach ( array( 'key', 'meta_key' ) as $name ) {
+		if ( isset( $input[ $name ] ) && is_wp_error( aafm_validate_user_meta_key( (string) $input[ $name ] ) ) ) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/**
+ * The user-meta key a call names, as key or under the post and term meta tools' name meta_key.
+ *
+ * @param array<string,mixed> $input Ability input.
+ * @return string|WP_Error The validated key, or why there is none.
+ */
+function aafm_user_meta_key( array $input ) {
+	$named = array_values( array_unique( array_map( 'strval', array_intersect_key( $input, array_flip( array( 'key', 'meta_key' ) ) ) ) ) );
+	if ( count( $named ) > 1 ) {
+		return new WP_Error( 'aafm_user_meta_key_conflict', __( 'key and meta_key name different keys. Send one of them, or the same key in both. Nothing was changed.', 'agent-abilities-for-mcp' ), array( 'status' => 400 ) );
+	}
+	if ( array() === $named ) {
+		return new WP_Error( 'aafm_user_meta_key_missing', __( 'Send the user-meta key as key or meta_key.', 'agent-abilities-for-mcp' ), array( 'status' => 400 ) );
+	}
+	return aafm_validate_user_meta_key( $named[0] );
 }
 
 /**
@@ -85,18 +108,23 @@ function aafm_args_get_user_meta(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'user_id' => array(
+				'user_id'  => array(
 					'type'        => 'integer',
 					'minimum'     => 1,
 					'description' => __( 'ID of the user whose meta to read. The current user must have edit access to this user.', 'agent-abilities-for-mcp' ),
 				),
-				'key'     => array(
+				'key'      => array(
 					'type'        => 'string',
 					'minLength'   => 1,
-					'description' => __( 'The user-meta key to operate on. Must be on the operator\'s user-meta allowlist (or the allow-all wildcard) and not explicitly denied or hard-blocked; session tokens, application passwords, capability, user-level, and 2FA/passkey keys can never be exposed under any allowlist, and a key that fails any of those checks is rejected before the operation runs. (The post-meta abilities name the equivalent parameter meta_key; the two are kept distinct for back-compatibility and are not interchangeable.)', 'agent-abilities-for-mcp' ),
+					'description' => __( 'The user-meta key to operate on. Must be on the operator\'s user-meta allowlist (or the allow-all wildcard) and not explicitly denied or hard-blocked; session tokens, application passwords, capability, user-level, and 2FA/passkey keys can never be exposed under any allowlist, and a key that fails any of those checks is rejected before the operation runs. Send key or meta_key.', 'agent-abilities-for-mcp' ),
+				),
+				'meta_key' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property name, not a meta query.
+					'type'        => 'string',
+					'minLength'   => 1,
+					'description' => __( 'The same key under the name the post and term meta tools use. Send key or meta_key; when both are sent they must be the same.', 'agent-abilities-for-mcp' ),
 				),
 			),
-			'required'             => array( 'user_id', 'key' ),
+			'required'             => array( 'user_id' ),
 			'additionalProperties' => false,
 		),
 		'output_schema'       => array(
@@ -135,22 +163,27 @@ function aafm_args_update_user_meta(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'user_id' => array(
+				'user_id'  => array(
 					'type'        => 'integer',
 					'minimum'     => 1,
 					'description' => __( 'ID of the user whose meta to write. The current user must have edit access to this user.', 'agent-abilities-for-mcp' ),
 				),
-				'key'     => array(
+				'key'      => array(
 					'type'        => 'string',
 					'minLength'   => 1,
-					'description' => __( 'The user-meta key to operate on. Must be on the operator\'s user-meta allowlist (or the allow-all wildcard) and not explicitly denied or hard-blocked; session tokens, application passwords, capability, user-level, and 2FA/passkey keys can never be exposed under any allowlist, and a key that fails any of those checks is rejected before the operation runs. (The post-meta abilities name the equivalent parameter meta_key; the two are kept distinct for back-compatibility and are not interchangeable.)', 'agent-abilities-for-mcp' ),
+					'description' => __( 'The user-meta key to operate on. Must be on the operator\'s user-meta allowlist (or the allow-all wildcard) and not explicitly denied or hard-blocked; session tokens, application passwords, capability, user-level, and 2FA/passkey keys can never be exposed under any allowlist, and a key that fails any of those checks is rejected before the operation runs. Send key or meta_key.', 'agent-abilities-for-mcp' ),
 				),
-				'value'   => array(
+				'meta_key' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property name, not a meta query.
+					'type'        => 'string',
+					'minLength'   => 1,
+					'description' => __( 'The same key under the name the post and term meta tools use. Send key or meta_key; when both are sent they must be the same.', 'agent-abilities-for-mcp' ),
+				),
+				'value'    => array(
 					'type'        => array( 'string', 'number', 'boolean', 'integer' ),
 					'description' => __( 'The scalar value to store. Only text, number, or boolean values are accepted; the value is plain-text sanitized and then run through any registered sanitize_user_meta_{key} callback.', 'agent-abilities-for-mcp' ),
 				),
 			),
-			'required'             => array( 'user_id', 'key', 'value' ),
+			'required'             => array( 'user_id', 'value' ),
 			'additionalProperties' => false,
 		),
 		'output_schema'       => array(
@@ -190,18 +223,23 @@ function aafm_args_delete_user_meta(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'user_id' => array(
+				'user_id'  => array(
 					'type'        => 'integer',
 					'minimum'     => 1,
 					'description' => __( 'ID of the user whose meta to delete. The current user must have edit access to this user.', 'agent-abilities-for-mcp' ),
 				),
-				'key'     => array(
+				'key'      => array(
 					'type'        => 'string',
 					'minLength'   => 1,
-					'description' => __( 'The user-meta key to operate on. Must be on the operator\'s user-meta allowlist (or the allow-all wildcard) and not explicitly denied or hard-blocked; session tokens, application passwords, capability, user-level, and 2FA/passkey keys can never be exposed under any allowlist, and a key that fails any of those checks is rejected before the operation runs. (The post-meta abilities name the equivalent parameter meta_key; the two are kept distinct for back-compatibility and are not interchangeable.)', 'agent-abilities-for-mcp' ),
+					'description' => __( 'The user-meta key to operate on. Must be on the operator\'s user-meta allowlist (or the allow-all wildcard) and not explicitly denied or hard-blocked; session tokens, application passwords, capability, user-level, and 2FA/passkey keys can never be exposed under any allowlist, and a key that fails any of those checks is rejected before the operation runs. Send key or meta_key.', 'agent-abilities-for-mcp' ),
+				),
+				'meta_key' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property name, not a meta query.
+					'type'        => 'string',
+					'minLength'   => 1,
+					'description' => __( 'The same key under the name the post and term meta tools use. Send key or meta_key; when both are sent they must be the same.', 'agent-abilities-for-mcp' ),
 				),
 			),
-			'required'             => array( 'user_id', 'key' ),
+			'required'             => array( 'user_id' ),
 			'additionalProperties' => false,
 		),
 		'output_schema'       => array(
@@ -246,7 +284,10 @@ function aafm_perm_user_meta_access( array $input ): bool {
  */
 function aafm_exec_get_user_meta( array $input ) {
 	$id  = absint( $input['user_id'] );
-	$key = aafm_validate_user_meta_key( isset( $input['key'] ) ? (string) $input['key'] : '' );
+	$key = aafm_user_meta_key( $input );
+	if ( is_wp_error( $key ) && in_array( $key->get_error_code(), array( 'aafm_user_meta_key_conflict', 'aafm_user_meta_key_missing' ), true ) ) {
+		return $key;
+	}
 	if ( is_wp_error( $key ) || ! aafm_exact_object( 'user', $id ) instanceof WP_User ) {
 		return aafm_generic_error();
 	}
@@ -274,7 +315,10 @@ function aafm_exec_get_user_meta( array $input ) {
  */
 function aafm_exec_update_user_meta( array $input ) {
 	$id  = absint( $input['user_id'] );
-	$key = aafm_validate_user_meta_key( isset( $input['key'] ) ? (string) $input['key'] : '' );
+	$key = aafm_user_meta_key( $input );
+	if ( is_wp_error( $key ) && in_array( $key->get_error_code(), array( 'aafm_user_meta_key_conflict', 'aafm_user_meta_key_missing' ), true ) ) {
+		return $key;
+	}
 	if ( is_wp_error( $key ) || ! aafm_exact_object( 'user', $id ) instanceof WP_User ) {
 		return aafm_generic_error();
 	}
@@ -317,7 +361,10 @@ function aafm_exec_update_user_meta( array $input ) {
  */
 function aafm_exec_delete_user_meta( array $input ) {
 	$id  = absint( $input['user_id'] );
-	$key = aafm_validate_user_meta_key( isset( $input['key'] ) ? (string) $input['key'] : '' );
+	$key = aafm_user_meta_key( $input );
+	if ( is_wp_error( $key ) && in_array( $key->get_error_code(), array( 'aafm_user_meta_key_conflict', 'aafm_user_meta_key_missing' ), true ) ) {
+		return $key;
+	}
 	if ( is_wp_error( $key ) || ! aafm_exact_object( 'user', $id ) instanceof WP_User ) {
 		return aafm_generic_error();
 	}

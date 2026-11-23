@@ -41,7 +41,7 @@ function aafm_register_settings_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-site-settings'] = array(
 		'label'        => __( 'Update site settings', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Write a small allowlist of site settings, passed as a settings object whose keys are the setting names and values the new values. Accepted keys: blogname (site name), blogdescription (tagline), timezone_string, date_format, time_format, start_of_week (0-6), posts_per_page (1-100), and the static homepage: show_on_front (posts or page), page_on_front and page_for_posts (a published page id, or 0 for none). String values are sanitized; the two integer settings are clamped into their legal ranges. Any unrecognized key rejects the entire call with nothing written. The homepage keys are checked together before anything is written (the front page and posts page must differ, and show_on_front page needs a front page), then written in the order page_on_front, page_for_posts, show_on_front; if one does not land, the call returns an error listing the keys that landed, were unchanged and failed. It can never change the site URL, admin email, default role, or open registration. Requires manage-options. Off by default.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Write a small allowlist of site settings, passed as a settings object whose keys are the setting names and values the new values. Accepted keys: blogname (site name), blogdescription (tagline), timezone_string, date_format, time_format, start_of_week (0-6), posts_per_page (1-100), and the static homepage: show_on_front (posts or page), page_on_front and page_for_posts (a published page id, or 0 for none). String values are sanitized; the two integer settings are clamped into their legal ranges. Any unrecognized key rejects the entire call with nothing written. The homepage keys are checked together before anything is written (the front page and posts page must differ, and show_on_front page needs a front page), then written in the order page_on_front, page_for_posts, show_on_front; if one does not land, the call returns an error listing the keys that landed, were unchanged and failed. It can never change the site URL, admin email, default role, or open registration. Requires manage-options.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'site',
@@ -147,6 +147,18 @@ function aafm_args_update_site_settings(): array {
 			'type'       => 'object',
 			'properties' => array(
 				'settings'     => array( 'type' => 'object' ),
+				'adjusted'     => array(
+					'type'        => 'array',
+					'description' => __( 'Present only when a setting does not hold the value you sent once the write is done (posts_per_page is kept between 1 and 100, start_of_week between 0 and 6, text is cleaned, and another plugin can change the value or keep the old one): each such setting with the value you sent and the value it holds now.', 'agent-abilities-for-mcp' ),
+					'items'       => array(
+						'type'       => 'object',
+						'properties' => array(
+							'setting'   => array( 'type' => 'string' ),
+							'requested' => array( 'type' => array( 'string', 'integer', 'number', 'boolean' ) ),
+							'stored'    => array( 'type' => array( 'string', 'integer' ) ),
+						),
+					),
+				),
 				'landed'       => array(
 					'type'        => 'array',
 					'description' => __( 'Present only when a homepage key was sent: the keys that were saved.', 'agent-abilities-for-mcp' ),
@@ -323,6 +335,7 @@ function aafm_exec_update_site_settings( array $input ) {
 		'side_effects' => array(),
 	);
 	$intended_rows = array();
+	$adjusted      = array();
 	foreach ( $settings as $key => $value ) {
 		$key = (string) $key;
 		if ( array() !== array_intersect( $report['failed'], $homepage ) && in_array( $key, $homepage, true ) ) {
@@ -375,8 +388,26 @@ function aafm_exec_update_site_settings( array $input ) {
 		$updated[ $key ] = get_option( $key );
 	}
 
+	// A value that does not reach the row as sent (a clamp, cleaned text, a filter that kept the old value,
+	// or a later write's hook) is reported with what the row holds once every write is done.
+	foreach ( $settings as $key => $value ) {
+		$key = (string) $key;
+		$row = aafm_option_row( $key );
+		if ( $row['ok'] && $row['found'] && is_scalar( $row['value'] ) ) {
+			$stored = in_array( $key, $integer_keys, true ) ? (int) $row['value'] : wp_specialchars_decode( (string) $row['value'], ENT_QUOTES );
+			if ( (string) $stored !== (string) $value ) {
+				$adjusted[] = array(
+					'setting'   => $key,
+					'requested' => $value,
+					'stored'    => $stored,
+				);
+			}
+		}
+	}
+
+	$adjusted = array() === $adjusted ? array() : array( 'adjusted' => $adjusted );
 	if ( array() === $homepage ) {
-		return array( 'settings' => $updated );
+		return array( 'settings' => $updated ) + $adjusted;
 	}
 	// Each requested homepage key that was written, judged now against the rows before the call (demo #1): another
 	// plugin's sanitize hook can change one during the dry run or during a later key's write.
@@ -410,7 +441,7 @@ function aafm_exec_update_site_settings( array $input ) {
 			array_merge( array( 'status' => 500 ), $report )
 		);
 	}
-	return array_merge( array( 'settings' => $updated ), $report );
+	return array_merge( array( 'settings' => $updated ), $report, $adjusted );
 }
 
 /**

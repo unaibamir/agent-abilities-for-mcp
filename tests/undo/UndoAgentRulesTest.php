@@ -106,7 +106,8 @@ final class UndoAgentRulesTest extends UndoTestCase {
 		$other  = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $other );
 
-		$this->assertSame( $this->undo_code( 999999 ), $this->undo_code( $change ) );
+		// Same client, another user (a shared connector): not another connection, so the owner answer.
+		$this->assertSame( 'aafm_undo_needs_owner', $this->undo_code( $change ) );
 		$this->assertSame( 'B', get_post( $post )->post_title );
 		$listing = aafm_exec_list_changes(
 			array(
@@ -130,7 +131,8 @@ final class UndoAgentRulesTest extends UndoTestCase {
 		);
 
 		$GLOBALS['wp_rest_application_password_uuid'] = 'uuid-two';
-		$this->assertSame( $this->undo_code( 999999 ), $this->undo_code( $change ) );
+		// A site owner is told the change belongs to another connection, alike in every status; see UndoPermissionTest for a caller without the Changes tab.
+		$this->assertSame( 'aafm_undo_other_connection', $this->undo_code( $change ) );
 		$this->assertSame( 'B', get_post( $post )->post_title );
 
 		$GLOBALS['wp_rest_application_password_uuid'] = 'uuid-one';
@@ -161,7 +163,7 @@ final class UndoAgentRulesTest extends UndoTestCase {
 	 *
 	 * @param string $status The foreign row's status.
 	 */
-	public function test_foreign_rows_in_every_status_return_the_generic_error( string $status ): void {
+	public function test_foreign_rows_in_every_status_answer_alike( string $status ): void {
 		global $wpdb;
 		$post   = self::factory()->post->create( array( 'post_title' => 'A' ) );
 		$change = $this->change_from(
@@ -182,7 +184,10 @@ final class UndoAgentRulesTest extends UndoTestCase {
 		);
 		aafm_oauth_current_client_id( 'client-b' );
 
-		$this->assertSame( $this->undo_code( 999999 ), $this->undo_code( $change ) );
+		// A site owner is told the change belongs to another connection, alike in every status; see UndoPermissionTest for a caller without the Changes tab.
+		$this->assertSame( 'aafm_undo_other_connection', $this->undo_code( $change ) );
+		// The words hold in every status: a reverted or expired change cannot be reverted again.
+		$this->assertStringNotContainsString( 'revert', aafm_undo_reason_message( 'other_connection' ) );
 		$this->assertSame( 'B', get_post( $post )->post_title );
 	}
 

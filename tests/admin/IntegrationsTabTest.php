@@ -424,9 +424,10 @@ final class IntegrationsTabTest extends TestCase {
 		remove_filter( 'aafm_yoast_active', '__return_false', 99 );
 
 		// Each card carries a per-card filter: a search input plus the All / Read Only / Write group.
-		// There are eleven integration cards (1.7.4 adds Slim SEO, The Events Calendar, Event
-		// Tickets, Avada, and GeoDirectory; 1.12.0 adds WPBakery), so each control appears eleven times.
-		$this->assertSame( 11, substr_count( $html, 'aafm-integration-filter' ) );
+		// There are fourteen integration cards (1.7.4 adds Slim SEO, The Events Calendar, Event
+		// Tickets, Avada, and GeoDirectory; 1.12.0 adds WPBakery; 1.13.0 adds Page cache, Redirects
+		// and Backups), so each control appears fourteen times.
+		$this->assertSame( 14, substr_count( $html, 'aafm-integration-filter' ) );
 		$this->assertStringContainsString( 'type="search"', $html );
 		$this->assertStringContainsString( 'data-filter-risk="all"', $html );
 		$this->assertStringContainsString( 'data-filter-risk="read"', $html );
@@ -512,7 +513,7 @@ final class IntegrationsTabTest extends TestCase {
 	public function test_an_aioseo_below_its_floor_shows_the_floor_reason(): void {
 		$this->acting_as( 'administrator' );
 		if ( ! function_exists( 'aioseo' ) ) {
-			eval( 'function aioseo() { return new \stdClass(); }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a function-only marker stub for tests; never shipped.
+			eval( 'function aioseo() { return \AAFM\Tests\AioseoStubStore::app(); }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a function-only marker stub for tests; never shipped.
 		}
 		add_filter( 'aafm_aioseo_version', static fn() => '4.9.0' );
 
@@ -585,5 +586,51 @@ final class IntegrationsTabTest extends TestCase {
 		// The shared head rule gives a direct-child pill an auto start margin; next to the count's own
 		// auto margin that splits the free space and the pill drifts per row.
 		$this->assertStringContainsString( '> .aafm-pill { margin-inline-start: 0; }', $block );
+	}
+
+	public function test_the_page_cache_card_confirms_with_its_own_text_not_the_personal_data_line(): void {
+		$this->acting_as( 'administrator' );
+		$personal = 'personal data';
+		$expected = array(
+			'site_cache' => 'page cache',
+		);
+		foreach ( $expected as $slug => $needle ) {
+			$text = aafm_integration_toggle_confirm( $slug );
+			$this->assertNotSame( '', $text, "{$slug} needs its own confirmation text." );
+			$this->assertStringContainsString( $needle, $text );
+			$this->assertStringNotContainsString( $personal, $text );
+			$this->assertStringNotContainsString( 'customer', $text );
+		}
+		$this->assertSame( '', aafm_integration_toggle_confirm( 'woocommerce' ), 'A card with no text of its own keeps the shared personal-data line.' );
+	}
+
+	public function test_the_page_cache_enable_all_button_carries_its_confirmation_text(): void {
+		$this->acting_as( 'administrator' );
+		$rows = aafm_integration_ability_manifest()['site_cache'] ?? array();
+		$this->assertContains( 'destructive', array_column( $rows, 'risk' ), 'The cache card holds the destructive purge, so the confirmation is raised.' );
+
+		ob_start();
+		aafm_render_integration_abilities( 'site_cache', $rows, array(), array(), true );
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'data-has-sensitive="1"', $html );
+		$this->assertStringContainsString( 'data-confirm="' . esc_attr( aafm_integration_toggle_confirm( 'site_cache' ) ) . '"', $html );
+	}
+
+	public function test_the_bulk_script_prefers_the_cards_own_confirmation_text(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Reading a local plugin asset off disk, never a remote URL.
+		$js    = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
+		$start = strpos( $js, '#bindIntegrationToggles() {' );
+		$this->assertNotFalse( $start );
+		$body = substr( $js, (int) $start, (int) strpos( $js, "\n\t\t#", (int) $start + 1 ) - (int) $start );
+		$this->assertStringContainsString( 'btn.dataset.confirm', $body );
+	}
+
+	public function test_site_ops_cards_name_a_supported_plugin_not_their_category(): void {
+		foreach ( array( 'site_cache', 'site_redirects', 'site_backups' ) as $slug ) {
+			$this->assertSame( 'Installed but not active. Activate a supported plugin to use these abilities.', aafm_integration_status_note( $slug, 'installed_inactive' ), $slug );
+			$this->assertSame( 'Not installed. Install and activate a supported plugin to expose these abilities here.', aafm_integration_status_note( $slug, 'not_installed' ), $slug );
+		}
+		$this->assertSame( 'Installed but not active. Activate WooCommerce to use these abilities.', aafm_integration_status_note( 'woocommerce', 'installed_inactive' ) );
 	}
 }

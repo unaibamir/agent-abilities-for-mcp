@@ -7,7 +7,11 @@
  * Registers ONLY while WPBakery Page Builder is active (aafm_integration_active('wpbakery')).
  * WPBakery keeps its whole layout as shortcodes in post_content, so both abilities gate on the
  * ordinary edit access check every other content ability uses (aafm_perm_avada_post_object(),
- * which is builder neutral). WPBakery's own Role Manager is not consulted.
+ * which is builder neutral). WPBakery's own Role Manager is not consulted for that access. It is
+ * consulted in two places elsewhere: the custom JS fields of wpbakery-update-page-code
+ * (vc_user_access(), wpbakery-site.php) and the first element inserted into an empty post, which
+ * needs WPBakery's editor on for that post type for the calling user (vc_editor_post_types(),
+ * wpbakery-elements.php).
  *
  * Vendor facts were read from WPBakery Page Builder 9.1 (plugin folder js_composer); see design
  * doc 322 section 4.2. Add-ons map their own tags under any name, so the tag list each call
@@ -57,7 +61,7 @@ function aafm_wpbakery_registry_definitions(): array {
 	return array(
 		'aafm/wpbakery-get-page-content' => array(
 			'label'        => __( 'Get WPBakery page content', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads the raw post content of a WPBakery page, unchanged. Shortcodes come back exactly as stored, never rendered or stripped, and attribute values keep the form WPBakery stores them in, including its escaped brackets and quotes and base64 encoded values such as raw HTML, so search for text as it is stored. Also returns is_wpbakery_owned, true when WPBakery owns the page or the post is a Grid Builder template. With include_structure it also returns an outline of the shortcode elements (tag, nesting depth, attributes as stored and decoded the way WPBakery reads them, the inner text of an element with no child element, decoded for raw HTML and raw JS, and a fingerprint per element) plus a page fingerprint, to find the text block that holds the text before calling wpbakery-replace-text. The outline stops at 2,000 elements. With include_page_settings it also returns the page custom CSS and the editor status, and the page custom JS only to users who may post unfiltered HTML. Requires edit access to the post; WPBakery\'s Role Manager settings are not applied. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Reads the raw post content of a WPBakery page, unchanged. Shortcodes come back exactly as stored, never rendered or stripped, and attribute values keep the form WPBakery stores them in, including its escaped brackets and quotes and base64 encoded values such as raw HTML, so search for text as it is stored. Also returns is_wpbakery_owned, true when WPBakery owns the page or the post is a Grid Builder template or a Templatera template. With include_structure it also returns an outline of the shortcode elements (tag, nesting depth, attributes as stored and decoded the way WPBakery reads them, the inner text of an element with no child element, decoded for raw HTML and raw JS, and a fingerprint per element) plus a page fingerprint, to find the text block that holds the text before calling wpbakery-replace-text. The outline stops at 2,000 elements. With include_page_settings it also returns the page custom CSS and the editor status, and the page custom JS only to users who may post unfiltered HTML. Requires edit access to the post; WPBakery\'s Role Manager settings are not applied. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'wpbakery',
@@ -65,7 +69,7 @@ function aafm_wpbakery_registry_definitions(): array {
 		),
 		'aafm/wpbakery-replace-text'     => array(
 			'label'        => __( 'Replace text in a WPBakery page', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Replaces literal text within a WPBakery page while requiring the shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee). Text that WPBakery keeps in an element\'s settings, such as a heading or a button label, cannot be changed here and is refused, as is any replacement that would add, remove or alter an element. Only a user who may post unfiltered HTML can put square brackets, percent-encoded brackets or data-* attributes in body text, and even then text that would add an element is refused. If saving the page as this user would remove or change elements, or change other content on the page, the call is refused and nothing is saved. Not undoable from this plugin\'s change history; WordPress keeps a revision when revisions are on. Requires edit access to the post; WPBakery\'s Role Manager settings are not applied. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Replaces literal text within a WPBakery page while requiring the shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee). Text that WPBakery keeps in an element\'s settings, such as a heading or a button label, cannot be changed here and is refused, as is any replacement that would add, remove or alter an element. Only a user who may post unfiltered HTML can put square brackets, percent-encoded brackets or data-* attributes in body text, and even then text that would add an element is refused. If saving the page as this user would remove or change elements, or change other content on the page, the call is refused and nothing is saved. Not undoable from this plugin\'s change history; when the site keeps revisions and the revision saved before the change survives the save, restore_revision_id names it and restore-revision brings the page back, and otherwise reversible_reason says why there is no restore point. Requires edit access to the post; WPBakery\'s Role Manager settings are not applied. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'wpbakery',
@@ -295,7 +299,15 @@ function aafm_wpbakery_decode_atts( string $tag, array $atts ): array {
 			$decoded[ $name ] = $value;
 			continue;
 		}
-		$type             = null === $param_type ? null : $param_type( $tag, (string) $name );
+		$type = null;
+		if ( null !== $param_type ) {
+			try {
+				$type = $param_type( $tag, (string) $name );
+			} catch ( \Throwable $e ) {
+				// An add-on's map row can throw; an unknown type is not writable, so this fails closed.
+				$type = null;
+			}
+		}
 		$decoded[ $name ] = aafm_wpbakery_decode_value( $value, is_string( $type ) ? $type : null );
 	}
 	return $decoded;
@@ -586,8 +598,16 @@ function aafm_args_wpbakery_replace_text(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'post'         => array( 'type' => 'object' ),
-				'replacements' => array( 'type' => 'integer' ),
+				'post'                => array( 'type' => 'object' ),
+				'replacements'        => array( 'type' => 'integer' ),
+				'restore_revision_id' => array(
+					'type'        => 'integer',
+					'description' => __( 'The revision holding the page before this change; restore-revision brings it back. Absent when there is no restore point.', 'agent-abilities-for-mcp' ),
+				),
+				'reversible_reason'   => array(
+					'type'        => 'string',
+					'description' => __( 'Present only when there is no restore point: the site or the content type keeps no revisions, WordPress saved none before the change, or the one saved was deleted during the save by the revision limit or another plugin. Says why there is no way back.', 'agent-abilities-for-mcp' ),
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_wpbakery_replace_text',
@@ -612,7 +632,7 @@ function aafm_args_wpbakery_replace_text(): array {
  * unchanged (step 7), and the new content must keep its structure through it (step 8).
  *
  * @param array<string,mixed> $input Validated input.
- * @return array{post:array<string,mixed>,replacements:int}|WP_Error
+ * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_wpbakery_replace_text( array $input ) {
 	$id   = absint( $input['post_id'] );
@@ -660,6 +680,16 @@ function aafm_exec_wpbakery_replace_text( array $input ) {
 		);
 	}
 
+	// A page whose own shortcodes cannot be read fails the structure check whatever the search
+	// term is, so say that instead of blaming the term.
+	if ( null === aafm_fusion_shortcode_walk( $content, 0, $tags ) ) {
+		return new WP_Error(
+			'aafm_builder_unparseable',
+			__( 'This page\'s shortcodes cannot be read safely, so its text cannot be replaced here; wpbakery-get-page-content with include_structure shows the same, as structure_status unparseable. Change the text in WPBakery instead. Nothing was changed.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 409 )
+		);
+	}
+
 	if ( ! aafm_fusion_shortcode_structure_preserved( $content, $new, $tags ) || aafm_wpbakery_text_closes_a_tag( $inserted, $tags ) ) {
 		return new WP_Error(
 			'aafm_replace_inside_shortcode',
@@ -686,6 +716,20 @@ function aafm_exec_wpbakery_replace_text( array $input ) {
 		);
 	}
 
+	// Keep the page before the change as a revision, the way avada-replace-text and the element tools do, so
+	// restore-revision can bring it back.
+	$supports = post_type_supports( $post->post_type, 'revisions' );
+	$enabled  = $supports && wp_revisions_enabled( $post );
+	$restore  = $enabled ? aafm_builder_restore_point( $id, $content ) : null;
+	$reason   = null;
+	if ( ! $supports ) {
+		$reason = aafm_builder_type_no_revisions_reason();
+	} elseif ( ! $enabled ) {
+		$reason = aafm_builder_revisions_off_reason();
+	} elseif ( null === $restore ) {
+		$reason = aafm_builder_snapshot_failed_reason();
+	}
+
 	$updated = wp_update_post(
 		wp_slash(
 			array(
@@ -699,6 +743,12 @@ function aafm_exec_wpbakery_replace_text( array $input ) {
 		return aafm_generic_error();
 	}
 
+	// The site's revision limit can prune it during the save; never report a restore point that is gone.
+	if ( null !== $restore && ! aafm_exact_object( 'post', $restore ) instanceof WP_Post ) {
+		$restore = null;
+		$reason  = aafm_builder_pruned_reason( $post );
+	}
+
 	$fresh = aafm_exact_object( 'post', $id );
 	if ( ! $fresh instanceof WP_Post || ! aafm_post_field_confirm_logged( $id, 'post_content', $new, $content ) ) {
 		return new WP_Error(
@@ -707,9 +757,14 @@ function aafm_exec_wpbakery_replace_text( array $input ) {
 		);
 	}
 
-	return array(
-		'post'         => aafm_redact_post( $fresh ),
-		'replacements' => $replacements,
+	return array_filter(
+		array(
+			'post'                => aafm_redact_post( $fresh ),
+			'replacements'        => $replacements,
+			'restore_revision_id' => $restore,
+			'reversible_reason'   => $reason,
+		),
+		static fn( $value ): bool => null !== $value
 	);
 }
 

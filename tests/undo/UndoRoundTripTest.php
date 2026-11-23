@@ -263,6 +263,30 @@ final class UndoRoundTripTest extends UndoTestCase {
 	}
 
 	/**
+	 * The ability writes an omitted taxonomy as the schema default (category), so the capture must
+	 * read that same term, not a term in taxonomy ''.
+	 */
+	public function test_update_term_without_taxonomy_records_and_round_trips(): void {
+		$term   = self::factory()->term->create(
+			array(
+				'taxonomy' => 'category',
+				'name'     => 'Before',
+			)
+		);
+		$change = $this->change_from(
+			'aafm/update-term',
+			array(
+				'term_id' => $term,
+				'name'    => 'After',
+			)
+		);
+
+		$this->revert( $change );
+
+		$this->assertSame( 'Before', get_term( $term, 'category' )->name );
+	}
+
+	/**
 	 * Core clears a draft's date to "now" on every save, so the forward edit moves post_date and an
 	 * undo that did not ask core to keep the date reported a difference although the content was back.
 	 */

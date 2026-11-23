@@ -155,7 +155,7 @@ function aafm_allowlist_allowed_summary( bool $is_all, array $names, array $regi
 		return __( 'All abilities (no narrowing)', 'agent-abilities-for-mcp' );
 	}
 	if ( empty( $names ) ) {
-		return __( 'No abilities selected - this scope can reach nothing.', 'agent-abilities-for-mcp' );
+		return __( 'No abilities selected, so this scope can reach nothing.', 'agent-abilities-for-mcp' );
 	}
 	$labels = array_map(
 		static fn( string $name ): string => (string) ( $registry_full[ $name ]['label'] ?? $name ),
@@ -218,7 +218,7 @@ function aafm_ajax_save_allowlist(): void {
 				array(
 					'message' => sprintf(
 						/* translators: %d: 1-based row number in the submitted allowlist. */
-						__( 'Row %d names a role, OAuth client, or ability that does not exist. Nothing was saved - fix that row and try again.', 'agent-abilities-for-mcp' ),
+						__( 'Row %d names a role, OAuth client, or ability that does not exist. Nothing was saved. Fix that row and try again.', 'agent-abilities-for-mcp' ),
 						(int) $index + 1
 					),
 				),
@@ -282,7 +282,7 @@ function aafm_render_allowlist_section(): void {
 	// state could otherwise be saved over the real, still-stored rows the moment the database
 	// recovers. Say the read failed and refuse to offer Add/Save until a reload gets a real read.
 	if ( $read_failed ) {
-		echo '<div class="notice notice-error inline"><p>' . esc_html__( 'The current allowlist could not be read, so it is not safe to show or edit here. Reload this page once the underlying issue clears before adding or saving a scope - saving now could silently erase the existing restrictions.', 'agent-abilities-for-mcp' ) . '</p></div>';
+		echo '<div class="notice notice-error inline"><p>' . esc_html__( 'The current allowlist could not be read, so it is not safe to show or edit here. Reload this page once the underlying issue clears before adding or saving a scope, because saving now could silently erase the existing restrictions.', 'agent-abilities-for-mcp' ) . '</p></div>';
 	}
 	// A malformed stored row denies every call and a reload never clears it, so Add and Save stay
 	// available: saving is the only way to replace it.
@@ -291,7 +291,7 @@ function aafm_render_allowlist_section(): void {
 	}
 
 	if ( empty( $rows ) && $read['ok'] ) {
-		echo '<p class="aafm-empty-state" id="aafm-allowlist-empty">' . esc_html__( 'No scopes narrowed yet. Every role and connection can reach everything enabled above.', 'agent-abilities-for-mcp' ) . '</p>';
+		echo '<p class="aafm-empty-state" id="aafm-allowlist-empty">' . esc_html__( 'No scopes narrowed yet. Every role and connection can reach everything enabled above, apart from any limit set by a connection\'s own access level.', 'agent-abilities-for-mcp' ) . '</p>';
 	} else {
 		// Hidden until a save replaces a malformed row with no scopes; admin.js reveals it then.
 		if ( $malformed ) {

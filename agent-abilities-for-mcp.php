@@ -3,7 +3,7 @@
  * Plugin Name:       Agent Abilities for MCP - Connect Claude and ChatGPT with Permission Controls and Audit Log
  * Plugin URI:        https://agentabilitieswp.com
  * Description:       WordPress MCP server for Claude and ChatGPT with limited access, a pause switch, read-only mode, drafts you approve, playbooks and an audit log.
- * Version:           1.12.0
+ * Version:           1.13.0
  * Requires at least: 6.9
  * Requires PHP:      7.4
  * Author:            Unaib Amir
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AAFM_VERSION', '1.12.0' );
+define( 'AAFM_VERSION', '1.13.0' );
 define( 'AAFM_PLUGIN_FILE', __FILE__ );
 define( 'AAFM_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AAFM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -414,6 +414,10 @@ function aafm_bootstrap() {
 	// The Connection Doctor's own probe: answered before any MCP code runs, only for a live single-use token.
 	add_filter( 'rest_pre_dispatch', 'aafm_doctor_handle_probe', 1, 3 );
 
+	// Site Ops: the cache adapter registry. Detection only; adapter files load on first use.
+	require_once AAFM_PLUGIN_DIR . 'includes/siteops/cache-registry.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/siteops/redirect-registry.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/siteops/backup-gate.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/posts.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/pages.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/terms.php';
@@ -462,6 +466,10 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/wpbakery-elements.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/wpbakery-site.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/geodirectory.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/site-health.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/site-cache.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/site-redirects.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/site-backups.php';
 
 	add_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 	add_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
@@ -512,6 +520,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/playbooks.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/integrations.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/bridge-directory.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/admin/backup-gate.php';
 	if ( is_admin() ) {
 		add_action( 'admin_init', 'aafm_bridge_review_sync', 20 );
 		add_action( 'admin_menu', 'aafm_register_admin_menu' );
@@ -556,6 +565,7 @@ function aafm_bootstrap() {
 		// The same answer, arriving as a plain link when the notice's footer script never ran.
 		add_action( 'admin_post_aafm_review_request', 'aafm_handle_review_request_post' );
 		add_action( 'wp_ajax_aafm_notify_test', 'aafm_ajax_notify_test' );
+		add_action( 'wp_ajax_aafm_backup_verify_now', 'aafm_ajax_backup_verify_now' );
 		add_action( 'admin_post_aafm_notify_dismiss', 'aafm_handle_notify_dismiss' );
 		add_action( 'admin_notices', 'aafm_notify_admin_notice' );
 		add_action( 'admin_notices', 'aafm_render_review_request_notice' );

@@ -30,47 +30,47 @@ function aafm_integration_cards(): array {
 	// integration" - not classify it. Deliberately NOT the 'abilities'/'bolt' glyph, which means
 	// "enabled" elsewhere in this UI; reusing it here would imply a state the icon doesn't track.
 	return array(
-		'yoast'         => array(
+		'yoast'          => array(
 			'label'   => __( 'Yoast SEO', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'wordpress-seo/wp-seo.php' ),
 		),
-		'rankmath'      => array(
+		'rankmath'       => array(
 			'label'   => __( 'Rank Math', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'seo-by-rank-math/rank-math.php' ),
 		),
-		'aioseo'        => array(
+		'aioseo'         => array(
 			'label'   => __( 'All in One SEO', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'all-in-one-seo-pack/all_in_one_seo_pack.php' ),
 		),
-		'acf'           => array(
+		'acf'            => array(
 			'label'   => __( 'ACF', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'advanced-custom-fields/acf.php', 'advanced-custom-fields-pro/acf.php', 'secure-custom-fields/secure-custom-fields.php' ),
 		),
-		'woocommerce'   => array(
+		'woocommerce'    => array(
 			'label'   => __( 'WooCommerce', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'woocommerce/woocommerce.php' ),
 		),
-		'slim_seo'      => array(
+		'slim_seo'       => array(
 			'label'   => __( 'Slim SEO', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'slim-seo/slim-seo.php' ),
 		),
-		'tec'           => array(
+		'tec'            => array(
 			'label'   => __( 'The Events Calendar', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'the-events-calendar/the-events-calendar.php' ),
 		),
-		'event_tickets' => array(
+		'event_tickets'  => array(
 			'label'   => __( 'Event Tickets', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'event-tickets/event-tickets.php' ),
 		),
-		'avada'         => array(
+		'avada'          => array(
 			'label'   => __( 'Avada / Fusion Builder', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			// Avada is a theme, not a plugin - there is no plugin file to probe for an
@@ -79,15 +79,44 @@ function aafm_integration_cards(): array {
 			// (Task 21 Step 7: active/not_installed only, no installed_inactive for this card).
 			'plugins' => array(),
 		),
-		'wpbakery'      => array(
+		'wpbakery'       => array(
 			'label'   => __( 'WPBakery Page Builder', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'js_composer/js_composer.php' ),
 		),
-		'geodirectory'  => array(
+		'geodirectory'   => array(
 			'label'   => __( 'GeoDirectory', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'geodirectory/geodirectory.php' ),
+		),
+		'site_cache'     => array(
+			'label'   => __( 'Page cache', 'agent-abilities-for-mcp' ),
+			'icon'    => 'integrations',
+			'plugins' => array(
+				'wp-super-cache/wp-cache.php',
+				'wp-fastest-cache/wpFastestCache.php',
+				'w3-total-cache/w3-total-cache.php',
+				'wp-optimize/wp-optimize.php',
+				'cache-enabler/cache-enabler.php',
+				'hummingbird-performance/wp-hummingbird.php',
+				'jetpack-boost/jetpack-boost.php',
+				'speedycache/speedycache.php',
+				'breeze/breeze.php',
+				'sg-cachepress/sg-cachepress.php',
+				'litespeed-cache/litespeed-cache.php',
+				'nginx-helper/nginx-helper.php',
+				'varnish-http-purge/varnish-http-purge.php',
+			),
+		),
+		'site_redirects' => array(
+			'label'   => __( 'Redirects', 'agent-abilities-for-mcp' ),
+			'icon'    => 'integrations',
+			'plugins' => array( 'eps-301-redirects/eps-301-redirects.php', 'redirection/redirection.php', 'safe-redirect-manager/safe-redirect-manager.php', 'seo-by-rank-math/rank-math.php', 'slim-seo/slim-seo.php' ),
+		),
+		'site_backups'   => array(
+			'label'   => __( 'Backups', 'agent-abilities-for-mcp' ),
+			'icon'    => 'integrations',
+			'plugins' => array( 'updraftplus/updraftplus.php' ),
 		),
 	);
 }
@@ -299,7 +328,7 @@ function aafm_render_integrations_tab(): void {
 	echo '<div class="aafm-integrations">';
 
 	// Intro lede + the security disclaimer (humanized copy).
-	echo '<p class="aafm-page-lede">' . esc_html__( 'Connect AI agents to the plugins you already run. An integration\'s abilities show up here only while its plugin is active, and each one stays off until you turn it on.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="aafm-page-lede">' . esc_html__( 'Connect AI agents to the plugins you already run. An integration\'s abilities can be switched on only while its plugin is active, and each one stays off until you turn it on.', 'agent-abilities-for-mcp' ) . '</p>';
 
 	echo '<div class="aafm-integrations-disclaimer">';
 	echo wp_kses(
@@ -531,6 +560,10 @@ function aafm_integration_status_note( string $slug, string $status ): string {
 			// (includes/abilities/tec/tickets.php), so Event Tickets alone cannot register them.
 			return __( 'Event Tickets is active, but its ticket abilities are gated on a parent event and need The Events Calendar active too. Install and activate The Events Calendar to use these abilities.', 'agent-abilities-for-mcp' );
 		case 'installed_inactive':
+			// The Site Ops cards are labelled by category, not by plugin, so "Activate Redirects" would name nothing.
+			if ( in_array( $slug, array( 'site_cache', 'site_redirects', 'site_backups' ), true ) ) {
+				return __( 'Installed but not active. Activate a supported plugin to use these abilities.', 'agent-abilities-for-mcp' );
+			}
 			return sprintf(
 				/* translators: %s: the integration plugin name, e.g. WooCommerce. */
 				__( 'Installed but not active. Activate %s to use these abilities.', 'agent-abilities-for-mcp' ),
@@ -538,6 +571,9 @@ function aafm_integration_status_note( string $slug, string $status ): string {
 			);
 		case 'not_installed':
 		default:
+			if ( in_array( $slug, array( 'site_cache', 'site_redirects', 'site_backups' ), true ) ) {
+				return __( 'Not installed. Install and activate a supported plugin to expose these abilities here.', 'agent-abilities-for-mcp' );
+			}
 			return __( 'Not installed. Install and activate the plugin to expose its abilities here.', 'agent-abilities-for-mcp' );
 	}
 }
@@ -557,6 +593,23 @@ function aafm_render_integration_filter( string $slug ): void {
 	echo '<div class="aafm-integration-filter" data-card="' . esc_attr( $slug ) . '">';
 	aafm_render_filter_controls( 'aafm-int-search-' . $slug );
 	echo '</div>';
+}
+
+/**
+ * The text of the confirmation raised before "Enable all" turns on a card that holds a sensitive tool.
+ *
+ * The page cache card says what its purge does. An empty string means the card has no text of its
+ * own, and the script falls back to the shared line about personal data. Only a card holding a
+ * destructive tool raises the confirmation, which is why the read-only Site Ops cards have none.
+ *
+ * @param string $slug Integration slug.
+ * @return string
+ */
+function aafm_integration_toggle_confirm( string $slug ): string {
+	if ( 'site_cache' === $slug ) {
+		return __( 'These abilities can empty your whole page cache, and pages load slower until it fills again. Turn all of them on?', 'agent-abilities-for-mcp' );
+	}
+	return '';
 }
 
 /**
@@ -590,10 +643,12 @@ function aafm_render_integration_abilities( string $slug, array $rows, array $en
 	// Group enable/disable-all control (a type="button", never a nested form). The
 	// data-has-sensitive flag tells the JS to window.confirm() before bulk-enabling a group
 	// that can read or change personal data.
+	$confirm = aafm_integration_toggle_confirm( $slug );
+	$show    = $has_sensitive && '' !== $confirm;
 	printf(
 		'<p class="aafm-section-toggle"><button type="button" class="aafm-btn aafm-btn-secondary aafm-integration-toggle-all" data-subject="%1$s"%2$s>%3$s</button> <button type="button" class="aafm-btn aafm-btn-secondary aafm-enable-reads">%4$s</button>%5$s</p>',
 		esc_attr( $slug ),
-		$has_sensitive ? ' data-has-sensitive="1"' : '',
+		( $has_sensitive ? ' data-has-sensitive="1"' : '' ) . ( $show ? ' data-confirm="' . esc_attr( $confirm ) . '"' : '' ),
 		esc_html__( 'Enable all / Disable all', 'agent-abilities-for-mcp' ),
 		esc_html__( 'Enable all reads', 'agent-abilities-for-mcp' ),
 		$disabled ? '' : wp_kses( aafm_enable_writes_button_html( 'integration-' . $slug, $rows ), aafm_admin_allowed_html() )

@@ -1145,6 +1145,9 @@ function aafm_notify_unschedule( bool $network_wide = false ): void {
 	// have to match; wp_unschedule_hook() drops them all.
 	wp_unschedule_hook( 'aafm_notify_send_scheduled' );
 	delete_transient( 'aafm_ntf_overdue_seen' ); // The self-heal's sighting record goes with the events.
+	// The backup gate's hourly check. While the gate is on, the first wp-admin request after a
+	// reactivation schedules it again.
+	wp_clear_scheduled_hook( 'aafm_backup_verify' );
 }
 register_deactivation_hook( AAFM_PLUGIN_FILE, 'aafm_notify_unschedule' );
 

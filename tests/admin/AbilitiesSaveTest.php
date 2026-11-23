@@ -177,7 +177,7 @@ final class AbilitiesSaveTest extends TestCase {
 		$this->assertNotEmpty( $registry );
 		// Abilities-tab subjects plus the integration subjects, which render on the Integrations
 		// tab rather than the Abilities tab but are still real, non-empty subjects.
-		$known = array_merge( array_keys( aafm_abilities_subjects() ), array( 'yoast', 'rankmath', 'aioseo', 'acf', 'woocommerce', 'slim_seo', 'tec', 'event_tickets', 'avada', 'wpbakery', 'geodirectory' ) );
+		$known = array_merge( array_keys( aafm_abilities_subjects() ), array( 'yoast', 'rankmath', 'aioseo', 'acf', 'woocommerce', 'slim_seo', 'tec', 'event_tickets', 'avada', 'wpbakery', 'geodirectory', 'site_cache', 'site_redirects', 'site_backups' ) );
 		foreach ( $registry as $name => $meta ) {
 			$this->assertArrayHasKey( 'subject', $meta, "{$name} is missing a subject." );
 			$this->assertNotSame( '', (string) $meta['subject'], "{$name} has an empty subject." );
@@ -289,6 +289,7 @@ final class AbilitiesSaveTest extends TestCase {
 			'blocks'        => 'Blocks',
 			'menus'         => 'Menus',
 			'search'        => 'Site search',
+			'site_health'   => 'Site health',
 		);
 		foreach ( $expected as $slug => $label ) {
 			$this->assertStringContainsString( 'data-subject="' . $slug . '"', $bar, "Missing chip for {$slug}." );

@@ -98,7 +98,7 @@ function aafm_register_menus_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-menu-item']  = array(
 		'label'        => __( 'Update menu item', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Updates a menu item by id: its title, URL, parent item (to nest it, or 0 for the top level) or stored position. A parent must be another item of the same menu and cannot be the item itself or one of its own descendants. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Updates a menu item by id: its title, a custom link\'s URL, parent item (to nest it, or 0 for the top level) or stored position. A parent must be another item of the same menu and cannot be the item itself or one of its own descendants. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'site',
@@ -122,7 +122,7 @@ function aafm_register_menus_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-navigation'] = array(
 		'label'        => __( 'Update navigation', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Replaces the links of one block-theme navigation menu by id with the list you send: each item a label and a URL, with optional children up to three levels deep and 100 items in all. The whole navigation is replaced, including any blocks list-navigations names under other_blocks. Each link is saved as a plain custom link, so per-link settings such as open in a new tab, rel, CSS classes and a link\'s binding to a page or post are not kept. URLs must be http, https, mailto or tel links, a path starting with /, or an anchor starting with #. A navigation owned by a page builder is refused. Navigation edits are not recorded in change history, so this cannot be undone here; When the site keeps revisions, WordPress saves the new version as a revision, so the earlier version can be restored only if it was already kept as a revision; restoring one brings back the links it holds. Requires the edit-theme-options capability. Off by default.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Replaces the links of one block-theme navigation menu by id with the list you send: each item a label and a URL, with optional children up to three levels deep and 100 items in all. The whole navigation is replaced, including any blocks list-navigations names under other_blocks. Each link is saved as a plain custom link, so per-link settings such as open in a new tab, rel, CSS classes and a link\'s binding to a page or post are not kept. URLs must be http, https, mailto or tel links, a path starting with /, or an anchor starting with #. A navigation owned by a page builder is refused. Navigation edits are not recorded in change history, so this cannot be undone here. When the site keeps revisions, WordPress saves the new version as a revision, so the earlier version survives only if it was already kept as a revision. No tool in this plugin restores it, because restore-revision does not reach navigation posts. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'site',
@@ -276,7 +276,7 @@ function aafm_args_list_menu_items(): array {
 			'properties'           => array(
 				'menu_id' => array(
 					'type'        => 'integer',
-					'description' => __( 'ID of the navigation menu whose items to list. An unknown or empty menu returns an empty items list rather than an error.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'ID of the navigation menu whose items to list. An unknown ID, or a term that is not a nav menu, returns a generic error. A menu with no items returns an empty items list.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'menu_id' ),
@@ -289,7 +289,7 @@ function aafm_args_list_menu_items(): array {
 					'type'  => 'array',
 					'items' => array(
 						'type'       => 'object',
-						'properties' => aafm_menu_item_output_properties( true ),
+						'properties' => aafm_menu_item_output_properties(),
 					),
 				),
 			),
@@ -651,7 +651,7 @@ function aafm_args_create_menu_item(): array {
 				),
 				'parent'    => array(
 					'type'        => 'integer',
-					'description' => __( 'ID of an existing menu item this one should nest under, or omit for a top-level item. Not verified to exist or to belong to this menu before being applied.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'ID of an existing menu item this one should nest under, or omit for a top-level item. The parent must be an item of this same menu; any other id is refused and nothing is created.', 'agent-abilities-for-mcp' ),
 				),
 				'object_id' => array(
 					'type'        => 'integer',
@@ -779,7 +779,7 @@ function aafm_exec_create_menu_item( array $input ) {
 			array( 'status' => 400 )
 		);
 	}
-	return aafm_redact_menu_item( $saved );
+	return aafm_menu_item_listed_order( $menu_id, aafm_redact_menu_item( $saved ) );
 }
 
 /**
@@ -958,7 +958,7 @@ function aafm_args_update_menu_item(): array {
 				),
 				'url'       => array(
 					'type'        => 'string',
-					'description' => __( 'New destination URL for the item. An invalid or unsafe URL is refused and the current URL stays. Omit to leave the current URL unchanged.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'New destination URL for the item. Only a custom link takes a URL; for an item that links to a page, post, term or archive the call is refused. An invalid or unsafe URL is refused and the current URL stays. Omit to leave the current URL unchanged.', 'agent-abilities-for-mcp' ),
 				),
 				'parent_id' => array(
 					'type'        => 'integer',
@@ -1059,6 +1059,15 @@ function aafm_exec_update_menu_item( array $input ) {
 		$args['menu-item-title'] = wp_slash( aafm_sanitize_plain_text( (string) $input['title'] ) );
 	}
 	if ( isset( $input['url'] ) ) {
+		// Core blanks the stored url of a page, post or term item and derives it from the target, so
+		// a url sent for one would be reported as written while nothing changed.
+		if ( 'custom' !== $args['menu-item-type'] ) {
+			return new WP_Error(
+				'aafm_menu_item_url_not_custom',
+				__( 'Only a custom link takes a URL. This item links to something on the site, such as a page, post, term or archive, and its URL follows that target. Nothing was changed.', 'agent-abilities-for-mcp' ),
+				array( 'status' => 400 )
+			);
+		}
 		$url = aafm_checked_url( (string) $input['url'], 'url' );
 		if ( is_wp_error( $url ) ) {
 			return $url; // Refused before the write, so the stored URL stays.
@@ -1117,6 +1126,26 @@ function aafm_exec_update_menu_item( array $input ) {
 		|| ( isset( $input['position'] ) && $shape['order'] !== $args['menu-item-position'] ) ) {
 		return aafm_generic_error();
 	}
+	return aafm_menu_item_listed_order( $menu_id, $shape );
+}
+
+/**
+ * A written item's order as list-menu-items numbers it (1 to N), so an agent comparing the two sees
+ * one number. The stored menu_order can start at 0 and have gaps; it stays core's. An item the list
+ * leaves out (a draft) keeps its stored value, the only order it has.
+ *
+ * @param int                 $menu_id Menu id.
+ * @param array<string,mixed> $shape   The redacted item.
+ * @return array<string,mixed>
+ */
+function aafm_menu_item_listed_order( int $menu_id, array $shape ): array {
+	$listed = aafm_exec_list_menu_items( array( 'menu_id' => $menu_id ) );
+	foreach ( is_array( $listed ) ? $listed['items'] : array() as $row ) {
+		if ( $row['id'] === $shape['id'] ) {
+			$shape['order'] = $row['order'];
+			break;
+		}
+	}
 	return $shape;
 }
 
@@ -1172,6 +1201,10 @@ function aafm_args_delete_menu_item(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
+				'menu_id' => array(
+					'type'        => 'integer',
+					'description' => __( 'Optional ID of the navigation menu the item belongs to. When given, an item that is not in this menu is refused and nothing is deleted.', 'agent-abilities-for-mcp' ),
+				),
 				'item_id' => array(
 					'type'        => 'integer',
 					'description' => __( 'ID of the menu item to permanently remove. Menu items have no Trash, so this cannot be undone.', 'agent-abilities-for-mcp' ),
@@ -1215,6 +1248,13 @@ function aafm_exec_delete_menu_item( array $input ) {
 	$post    = aafm_exact_object( 'post', $item_id );
 	if ( ! $post instanceof WP_Post || 'nav_menu_item' !== $post->post_type ) {
 		return aafm_generic_error();
+	}
+	if ( isset( $input['menu_id'] ) && ! aafm_menu_item_post( (int) $input['menu_id'], $item_id ) instanceof WP_Post ) {
+		return new WP_Error(
+			'aafm_menu_item_not_in_menu',
+			__( 'That menu item is not in the menu given by menu_id. Nothing was deleted.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
 	}
 	wp_delete_post( $item_id );
 	// A re-read that does not load exactly proves nothing: the item is gone only when a
@@ -1397,7 +1437,7 @@ function aafm_navigation_item_schema( int $level ): array {
 			),
 			'url'      => array(
 				'type'        => 'string',
-				'description' => __( 'Where the link goes: an http, https, mailto or tel link, a path starting with /, or an anchor starting with #. Anything else is refused.', 'agent-abilities-for-mcp' ),
+				'description' => __( 'Where the link goes: an http, https, mailto or tel link, a path starting with /, or an anchor starting with #. Other schemes, such as javascript:, data: or ftp:, are refused.', 'agent-abilities-for-mcp' ),
 			),
 			'children' => $children,
 		),

@@ -20,7 +20,7 @@ defined( 'ABSPATH' ) || exit;
  * @return string[]
  */
 function aafm_undo_fixed_meta_tools(): array {
-	return array( 'aafm/set-featured-image', 'aafm/yoast-update-post', 'aafm/rankmath-update-post', 'aafm/rankmath-update-schema', 'aafm/slim-seo-update-post' );
+	return array( 'aafm/set-featured-image', 'aafm/yoast-update-post', 'aafm/rankmath-update-post', 'aafm/rankmath-update-schema', 'aafm/slim-seo-update-post', 'aafm/aioseo-update-post' );
 }
 
 /**

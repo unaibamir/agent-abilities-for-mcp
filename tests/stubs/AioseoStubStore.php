@@ -48,6 +48,23 @@ class AioseoStubStore {
 	public static bool $normalize_urls = false;
 
 	/**
+	 * When true, savePost() mirrors the text keys of its patch into _aioseo_* post meta the way the
+	 * real Models\Post::updatePostMeta() does: a string trimmed, a NULL as a NULL meta_value row.
+	 *
+	 * @var bool
+	 */
+	public static bool $mirror_meta = false;
+
+	/**
+	 * The Search Appearance default formats savePost() compares against, keyed 'title' and
+	 * 'description'. A sent value equal to its default format is stored as NULL, as
+	 * Models\Post::checkForDefaultFormat() does.
+	 *
+	 * @var array<string,string>
+	 */
+	public static array $default_formats = array();
+
+	/**
 	 * Every call made to the stub Post::savePost($postId, $data), in order: array{post_id:int,
 	 * data:array<string,mixed>}. Delegation audit sweep - lets a test assert the
 	 * vendor's own savePost() path was actually taken, and with which patch-data keys, rather than
@@ -72,11 +89,50 @@ class AioseoStubStore {
 	 * @return void
 	 */
 	public static function reset(): void {
+		self::$mirror_meta      = false;
+		self::$default_formats  = array();
 		self::$rows             = array();
 		self::$save_should_fail = false;
 		self::$normalize_urls   = false;
 		self::$save_post_calls  = array();
 		self::$save_post_error  = '';
+	}
+
+	/**
+	 * What the stubbed aioseo() returns: only the Search Appearance default formats the plugin reads
+	 * (meta->title->getPostTypeTitle(), meta->description->getPostTypeDescription()).
+	 *
+	 * @return object
+	 */
+	public static function app(): object {
+		return (object) array(
+			'meta' => (object) array(
+				'title'       => new class() {
+					/**
+					 * The post type's default title format, as set by the test.
+					 *
+					 * @param string $post_type Post type.
+					 * @return string
+					 */
+					public function getPostTypeTitle( $post_type ): string { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid -- AIOSEO's own method name.
+						unset( $post_type );
+						return AioseoStubStore::$default_formats['title'] ?? '';
+					}
+				},
+				'description' => new class() {
+					/**
+					 * The post type's default description format, as set by the test.
+					 *
+					 * @param string $post_type Post type.
+					 * @return string
+					 */
+					public function getPostTypeDescription( $post_type ): string { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid -- AIOSEO's own method name.
+						unset( $post_type );
+						return AioseoStubStore::$default_formats['description'] ?? '';
+					}
+				},
+			),
+		);
 	}
 
 	/**
@@ -88,6 +144,16 @@ class AioseoStubStore {
 	 */
 	public static function get( int $id ): array {
 		return self::$rows[ $id ] ?? self::defaults( $id );
+	}
+
+	/**
+	 * Whether a post id has a stored row (what the real model's exists() reports).
+	 *
+	 * @param int $id Post id.
+	 * @return bool
+	 */
+	public static function has( int $id ): bool {
+		return isset( self::$rows[ $id ] );
 	}
 
 	/**

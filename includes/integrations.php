@@ -23,7 +23,7 @@ defined( 'ABSPATH' ) || exit;
  * Whether a given integration's host plugin is active (so its abilities should
  * register / discover).
  *
- * @param string $slug One of 'yoast' | 'rankmath' | 'aioseo' | 'acf' | 'woocommerce' | 'slim_seo' | 'tec' | 'event_tickets' | 'avada' | 'wpbakery' | 'geodirectory'.
+ * @param string $slug One of 'yoast' | 'rankmath' | 'aioseo' | 'acf' | 'woocommerce' | 'slim_seo' | 'tec' | 'event_tickets' | 'avada' | 'wpbakery' | 'geodirectory' | 'site_cache' | 'site_redirects' | 'site_backups'.
  * @return bool
  */
 function aafm_integration_active( string $slug ): bool {
@@ -60,6 +60,15 @@ function aafm_integration_active( string $slug ): bool {
 			break;
 		case 'geodirectory':
 			$active = aafm_geodirectory_active();
+			break;
+		case 'site_cache':
+			$active = aafm_site_cache_active();
+			break;
+		case 'site_redirects':
+			$active = aafm_site_redirects_active();
+			break;
+		case 'site_backups':
+			$active = aafm_site_backups_active();
 			break;
 		default:
 			return false;
@@ -260,6 +269,26 @@ function aafm_tec_active(): bool {
 }
 
 /**
+ * WP_Query args with The Events Calendar's display filter suppressed when the query can return events.
+ *
+ * TEC hides past events from an event-only query it has not been told to leave alone, through its
+ * own tribe_suppress_query_filters query var (Tribe__Events__Query::parse_query() and
+ * filter_and_order_by_date() both bail on it, and its own repositories set it). An agent query is a
+ * data read, not a calendar view, so it sees every event whatever its date. Keyed on the post type,
+ * not aafm_tec_active(): a TEC below the floor of the dedicated event tools still filters, and the
+ * var is ignored when TEC is absent.
+ *
+ * @param array<string,mixed> $args WP_Query args.
+ * @return array<string,mixed>
+ */
+function aafm_tec_unfiltered_query_args( array $args ): array {
+	if ( array() !== array_intersect( array( 'tribe_events', 'any' ), (array) ( $args['post_type'] ?? array() ) ) ) {
+		$args['tribe_suppress_query_filters'] = true;
+	}
+	return $args;
+}
+
+/**
  * Event Tickets' minimum required version.
  *
  * Pinned to the version verified locally when this integration was built
@@ -368,6 +397,61 @@ function aafm_geodirectory_active(): bool {
 	 * @param bool $active Detected active state.
 	 */
 	return (bool) apply_filters( 'aafm_geodirectory_active', $active );
+}
+
+/**
+ * Whether a supported page cache plugin is present, behind a filterable seam.
+ *
+ * True when the detect tests of any cache adapter registry entry pass. Symbol tests only: no
+ * adapter file is loaded and no vendor code runs. A site whose only cache is an object cache
+ * drop-in, an asset optimiser or a page cache plugin without an adapter in this version does not
+ * count: the purge tools could do nothing there.
+ *
+ * @return bool
+ */
+function aafm_site_cache_active(): bool {
+	$active = false;
+	// The registry file is loaded by the bootstrap; a caller that runs without it sees no cache plugin.
+	$entries = function_exists( 'aafm_site_cache_adapters' ) ? aafm_site_cache_adapters() : array();
+	foreach ( $entries as $entry ) {
+		if ( aafm_site_cache_detected( $entry ) ) {
+			$active = true;
+			break;
+		}
+	}
+
+	/**
+	 * Filters whether a supported page cache plugin is reported present.
+	 *
+	 * @param bool $active Detected active state.
+	 */
+	return (bool) apply_filters( 'aafm_site_cache_active', $active );
+}
+
+/**
+ * Whether a supported redirect plugin is detected, behind a filterable seam.
+ *
+ * True when the detect tests of any redirect registry entry pass. Only cheap symbol tests run:
+ * no adapter file is loaded and no vendor code is called. Whether a detected plugin's redirect
+ * feature is on is a separate question, answered per call by the adapter's ready() function.
+ *
+ * @return bool
+ */
+function aafm_site_redirects_active(): bool {
+	$active = false;
+	foreach ( aafm_site_redirect_adapters() as $entry ) {
+		if ( is_array( $entry ) && aafm_site_cache_detected( $entry ) ) {
+			$active = true;
+			break;
+		}
+	}
+
+	/**
+	 * Filters whether a supported redirect plugin is reported active.
+	 *
+	 * @param bool $active Detected active state.
+	 */
+	return (bool) apply_filters( 'aafm_site_redirects_active', $active );
 }
 
 /**
@@ -541,4 +625,23 @@ function aafm_woocommerce_active(): bool {
 	 * @param bool $active Detected active state.
 	 */
 	return (bool) apply_filters( 'aafm_woocommerce_active', $active );
+}
+
+/**
+ * Whether the backup tools have a provider, behind a filterable seam.
+ *
+ * True when UpdraftPlus is loaded. The test reads one global and one class name: it loads no file
+ * and calls no vendor code.
+ *
+ * @return bool
+ */
+function aafm_site_backups_active(): bool {
+	$active = aafm_site_updraft_loaded();
+
+	/**
+	 * Filters whether the backup tools' host plugin is reported active.
+	 *
+	 * @param bool $active Detected active state.
+	 */
+	return (bool) apply_filters( 'aafm_site_backups_active', $active );
 }

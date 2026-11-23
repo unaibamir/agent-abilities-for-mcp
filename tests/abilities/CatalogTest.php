@@ -72,7 +72,11 @@ final class CatalogTest extends TestCase {
 		// plus the six 1.12.0 site-wide and Studio tools (aafm/wpbakery-get-settings, aafm/wpbakery-update-settings,
 		// aafm/avada-update-global-options, aafm/avada-update-layout, aafm/avada-list-studio-items,
 		// aafm/avada-import-studio-item), making 215, plus the 1.12.0 Avada Slider settings write
-		// (aafm/avada-update-slider-settings), making 216.
+		// (aafm/avada-update-slider-settings), making 216, plus the three 1.13.0 site health reads
+		// (aafm/site-health-status, aafm/site-list-updates, aafm/site-cron-status), making 219, plus the four 1.13.0 page
+		// cache tools (aafm/site-cache-status and the three aafm/site-purge-* writes), making 223, plus the four 1.13.0 redirect reads
+		// (aafm/site-list-redirects, aafm/site-get-redirect, aafm/site-list-404s, aafm/site-test-redirect), making 227.
+		// 1.13.0 batch 9 adds the two backup reads (aafm/site-backup-status, aafm/site-list-backups), making 229.
 		add_filter( 'aafm_integration_active_yoast', '__return_true' );
 		add_filter( 'aafm_integration_active_rankmath', '__return_true' );
 		add_filter( 'aafm_integration_active_aioseo', '__return_true' );
@@ -84,11 +88,14 @@ final class CatalogTest extends TestCase {
 		add_filter( 'aafm_integration_active_avada', '__return_true' );
 		add_filter( 'aafm_integration_active_wpbakery', '__return_true' );
 		add_filter( 'aafm_integration_active_geodirectory', '__return_true' );
+		add_filter( 'aafm_integration_active_site_cache', '__return_true' );
+		add_filter( 'aafm_integration_active_site_redirects', '__return_true' );
+		add_filter( 'aafm_integration_active_site_backups', '__return_true' );
 		aafm_flush_registry_cache();
 	}
 
 	/**
-	 * Enable the entire catalog (all 216) and register categories + abilities.
+	 * Enable the entire catalog (all 229) and register categories + abilities.
 	 */
 	private function register_whole_catalog(): void {
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
@@ -115,14 +122,17 @@ final class CatalogTest extends TestCase {
 		$this->assertTrue( aafm_integration_active( 'avada' ) );
 		$this->assertTrue( aafm_integration_active( 'wpbakery' ) );
 		$this->assertTrue( aafm_integration_active( 'geodirectory' ) );
+		$this->assertTrue( aafm_integration_active( 'site_cache' ) );
+		$this->assertTrue( aafm_integration_active( 'site_redirects' ) );
+		$this->assertTrue( aafm_integration_active( 'site_backups' ) );
 	}
 
 	public function test_registry_has_the_exact_expected_count(): void {
 		$registry = aafm_get_abilities_registry();
 		$this->assertCount(
-			216,
+			229,
 			$registry,
-			'The catalog must contain exactly 216 abilities - 104 reads + 112 writes.'
+			'The catalog must contain exactly 229 abilities - 114 reads + 115 writes.'
 		);
 	}
 
@@ -162,7 +172,7 @@ final class CatalogTest extends TestCase {
 		// Every catalog key is one of the known names - no stray ability slipped in.
 		$known = array_merge( self::READS, self::WRITES );
 		foreach ( array_keys( $registry ) as $name ) {
-			$this->assertContains( $name, $known, $name . ' is not one of the 216 sanctioned abilities.' );
+			$this->assertContains( $name, $known, $name . ' is not one of the 229 sanctioned abilities.' );
 		}
 
 		// And every group is one of exactly two values.
@@ -176,9 +186,9 @@ final class CatalogTest extends TestCase {
 
 		// reads + writes accounts for the whole catalog.
 		$this->assertSame(
-			216,
+			229,
 			count( self::READS ) + count( self::WRITES ),
-			'reads(104) + writes(112) must equal the full catalog (216).'
+			'reads(114) + writes(115) must equal the full catalog (229).'
 		);
 	}
 

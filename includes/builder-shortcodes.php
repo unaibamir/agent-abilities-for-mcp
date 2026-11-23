@@ -46,7 +46,7 @@ function aafm_builder_error( string $code, array $extra = array() ): WP_Error {
 		'aafm_builder_invalid_move'           => array( 400, __( 'An element cannot be moved into itself or into one of its own children. Nothing was changed.', 'agent-abilities-for-mcp' ) ),
 		'aafm_builder_remove_irreversible'    => array( 409, __( 'Revisions are off for this post, so a removed element could not be brought back. Nothing was changed.', 'agent-abilities-for-mcp' ) ),
 		'aafm_builder_remove_last_root'       => array( 409, __( 'The last top level element of a page cannot be removed. Nothing was changed.', 'agent-abilities-for-mcp' ) ),
-		'aafm_builder_unknown_template'       => array( 404, __( 'No template with that id was found. Nothing was changed.', 'agent-abilities-for-mcp' ) ),
+		'aafm_builder_unknown_template'       => array( 404, __( 'No template or library item with that id was found for this user. Nothing was changed.', 'agent-abilities-for-mcp' ) ),
 	);
 	$row   = $codes[ $code ] ?? array( 400, __( 'The request could not be completed. Nothing was changed.', 'agent-abilities-for-mcp' ) );
 	return new WP_Error( $code, $row[1], array_merge( array( 'status' => $row[0] ), $extra ) );
@@ -95,7 +95,7 @@ function aafm_builder_css_vendor_alters( string $builder, string $field, string 
 		$message = __( '%s holds a "<" character, which Avada rewrites when it prints page CSS. Use min-width or max-width instead of a <= range query. Nothing was changed.', 'agent-abilities-for-mcp' );
 	} elseif ( 'wpbakery' === $builder && 1 === preg_match( '/<(?!\s)/', $css ) ) {
 		/* translators: %s: the CSS field. */
-		$message = __( '%s holds a "<" followed by another character, such as a <= range query, and WPBakery cuts the CSS off there when it prints it. Use min-width or max-width instead. Nothing was changed.', 'agent-abilities-for-mcp' );
+		$message = __( '%s holds a "<" that is not followed by whitespace, such as a <= range query, and WPBakery cuts the CSS off there when it prints it. Use min-width or max-width instead. Nothing was changed.', 'agent-abilities-for-mcp' );
 	} else {
 		return null;
 	}
@@ -510,8 +510,8 @@ function aafm_builder_vendor_rows(): array {
 			'target'   => 'vc_editor_post_types',
 			'requires' => 'vc_editor_post_types',
 		),
-		// WPBakery's access chain (vc_user_access()), for the one Role Manager check this plugin makes: the custom JS
-		// fields, which WPBakery's own save skips for a user whose unfiltered_html part is off (W11).
+		// WPBakery's access chain (vc_user_access()), for the Role Manager check on the custom JS
+		// fields (the editor post types seam above is the other WPBakery setting checked), which WPBakery's own save skips for a user whose unfiltered_html part is off (W11).
 		'wpbakery_user_access'       => array(
 			'target'   => 'vc_user_access',
 			'requires' => 'vc_user_access',
@@ -1046,7 +1046,6 @@ function aafm_builder_commit( WP_Post $post, string $old, string $new, array $ta
 	if ( null !== $restore_revision_id && ! aafm_exact_object( 'post', $restore_revision_id ) instanceof WP_Post ) {
 		$restore_revision_id = null;
 		$reversible          = false;
-		$keep                = wp_revisions_to_keep( $post );
 		$reversible_reason   = aafm_builder_pruned_reason( $post );
 	}
 

@@ -249,6 +249,87 @@ final class SiteSettingsTest extends TestCase {
 		$this->assertIsArray( $res );
 		$this->assertSame( 1, (int) get_option( 'posts_per_page' ), 'posts_per_page=0 must floor to 1.' );
 		$this->assertSame( 6, (int) get_option( 'start_of_week' ), 'start_of_week=99 must clamp to 6.' );
+		$this->assertSame(
+			array(
+				array(
+					'setting'   => 'posts_per_page',
+					'requested' => 0,
+					'stored'    => 1,
+				),
+				array(
+					'setting'   => 'start_of_week',
+					'requested' => 99,
+					'stored'    => 6,
+				),
+			),
+			$res['adjusted'],
+			'A clamped value is reported, not applied silently.'
+		);
+	}
+
+	public function test_adjusted_reports_the_value_the_row_holds_after_the_write(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		update_option( 'posts_per_page', 12 );
+		$keep = static fn( $new_value, $old_value ) => $old_value;
+		add_filter( 'pre_update_option_posts_per_page', $keep, 10, 2 );
+		$res  = wp_get_ability( 'aafm/update-site-settings' )->execute( array( 'settings' => array( 'posts_per_page' => 500 ) ) ); // phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page -- the over-limit value is the test input.
+		remove_filter( 'pre_update_option_posts_per_page', $keep, 10 );
+
+		$this->assertIsArray( $res );
+		$this->assertSame(
+			array(
+				array(
+					'setting'   => 'posts_per_page',
+					'requested' => 500,
+					'stored'    => 12,
+				),
+			),
+			$res['adjusted'],
+			'A filter kept the old value, so the response must not claim 100 was stored.'
+		);
+	}
+
+	/**
+	 * A later write's hook can change a setting written earlier in the same call, so adjusted is read
+	 * once every write is done. (A homepage key changed that way fails the call's homepage report.)
+	 */
+	public function test_adjusted_is_read_after_every_write_of_the_call(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		$late = static function (): void {
+			update_option( 'blogname', 'Changed by a hook' );
+		};
+		add_action( 'update_option_posts_per_page', $late );
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array(
+				'settings' => array(
+					'blogname'       => 'A Name',
+					'posts_per_page' => 12,
+				),
+			)
+		);
+		remove_action( 'update_option_posts_per_page', $late );
+
+		$this->assertIsArray( $res );
+		$this->assertSame(
+			array(
+				array(
+					'setting'   => 'blogname',
+					'requested' => 'A Name',
+					'stored'    => 'Changed by a hook',
+				),
+			),
+			$res['adjusted'] ?? null
+		);
+	}
+
+	public function test_update_site_settings_reports_no_adjusted_list_when_nothing_was_changed_in_range(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute( array( 'settings' => array( 'posts_per_page' => 12 ) ) );
+		$this->assertIsArray( $res );
+		$this->assertArrayNotHasKey( 'adjusted', $res );
 	}
 
 	public function test_update_site_settings_clamps_a_negative_posts_per_page_to_one(): void {
@@ -520,7 +601,20 @@ final class SiteSettingsTest extends TestCase {
 		remove_all_filters( 'pre_update_option_blogname' );
 		remove_all_filters( 'option_blogname' );
 
-		$this->assertSame( array( 'settings' => array( 'blogname' => 'Translated Name' ) ), $this->without_undo( $res ) );
+		// The filter kept the old value, so the response says what the row holds, not what was sent.
+		$this->assertSame(
+			array(
+				'settings' => array( 'blogname' => 'Translated Name' ),
+				'adjusted' => array(
+					array(
+						'setting'   => 'blogname',
+						'requested' => 'New Name',
+						'stored'    => 'Old Name',
+					),
+				),
+			),
+			$this->without_undo( $res )
+		);
 		$this->assertSame( 'Old Name', $this->option_row( 'blogname' ) );
 		$rows = $this->write_outcome_rows();
 		$this->assertCount( 1, $rows );

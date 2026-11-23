@@ -9,10 +9,10 @@ WordPress MCP server for Claude and ChatGPT with limited access, a pause switch,
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.1 |
 | **Requires PHP** | 7.4 |
-| **Stable tag** | 1.12.0 |
+| **Stable tag** | 1.13.0 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
-Agent Abilities for MCP is a free WordPress MCP server plugin. It adds an MCP endpoint to a site and exposes WordPress abilities to AI agents, so Claude, ChatGPT, Cursor and other MCP clients can work on it as a WordPress user you choose, with that user's role and no more. It ships 216 abilities (94 core, 122 for plugins such as WooCommerce, ACF and Yoast SEO) and every one starts switched off.
+Agent Abilities for MCP is a free WordPress MCP server plugin. It adds an MCP endpoint to a site and exposes WordPress abilities to AI agents, so Claude, ChatGPT, Cursor and other MCP clients can work on it as a WordPress user you choose, with that user's role and no more. It ships 229 abilities (97 core, 132 for plugins such as WooCommerce, ACF and Yoast SEO) and every one starts switched off.
 
 This is the GitHub home of the plugin. The listing for site owners lives on [WordPress.org](https://wordpress.org/plugins/agent-abilities-for-mcp/), and this page is for anyone who wants to read the code, wire the plugin into their own stack or send a patch.
 
@@ -26,7 +26,7 @@ Typical setups:
 * Pause one OAuth connection, give it an end date or a lower rate limit, or refuse every MCP request at once with Pause all access.
 * Revert what an agent changed from the Changes tab, which covers 25 of this plugin's tools and keeps 30 days.
 
-Abilities are registered on the WordPress 6.9 Abilities API and served through the official MCP Adapter, which is bundled, so if the standalone Adapter plugin is active too the plugin simply uses whichever copy loads first. Every call to its tools runs as the WordPress user the connection belongs to, over OAuth or an Application Password, and is checked against that user's capabilities.
+Abilities are registered on the WordPress 6.9 Abilities API and served through the official MCP Adapter, which is bundled, so if the standalone Adapter plugin is active too the plugin uses whichever copy loads first. Every call to its tools runs as the WordPress user the connection belongs to, over OAuth or an Application Password, and is checked against that user's capabilities.
 
 The admin screen has a switch for each ability, plus read-only mode, per-role and per-connection allowlists, a rate limit, an IP allowlist and Pause all access, and each OAuth connection gets its own pause, end date, rate limit and access preset. An Activity Log table in the site's own database records the acting user, the tool, the argument keys and an identifier-only note, and it never stores free-text content.
 
@@ -34,9 +34,9 @@ The Changes tab keeps 30 days of what agents changed with 25 of the plugin's too
 
 Playbooks are step-by-step instructions the owner writes, and agents read the Active ones through two read tools, `aafm/list-playbooks` and `aafm/get-playbook`. Writes through the plugin's general content tools to pages owned by Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks or WPBakery are refused, except Restore revision on Avada and WPBakery pages. An edit that only sets the excerpt goes through and leaves the stored content as it was, unless the plugin can't tell which builder owns the post. Avada and WPBakery pages have their own tools instead: they read a page as an outline, change an element's settings or text, add, move and remove elements, and refuse any save that would change something else on the page.
 
-Minimum versions: WooCommerce 9.1, All in One SEO 4.9.8, The Events Calendar 6.17.3.1 and Event Tickets 5.29.3.1. Below these, their tools stay hidden and the Integrations tab says why. A plugin that doesn't declare its reads as read-only has them treated as writes, so read-only mode unloads them. A tool whose own permission check needs an item id is listed for anyone who can edit posts, and the plugin's own check refuses the call if their role can't run it.
+Minimum versions: WooCommerce 9.1, All in One SEO 4.9.8, The Events Calendar 6.17.3.1 and Event Tickets 5.29.3.1. Below these, their tools stay hidden and the Integrations tab says why. A plugin that doesn't declare its reads as read-only has them treated as writes, so read-only mode unloads them. A tool whose own permission check needs an item id is listed for anyone who can edit posts, and that plugin's own check refuses the call if their role can't run it.
 
-One scope note: the Adapter has a default server that other plugins can publish tools to, and those tools are outside this plugin's controls. A Settings choice (Automatic, Always on, Always off) decides whether that server runs, and this plugin's own tools are never on it.
+One scope note: the Adapter has a default server that other plugins can publish tools to, and those tools are outside this plugin's controls, except that Pause all access refuses requests to that server too. A Settings choice (Automatic, Always on, Always off) decides whether that server runs, and this plugin's own tools are never on it.
 
 ## Install and connect
 
@@ -88,7 +88,7 @@ VS Code keys the same block as `servers` in `.vscode/mcp.json`. If you'd rather 
 }
 ```
 
-The Connection tab generates both blocks with your real endpoint, plus a Windows variant that wraps `npx` in `cmd /c`. Keep in mind that an Application Password works across the whole REST API, so this plugin's limits apply only to calls through its MCP endpoint, whereas a token it issues over OAuth works on that endpoint alone.
+The Connection tab generates both blocks with your real endpoint, plus a Windows variant that wraps `npx` in `cmd /c`. An Application Password works across the whole REST API, so this plugin's limits apply only to calls through its MCP endpoint, whereas a token it issues over OAuth works on that endpoint alone.
 
 ## For developers
 
@@ -114,6 +114,12 @@ These are the main extension points. Every name starts with `aafm_`.
 | `aafm_page_builder_markers` | filter | Map of post meta key to builder name used by the page builder guard. |
 | `aafm_allowed_post_types` | filter | Custom post types exposed to the content tools. Types that fail the eligibility check stay refused. |
 | `aafm_undo_secret_key_patterns` | filter | Regular expressions for meta keys whose values change history must never keep. Receives the default pattern and can only add; the defaults always stay. |
+| `aafm_build_server_tools_for_request` | filter | Whether this request builds the MCP tool set. Since 1.13.0 a request that is not for the MCP route (another REST route, wp-admin, cron) skips it, on PHP runtimes that start fresh for every request. Return `true` to build it on every request, as before 1.13.0. Code that calls `rest_do_request()` for the MCP route from another kind of request must add this filter before the first `rest_get_server()` call. |
+| `aafm_backup_gate_vouch` | filter | Return exactly `true` to say a good backup exists by other means (a host backup, another backup plugin) for one tool call. It receives the ability name and has no effect while the backup gate is off. |
+| `aafm_backup_gate_inline_checksum_max_bytes` | filter | How many bytes in total one backup check may hash during a tool call. Default 8388608 (8 MB), clamped to 0 to 32 MB. |
+| `aafm_site_purge_budget` | filter | Tune the page cache purge budget: window, limit, whole-site cost and cooldown, wall time, request cap and timeout. Receives an array with the keys `window`, `limit`, `site_cost`, `site_cooldown`, `wall_seconds`, `http_cap` and `http_timeout`. Values are clamped, so it cannot switch the budget off. |
+| `aafm_site_litespeed_serving` | filter | Receives whether a LiteSpeed or OpenLiteSpeed server was detected. Return `true` on a site behind a LiteSpeed ADC or QUIC.cloud front, which cannot be told from the request; any other value counts as no LiteSpeed cache. LiteSpeed Cache must still be active. |
+| `aafm_site_redirect_protected_paths` | filter | Add paths, each starting with `/`, that a redirect should not take over. In 1.13.0 the list only sets the `protected_path` flag of the test redirect tool. The built-in paths (the home path, the REST prefix, wp-admin, wp-login.php and the other core entry points) are added back afterwards, so it can only add. |
 
 ### WP-CLI
 
@@ -151,6 +157,18 @@ That notice comes from a copy of the MCP Adapter that runs its own loader and fi
 
 If the notice still shows, another plugin ships its own copy of the adapter. The Connection Doctor report on the Connection tab shows which copy is running. If it says bundled, this plugin's copy is in use and the notice comes from the other plugin's copy, so update or remove the plugin that bundles its own MCP Adapter.
 
+### Can an AI agent clear my page cache, check redirects or see my backups?
+
+Yes, with 13 tools that start switched off and need a user who can manage options. Four work with your page cache plugin: one reports which supported cache plugins are active, and three clear one post, one URL or the whole site. Each result says, per plugin, whether a cached copy was found and removed, the purge was only requested, or it failed or was skipped. LiteSpeed Cache, W3 Total Cache and Proxy Cache Purge can't confirm a removal, so their results say requested. Supported: WP Super Cache, WP Fastest Cache, W3 Total Cache, WP-Optimize, Cache Enabler, Hummingbird, Jetpack Boost, SpeedyCache, Breeze, SiteGround Speed Optimizer, LiteSpeed Cache, Nginx Helper and Proxy Cache Purge.
+
+Four more tools read redirects from Redirection, Rank Math, Safe Redirect Manager, 301 Redirects and Slim SEO. They list redirects, read one and test which redirect a URL would hit, and they list not-found addresses for every plugin except Safe Redirect Manager, which keeps no such log. They change nothing. Two tools report UpdraftPlus backups, and three report Site Health results, waiting updates and scheduled tasks. On a multisite network the purge and backup tools are refused and the health tools need a super admin.
+
+These tools call the other plugin's own purge and read functions, and this plugin sends no request of its own for them. This plugin doesn't purge a CDN, Cloudflare, Varnish or a host's cache itself, but a cache plugin can pass the purge on to one it is set up for: Proxy Cache Purge to its proxy, Nginx Helper to nginx, SiteGround Speed Optimizer to SiteGround's server cache, and W3 Total Cache or WP Fastest Cache to Varnish, Cloudflare or a CDN configured inside them. Some cache plugins also send requests to your own site while they purge.
+
+### What is the backup gate?
+
+A setting on the Settings tab that starts off. You tick the risky tools it covers, and each one is then refused unless UpdraftPlus has a database backup from the last 24 hours that passed a check. A small backup is compared with the checksum UpdraftPlus recorded when the tool is called, and a larger one is checked in the background about once an hour. A backup too large to check in time keeps those tools refused unless you switch on Large backups to accept it on its size alone. A backup kept only off-site has no file here to check, so it stays refused unless you switch on Off-site backups, which trusts UpdraftPlus's own record of it. Without UpdraftPlus every ticked tool is refused. The gate covers tools run through this plugin, not tools another plugin serves from its own MCP server. No tool can start a backup, so run one in UpdraftPlus or let its schedule do it.
+
 ## More documentation
 
 - [Documentation](https://agentabilitieswp.com/docs/?utm_source=github&utm_medium=readme&utm_campaign=plugin-repo)
@@ -165,6 +183,14 @@ If the notice still shows, another plugin ships its own copy of the adapter. The
 The Model Context Protocol is an open specification that Anthropic originally developed. Claude, ChatGPT, Cursor, VS Code, Gemini and other product names belong to their owners, and Agent Abilities for MCP is a third-party plugin that isn't affiliated with, endorsed by or sponsored by any of them.
 
 ## Changelog
+### 1.13.0
+
+* **Feature:** Agents can clear one post, one URL or the whole site from the page cache of 13 cache plugins, including LiteSpeed Cache, WP Super Cache and W3 Total Cache. Each plugin's result says whether a cached copy was found and removed, the purge was only requested, or it failed or was skipped.
+* **Feature:** Agents can list redirects, read one and test which redirect a URL would hit in Redirection, Rank Math, Safe Redirect Manager, 301 Redirects and Slim SEO, and see not-found addresses in all of them but Safe Redirect Manager. None of it changes anything. wpbakery-replace-text now returns a restore point when the site keeps revisions, and Check my connection shows when another plugin, such as WP Rocket or Rank Math, also runs an MCP server.
+* **Feature:** Backup gate: a Settings option, off by default, that refuses the risky tools you pick unless UpdraftPlus has a checked backup from the last 24 hours. New read tools report those backups, Site Health results, waiting updates and scheduled tasks, and make no outbound requests.
+* **Fix:** A stored Bridge list could register the MCP Adapter's own tools, which let an agent run another plugin's tools past the Bridge enable list and the high-risk lock; those tools are never bridged now.
+* **Fix:** Codex and other clients that send a client title could fail to connect with an "Expected object, got array" error; they now connect. Undo now records update-term calls made without a taxonomy and puts AIOSEO's meta rows back exactly, lists and search include past events from The Events Calendar, and smaller fixes cover page totals, menu item order, clearer refusals, prices, stock quantity and captions in list rows, WPBakery image ids, skipping the MCP tool set on other REST routes, the FAQ and the admin header.
+
 ### 1.12.0
 
 * **Feature:** Agents can edit WPBakery Page Builder and Avada pages element by element with tools such as avada-update-element and wpbakery-insert-template. Restore revision works there too. [See every tool](https://agentabilitieswp.com/abilities/?utm_source=github&utm_medium=readme&utm_campaign=plugin-repo).

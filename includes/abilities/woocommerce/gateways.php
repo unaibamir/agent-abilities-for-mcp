@@ -75,7 +75,7 @@ function aafm_wc_gateways_registry_definitions(): array {
 
 		'aafm/wc-update-payment-gateway' => array(
 			'label'        => __( 'Update WooCommerce payment gateway', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Updates a WooCommerce payment gateway by id, changing only the fields you send: enabled state, title, description, or display order. Returns the updated gateway shape with secrets redacted. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Updates a WooCommerce payment gateway by id, changing only the fields you send: enabled state, title, description, or display order. Returns the updated gateway shape with credential fields redacted on a best-effort basis. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -624,7 +624,7 @@ function aafm_args_wc_update_payment_gateway(): array {
 				),
 				'enabled'     => array(
 					'type'        => 'boolean',
-					'description' => 'Whether the gateway is enabled, as a boolean (true/false). Note: this differs from the shipping-method abilities, where the equivalent enabled flag is the string "yes"/"no".',
+					'description' => __( 'Whether the gateway is enabled, as a boolean (true/false). Note: this differs from the shipping-method abilities, where the equivalent enabled flag is the string "yes"/"no".', 'agent-abilities-for-mcp' ),
 				),
 				'title'       => array(
 					'type'        => 'string',

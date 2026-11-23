@@ -94,6 +94,18 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/server.php|aafm_reconcile_omitted_abilities|1' => 'N',
 		'includes/server.php|aafm_notice_omitted_abilities|1' => 'N',
 		'includes/site-brief.php|aafm_site_brief|1'        => 'N',
+		'includes/siteops/cache-registry.php|aafm_siteops_plugin_active|1' => 'N',
+		'includes/siteops/cache/wp-super-cache.php|aafm_cache_wp_super_cache_purge_url|1' => 'N',
+		'includes/siteops/cache/wp-fastest-cache.php|aafm_cache_wp_fastest_cache_serving|1' => 'N',
+		'includes/siteops/cache/jetpack-boost.php|aafm_cache_jetpack_boost_serving|1' => 'N',
+		'includes/siteops/redirects/eps-301.php|aafm_redirect_eps_301_list_404s|1' => 'N',
+		'includes/siteops/redirects/eps-301.php|aafm_redirect_eps_301_list_404s|2' => 'N',
+		'includes/siteops/redirects/redirection.php|aafm_redirect_redirection_ready|1' => 'N',
+		'includes/siteops/redirects/rankmath.php|aafm_redirect_rankmath_match|1' => 'N',
+		'includes/siteops/redirects/slim-seo.php|aafm_redirect_slim_seo_match|1' => 'N',
+		'includes/siteops/redirects/slim-seo.php|aafm_redirect_slim_seo_match|2' => 'N',
+		'includes/siteops/redirects/slim-seo.php|aafm_redirect_slim_seo_ready|1' => 'N',
+		'includes/siteops/backup-updraft.php|aafm_site_updraft_dir|1' => 'N',
 	);
 
 	/**
@@ -107,7 +119,7 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/admin/settings.php|aafm_render_settings_tab|1' => array( 'aafm_high_risk_abilities_unlocked' ),
 		'includes/admin/settings.php|aafm_render_settings_tab|2' => array( 'aafm_delete_data_on_uninstall' ),
 		'includes/audit/high-risk.php|aafm_high_risk_unlocked|1' => array( 'aafm_high_risk_abilities_unlocked' ),
-		'includes/audit/read-only.php|aafm_stored_switch_on|1' => array( 'aafm_pause_all', 'aafm_read_only_mode', 'aafm_undo_capture_off' ),
+		'includes/audit/read-only.php|aafm_stored_switch_on|1' => array( 'aafm_pause_all', 'aafm_read_only_mode', 'aafm_undo_capture_off', 'aafm_backup_gate' ),
 		'includes/block-guard.php|aafm_block_guard_is_strict|1' => array( 'aafm_block_guard_strict' ),
 		'includes/bridge.php|aafm_get_stored_bridged_abilities_raw|1' => array( 'aafm_enabled_bridged_abilities' ),
 		'includes/default-server.php|aafm_default_server_mode|1' => array( 'aafm_default_server_mode' ),
@@ -369,7 +381,7 @@ final class OptionReadSweepTest extends TestCase {
 			array(
 				'G' => 21,
 				'L' => 3,
-				'N' => 44,
+				'N' => 56,
 			),
 			array(
 				'G' => count( array_keys( self::GET_OPTION, 'G', true ) ),
@@ -395,12 +407,12 @@ final class OptionReadSweepTest extends TestCase {
 
 	public function test_the_policy_reads_cover_exactly_the_batched_options(): void {
 		// Read only through aafm_policy_row(), never get_option().
-		$options = array( 'aafm_ability_allowlist_overrides', 'aafm_oauth_connect_roles', 'aafm_trusted_proxy', 'aafm_oauth_default_preset' );
+		$options = array( 'aafm_ability_allowlist_overrides', 'aafm_oauth_connect_roles', 'aafm_trusted_proxy', 'aafm_oauth_default_preset', 'aafm_backup_gate_abilities', 'aafm_backup_gate_accept_remote', 'aafm_backup_gate_accept_size', 'aafm_backup_verify' );
 		foreach ( self::G_OPTIONS as $list ) {
 			$options = array_merge( $options, $list );
 		}
 
-		$this->assertCount( 30, aafm_policy_options() );
+		$this->assertCount( 35, aafm_policy_options() );
 		$this->assertSame( $this->sorted( aafm_policy_options() ), $this->sorted( array_values( array_unique( $options ) ) ) );
 	}
 

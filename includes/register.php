@@ -191,6 +191,25 @@ function aafm_resolve_current_invocation_row( string $name ): ?int {
 }
 
 /**
+ * The activity row id of the tool call whose execute callback is running now.
+ *
+ * Holds one integer. Called with an integer it stores and returns it; called with no argument it
+ * returns what is stored. The decorated execute callback sets it on the line before the ability's
+ * own callback runs and clears it in a finally after, so it never outlives one call. The purge
+ * budget reads it: a purge whose row could not be written would be counted by nobody.
+ *
+ * @param int|null $set Row id to store, 0 to clear, or null to read.
+ * @return int The stored row id, 0 when no call is running or its row was not written.
+ */
+function aafm_current_invocation_row_id( ?int $set = null ): int {
+	static $row_id = 0;
+	if ( null !== $set ) {
+		$row_id = $set;
+	}
+	return $row_id;
+}
+
+/**
  * Whether a WP_Ability::execute() return value is core's OWN input-validation refusal - the one
  * class of dangling row aafm_resolve_dangling_invocation_if_mine() below is allowed to resolve on
  * its own authority, rather than leave stuck at 'started' the way every other dangling case still
@@ -1332,6 +1351,19 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			}
 		}
 
+		// Backup gate: one more AND, after the allowlist, so a refusal reaches the same audit block
+		// below and is written as exactly one 'denied' row. With the gate off this is one switch read.
+		// The adapter's fire gets the reason as a tool error; core's re-check inside execute() gets a
+		// bare false, as the paused-connection refusal does, because a WP_Error there trips
+		// _doing_it_wrong().
+		if ( true === $allowed ) {
+			$gate_refusal = aafm_backup_gate_refusal( $name );
+			if ( '' !== $gate_refusal ) {
+				$allowed = null === aafm_executing_ability() ? aafm_backup_gate_error( $gate_refusal ) : false;
+				$reason  = $gate_refusal;
+			}
+		}
+
 		// The WP Abilities API admits ONLY a strict true; every other return (false, WP_Error,
 		// null, 0, '') is a denial. Audit any non-true result so a malformed or future permission
 		// callback's denial is never silently unlogged.
@@ -1430,6 +1462,8 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		$undo       = aafm_undo_begin( $name, $call_args, (int) $row_id );
 		$started_at = hrtime( true );
 		$ended_at   = $started_at;
+		// The Site Ops purge budget counts this call by its row; a call with no row is refused there.
+		aafm_current_invocation_row_id( (int) $row_id );
 		try {
 			$result   = $original_execute( $input );
 			$ended_at = hrtime( true );
@@ -1482,6 +1516,8 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			$crash_detail = aafm_log_ability_exception( $row_id, $e );
 
 			$result = new \WP_Error( 'aafm_ability_exception', aafm_ability_exception_message() );
+		} finally {
+			aafm_current_invocation_row_id( 0 );
 		}
 
 		// Every NATIVE ability's execute_callback is contracted to return array|WP_Error. That

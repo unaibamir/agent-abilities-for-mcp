@@ -625,6 +625,9 @@ final class WpbakerySiteTest extends TestCase {
 			}
 		}
 		$this->assertStringContainsString( 'Only while WPBakery Page Builder is active', $row['description'] );
+		// The empty-post insert asks WPBakery's editor post types, which follow the user's Role Manager.
+		$this->assertStringNotContainsString( 'Role Manager settings are not applied', $row['description'] );
+		$this->assertStringContainsString( 'editor is on for that post type and user', $row['description'] );
 	}
 
 	/**
@@ -1416,6 +1419,7 @@ final class WpbakerySiteTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		foreach ( array( 'use_custom', 'gutenberg_disable', 'auto_save', 'js_composer_purchase_code', 'nope' ) as $key ) {
 			$this->assert_error( aafm_exec_wpbakery_update_settings( array( 'set' => array( $key => true ) ) ), 'aafm_builder_attribute_not_writable', 400 );
+			$this->assertSame( '"' . $key . '" is not a setting this tool can change. Nothing was changed.', aafm_exec_wpbakery_update_settings( array( 'set' => array( $key => true ) ) )->get_error_message() );
 			$this->assertFalse( get_option( 'wpb_js_' . $key ), $key );
 		}
 		remove_filter( 'aafm_builder_vendor', $filter, 20 );
@@ -1502,6 +1506,10 @@ final class WpbakerySiteTest extends TestCase {
 			$this->assert_error( aafm_exec_wpbakery_update_settings( array( 'set' => $set ) ), 'aafm_builder_invalid_value', 400 );
 		}
 		$this->assert_error( aafm_exec_wpbakery_update_settings( array( 'set' => array() ) ), 'aafm_builder_invalid_value', 400 );
+		$this->assertSame( 'Give at least one setting. Nothing was changed.', aafm_exec_wpbakery_update_settings( array( 'set' => array() ) )->get_error_message() );
+		// The key is the caller's: it is repeated as plain text, at most 100 characters.
+		$long = aafm_exec_wpbakery_update_settings( array( 'set' => array( '<b>x</b>' . str_repeat( 'k', 300 ) => true ) ) );
+		$this->assertSame( '"x' . str_repeat( 'k', 99 ) . '" is not a setting this tool can change. Nothing was changed.', $long->get_error_message() );
 		$this->assert_error( aafm_exec_wpbakery_update_settings( array( 'set' => 'x' ) ), 'aafm_builder_invalid_value', 400 );
 		remove_filter( 'aafm_builder_vendor', $filter, 20 );
 		$this->assertSame( array(), self::$calls );
@@ -1632,5 +1640,10 @@ final class WpbakerySiteTest extends TestCase {
 			}
 		}
 		$this->assertStringContainsString( 'Only while WPBakery Page Builder is active', $row['description'] );
+	}
+
+	public function test_editor_post_types_says_it_is_per_user(): void {
+		$props = aafm_args_wpbakery_get_settings()['output_schema']['properties'];
+		$this->assertSame( "The post types WPBakery's editor is on for the calling user.", $props['editor_post_types']['description'] ?? null );
 	}
 }

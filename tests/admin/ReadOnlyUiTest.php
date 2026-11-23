@@ -408,9 +408,9 @@ final class ReadOnlyUiTest extends TestCase {
 		$html = $this->render_settings_tab();
 
 		$this->assertSame(
-			3,
+			5,
 			substr_count( $html, '<details class="aafm-set-more">' ),
-			'Exactly three rows collapse: read-only mode, the high-risk switch, and delete on uninstall.'
+			'Exactly five rows collapse: read-only mode, the high-risk switch, delete on uninstall, and the off-site and large backup switches of the backup gate.'
 		);
 
 		preg_match_all( '#<details class="aafm-set-more">(.*?)</details>#s', $html, $m );
@@ -520,7 +520,7 @@ final class ReadOnlyUiTest extends TestCase {
 		// The label alone reads as "everything that changes the site". The caveat is what stops
 		// that, and it is the button's aria-describedby target, so losing it costs a sighted
 		// reader the disclosure and a screen reader user the announcement.
-		$this->assertStringContainsString( 'this leaves deletes and high-risk abilities switched off', $html );
+		$this->assertStringContainsString( 'Deletes and high-risk abilities stay switched off', $html );
 		$this->assertMatchesRegularExpression(
 			'/<button[^>]*aafm-enable-writes[^>]*aria-describedby="aafm-write-note-[a-z0-9_-]+"/',
 			$html,

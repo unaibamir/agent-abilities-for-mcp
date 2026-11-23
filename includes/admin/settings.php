@@ -307,8 +307,8 @@ function aafm_ajax_save_settings(): void {
 			wp_send_json_error( array( 'message' => $ntf_error ) );
 		}
 	}
-	// Roles and proxy are refused here too, before any write.
-	$access_error = aafm_connect_roles_input_error( $posted ) ?? aafm_proxy_input_error( $posted );
+	// Roles, proxy and the backup gate tool list are refused here too, before any write.
+	$access_error = aafm_connect_roles_input_error( $posted ) ?? aafm_proxy_input_error( $posted ) ?? aafm_backup_gate_input_error( $posted );
 	if ( null !== $access_error ) {
 		wp_send_json_error( array( 'message' => $access_error ) );
 	}
@@ -517,6 +517,20 @@ function aafm_ajax_save_settings(): void {
 			if ( ! $undo_persisted ) {
 				wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Change history', 'agent-abilities-for-mcp' ) ) ) );
 			}
+		}
+	}
+
+	// Backup gate. Posted-only through its marker field, like the roles list: a save from a page
+	// without the card (a stale cached script) reads nothing, writes nothing and leaves the
+	// schedule alone. With the marker, restrictive changes are written before permissive ones and
+	// the first write that does not take stops the block. The schedule is reconciled either way,
+	// so it follows the switch as it is stored now.
+	$backup_gate = aafm_sanitize_backup_gate_input( $posted );
+	if ( null !== $backup_gate ) {
+		$backup_gate_error = aafm_backup_gate_save( $backup_gate );
+		aafm_backup_verify_reconcile();
+		if ( null !== $backup_gate_error ) {
+			wp_send_json_error( array( 'message' => $backup_gate_error ) );
 		}
 	}
 
@@ -739,6 +753,12 @@ function aafm_config_option_names(): array {
 		'aafm_oauth_connect_roles',
 		'aafm_trusted_proxy',
 		'aafm_oauth_default_preset',
+		// 1.13.0 backup gate: the four owner settings and the stored verification verdicts.
+		'aafm_backup_gate',
+		'aafm_backup_gate_abilities',
+		'aafm_backup_gate_accept_remote',
+		'aafm_backup_gate_accept_size',
+		'aafm_backup_verify',
 	);
 }
 
@@ -808,6 +828,7 @@ function aafm_uninstall_site_data(): void {
 	wp_clear_scheduled_hook( 'aafm_prune_activity_log_daily' );
 	wp_clear_scheduled_hook( 'aafm_oauth_cleanup' );
 	wp_clear_scheduled_hook( 'aafm_notifications_digest' );
+	wp_clear_scheduled_hook( 'aafm_backup_verify' );
 	wp_unschedule_hook( 'aafm_notify_send_scheduled' ); // Alert mail handed to cron; every event carries its own arguments.
 	delete_transient( 'aafm_ntf_overdue_seen' ); // The alert-mail self-heal's sighting record.
 
@@ -942,13 +963,13 @@ function aafm_ajax_reset_plugin(): void {
 	if ( ! aafm_reset_plugin() ) {
 		wp_send_json_error(
 			array(
-				'message' => __( 'Reset did not fully complete. Some settings, the activity log, or OAuth data may still hold their old state - please try again.', 'agent-abilities-for-mcp' ),
+				'message' => __( 'Reset did not fully complete. Some settings, the activity log, or OAuth data may still hold their old state. Please try again.', 'agent-abilities-for-mcp' ),
 			)
 		);
 	}
 	wp_send_json_success(
 		array(
-			'message' => __( 'Plugin reset. Every setting and the activity log were cleared; your agent user and its content were left alone.', 'agent-abilities-for-mcp' ),
+			'message' => __( 'Plugin reset. Every setting, the activity log, the change history and all OAuth connections were cleared; your agent user and its content were left alone.', 'agent-abilities-for-mcp' ),
 		)
 	);
 }
@@ -1066,7 +1087,7 @@ function aafm_render_settings_tab(): void {
 	// Same .aafm-switch / .aafm-set-row contract as every other row, and inside #aafm-settings-form
 	// so admin.js reads it.
 	$read_only_control  = '<label class="aafm-switch"><input type="checkbox" id="aafm-read-only-mode" name="aafm_read_only_mode" value="1" ' . checked( aafm_read_only_mode_stored(), true, false ) . '><span class="aafm-switch-track"></span></label> ';
-	$read_only_control .= '<label for="aafm-read-only-mode">' . esc_html__( 'Let agents read this site, and nothing else.', 'agent-abilities-for-mcp' ) . '</label>';
+	$read_only_control .= '<label for="aafm-read-only-mode">' . esc_html__( 'Let agents read this site through this plugin, and nothing else.', 'agent-abilities-for-mcp' ) . '</label>';
 	$read_only_control .= '<p class="help">' . esc_html__( 'While this is on, no ability that creates, changes, or deletes anything can be switched on, and none that is already switched on is reachable.', 'agent-abilities-for-mcp' ) . '</p>';
 
 	// The rest of the explanation sits behind a "See more" so this row reads at the same length as
@@ -1116,8 +1137,8 @@ function aafm_render_settings_tab(): void {
 		$high_risk_checked = $high_risk_checked && $high_risk_row['ok'] && $high_risk_row['found'] && is_scalar( $high_risk_row['value'] ) && (bool) $high_risk_row['value'];
 	}
 	$high_risk_control .= '<label class="aafm-switch"><input type="checkbox" id="aafm-high-risk-unlocked" name="aafm_high_risk_abilities_unlocked" value="1" ' . checked( $high_risk_checked, true, false ) . '><span class="aafm-switch-track"></span></label> ';
-	$high_risk_control .= '<label for="aafm-high-risk-unlocked">' . esc_html__( 'Allow refunds, creating and changing orders, payment gateway settings, coupons and tax rates to be switched on individually.', 'agent-abilities-for-mcp' ) . '</label>';
-	$high_risk_control .= '<p class="help">' . esc_html__( "While this is off, no agent can issue a refund, create or change an order, change a payment gateway setting, or create or change a coupon or a tax rate through this plugin's own tools. WooCommerce's own order status and order update tools on the Plugins' own tools tab are held too, and so are the Secure Custom Fields tools that can store a callback name. Order notes stay available.", 'agent-abilities-for-mcp' ) . '</p>';
+	$high_risk_control .= '<label for="aafm-high-risk-unlocked">' . esc_html__( 'Allow refunds, creating and changing orders, customer updates, payment gateway settings, coupons and tax rates to be switched on individually.', 'agent-abilities-for-mcp' ) . '</label>';
+	$high_risk_control .= '<p class="help">' . esc_html__( "While this is off, no agent can issue a refund, create or change an order, update a customer, change a payment gateway setting, or create or change a coupon or a tax rate through this plugin's own tools. WooCommerce's own order status and order update tools on the Plugins' own tools tab are held too, and so are the Secure Custom Fields tools that can store a callback name. Order notes stay available.", 'agent-abilities-for-mcp' ) . '</p>';
 	$high_risk_control .= '<p class="help">' . esc_html__( 'One switch covers every tool listed here. Turning it on also reopens every high-risk tool you had already switched on.', 'agent-abilities-for-mcp' ) . '</p>';
 	if ( aafm_high_risk_forced() ) {
 		$high_risk_control .= aafm_get_notice_html( 'info', __( 'Your host or a site setting keeps this locked, whatever this switch says.', 'agent-abilities-for-mcp' ), array( 'inline' => true ) );
@@ -1157,7 +1178,7 @@ function aafm_render_settings_tab(): void {
 				esc_attr( (string) aafm_rate_limit_per_min() ),
 				esc_attr__( 'Rate limit, per minute', 'agent-abilities-for-mcp' )
 			),
-			'help'    => __( 'How many agent calls one connection can make per minute. Off by default (0), so nothing is capped until you set a number here. If you are not sure where to start, 60 is a reasonable limit for a single connected agent. Developers can also set this with the aafm_rate_limit_per_min filter.', 'agent-abilities-for-mcp' ),
+			'help'    => __( 'How many agent calls one user account can make per minute, across all of its connections. Off by default (0), so nothing is capped until you set a number here. If you are not sure where to start, 60 is a reasonable limit for a single connected agent. Developers can also set this with the aafm_rate_limit_per_min filter.', 'agent-abilities-for-mcp' ),
 		)
 	);
 
@@ -1176,7 +1197,7 @@ function aafm_render_settings_tab(): void {
 				'<textarea id="aafm-ip-allowlist" name="aafm_ip_allowlist" rows="5" class="large-text code" aria-label="%2$s">%1$s</textarea>',
 				esc_textarea( implode( "\n", aafm_ip_allowlist() ) ),
 				esc_attr__( 'IP allowlist, one per line', 'agent-abilities-for-mcp' )
-			) . '<p class="help">' . esc_html__( 'One IP address or CIDR range per line. Leave it empty to allow connections from anywhere. When you save, any line that is not a valid IP or range is dropped. A blocked client is refused before it signs in. Claude shows that as a firewall or sign-in error, and ChatGPT shows the reason.', 'agent-abilities-for-mcp' ) . '</p>'
+			) . '<p class="help">' . esc_html__( 'One IP address or CIDR range per line. Leave it empty to allow connections from anywhere. When you save, any line that is not a valid IP or range is dropped. A blocked client is refused at the MCP endpoint, even with valid credentials. Claude shows that as a firewall or sign-in error, and ChatGPT shows the reason.', 'agent-abilities-for-mcp' ) . '</p>'
 				. '<p class="help">' . sprintf(
 					/* translators: %s: link to the Ability allowlist card on the Connection tab. */
 					esc_html__( 'To limit which abilities a role or a connection can use, see the %s on the Connection tab.', 'agent-abilities-for-mcp' ),
@@ -1234,7 +1255,7 @@ function aafm_render_settings_tab(): void {
 			'label'   => __( 'Force draft on create', 'agent-abilities-for-mcp' ),
 			'control' => '<label class="aafm-switch"><input type="checkbox" id="aafm-force-draft" name="aafm_force_draft" value="1" ' . checked( aafm_force_draft(), true, false ) . '><span class="aafm-switch-track"></span></label> '
 				. '<label for="aafm-force-draft">' . esc_html__( 'Save the content an agent creates as a draft, no matter what status the request asked for.', 'agent-abilities-for-mcp' ) . '</label>',
-			'help'    => __( 'Turn this on if you want to look over agent-created content before it goes live. Covers posts, pages, custom content items, reusable blocks, and WooCommerce products. Product variations save as disabled instead, because a draft variation disappears from WooCommerce\'s editor. Things without a draft state (media, menus, terms, comments, users, coupons, orders) are not affected.', 'agent-abilities-for-mcp' ),
+			'help'    => __( 'Turn this on if you want to look over agent-created content before it goes live. Covers posts, pages, custom content items, reusable blocks, events, venues, organizers, GeoDirectory listings and WooCommerce products. Product variations save as disabled instead, because a draft variation disappears from WooCommerce\'s editor. Things without a draft state (media, menus, terms, comments, users, coupons, orders) are not affected.', 'agent-abilities-for-mcp' ),
 		)
 	);
 
@@ -1244,7 +1265,7 @@ function aafm_render_settings_tab(): void {
 		array(
 			'label'   => __( 'Keep change history', 'agent-abilities-for-mcp' ),
 			'control' => '<label class="aafm-switch"><input type="checkbox" id="aafm-undo-capture" name="aafm_undo_capture" value="1" ' . checked( ! aafm_stored_switch_on( 'aafm_undo_capture_off' ), true, false ) . '><span class="aafm-switch-track"></span></label> '
-				. '<label for="aafm-undo-capture">' . esc_html__( 'Record what agents change so you can revert it from the Changes tab.', 'agent-abilities-for-mcp' ) . '</label>',
+				. '<label for="aafm-undo-capture">' . esc_html__( 'Record the changes agents make with the post, term, custom field and SEO tools so you can revert them from the Changes tab.', 'agent-abilities-for-mcp' ) . '</label>',
 			'help'    => __( 'History is kept for 30 days while the plugin is active, because the clean-up needs the plugin loaded. The before-values stay in this site\'s database and its backups, and they are dropped when the plugin is uninstalled. Turning this off does not delete history that is already kept.', 'agent-abilities-for-mcp' ),
 		)
 	);
@@ -1270,7 +1291,7 @@ function aafm_render_settings_tab(): void {
 				esc_attr( (string) aafm_max_title_len() ),
 				esc_attr__( 'Maximum title length, in characters', 'agent-abilities-for-mcp' )
 			),
-			'help'    => __( 'The longest title, in characters, an agent can set. Set it to 0 to leave the limit off.', 'agent-abilities-for-mcp' ),
+			'help'    => __( 'The longest title, in characters, an agent can set on a post, page, custom content item, event, venue, organizer or listing. Products, reusable blocks, media, menus and terms are not limited. Set it to 0 to leave the limit off.', 'agent-abilities-for-mcp' ),
 		)
 	);
 
@@ -1306,7 +1327,7 @@ function aafm_render_settings_tab(): void {
 			'label'   => __( 'Allow the MCP Adapter\'s default server', 'agent-abilities-for-mcp' ),
 			'opt'     => __( 'Other plugins\' tools', 'agent-abilities-for-mcp' ),
 			'control' => $default_server_select,
-			'help'    => __( 'The MCP Adapter has a built-in server that other plugins can publish their tools to. Tools served there are not governed by this plugin: no allowlist, read-only mode or audit log applies to them, and WordPress core\'s own public abilities are reachable there too. Agent Abilities for MCP\'s own tools are never on that server, whatever you choose.', 'agent-abilities-for-mcp' ),
+			'help'    => __( 'The MCP Adapter has a built-in server that other plugins can publish their tools to. Tools served there are not governed by this plugin: no allowlist, read-only mode, IP allowlist, rate limit or audit log applies to them, though Pause all access still refuses requests to that server, and WordPress core\'s own public abilities are reachable there too. Agent Abilities for MCP\'s own tools are never on that server, whatever you choose.', 'agent-abilities-for-mcp' ),
 		)
 	);
 
@@ -1351,10 +1372,14 @@ function aafm_render_settings_tab(): void {
 		array(
 			'icon'        => 'shield',
 			'title'       => __( 'Safety controls', 'agent-abilities-for-mcp' ),
-			'description' => __( 'These safety controls are optional. They all start off, and the plugin runs fine without any of them. Turn on only what you need.', 'agent-abilities-for-mcp' ),
+			'description' => __( 'These safety controls are optional, and the plugin runs fine on its defaults. Most start off. Change history starts on, the activity log keeps 30 days, and the MCP Adapter default server starts on Automatic. Change only what you need.', 'agent-abilities-for-mcp' ),
 			'body'        => (string) ob_get_clean() . $safety_body,
 		)
 	);
+
+	// Backup gate. Inside the form, after Safety controls and before the save bar, so the one Save
+	// covers it. Its hidden marker field tells the save handler the card was on the page.
+	aafm_render_backup_gate_section();
 
 	// One Save, in the shared .aafm-savebar the Abilities, Integrations and Bridge tabs already
 	// use: it sticks to the foot of the viewport while the tab is scrolled, so the operator never
@@ -1381,7 +1406,7 @@ function aafm_render_settings_tab(): void {
 	echo '<div class="aafm-set-label">' . esc_html__( 'Reset plugin', 'agent-abilities-for-mcp' ) . '<span class="opt">' . esc_html__( 'Cannot be undone', 'agent-abilities-for-mcp' ) . '</span></div>';
 	echo '<div class="aafm-set-control">';
 	echo '<button type="button" id="aafm-reset-plugin" class="aafm-btn aafm-btn-danger">' . esc_html__( 'Reset plugin to defaults', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-reset-status" aria-live="polite"></span>';
-	echo '<p class="help">' . esc_html__( 'Clears every plugin setting - enabled abilities, exposed content types and meta keys, and all safety controls - and empties the activity log and the change history. Your agent user and anything it created (posts and other content) are left untouched. This cannot be undone.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="help">' . esc_html__( 'Clears every plugin setting (enabled abilities, exposed content types and meta keys, and all safety controls) and empties the activity log, the change history, and every OAuth client, token and consent, so connected apps must reconnect. Your agent user and anything it created (posts and other content) are left untouched. This cannot be undone.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div></div>';
 
 	echo '</div>';

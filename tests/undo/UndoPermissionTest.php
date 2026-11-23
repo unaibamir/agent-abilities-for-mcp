@@ -83,7 +83,17 @@ final class UndoPermissionTest extends UndoTestCase {
 		$this->assertSame( 'A', get_post( $post )->post_title );
 	}
 
-	public function test_a_foreign_row_answers_the_same_as_a_missing_id(): void {
+	public function test_a_site_owner_on_another_connection_is_told_whose_change_it_is(): void {
+		$post   = self::factory()->post->create( array( 'post_title' => 'A' ) );
+		$change = $this->edit( $post );
+		aafm_oauth_current_client_id( 'client-b' );
+
+		$this->assertSame( 'aafm_undo_other_connection', $this->undo_code( $change ) );
+		$this->assertSame( 'B', get_post( $post )->post_title );
+	}
+
+	public function test_a_foreign_row_answers_the_same_as_a_missing_id_for_a_caller_without_the_changes_tab(): void {
+		$this->acting_as( 'editor' );
 		$post   = self::factory()->post->create( array( 'post_title' => 'A' ) );
 		$change = $this->edit( $post );
 		aafm_oauth_current_client_id( 'client-b' );
@@ -112,8 +122,42 @@ final class UndoPermissionTest extends UndoTestCase {
 		$post   = self::factory()->post->create( array( 'post_title' => 'A' ) );
 		$change = $this->edit( $post );
 
-		$this->assertSame( $this->undo_code( 999999 ), $this->undo_code( $change ) );
+		$this->assertSame( 'aafm_undo_needs_owner', $this->undo_code( $change ), 'With no client id on either side, no other connection can be named.' );
 		$this->assertSame( 'B', get_post( $post )->post_title );
+	}
+
+	/**
+	 * The owner answer says a site owner can undo the change from the Changes tab, which is false for a
+	 * change already reverted or expired: those get their own row-state answer first.
+	 */
+	public function test_a_site_owner_gets_the_row_state_answer_before_needs_owner(): void {
+		global $wpdb;
+		aafm_oauth_current_client_id( null, true );
+		$post     = self::factory()->post->create( array( 'post_title' => 'A' ) );
+		$reverted = $this->edit( $post );
+		$expired  = $this->edit( $post, 'C' );
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->update( aafm_changes_table(), array( 'status' => 'reverted' ), array( 'id' => $reverted ) );
+		$wpdb->update( aafm_changes_table(), array( 'status' => 'expired' ), array( 'id' => $expired ) );
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+
+		$this->assertSame( 'aafm_undo_already_reverted', $this->undo_code( $reverted ) );
+		$this->assertSame( 'aafm_undo_expired', $this->undo_code( $expired ) );
+	}
+
+	/**
+	 * The pre-check asks what a site owner can do: a change older than 24 hours is past the agent window
+	 * but still revertible from the Changes tab, so needs_owner (pointing there) is the true answer.
+	 */
+	public function test_a_site_owner_on_a_shared_connector_gets_needs_owner_for_a_change_older_than_a_day(): void {
+		global $wpdb;
+		aafm_oauth_current_client_id( null, true );
+		$post   = self::factory()->post->create( array( 'post_title' => 'A' ) );
+		$change = $this->edit( $post );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->update( aafm_changes_table(), array( 'created_at' => gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS - 60 ) ), array( 'id' => $change ) );
+
+		$this->assertSame( 'aafm_undo_needs_owner', $this->undo_code( $change ) );
 	}
 
 	public function test_older_than_24_hours_is_refused(): void {

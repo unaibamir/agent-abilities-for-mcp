@@ -419,6 +419,31 @@ final class WpbakeryElementsTest extends TestCase {
 		$this->assertFalse( $kind['writable'], 'Without the param type row the setting is not writable.' );
 	}
 
+	/**
+	 * S8a R2-3: an add-on can register a map row whose lookup throws. The type is then unknown, which
+	 * every caller already treats as "not writable", so the page still reads.
+	 */
+	public function test_a_param_type_lookup_that_throws_reads_as_unknown(): void {
+		$throwing = static function ( $resolved, string $entry ) {
+			if ( 'wpbakery_param_type' !== $entry ) {
+				return $resolved;
+			}
+			return static function ( string $tag, string $name ): ?string {
+				unset( $tag, $name );
+				throw new \RuntimeException( 'add-on map failed' );
+			};
+		};
+		add_filter( 'aafm_builder_vendor', $throwing, 99, 2 );
+
+		$this->assertNull( aafm_wpbakery_param_type( 'wpb_btn', 'title' ) );
+		$this->assertFalse( aafm_wpbakery_param_kind( 'wpb_btn', $this->param( 'wpb_btn', 'title' ) )['writable'] );
+		$decoded = aafm_wpbakery_decode_atts( 'wpb_btn', array( 'title' => 'Hello' ) );
+		$this->assertIsArray( $decoded );
+		$this->assertArrayHasKey( 'title', $decoded );
+
+		remove_filter( 'aafm_builder_vendor', $throwing, 99 );
+	}
+
 	public function test_text_escapes_quotes_and_brackets_the_way_the_editor_stores_them(): void {
 		$stored  = $this->stored( 'vc_custom_heading', 'text' );
 		$decoded = aafm_wpbakery_decode_atts( 'vc_custom_heading', array( 'text' => $stored ) )['text'];
@@ -2429,7 +2454,8 @@ final class WpbakeryElementsTest extends TestCase {
 		$this->acting_as( 'editor' );
 		$out = $this->remove( $id, 2 );
 		$this->assertIsArray( $out );
-		$this->assertSame( array( 'post', 'removed', 'page_fingerprint', 'restore_revision_id' ), array_keys( $out ) );
+		$this->assertSame( array( 'post', 'removed', 'page_fingerprint', 'restore_revision_id', 'reversible' ), array_keys( $out ) );
+		$this->assertTrue( $out['reversible'], 'Reported like avada-remove-element.' );
 		$this->assertSame( 1, $out['removed'] );
 		$this->assertSame( str_replace( '[vc_column_text]<p>A</p>[/vc_column_text]', '', self::TWO_ROWS ), get_post_field( 'post_content', $id, 'raw' ) );
 		$this->assertSame( self::TWO_ROWS, get_post( $out['restore_revision_id'] )->post_content );
@@ -2717,5 +2743,36 @@ final class WpbakeryElementsTest extends TestCase {
 		}
 		$this->assertStringContainsString( 'WPBakery\'s own setting', $registry['aafm/wpbakery-insert-element']['description'] );
 		$this->assertStringContainsString( 'unfiltered HTML', $registry['aafm/wpbakery-insert-element']['description'] );
+		// The empty-post insert asks WPBakery's editor post types, which follow the user's Role Manager.
+		$this->assertStringNotContainsString( 'Role Manager settings are not applied', $registry['aafm/wpbakery-insert-element']['description'] );
+		$this->assertStringContainsString( 'editor is on for that post type and user', $registry['aafm/wpbakery-insert-element']['description'] );
+	}
+
+	/**
+	 * S9a R1-2: a decoded param group row carries an image id as a digit string, so sending the read value
+	 * back must work, as it already does for the number kind.
+	 */
+	public function test_an_image_id_sent_as_a_digit_string_is_accepted(): void {
+		$image = self::factory()->attachment->create_upload_object( DIR_TESTDATA . '/images/canola.jpg' );
+		$this->assertIsInt( $image );
+
+		$this->assertSame( (string) $image, aafm_wpbakery_encode_image( (string) $image, false ) );
+		$this->assertSame( $image . ',' . $image, aafm_wpbakery_encode_image( array( (string) $image, $image ), true ) );
+		$this->assertSame( (string) $image, aafm_wpbakery_encode_image( $image, false ), 'An integer still works.' );
+
+		foreach ( array( '0', '-3', '1.5', '12abc', '', ' 7', true, null, array() ) as $bad ) {
+			$this->assertNull( aafm_wpbakery_encode_image( $bad, false ) );
+		}
+		$this->assertNull( aafm_wpbakery_encode_image( '999999999', false ), 'Still has to be an existing image.' );
+	}
+
+	/**
+	 * S9b R1-5: the insert tool refuses text that would add an element even for a user who may post
+	 * unfiltered HTML, and its description has to say so, as the update description does.
+	 */
+	public function test_insert_description_says_text_adding_an_element_is_refused(): void {
+		$description = aafm_ability_description( 'aafm/wpbakery-insert-element' );
+		$this->assertStringContainsString( 'in body text, and even then text that would add an element is refused.', $description );
+		$this->assertStringNotContainsString( ' - ', $description );
 	}
 }

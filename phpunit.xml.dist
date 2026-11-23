@@ -49,6 +49,7 @@
 			<file>tests/WpbakeryElementsWireTest.php</file>
 			<file>tests/WpbakerySiteWireTest.php</file>
 			<file>tests/GeodirectoryWireTest.php</file>
+			<file>tests/SiteOpsWireTest.php</file>
 			<file>tests/AllNew174AbilitiesWireTest.php</file>
 			<file>tests/StaleWpdbReaderSweepTest.php</file>
 			<file>tests/MetaWriteSweepTest.php</file>
@@ -57,6 +58,8 @@
 			<file>tests/RoleReadSweepTest.php</file>
 			<file>tests/OptionReadSweepTest.php</file>
 			<file>tests/RouteMatchSweepTest.php</file>
+			<file>tests/SiteCacheAdaptersTest.php</file>
+			<file>tests/VendorMcpServerTest.php</file>
 		</testsuite>
 	</testsuites>
 	<!--

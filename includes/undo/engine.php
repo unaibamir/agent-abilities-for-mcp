@@ -219,6 +219,25 @@ function aafm_undo_perm_input_json( array $surface, array $input ): string {
 }
 
 /**
+ * The tool input with its schema's top-level defaults filled in, so the capture reads the object the
+ * ability itself writes: update-term with no taxonomy writes a category, not a term of taxonomy ''.
+ *
+ * @param string              $ability Ability name.
+ * @param array<string,mixed> $input   Tool input.
+ * @return array<string,mixed>
+ */
+function aafm_undo_input_with_defaults( string $ability, array $input ): array {
+	$registered = wp_has_ability( $ability ) ? wp_get_ability( $ability ) : null;
+	$schema     = $registered instanceof \WP_Ability ? $registered->get_input_schema() : array();
+	foreach ( (array) ( $schema['properties'] ?? array() ) as $key => $property ) {
+		if ( ! array_key_exists( $key, $input ) && is_array( $property ) && array_key_exists( 'default', $property ) ) {
+			$input[ $key ] = $property['default'];
+		}
+	}
+	return $input;
+}
+
+/**
  * Read a change's fields, apply the value rules and store the write-ahead pending row.
  *
  * @param array<string,mixed> $base Base handle: ability, row_id, object_type, object_id, field_ids, context, undo_op, perm_input, group_id.
@@ -325,6 +344,7 @@ function aafm_undo_begin_inner( string $ability, array $input, int $row_id ): ?a
 	}
 
 	$surface = $surfaces[ $ability ];
+	$input   = aafm_undo_input_with_defaults( $ability, $input );
 	$base    = array(
 		'ability'     => $ability,
 		'row_id'      => $row_id,
@@ -1021,6 +1041,21 @@ function aafm_undo_apply( int $change_id, string $source ) {
 	if ( 'agent' === $source ) {
 		$connection = aafm_undo_connection_id();
 		if ( 'agent' !== $row['source'] || get_current_user_id() !== (int) $row['principal_user_id'] || '' === $connection || $row['client_id'] !== $connection ) {
+			// A site owner sees every change in the Changes tab, so naming the reason tells them nothing new.
+			// "Another connection" only when both sides carry a client id and they differ; the same client
+			// under another user (a shared connector) or an unidentified caller gets the owner answer.
+			// Anyone else gets the answer a missing id gets: no oracle for other connections' changes.
+			if ( 'agent' === $row['source'] && current_user_can( 'manage_options' ) ) {
+				$other = '' !== $connection && '' !== (string) $row['client_id'] && $row['client_id'] !== $connection;
+				if ( $other ) {
+					return aafm_undo_refusal( 'other_connection' );
+				}
+				// needs_owner says the change can be undone from the Changes tab, so a row that cannot be
+				// (reverted, expired) gets its own state answer first. The state tells an owner nothing new.
+				// Asked as the owner: the agent-only refusals (the 24 hour window and the rest) do not apply there.
+				$state = aafm_undo_row_state( $row, 'owner' );
+				return aafm_undo_refusal( $state['undoable'] ? 'needs_owner' : (string) ( $state['reason'] ?? 'not_allowed' ) );
+			}
 			return aafm_generic_error();
 		}
 	}

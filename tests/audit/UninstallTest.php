@@ -341,6 +341,16 @@ final class UninstallTest extends TestCase {
 		$this->assertFalse( wp_next_scheduled( 'aafm_notifications_digest' ), 'the digest event must be cleared even when data is retained.' );
 	}
 
+	public function test_uninstall_clears_the_backup_check_event(): void {
+		delete_option( 'aafm_delete_data_on_uninstall' );
+		wp_schedule_event( time() + 60, 'hourly', 'aafm_backup_verify' );
+		$this->assertNotFalse( wp_next_scheduled( 'aafm_backup_verify' ), 'precondition: the event must be scheduled.' );
+
+		aafm_uninstall_site_data();
+
+		$this->assertFalse( wp_next_scheduled( 'aafm_backup_verify' ), 'the backup check event must be cleared on uninstall.' );
+	}
+
 	public function test_uninstall_clears_the_digest_event_when_data_is_deleted(): void {
 		update_option( 'aafm_delete_data_on_uninstall', true );
 		wp_schedule_event( time(), 'daily', 'aafm_notifications_digest' );

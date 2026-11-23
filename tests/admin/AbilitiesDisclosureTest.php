@@ -32,6 +32,9 @@ final class AbilitiesDisclosureTest extends TestCase {
 		add_filter( 'aafm_integration_active_avada', '__return_true' );
 		add_filter( 'aafm_integration_active_wpbakery', '__return_true' );
 		add_filter( 'aafm_integration_active_geodirectory', '__return_true' );
+		add_filter( 'aafm_integration_active_site_cache', '__return_true' );
+		add_filter( 'aafm_integration_active_site_redirects', '__return_true' );
+		add_filter( 'aafm_integration_active_site_backups', '__return_true' );
 		aafm_flush_registry_cache();
 	}
 
@@ -160,5 +163,15 @@ final class AbilitiesDisclosureTest extends TestCase {
 			$this->assertStringContainsStringIgnoringCase( 'line breaks', $text );
 		}
 		$this->assertSame( 'one two three', aafm_sanitize_plain_text( "one\ntwo\r\n\tthree" ), 'The description matches what the sanitizer does.' );
+	}
+
+	/**
+	 * The list summaries name the row fields the tools return, prices included.
+	 */
+	public function test_the_woo_list_summaries_name_the_regular_and_sale_price(): void {
+		$disclosures = aafm_ability_disclosures();
+		foreach ( array( 'aafm/wc-list-products', 'aafm/wc-list-product-variations' ) as $name ) {
+			$this->assertStringContainsString( 'regular and sale price', $disclosures[ $name ], $name );
+		}
 	}
 }

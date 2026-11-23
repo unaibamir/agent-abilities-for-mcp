@@ -612,6 +612,12 @@ function aafm_policy_options(): array {
 		'aafm_oauth_connect_roles',
 		'aafm_trusted_proxy',
 		'aafm_oauth_default_preset',
+		// 1.13.0 backup gate: the switch, its tool list, the two acceptance switches and the stored verdicts.
+		'aafm_backup_gate',
+		'aafm_backup_gate_abilities',
+		'aafm_backup_gate_accept_remote',
+		'aafm_backup_gate_accept_size',
+		'aafm_backup_verify',
 	);
 }
 
@@ -1010,6 +1016,8 @@ function aafm_recoverable_delete_abilities(): array {
 		'aafm/avada-remove-element',
 		// Undoing a create moves the post to the Trash, and it refuses when the Trash is off.
 		'aafm/undo-change',
+		// Removes cached copies of pages only; each page is rebuilt on its next visit and no content is removed.
+		'aafm/site-purge-site-cache',
 	);
 
 	/**
@@ -2788,6 +2796,34 @@ function aafm_validate_revision( int $revision_id, int $post_id ) {
 }
 
 /**
+ * Run a paged list query whose found_posts is the real total even on a page past the last one.
+ *
+ * Core skips its count when the page holds no rows and leaves found_posts at 0, so a caller paging
+ * to the end by total would read the whole collection as empty. Call it where the query's own
+ * scoping filters are attached: the one-row probe must see the same WHERE.
+ *
+ * @param array<string,mixed> $args WP_Query args with no_found_rows false.
+ * @return WP_Query
+ */
+function aafm_paged_query( array $args ): WP_Query {
+	$query = new WP_Query( $args );
+	if ( array() === $query->posts && (int) ( $args['paged'] ?? 1 ) > 1 ) {
+		$probe              = new WP_Query(
+			array_merge(
+				$args,
+				array(
+					'paged'          => 1,
+					'posts_per_page' => 1,
+					'fields'         => 'ids',
+				)
+			)
+		);
+		$query->found_posts = (int) $probe->found_posts;
+	}
+	return $query;
+}
+
+/**
  * Bound page/per_page arguments.
  *
  * The page is clamped to AAFM_LIST_PAGE_MAX server-side, matching the `maximum` every list
@@ -3255,10 +3291,9 @@ function aafm_redact_menu_item( $item ): array {
  * Mirrors what aafm_redact_menu_item() returns - every key, with its type - so the
  * list-menu-items output_schema can describe its array element shape instead of leaving it open.
  *
- * @param bool $listed True for list-menu-items, whose `order` is a 1..N rank; false for the stored menu_order.
  * @return array<string,mixed>
  */
-function aafm_menu_item_output_properties( bool $listed = false ): array {
+function aafm_menu_item_output_properties(): array {
 	return array(
 		'id'        => array( 'type' => 'integer' ),
 		'title'     => array( 'type' => 'string' ),
@@ -3269,9 +3304,7 @@ function aafm_menu_item_output_properties( bool $listed = false ): array {
 		'parent'    => array( 'type' => 'integer' ),
 		'order'     => array(
 			'type'        => 'integer',
-			'description' => $listed
-				? __( 'The item\'s place in this list, numbered 1 to N. It is not the stored position, which create-menu-item and update-menu-item return.', 'agent-abilities-for-mcp' )
-				: __( 'The item\'s stored position (menu_order), which can start at 0 and have gaps. list-menu-items numbers its items 1 to N instead, so compare places there.', 'agent-abilities-for-mcp' ),
+			'description' => __( 'For an item list-menu-items shows, its place in the menu, numbered 1 to N, the same number list-menu-items, create-menu-item and update-menu-item give it. It is not the stored position that update-menu-item\'s position sets, which can start at 0 and have gaps. An item the list leaves out, such as a draft or one whose target is gone, shows its stored position instead.', 'agent-abilities-for-mcp' ),
 		),
 	);
 }
@@ -3353,7 +3386,7 @@ function aafm_paired_write_partial_failure_message( string $saved_label, string 
 function aafm_mixed_write_partial_failure_message( string $saved_label, string $failed_label ): string {
 	return sprintf(
 		/* translators: 1: name of the value that saved, 2: name of the value that could not be. */
-		__( '%1$s was saved, but %2$s could not be changed: the site\'s persistent object cache is still returning the old value. Some of your changes did not take - re-check your settings rather than assuming this save either fully applied or fully failed. Flush the object cache (Redis, Memcached, or your host\'s cache) and save again.', 'agent-abilities-for-mcp' ),
+		__( '%1$s was saved, but %2$s could not be changed: the site\'s persistent object cache is still returning the old value. Some of your changes did not take, so re-check your settings rather than assuming this save either fully applied or fully failed. Flush the object cache (Redis, Memcached, or your host\'s cache) and save again.', 'agent-abilities-for-mcp' ),
 		$saved_label,
 		$failed_label
 	);

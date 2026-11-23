@@ -232,8 +232,33 @@ final class WooVariationsTest extends TestCase {
 		$this->assertArrayHasKey( 'price', $row );
 		$this->assertArrayHasKey( 'stock_status', $row );
 		$this->assertArrayHasKey( 'status', $row );
+		$this->assertArrayHasKey( 'regular_price', $row );
+		$this->assertArrayHasKey( 'sale_price', $row );
 		$this->assertArrayNotHasKey( 'description', $row, 'list rows are lean (no description).' );
 		$this->assertArrayNotHasKey( 'attributes', $row, 'list rows are lean (no attributes).' );
+	}
+
+	public function test_list_variation_rows_carry_the_right_prices(): void {
+		WcStubStore::seed(
+			610,
+			array(
+				'parent_id'     => 500,
+				'type'          => 'variation',
+				'sku'           => 'VAR-610',
+				'regular_price' => '9.00',
+				'sale_price'    => '7.00',
+				'price'         => '7.00',
+				'status'        => 'publish',
+				'stock_status'  => 'instock',
+			)
+		);
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-list-product-variations' )->execute( array( 'product_id' => 500 ) );
+		$row = array_values( array_filter( $res['variations'], static fn( array $r ): bool => 610 === $r['id'] ) )[0];
+
+		$this->assertSame( '9.00', $row['regular_price'], 'regular and sale are not swapped.' );
+		$this->assertSame( '7.00', $row['sale_price'] );
+		$this->assertSame( '7.00', $row['price'] );
 	}
 
 	public function test_list_variations_denies_a_subscriber(): void {

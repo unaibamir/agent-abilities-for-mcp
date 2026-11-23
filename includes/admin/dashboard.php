@@ -277,7 +277,7 @@ function aafm_setup_steps(): array {
 	return array(
 		array(
 			'title' => __( 'Enable the abilities you want', 'agent-abilities-for-mcp' ),
-			'desc'  => __( 'Nothing is exposed until you turn it on. Pick the abilities the agent should have on the Abilities tab.', 'agent-abilities-for-mcp' ),
+			'desc'  => __( 'Nothing from this plugin is exposed until you turn it on. Pick the abilities the agent should have on the Abilities tab.', 'agent-abilities-for-mcp' ),
 			'done'  => aafm_enabled_ability_count() > 0,
 			'href'  => $tab_url( 'abilities' ),
 		),
@@ -588,7 +588,7 @@ function aafm_render_dashboard_tab(): void {
 	}
 	printf(
 		'<dt>%1$s</dt><dd>%2$s</dd>',
-		esc_html__( 'Bundled adapter', 'agent-abilities-for-mcp' ),
+		esc_html__( 'MCP adapter', 'agent-abilities-for-mcp' ),
 		esc_html( $adapter_label )
 	);
 	echo '</dl>';

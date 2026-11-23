@@ -214,13 +214,15 @@ function aafm_wpml_count_posts_by_status( string $type, ?string $lang, string $p
 		$out = array();
 		foreach ( $statuses as $status ) {
 			$q              = new WP_Query(
-				array(
-					'post_type'        => $type,
-					'post_status'      => $status,
-					'posts_per_page'   => 1,
-					'fields'           => 'ids',
-					'no_found_rows'    => false,
-					'suppress_filters' => false,
+				aafm_tec_unfiltered_query_args(
+					array(
+						'post_type'        => $type,
+						'post_status'      => $status,
+						'posts_per_page'   => 1,
+						'fields'           => 'ids',
+						'no_found_rows'    => false,
+						'suppress_filters' => false,
+					)
 				)
 			);
 			$out[ $status ] = (int) $q->found_posts;

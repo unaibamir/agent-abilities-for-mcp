@@ -244,8 +244,9 @@ function aafm_activity_detail_map(): array {
 			'template' => __( 'Read meta key `%1$s` on user #%2$s', 'agent-abilities-for-mcp' ),
 			'args'     => array(
 				array(
-					'key'  => 'key',
-					'type' => 'key',
+					'key'   => 'key',
+					'alias' => 'meta_key',
+					'type'  => 'key',
 				),
 				array(
 					'key'  => 'user_id',
@@ -478,9 +479,9 @@ function aafm_activity_detail_map(): array {
 		//
 		// Every key below is read from that ability's OWN args builder, never inferred from a
 		// sibling. aafm/delete-user-meta is why that rule is written down: it names its parameter
-		// `key` where the post-meta abilities name theirs `meta_key`, and its schema description
-		// says in as many words that the two "are not interchangeable". A sibling-shaped guess of
-		// `meta_key` there resolves to null through the all-or-nothing rule in
+		// `key` where the post-meta abilities name theirs `meta_key`, and since 1.13.0 also takes
+		// `meta_key` as an alias, so its entry names both (`key` plus `alias`). An entry naming a
+		// key the ability does not take resolves to null through the all-or-nothing rule in
 		// aafm_build_activity_detail(), logging exactly the blindness this block removes, with
 		// every gate still green.
 		//
@@ -592,13 +593,13 @@ function aafm_activity_detail_map(): array {
 		'aafm/update-user-meta'             => array(
 			/* translators: 1: meta key name. 2: the user's numeric ID. */
 			'template' => __( 'Updated meta key `%1$s` on user #%2$s', 'agent-abilities-for-mcp' ),
-			// `key`, NOT `meta_key` - confirmed against aafm_args_update_user_meta(). BOTH user-meta
-			// abilities diverge from the post-meta family's spelling, so copying from the wrong
-			// neighbour still silently yields null here.
+			// `key`, with `meta_key` as its alias: the user meta tools take either name since 1.13.0
+			// (aafm_user_meta_key()), so a call naming only meta_key still renders its key.
 			'args'     => array(
 				array(
-					'key'  => 'key',
-					'type' => 'key',
+					'key'   => 'key',
+					'alias' => 'meta_key',
+					'type'  => 'key',
 				),
 				array(
 					'key'  => 'user_id',
@@ -629,13 +630,12 @@ function aafm_activity_detail_map(): array {
 		'aafm/delete-user-meta'             => array(
 			/* translators: 1: meta key name. 2: the user's numeric ID. */
 			'template' => __( 'Deleted meta key `%1$s` on user #%2$s', 'agent-abilities-for-mcp' ),
-			// `key`, NOT `meta_key` - see the block comment above. Confirmed against
-			// aafm_args_delete_user_meta(), whose own description states the post-meta abilities
-			// name the equivalent parameter differently and that the two are not interchangeable.
+			// `key` with the `meta_key` alias, as on update-user-meta above.
 			'args'     => array(
 				array(
-					'key'  => 'key',
-					'type' => 'key',
+					'key'   => 'key',
+					'alias' => 'meta_key',
+					'type'  => 'key',
 				),
 				array(
 					'key'  => 'user_id',
@@ -1482,6 +1482,24 @@ function aafm_activity_detail_map(): array {
 			),
 			'link'     => 'post',
 		),
+		'aafm/site-purge-post-cache'        => array(
+			/* translators: %s: the post's numeric ID. */
+			'template' => __( 'Ran a page cache purge for post #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'post_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		// A URL is free text, not an identifier, so it is never logged: no args.
+		'aafm/site-purge-url-cache'         => array(
+			'template' => __( 'Ran a page cache purge for one URL', 'agent-abilities-for-mcp' ),
+		),
+		'aafm/site-purge-site-cache'        => array(
+			'template' => __( 'Ran a whole-site page cache purge', 'agent-abilities-for-mcp' ),
+		),
 	);
 }
 
@@ -1541,8 +1559,16 @@ function aafm_activity_order_statuses(): array {
  */
 function aafm_build_activity_detail( string $ability, array $args, string $status = 'started' ): ?string {
 	$entry = aafm_activity_detail_map()[ $ability ] ?? null;
-	if ( null === $entry || empty( $entry['args'] ) ) {
+	if ( null === $entry ) {
 		return null;
+	}
+	if ( empty( $entry['args'] ) ) {
+		// No args: a result_id row is built from the return value, and a template with a
+		// placeholder has nothing to fill it. Only a fixed template is logged as it stands.
+		if ( isset( $entry['result_id'] ) || false !== strpos( (string) $entry['template'], '%' ) ) {
+			return null;
+		}
+		$entry['args'] = array();
 	}
 
 	$values   = array();
@@ -1551,7 +1577,7 @@ function aafm_build_activity_detail( string $ability, array $args, string $statu
 		$allowed  = isset( $field['enum'] ) ? aafm_activity_detail_enum( $field['enum'] ) : array();
 		$rendered = aafm_activity_detail_field(
 			(string) $field['type'],
-			$args[ $field['key'] ] ?? null,
+			$args[ $field['key'] ] ?? ( isset( $field['alias'] ) ? $args[ $field['alias'] ] ?? null : null ),
 			$allowed
 		);
 		if ( null === $rendered && ! empty( $field['optional'] ) && isset( $entry['fallback_template'] ) ) {

@@ -4,7 +4,7 @@ Tags: mcp-server, ai-agent, claude, mcp, abilities-api
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.12.0
+Stable tag: 1.13.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -25,7 +25,7 @@ Once connected, you can ask things like:
 * "Which WooCommerce orders are still on hold?"
 * "Write a post about the spring sale and save it as a draft."
 
-There are 216 abilities (the tools an AI client can call), 94 for WordPress itself and 122 for plugins such as WooCommerce, ACF and Yoast SEO. Every one starts switched off.
+There are 229 abilities (the tools an AI client can call), 97 for WordPress itself and 132 for plugins such as WooCommerce, ACF and Yoast SEO. Every one starts switched off.
 
 = What is a WordPress MCP server? =
 
@@ -143,7 +143,7 @@ Connecting a client happens in the client. Some clients reach your endpoint dire
 == Installation ==
 
 1. Upload the plugin to `/wp-content/plugins/agent-abilities-for-mcp`, or install it from Plugins, Add New in your admin, then activate it.
-2. Open Agent Abilities for MCP in the admin menu and, on the Abilities tab, switch on the tools you want the AI to have.
+2. Open Agent Abilities for MCP in the admin menu. First-run setup switches on a set of content and site read tools, and read-only mode unless you tick writes; the Abilities tab turns any tool on or off.
 3. On the Connection tab, copy your MCP endpoint and paste it into your AI client. Most clients ask you to approve the connection once in the browser, as your own account.
 4. If a client can't use OAuth, create the low-privilege agent user the Connection tab offers, add an Application Password for it and connect with that, using the config the tab builds for you.
 5. Click Check my connection to confirm your server answers.
@@ -204,7 +204,7 @@ Turn on read-only mode in Settings and this plugin loads no write tool, whatever
 
 = Can I let ChatGPT draft posts without publishing them? =
 
-With Force draft on create switched on in Settings, anything the AI creates and any request to publish is saved as a draft, which covers posts, pages, custom content items, reusable blocks and WooCommerce products. Product variations save as disabled instead, because a draft variation disappears from WooCommerce's editor. Edits to a post that's already live still go live, so if every change should be reviewed, connect the AI as a Contributor, who can't edit published posts. The drafts wait on the Needs review card on the Dashboard.
+With Force draft on create switched on in Settings, a post, page, custom content item, reusable block or WooCommerce product the AI creates, and any request to publish one, is saved as a draft. Product variations save as disabled instead, because a draft variation disappears from WooCommerce's editor. Edits to a post that's already live still go live, so if every change should be reviewed, connect the AI as a Contributor, who can't edit published posts. The drafts wait on the Needs review card on the Dashboard.
 
 = Can I stop an AI agent from deleting my posts? =
 
@@ -220,7 +220,7 @@ Yes, once you set it. Enter a number under Rate limit (per minute) on the Settin
 
 = Can I limit the MCP endpoint to certain IP addresses? =
 
-Yes. Enter addresses or CIDR ranges, one per line, under IP allowlist on the Settings tab and requests from anywhere else are refused before they sign in. Behind Cloudflare or another proxy, switch on Real visitor address behind a proxy or CDN first, because otherwise the plugin sees the proxy's address and the allowlist can lock your agents out.
+Yes. Enter addresses or CIDR ranges, one per line, under IP allowlist on the Settings tab and requests to the MCP endpoint from anywhere else are refused, even with valid credentials. Behind Cloudflare or another proxy, switch on Real visitor address behind a proxy or CDN first, because otherwise the plugin sees the proxy's address and the allowlist can lock your agents out.
 
 = What are the access presets? =
 
@@ -255,15 +255,15 @@ Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Bri
 
 Avada and WPBakery Page Builder pages have editing tools of their own: they read a page as an outline of elements, change an element's settings or text, add, move and remove elements, and place a saved template or Library item. Each write is refused, with nothing saved, if saving the page as your user would change anything else on it.
 
-Restore revision works on these pages too, and when WordPress keeps a revision the editing tool returns it so the page can be brought back. Remove element is refused when no revision could bring the element back, which means revisions are off, the site keeps only one revision, or the target is an Avada form or off canvas panel. All of these tools start off, and the writes are in no preset except Custom.
+Restore revision works on these pages too, and when WordPress keeps a revision the editing tool returns it so the page can be brought back. Remove element is refused when no revision could bring the element back, which means revisions are off, the site keeps only one revision, or the target keeps none, such as an Avada form or off canvas panel or a WPBakery Templatera or Grid Builder template. All of these tools start off, and the writes are in no preset except Custom.
 
 = What can an agent change on a WPBakery or Avada page? =
 
-Text, links, images, colours and spacing work for anyone who can edit the page. Code blocks, raw HTML and JS, Design Options, page CSS and JS, and settings that can carry script need a user who may post unfiltered HTML, and so do square brackets, percent-encoded brackets and data-* attributes in body text.
+Text, links, images and an element's own colour settings work for anyone who can edit the page, and so does spacing on Avada. Code blocks, raw HTML and JS, page CSS and JS, and settings that can carry script need a user who may post unfiltered HTML, and so do square brackets, percent-encoded brackets and data-* attributes in body text. On WPBakery that also covers Design Options, where its margins, padding, borders and background colours live.
 
-The site-wide tools (WPBakery settings, Avada Global Options, Avada layouts and their sections, Avada Slider settings and both Avada Studio tools) need a user who can manage options, and so does editing the elements of an Avada layout section. Neither builder's Role Manager is applied, so the agent gets what its WordPress user can do and no more.
+The site-wide tools (WPBakery settings, Avada Global Options, Avada layouts and their sections, Avada Slider settings and both Avada Studio tools) need a user who can manage options, and so does editing the elements of an Avada layout section. Neither builder's Role Manager gives the agent extra access. The agent gets what its WordPress user can do and no more. WPBakery's Role Manager can still narrow that in two places: custom JS is refused when the Role Manager would not let that user save it, and an empty post can only take its first element if WPBakery's editor is on for that post type and that user.
 
-With Templatera active, its templates are listed in place of WPBakery's saved templates and can be copied into a page or placed by reference, and a Templatera template can be edited like a WPBakery page.
+With Templatera active, its templates are listed in place of WPBakery's saved templates and can be copied into a page or placed by reference, and a Templatera template can be edited too, though it keeps no revisions.
 
 With Avada Core active, an agent can change an Avada Slider's settings, and Avada page options also work on Avada Slider and Elastic Slider slides. The settings tools return the previous values, which is the way back.
 
@@ -274,6 +274,18 @@ Refused on both builders: an element type the builder's own element map doesn't 
 = Can an AI agent manage my WooCommerce store? =
 
 With WooCommerce active, 52 abilities cover products and variations, orders with notes and refunds, customers, coupons, shipping, tax, payment gateways and reports, and because they reach customer data an admin notice flags them. The tools that move money or grant authority stay locked until you unlock them in Settings, and the Shop manager preset leaves them out.
+
+= Can an AI agent clear my page cache, check redirects or see my backups? =
+
+Yes, with 13 tools that start switched off and need a user who can manage options. Four work with your page cache plugin: one reports which supported cache plugins are active, and three clear one post, one URL or the whole site. Each result says, per plugin, whether a cached copy was found and removed, the purge was only requested, or it failed or was skipped. LiteSpeed Cache, W3 Total Cache and Proxy Cache Purge can't confirm a removal, so their results say requested. Supported: WP Super Cache, WP Fastest Cache, W3 Total Cache, WP-Optimize, Cache Enabler, Hummingbird, Jetpack Boost, SpeedyCache, Breeze, SiteGround Speed Optimizer, LiteSpeed Cache, Nginx Helper and Proxy Cache Purge.
+
+Four more tools read redirects from Redirection, Rank Math, Safe Redirect Manager, 301 Redirects and Slim SEO. They list redirects, read one and test which redirect a URL would hit, and they list not-found addresses for every plugin except Safe Redirect Manager, which keeps no such log. They change nothing. Two tools report UpdraftPlus backups, and three report Site Health results, waiting updates and scheduled tasks. On a multisite network the purge and backup tools are refused and the health tools need a super admin.
+
+These tools call the other plugin's own purge and read functions, and this plugin sends no request of its own for them. This plugin doesn't purge a CDN, Cloudflare, Varnish or a host's cache itself, but a cache plugin can pass the purge on to one it is set up for: Proxy Cache Purge to its proxy, Nginx Helper to nginx, SiteGround Speed Optimizer to SiteGround's server cache, and W3 Total Cache or WP Fastest Cache to Varnish, Cloudflare or a CDN configured inside them. Some cache plugins also send requests to your own site while they purge.
+
+= What is the backup gate? =
+
+A setting on the Settings tab that starts off. You tick the risky tools it covers, and each one is then refused unless UpdraftPlus has a database backup from the last 24 hours that passed a check. A small backup is compared with the checksum UpdraftPlus recorded when the tool is called, and a larger one is checked in the background about once an hour. A backup too large to check in time keeps those tools refused unless you switch on Large backups to accept it on its size alone. A backup kept only off-site has no file here to check, so it stays refused unless you switch on Off-site backups, which trusts UpdraftPlus's own record of it. Without UpdraftPlus every ticked tool is refused. The gate covers tools run through this plugin, not tools another plugin serves from its own MCP server. No tool can start a backup, so run one in UpdraftPlus or let its schedule do it.
 
 = Do I need to install the MCP Adapter? Does it work with the Abilities API? =
 
@@ -291,11 +303,11 @@ If the notice still shows, another plugin ships its own copy of the adapter. The
 
 = How is this different from other WordPress MCP plugins? =
 
-Because this plugin's tools are all off until you switch them on, it's a poor fit if you want everything available from day one. In exchange the AI acts as a user you choose, each OAuth connection can be paused or given an end date, and the plugin builds on the Abilities API and the MCP Adapter instead of running a server of its own.
+Because this plugin's tools are all off until you switch them on, it's a poor fit if you want everything available from day one. In exchange the AI acts as a user you choose, each OAuth connection can be paused or given an end date, and the plugin builds on the Abilities API and the MCP Adapter instead of implementing the protocol itself.
 
 = Does it send my content to OpenAI, Anthropic or Google? =
 
-The plugin never contacts an AI provider and has no telemetry, but your AI client does receive whatever a tool returns, because that is how it reads your site, and what it does with that is covered by the vendor's terms and your plan. The only request the plugin makes to an outside address is the upload-media-from-url tool, which stays off until you enable it, and External Services above has the details. If you switch on the Avada Studio tools, Avada itself fetches the Studio catalogue and items from Avada's servers under your Avada registration, and this plugin adds nothing to those requests.
+The plugin never contacts an AI provider and has no telemetry, but your AI client does receive whatever a tool returns, because that is how it reads your site, and what it does with that is covered by the vendor's terms and your plan. The only request the plugin makes to an outside address is the upload-media-from-url tool, which stays off until you enable it, and External Services above has the details. Cache plugins you purge through can send requests of their own, as the page cache answer above explains. If you switch on the Avada Studio tools, Avada itself fetches the Studio catalogue and items from Avada's servers under your Avada registration, and this plugin adds nothing to those requests.
 
 = Is it free? Which WordPress and PHP versions? Do I need to know how to code? =
 
@@ -325,7 +337,7 @@ Under Settings, Notifications, pick Admin notice only, Email alerts as they happ
 
 Yes, for edits made with 25 of this plugin's tools: posts, pages and custom post types, creates, trashes, block edits, terms, custom fields (post and term meta), featured images and SEO fields. The Changes tab keeps up to 30 days and reverts a change if the item hasn't been edited since, and it refuses a revert that would overwrite a newer edit. It lists field names, never contents, though the earlier values are stored in a table in your site's database, and when the history is full the oldest values go first.
 
-No other tool of this plugin's can be undone, including permanent deletes, orders, refunds, user accounts, file uploads, WooCommerce products, ACF field values, menus, comments and events, and each of them says so in its response. That includes the WPBakery and Avada tools, but a page edit keeps a WordPress revision when revisions are on, and the tool returns it for restore-revision; their settings tools return the previous values instead, and an imported Avada Studio item is removed by deleting it in Avada's Library. Tools from other plugins aren't recorded either. Notifications, webhooks and anything already read are not recalled. Some plugins, GeoDirectory among them, turn revisions off for the whole site; a WP_POST_REVISIONS line in wp-config.php turns them back on.
+No other tool of this plugin's can be undone, including permanent deletes, orders, refunds, user accounts, file uploads, WooCommerce products, ACF field values, menus, comments and events, and each of them says so in its response. That includes the WPBakery and Avada tools, but a page edit keeps a WordPress revision when revisions are on, and the tools that edit page content return it for restore-revision; their settings tools return the previous values instead, and an imported Avada Studio item is removed by deleting it in Avada's Library. Tools from other plugins aren't recorded either. Notifications, webhooks and anything already read are not recalled. Some plugins, GeoDirectory among them, turn revisions off for the whole site; a WP_POST_REVISIONS line in wp-config.php turns them back on.
 
 Two optional tools, list-changes and undo-change, let an agent undo its own changes from the last 24 hours, and both start off. History records only while the plugin is active, can be switched off in Settings and is removed on uninstall. WordPress's export and erase personal data tools cover it.
 
@@ -346,17 +358,25 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 5. WooCommerce tools that change orders, issue refunds or touch payment settings stay locked behind a second switch on the Settings tab.
 6. Each integration has a card showing whether its plugin is active and how many of its abilities are on. Here WooCommerce and Yoast SEO are active, and Rank Math, All in One SEO, ACF and Slim SEO are not installed.
 7. Abilities that other plugins register, grouped by plugin and off until you turn them on. A warning says this plugin does not filter what they return.
-8. The Connection tab: the Pause all access button, then Connect with OAuth, where you pick your client and get its steps and your endpoint address, with the token lifetimes card below.
+8. The Connection tab: the Pause all access button, then Connect with OAuth, where you pick your client and get its steps and your endpoint address.
 9. The Activity Log with a 7-day summary, filters, the connection and IP of each call, duration, a Live view and a CSV export that follows the filters.
 10. The Dashboard after setup: the Needs review card with two drafts from agents, and the Why is my tool missing card, which lists tools that are switched on but that agents cannot see right now, each with the reason.
 11. Site Brief: a few plain rules every connected agent reads when its session starts, such as spelling and what to leave alone.
-12. Connection Doctor checks the connection from your own server and says what to fix. Each finding says whether you or your host can fix it, and some come with a snippet to paste.
+12. Check my connection tests the connection from your own server and says what to fix. Each finding says who can fix it, and some come with a snippet to paste.
 13. Needs review: drafts and pending posts your agents wrote, with Preview, Open in editor, Publish and Discard.
 14. Notifications, off until you choose "Admin notice only", "Email alerts as they happen" or "One email a day" for the events you tick.
 15. Active grants: each approved connection with its access, last use, optional end date and rate limit, and its status, with Pause or Resume next to Revoke.
 16. Application Passwords: the agent users' passwords with when each was created and last used, the address it was last used from, and a Revoke button.
 
 == Changelog ==
+
+= 1.13.0 =
+
+* **Feature:** Agents can clear one post, one URL or the whole site from the page cache of 13 cache plugins, including LiteSpeed Cache, WP Super Cache and W3 Total Cache. Each plugin's result says whether a cached copy was found and removed, the purge was only requested, or it failed or was skipped.
+* **Feature:** Agents can list redirects, read one and test which redirect a URL would hit in Redirection, Rank Math, Safe Redirect Manager, 301 Redirects and Slim SEO, and see not-found addresses in all of them but Safe Redirect Manager. None of it changes anything. wpbakery-replace-text now returns a restore point when the site keeps revisions, and Check my connection shows when another plugin, such as WP Rocket or Rank Math, also runs an MCP server.
+* **Feature:** Backup gate: a Settings option, off by default, that refuses the risky tools you pick unless UpdraftPlus has a checked backup from the last 24 hours. New read tools report those backups, Site Health results, waiting updates and scheduled tasks, and make no outbound requests.
+* **Fix:** A stored Bridge list could register the MCP Adapter's own tools, which let an agent run another plugin's tools past the Bridge enable list and the high-risk lock; those tools are never bridged now.
+* **Fix:** Codex and other clients that send a client title could fail to connect with an "Expected object, got array" error; they now connect. Undo now records update-term calls made without a taxonomy and puts AIOSEO's meta rows back exactly, lists and search include past events from The Events Calendar, and smaller fixes cover page totals, menu item order, clearer refusals, prices, stock quantity and captions in list rows, WPBakery image ids, skipping the MCP tool set on other REST routes, the FAQ and the admin header.
 
 = 1.12.0 =
 
@@ -480,6 +500,10 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 [Full release history](https://agentabilitieswp.com/changelog/?utm_source=wordpress.org&utm_medium=readme&utm_campaign=plugin-listing).
 
 == Upgrade Notice ==
+
+= 1.13.0 =
+
+Adds page cache, redirect, backup and site health tools, and a backup gate under Settings. Every new tool starts off, and so does the gate. Also stops the Bridge from registering the MCP Adapter's own tools, which could get past the Bridge enable list.
 
 = 1.12.0 =
 

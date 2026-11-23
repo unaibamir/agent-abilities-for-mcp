@@ -590,7 +590,7 @@ function aafm_quickconnect_render(): void {
 							</label>
 							<div class="cx">
 								<div class="cl accent"><?php esc_html_e( 'Read content', 'agent-abilities-for-mcp' ); ?> <span class="soft">&middot; <?php esc_html_e( 'on by default', 'agent-abilities-for-mcp' ); ?></span></div>
-								<div class="cd"><?php esc_html_e( 'Core and content: posts, pages, media, and terms. Read-only and safe, so the agent can see the site without changing it.', 'agent-abilities-for-mcp' ); ?> <?php esc_html_e( 'Leaving the write row below off also turns on read-only mode, so nothing that writes can be switched on anywhere until you turn that off in Settings.', 'agent-abilities-for-mcp' ); ?></div>
+								<div class="cd"><?php esc_html_e( 'Posts, pages, media and terms, plus site settings, the plugin and theme lists, menus, the activity log, site health, waiting updates and scheduled tasks. Read-only, so the agent can see the site without changing it.', 'agent-abilities-for-mcp' ); ?> <?php esc_html_e( 'Leaving the write row below off also turns on read-only mode, so nothing that writes can be switched on anywhere until you turn that off in Settings.', 'agent-abilities-for-mcp' ); ?></div>
 							</div>
 						</div>
 
@@ -608,7 +608,7 @@ function aafm_quickconnect_render(): void {
 						<div class="aafm-qc-amberwarn" data-qc-writewarn><div>
 							<div class="aafm-qc-amberbox">
 								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v4M12 17h.01"/></svg>
-								<div class="at"><?php echo wp_kses( __( '<b>Write is on.</b> The agent can create, update, and publish posts and pages as the connected user. Turning this on adds no delete tools.', 'agent-abilities-for-mcp' ), array( 'b' => array() ) ); ?></div>
+								<div class="at"><?php echo wp_kses( __( '<b>Write is on.</b> The agent can create, update, and publish posts and pages as the connected user, and run find and replace across your posts. Turning this on adds no delete tools.', 'agent-abilities-for-mcp' ), array( 'b' => array() ) ); ?></div>
 							</div>
 						</div></div>
 
@@ -631,7 +631,7 @@ function aafm_quickconnect_render(): void {
 								array(
 									__( 'Off by default', 'agent-abilities-for-mcp' ),
 									__( 'Capped to your role', 'agent-abilities-for-mcp' ),
-									__( 'Every action is logged', 'agent-abilities-for-mcp' ),
+									__( 'Tool calls are logged', 'agent-abilities-for-mcp' ),
 									// Reads the enabled set rather than asserting recoverability the
 									// permanent-delete abilities do not have. See aafm_delete_guarantee().
 									aafm_delete_guarantee()[2],

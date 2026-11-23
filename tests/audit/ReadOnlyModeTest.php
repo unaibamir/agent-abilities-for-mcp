@@ -98,8 +98,8 @@ final class ReadOnlyModeTest extends TestCase {
 	/**
 	 * Plan 149 test 3, and the rule the whole design rests on (spec 1.3): the mode is a ceiling,
 	 * never a bulk action. Turning it on must not enable a single read, and turning it off must
-	 * not enable a single write. The page header promises "Nothing is exposed until you turn it
-	 * on"; if picking the safest posture switched on seventy reads the operator never chose, that
+	 * not enable a single write. The page header promises "Nothing from this plugin is exposed
+	 * until you turn it on"; if picking the safest posture switched on seventy reads the operator never chose, that
 	 * sentence would stop being true and the safest choice would expose more than before.
 	 *
 	 * Asserted on the raw stored options, byte for byte, on both edges of the switch.

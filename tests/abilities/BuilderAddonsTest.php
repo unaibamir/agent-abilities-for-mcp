@@ -975,8 +975,11 @@ final class BuilderAddonsTest extends TestCase {
 		foreach ( array( 'orderby', 'slider_content_width', 'nope' ) as $key ) {
 			$out = $this->slider_update( $term, array( $key => 'x' ) );
 			$this->assert_error( $out, 'aafm_builder_attribute_not_writable', 400 );
-			$this->assertStringContainsString( $key, $out->get_error_message() );
+			$this->assertSame( '"' . $key . '" is not a setting this tool can change. Nothing was changed.', $out->get_error_message() );
 		}
+		$empty = $this->slider_update( $term, array() );
+		$this->assert_error( $empty, 'aafm_builder_invalid_value', 400 );
+		$this->assertSame( 'Give at least one setting. Nothing was changed.', $empty->get_error_message() );
 		$this->assertSame( array(), $meta->calls, 'Refused before anything is read.' );
 	}
 

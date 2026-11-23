@@ -76,7 +76,7 @@ function aafm_wc_coupons_registry_definitions(): array {
 
 		'aafm/wc-create-coupon' => array(
 			'label'        => __( 'Create WooCommerce coupon', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Creates a WooCommerce coupon from a code and discount type, with optional amount, usage limits, spend limits, product restrictions, and email restrictions. Returns the full coupon shape. The coupon is published and usable immediately. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Creates a WooCommerce coupon from a code (required), with an optional discount type (fixed_cart when omitted), amount, usage limits, spend limits, product restrictions, and email restrictions. Returns the full coupon shape. The coupon is published and usable immediately. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -216,7 +216,7 @@ function aafm_wc_coupon_write_properties(): array {
 		'discount_type'        => array(
 			'type'        => 'string',
 			'enum'        => array( 'percent', 'fixed_cart', 'fixed_product' ),
-			'description' => 'How the coupon discounts: percent (a percentage of the cart), fixed_cart (a fixed amount off the whole cart), or fixed_product (a fixed amount off each matching product).',
+			'description' => __( 'How the coupon discounts: percent (a percentage of the cart), fixed_cart (a fixed amount off the whole cart), or fixed_product (a fixed amount off each matching product).', 'agent-abilities-for-mcp' ),
 		),
 		'description'          => array(
 			'type'        => 'string',
@@ -224,7 +224,7 @@ function aafm_wc_coupon_write_properties(): array {
 		),
 		'date_expires'         => array(
 			'type'        => array( 'string', 'null' ),
-			'description' => 'Expiry date as a YYYY-MM-DD string (the coupon expires at the start of that day, site timezone). Pass null or an empty string for no expiry.',
+			'description' => __( 'Expiry date as a YYYY-MM-DD string (the coupon expires at the start of that day, site timezone). Pass null or an empty string for no expiry.', 'agent-abilities-for-mcp' ),
 		),
 		'usage_limit'          => array(
 			'type'        => array( 'integer', 'null' ),

@@ -83,6 +83,148 @@ final class AioseoTest extends TestCase {
 	}
 
 	/**
+	 * AIOSEO stores a title or description equal to the post type's default format as NULL (its
+	 * checkForDefaultFormat), which reads back as empty. That is the write landing, not a miss: the
+	 * call answers success, not the generic error.
+	 */
+	public function test_a_default_format_title_or_description_is_a_confirmed_write(): void {
+		$admin_id                                     = $this->acting_as( 'administrator' );
+		$post_id                                      = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+		\AAFM\Tests\AioseoStubStore::$default_formats = array(
+			'title'       => '#post_title #separator_sa #site_title',
+			'description' => '#post_excerpt',
+		);
+
+		$res = wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+			array(
+				'post_id'     => $post_id,
+				'title'       => '#post_title #separator_sa #site_title',
+				'description' => '#post_excerpt',
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res, 'The write landed, so the call must not report a failure.' );
+		$this->assertNull( \AAFM\Tests\AioseoStubStore::get( $post_id )['title'] ?? null, 'AIOSEO stored the default format as NULL.' );
+		$this->assertNull( \AAFM\Tests\AioseoStubStore::get( $post_id )['description'] ?? null );
+
+		// A value that is not the default format and does not persist is still a failure.
+		\AAFM\Tests\AioseoStubStore::$save_should_fail = true;
+		$miss = wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+			array(
+				'post_id' => $post_id,
+				'title'   => 'Custom title',
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $miss );
+	}
+
+	/**
+	 * A default-format write reads back empty, so the success answer says which fields took that path
+	 * and why, or an agent reads the empty title as a failed write and retries (G-1). A normal write
+	 * carries neither key.
+	 */
+	public function test_a_default_format_write_says_which_fields_use_the_default(): void {
+		$admin_id                                     = $this->acting_as( 'administrator' );
+		$title_format                                 = '#post_title #separator_sa #site_title';
+		$description_format                           = '#post_excerpt';
+		\AAFM\Tests\AioseoStubStore::$default_formats = array(
+			'title'       => $title_format,
+			'description' => $description_format,
+		);
+		$update                                       = wp_get_ability( 'aafm/aioseo-update-post' );
+		$cases                                        = array(
+			array(
+				array( 'title' => $title_format ),
+				array( 'title' ),
+			),
+			array(
+				array( 'description' => $description_format ),
+				array( 'description' ),
+			),
+			array(
+				array(
+					'title'       => $title_format,
+					'description' => $description_format,
+				),
+				array( 'title', 'description' ),
+			),
+		);
+		foreach ( $cases as list( $fields, $expected ) ) {
+			$post_id = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+			$res     = $update->execute( array( 'post_id' => $post_id ) + $fields );
+			$this->assertIsArray( $res );
+			$this->assertSame( $expected, $res['stored_as_default'] ?? null );
+			$this->assertIsString( $res['note'] ?? null );
+			$this->assertNotSame( '', $res['note'] );
+		}
+
+		// A normal write, and a mixed one where only the description is literal, name only what applies.
+		$post_id = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+		$normal  = $update->execute(
+			array(
+				'post_id'     => $post_id,
+				'title'       => 'A custom title',
+				'description' => 'A custom description.',
+			)
+		);
+		$this->assertIsArray( $normal );
+		$this->assertArrayNotHasKey( 'stored_as_default', $normal );
+		$this->assertArrayNotHasKey( 'note', $normal );
+
+		$mixed = $update->execute(
+			array(
+				'post_id'     => $post_id,
+				'title'       => $title_format,
+				'description' => 'Another description.',
+			)
+		);
+		$this->assertSame( array( 'title' ), $mixed['stored_as_default'] ?? null );
+
+		// Both keys are declared on the update tool's output schema.
+		$props = $update->get_output_schema()['properties'];
+		$this->assertSame( 'array', $props['stored_as_default']['type'] ?? null );
+		$this->assertSame( 'string', $props['note']['type'] ?? null );
+	}
+
+	/**
+	 * The default-format confirmation needs AIOSEO's own default state: a row for the post that holds
+	 * NULL. A save that failed, or a post with no row, leaves an empty read-back that is not that state.
+	 */
+	public function test_a_default_format_write_that_did_not_land_is_still_an_error(): void {
+		$admin_id                                     = $this->acting_as( 'administrator' );
+		$format                                       = '#post_title #separator_sa #site_title';
+		\AAFM\Tests\AioseoStubStore::$default_formats = array( 'title' => $format );
+
+		// A save AIOSEO refused with a database error.
+		$refused = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+		\AAFM\Tests\AioseoStubStore::save( $refused, array( 'title' => '' ) );
+		\AAFM\Tests\AioseoStubStore::$save_post_error = 'Database error';
+		$this->assertInstanceOf(
+			WP_Error::class,
+			wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+				array(
+					'post_id' => $refused,
+					'title'   => $format,
+				)
+			)
+		);
+		\AAFM\Tests\AioseoStubStore::$save_post_error = '';
+
+		// A post with no AIOSEO row, whose save stored nothing.
+		$no_row                                        = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+		\AAFM\Tests\AioseoStubStore::$save_should_fail = true;
+		$this->assertInstanceOf(
+			WP_Error::class,
+			wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+				array(
+					'post_id' => $no_row,
+					'title'   => $format,
+				)
+			)
+		);
+	}
+
+	/**
 	 * Setting a robots flag must also flip the model's robots_default column to false. AIOSEO honors the
 	 * per-post robots_noindex/robots_nofollow ONLY when robots_default is falsy (its Robots meta reads
 	 * the custom flags behind `! $metaData->robots_default`, and its sitemap treats robots_default = 1 as

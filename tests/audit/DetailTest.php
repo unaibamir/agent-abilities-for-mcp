@@ -786,7 +786,7 @@ final class DetailTest extends TestCase {
 	 *
 	 * The arguments come from each ability's OWN input schema, not from the map entry, and that
 	 * asymmetry is the point. A map entry that names a key the ability does not actually take -
-	 * aafm/delete-user-meta takes `key`, its post-meta siblings take `meta_key` - gets no value
+	 * the user meta tools take `key` (or the `meta_key` alias), the post-meta tools `meta_key` - gets no value
 	 * for it, and aafm_build_activity_detail()'s all-or-nothing rule collapses the whole detail
 	 * to null. That is a silent-wrong-answer bug in production and a red assertion here.
 	 *
@@ -1005,8 +1005,8 @@ final class DetailTest extends TestCase {
 
 	/**
 	 * The trap this whole sweep is written around. delete-user-meta names its parameter `key`
-	 * while every post-meta ability names theirs `meta_key`, and the ability's own description
-	 * says the two are not interchangeable. A sibling-shaped `meta_key` here would log nothing.
+	 * (with `meta_key` accepted as an alias since 1.13.0) while every post-meta ability names
+	 * theirs `meta_key`, so a map entry that named only one of them would log nothing for the other.
 	 */
 	public function test_delete_user_meta_detail_renders_the_template(): void {
 		$this->assertSame(
@@ -1022,16 +1022,17 @@ final class DetailTest extends TestCase {
 	}
 
 	/**
-	 * The same call sent with the post-meta spelling must log NOTHING, which is what makes the
-	 * assertion above a statement about the right key rather than about any key.
+	 * A call naming its key under a name the tool does not take must log NOTHING, which is what
+	 * makes the assertion above a statement about the right key rather than about any key. key and
+	 * meta_key are both taken since 1.13.0 (test_user_meta_detail_reads_meta_key_as_well_as_key).
 	 */
-	public function test_delete_user_meta_ignores_the_post_meta_spelling_of_its_key(): void {
+	public function test_delete_user_meta_logs_nothing_for_a_name_it_does_not_take(): void {
 		$this->assertNull(
 			aafm_build_activity_detail(
 				'aafm/delete-user-meta',
 				array(
-					'user_id'  => 14,
-					'meta_key' => 'nickname', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+					'user_id' => 14,
+					'meta'    => 'nickname',
 				)
 			)
 		);
@@ -1202,14 +1203,14 @@ final class DetailTest extends TestCase {
 		$this->assertSame( 'user', aafm_activity_detail_link_type( 'aafm/update-user-meta' ) );
 	}
 
-	public function test_update_user_meta_ignores_the_post_meta_spelling_of_its_key(): void {
+	public function test_update_user_meta_logs_nothing_for_a_name_it_does_not_take(): void {
 		$this->assertNull(
 			aafm_build_activity_detail(
 				'aafm/update-user-meta',
 				array(
-					'user_id'  => 14,
-					'meta_key' => 'nickname', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
-					'value'    => 'Bob',
+					'user_id' => 14,
+					'meta'    => 'nickname',
+					'value'   => 'Bob',
 				)
 			)
 		);
@@ -1770,6 +1771,44 @@ final class DetailTest extends TestCase {
 		foreach ( $expected as $ability => $detail ) {
 			$this->assertSame( $detail, aafm_build_activity_detail( $ability, array( 'post_id' => 7 ) ) );
 			$this->assertSame( 'Attempted: ' . $detail, aafm_build_activity_detail( $ability, array( 'post_id' => 7 ), 'error' ) );
+		}
+	}
+	/**
+	 * A fixed template with no args and no result_id still logs its text. Only a template with a
+	 * placeholder needs args, and a result_id row is built from the return value instead.
+	 */
+	public function test_a_fixed_template_without_args_logs_its_text(): void {
+		$this->assertSame( 'Ran a page cache purge for one URL', aafm_build_activity_detail( 'aafm/site-purge-url-cache', array( 'url' => 'https://example.org/secret?token=x' ) ) );
+		$this->assertSame( 'Ran a whole-site page cache purge', aafm_build_activity_detail( 'aafm/site-purge-site-cache', array() ) );
+		$this->assertSame( 'Attempted: Ran a whole-site page cache purge', aafm_build_activity_detail( 'aafm/site-purge-site-cache', array(), 'denied' ) );
+		$this->assertSame( 'Ran a page cache purge for post #7', aafm_build_activity_detail( 'aafm/site-purge-post-cache', array( 'post_id' => 7 ) ) );
+		// A result_id row has no args either, and must still wait for the return value.
+		$this->assertNull( aafm_build_activity_detail( 'aafm/create-post', array( 'title' => 'x' ) ) );
+		$this->assertNull( aafm_build_activity_detail( 'aafm/wc-create-tax-class', array( 'name' => 'x' ) ) );
+	}
+
+	/**
+	 * The user meta tools take the key as key or meta_key; a meta_key call logs the same line.
+	 */
+	public function test_user_meta_detail_reads_meta_key_as_well_as_key(): void {
+		$lines = array(
+			'aafm/get-user-meta'    => 'Read meta key `twitter` on user #7',
+			'aafm/update-user-meta' => 'Updated meta key `twitter` on user #7',
+			'aafm/delete-user-meta' => 'Deleted meta key `twitter` on user #7',
+		);
+		foreach ( $lines as $ability => $line ) {
+			$this->assertSame(
+				$line,
+				aafm_build_activity_detail(
+					$ability,
+					array(
+						'user_id'  => 7,
+						'meta_key' => 'twitter', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- tool argument.
+					),
+					'success'
+				),
+				$ability
+			);
 		}
 	}
 }

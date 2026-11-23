@@ -223,8 +223,8 @@ function aafm_deny_crashed_permission_check( string $ability_name, \Throwable $e
 		// inside mcp_adapter_init, which on a web request is hooked on rest_api_init priority 15
 		// (McpAdapter::instance(), vendor/wordpress/mcp-adapter/includes/Core/McpAdapter.php:59-64;
 		// the init priority 20 branch is WP-CLI only). So on a WP_DEBUG site a throwing cap filter
-		// fatals every REST request that arrives with a logged-in user, block editor traffic
-		// included, rather than only the MCP endpoint. aafm_build_server_tools() walks the
+		// fatals the request that builds the tools, which is a request to the MCP route (or
+		// WP-CLI), not other REST traffic. aafm_build_server_tools() walks the
 		// permission callbacks behind an is_user_logged_in() gate, so ordinary page loads and
 		// anonymous REST requests never reach it and tools/list is the rest. That was true before
 		// this guard existed too - the bare `$permission( $input )` propagated identically - but the
@@ -253,7 +253,7 @@ function aafm_deny_crashed_permission_check( string $ability_name, \Throwable $e
 	// whatever crashed - would hide which abilities a partially broken cap filter takes out, and
 	// that is the diagnostic the row exists to carry. What the callers must not do is write a row
 	// per CHECK: they run over every enabled ability, and aafm_build_server_tools() does that on
-	// every REST request carrying a logged-in user, block editor traffic included, so the
+	// every request that builds the tool set (MCP route requests and WP-CLI), so the
 	// un-deduped shape was rows-per-ability times passes-per-request with nothing to bound it
 	// (the pruner is retention-day based, not size based).
 	//
@@ -1564,8 +1564,8 @@ function aafm_preflight_cache_key( array $tools ): string {
  * Cached front end to aafm_preflight_bound_server_tools() for the live registration path.
  *
  * The preflight walks every enabled+bridged ability's input AND output schema and json-encodes the
- * pair to measure it. aafm_register_mcp_server() runs on mcp_adapter_init, which fires on
- * rest_api_init for EVERY REST request the site serves - so on a large install that per-request walk
+ * pair to measure it. aafm_register_mcp_server() runs on mcp_adapter_init and walks them on every
+ * request that builds the tool set (every MCP request), so on a large install that per-request walk
  * is real, repeated, wasted work whenever the enabled set has not changed. This memoises the decision
  * (the kept list and the omitted map) keyed by aafm_preflight_cache_key(), so the expensive walk runs
  * only on a cache miss - i.e. only when the enabled set (or the plugin version) actually changes.
@@ -1745,6 +1745,51 @@ function aafm_omitted_reason_label( string $reason ): string {
 }
 
 /**
+ * Whether this request needs the MCP tool set built.
+ *
+ * The server and its REST route are created on every request, because the route has to exist for the
+ * 401 challenge, the Connection Doctor and the Connection tab. The tools are only needed when the
+ * request is served by the MCP route, so every other REST request (the block editor, WooCommerce,
+ * other plugins) skips building them. Tools are skipped only on positive evidence that the request is
+ * not for the MCP route: when the target is unknown, they are built.
+ *
+ * The adapter creates the server once per process. Only runtimes that start a fresh process state for
+ * every request may skip; anywhere else (WP-CLI, PHPUnit, and long-running workers such as FrankenPHP,
+ * Swoole or RoadRunner) a skipped first request would leave later MCP requests with no tools.
+ *
+ * @param string|null $sapi The PHP runtime name; null reads PHP_SAPI. A parameter so tests can name one.
+ * @return bool
+ */
+function aafm_request_needs_server_tools( ?string $sapi = null ): bool {
+	$sapi  = $sapi ?? PHP_SAPI;
+	$needs = true;
+	$wp    = $GLOBALS['wp'] ?? null;
+	if ( ! in_array( $sapi, array( 'fpm-fcgi', 'cgi-fcgi', 'apache2handler', 'litespeed', 'cli-server' ), true ) ) {
+		// Not a runtime known to serve one request per process state: keep the tools.
+		$needs = true;
+	} elseif ( did_action( 'parse_request' ) && $wp instanceof WP ) {
+		// Core parsed the request, so its target is known: only our own route needs tools. Checked before
+		// is_admin(), so a plugin that sets an admin screen during a REST request cannot hide the route.
+		$route = $wp->query_vars['rest_route'] ?? '';
+		$needs = is_string( $route ) && '' !== $route && aafm_is_mcp_route( untrailingslashit( $route ) );
+	} elseif ( is_admin() || wp_doing_cron() ) {
+		// wp-admin, admin-ajax, admin-post and cron never parse a request and never serve the MCP route.
+		$needs = false;
+	}
+
+	/**
+	 * Filters whether the MCP tool set is built on this request.
+	 *
+	 * Return true to build the tools on every request, as versions before 1.13.0 did. Code that calls
+	 * rest_do_request() for the MCP route from another kind of request must add this filter before the first
+	 * rest_get_server() call.
+	 *
+	 * @param bool $needs Whether the request needs the tools.
+	 */
+	return (bool) apply_filters( 'aafm_build_server_tools_for_request', $needs );
+}
+
+/**
  * Register the single governed MCP server inside mcp_adapter_init.
  *
  * Phase 0.5.1 confirmed the 13-argument create_server() signature and corrected the
@@ -1786,11 +1831,17 @@ function aafm_register_mcp_server( $adapter ): void {
 	// the work. aafm_ownership_filter_server_tools() is the ownership-only half of that function;
 	// the full aafm_build_server_tools() call below now only ever walks the already-bounded,
 	// already-owned set, so the discovery check's cost is capped the same way the schema walk is.
-	$claimed = array();
-	$owned   = aafm_ownership_filter_server_tools( aafm_all_server_ability_names(), $claimed );
-	$bounded = aafm_preflight_bound_server_tools_cached( $owned, $claimed );
-	$tools   = aafm_build_server_tools( $bounded );
-	aafm_server_registered_abilities( $tools );
+	// A request core routed elsewhere gets the server and its route but no tools: nothing on it lists or
+	// calls one, and building them costs memory and a permission check per tool on every REST request.
+	// The registered set is left unset there, which the Playbooks code reads as "no restriction".
+	$tools = array();
+	if ( aafm_request_needs_server_tools() ) {
+		$claimed = array();
+		$owned   = aafm_ownership_filter_server_tools( aafm_all_server_ability_names(), $claimed );
+		$bounded = aafm_preflight_bound_server_tools_cached( $owned, $claimed );
+		$tools   = aafm_build_server_tools( $bounded );
+		aafm_server_registered_abilities( $tools );
+	}
 
 	// Per-connection capability gate at request time (the user resolved at registration may be the
 	// bearer's approver, a cookie user or nobody; see aafm_build_server_tools()). Priority 5 so it

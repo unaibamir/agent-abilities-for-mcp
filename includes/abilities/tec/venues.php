@@ -60,7 +60,7 @@ function aafm_tec_venues_registry_definitions(): array {
 		),
 		'aafm/tec-get-venue'    => array(
 			'label'        => __( 'Get venue', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Read a single venue by ID.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Read a single venue by ID. A venue that is not published needs edit access to it.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'tec',

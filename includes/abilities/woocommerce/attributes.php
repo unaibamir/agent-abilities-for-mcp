@@ -238,12 +238,12 @@ function aafm_wc_attribute_write_properties(): array {
 		'type'         => array(
 			'type'        => 'string',
 			'enum'        => $types,
-			'description' => 'Attribute input type. The accepted values are sourced from wc_get_attribute_types(); WooCommerce core supports only "select" (terms chosen from a predefined list). Defaults to select.',
+			'description' => __( 'Attribute input type. The accepted values are sourced from wc_get_attribute_types(); WooCommerce core supports only "select" (terms chosen from a predefined list). Defaults to select.', 'agent-abilities-for-mcp' ),
 		),
 		'order_by'     => array(
 			'type'        => 'string',
 			'enum'        => array( 'menu_order', 'name', 'name_num', 'id' ),
-			'description' => 'Default term sort order for this attribute: menu_order (custom), name, name_num (name treated numerically), or id. Defaults to menu_order.',
+			'description' => __( 'Default term sort order for this attribute: menu_order (custom), name, name_num (name treated numerically), or id. Defaults to menu_order.', 'agent-abilities-for-mcp' ),
 		),
 		'has_archives' => array(
 			'type'        => 'boolean',

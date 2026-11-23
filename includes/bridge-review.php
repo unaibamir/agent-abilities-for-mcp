@@ -27,8 +27,7 @@ function aafm_bridge_foreign_slugs(): array {
 	$slugs = array();
 	foreach ( array_keys( $registry->get_all_registered() ) as $slug ) {
 		$slug = (string) $slug;
-		$ns   = aafm_bridge_namespace_of( $slug );
-		if ( 'aafm' !== $ns && AAFM_BRIDGE_NAMESPACE !== $ns && 'mcp-adapter' !== $ns ) {
+		if ( ! aafm_bridge_never_bridged( $slug ) ) {
 			$slugs[] = $slug;
 		}
 	}

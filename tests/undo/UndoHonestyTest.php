@@ -9,9 +9,12 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Undo;
 
+use AAFM\Tests\IntegrationStubs;
 use AAFM\Tests\Support\QueryFaultInjector;
 
 final class UndoHonestyTest extends UndoTestCase {
+
+	use IntegrationStubs;
 
 	public function set_up(): void {
 		parent::set_up();
@@ -408,6 +411,237 @@ final class UndoHonestyTest extends UndoTestCase {
 		$wrote = QueryFaultInjector::fail_query( 'FROM `' . aafm_undo_aioseo_table() . '`', static fn() => aafm_undo_write_aioseo( $post, array( 'robots_noindex' => '1' ) ) );
 
 		$this->assertFalse( $wrote, 'A failed companion read aborts before the vendor save, which would otherwise write a guessed title.' );
+	}
+
+	/**
+	 * A companion title that is NULL in the table is left out of the save: sending it as '' made
+	 * AIOSEO mirror an empty _aioseo_title meta row that was absent before the change.
+	 */
+	public function test_an_aioseo_restore_does_not_carry_a_null_companion_title(): void {
+		$post = self::factory()->post->create();
+		$this->aioseo_table_with( $post, null );
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$wpdb->query( $wpdb->prepare( 'ALTER TABLE %i ADD COLUMN description TEXT NULL', aafm_undo_aioseo_table() ) );
+		$this->stub_aioseo();
+
+		$this->assertTrue( aafm_undo_write_aioseo( $post, array( 'description' => 'first' ) ) );
+
+		$calls = \AAFM\Tests\AioseoStubStore::$save_post_calls;
+		$this->reset_integration_stubs();
+		$this->assertCount( 1, $calls );
+		$this->assertSame( array( 'description' => 'first' ), $calls[0]['data'] );
+	}
+
+	/**
+	 * A title written over a NULL column with no _aioseo_title row: AIOSEO mirrored the new title into
+	 * that row, and the restore's save of NULL mirrors '' into it again. The change records the shadow
+	 * row, so the undo leaves it absent, as it was.
+	 */
+	public function test_an_aioseo_title_undo_restores_an_absent_shadow_meta_row(): void {
+		$post = self::factory()->post->create();
+		$this->aioseo_table_with( $post, null );
+		$fields = aafm_undo_surfaces()['aafm/aioseo-update-post']['fields']( array() );
+		$this->assertContains( 'meta:_aioseo_title', $fields, 'the change records the shadow row' );
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$wpdb->query( $wpdb->prepare( 'ALTER TABLE %i ADD COLUMN description TEXT NULL', aafm_undo_aioseo_table() ) );
+
+		$this->stub_aioseo();
+		\AAFM\Tests\AioseoStubStore::$mirror_meta = true;
+		$before                                   = aafm_undo_read_fields( 'post', $post, array( 'aioseo:title', 'meta:_aioseo_title' ) );
+		update_post_meta( $post, '_aioseo_title', 'New title' ); // What the forward save mirrored.
+
+		aafm_undo_write_fields( 'post', $post, $before['values'] );
+		$saved = \AAFM\Tests\AioseoStubStore::$save_post_calls;
+		$this->reset_integration_stubs();
+
+		$this->assertCount( 1, $saved, 'precondition: the restore reached the AIOSEO save' );
+		$this->assertSame( array(), aafm_meta_raw_snapshot( 'post', $post, array( '_aioseo_title' ) )['by_key']['_aioseo_title']['raw'] );
+	}
+
+	/**
+	 * The og and twitter text keys reach AIOSEO's meta mirror untrimmed, so restoring a NULL column
+	 * writes a NULL meta_value row. Every touched shadow row must still end absent, as before.
+	 *
+	 * @dataProvider aioseo_untrimmed_columns
+	 *
+	 * @param string $column AIOSEO column.
+	 */
+	public function test_an_aioseo_og_or_twitter_undo_leaves_no_null_shadow_row( string $column ): void {
+		global $wpdb;
+		$post = self::factory()->post->create();
+		$this->aioseo_table_with( $post, null );
+		// The description column too: the restore reads it as a companion, and without it nothing is saved.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$wpdb->query( $wpdb->prepare( 'ALTER TABLE %i ADD COLUMN description TEXT NULL, ADD COLUMN %i TEXT NULL', aafm_undo_aioseo_table(), $column ) );
+
+		$this->stub_aioseo();
+		\AAFM\Tests\AioseoStubStore::$mirror_meta = true;
+		$key                                      = '_aioseo_' . $column;
+		$before                                   = aafm_undo_read_fields( 'post', $post, array( 'aioseo:' . $column, 'meta:' . $key ) );
+		update_post_meta( $post, $key, 'New value' ); // What the forward save mirrored.
+
+		aafm_undo_write_fields( 'post', $post, $before['values'] );
+		$saved = \AAFM\Tests\AioseoStubStore::$save_post_calls;
+		$this->reset_integration_stubs();
+		$this->assertCount( 1, $saved, 'precondition: the restore reached the AIOSEO save, which mirrors a NULL row' );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$rows = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE post_id = %d AND meta_key = %s', $wpdb->postmeta, $post, $key ) );
+		$this->assertSame( 0, $rows, "No {$key} row, not even a NULL one." );
+	}
+
+	/**
+	 * The text columns AIOSEO mirrors without trimming.
+	 *
+	 * @return array<string,array{0:string}>
+	 */
+	public function aioseo_untrimmed_columns(): array {
+		return array(
+			'og_title'            => array( 'og_title' ),
+			'og_description'      => array( 'og_description' ),
+			'twitter_title'       => array( 'twitter_title' ),
+			'twitter_description' => array( 'twitter_description' ),
+		);
+	}
+
+	/**
+	 * AIOSEO's own save leaves NULL _aioseo_* rows on an ordinary post (a page saved by its analysis
+	 * holds _aioseo_title NULL). That is a state the change records and the undo puts back as NULL,
+	 * never a reason to refuse the change.
+	 */
+	public function test_a_null_aioseo_shadow_row_before_the_change_is_recorded_and_restored(): void {
+		global $wpdb;
+		$post = self::factory()->post->create();
+		$this->aioseo_table_with( $post, null );
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery
+		$wpdb->query( $wpdb->prepare( 'ALTER TABLE %i ADD COLUMN description TEXT NULL', aafm_undo_aioseo_table() ) );
+		$wpdb->insert(
+			$wpdb->postmeta,
+			array(
+				'post_id'    => $post,
+				'meta_key'   => '_aioseo_title', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- a test fixture row.
+				'meta_value' => null, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- a test fixture row.
+			)
+		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery
+		wp_cache_delete( $post, 'post_meta' );
+
+		$before = aafm_undo_read_fields( 'post', $post, array( 'aioseo:title', 'meta:_aioseo_title' ) );
+		$this->assertSame( array( null ), $before['values']['meta:_aioseo_title'] );
+		$this->assertArrayNotHasKey( 'meta:_aioseo_title', $before['flags'], 'A NULL mirror row is not a reason to refuse the change.' );
+
+		$this->stub_aioseo();
+		\AAFM\Tests\AioseoStubStore::$mirror_meta = true;
+		update_post_meta( $post, '_aioseo_title', 'New title' ); // What the forward save mirrored.
+		$result = aafm_undo_write_fields( 'post', $post, $before['values'] );
+		$this->reset_integration_stubs();
+
+		$this->assertSame( array(), $result['missed'], wp_json_encode( $result ) );
+		$this->assertSame( array( null ), aafm_meta_rows_keeping_null( 'post', $post, '_aioseo_title' )['rows'] );
+	}
+
+	/**
+	 * A title equal to AIOSEO's default format is saved as NULL, and AIOSEO mirrors that NULL into
+	 * _aioseo_title. The after state reads as a NULL row, so the change stays undoable.
+	 */
+	public function test_a_null_aioseo_shadow_row_after_the_change_reads_as_a_value(): void {
+		global $wpdb;
+		$post = self::factory()->post->create();
+		$this->aioseo_table_with( $post, null );
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery
+		$wpdb->insert(
+			$wpdb->postmeta,
+			array(
+				'post_id'    => $post,
+				'meta_key'   => '_aioseo_title', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- a test fixture row.
+				'meta_value' => null, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- a test fixture row.
+			)
+		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery
+		$after = aafm_undo_read_fields( 'post', $post, array( 'meta:_aioseo_title', 'meta:aafm_note' ) );
+		$this->assertSame( array( null ), $after['values']['meta:_aioseo_title'] );
+		$this->assertArrayNotHasKey( 'meta:_aioseo_title', $after['flags'] );
+	}
+
+	/**
+	 * The NULL-keeping restore adds and proves its rows before it removes the current ones, so an add
+	 * that a filter refuses leaves the key as it was rather than empty.
+	 */
+	public function test_a_refused_add_leaves_the_current_aioseo_mirror_row_in_place(): void {
+		$post = self::factory()->post->create();
+		add_post_meta( $post, '_aioseo_title', 'Current title' );
+		$refuse = static function ( $check, $object_id, $meta_key ) {
+			return '_aioseo_title' === $meta_key ? false : $check;
+		};
+		add_filter( 'add_post_metadata', $refuse, 10, 3 );
+		$ok = aafm_meta_restore_rows_keeping_null( 'post', $post, '_aioseo_title', array( null ) );
+		remove_filter( 'add_post_metadata', $refuse, 10 );
+
+		$this->assertFalse( $ok );
+		$this->assertSame( array( 'Current title' ), aafm_meta_rows_keeping_null( 'post', $post, '_aioseo_title' )['rows'] );
+	}
+
+	public function test_the_null_keeping_restore_replaces_the_rows_in_order(): void {
+		$post = self::factory()->post->create();
+		add_post_meta( $post, '_aioseo_title', 'Current title' );
+
+		$this->assertTrue( aafm_meta_restore_rows_keeping_null( 'post', $post, '_aioseo_title', array( null ) ) );
+		$this->assertSame( array( null ), aafm_meta_rows_keeping_null( 'post', $post, '_aioseo_title' )['rows'] );
+		$this->assertTrue( aafm_meta_restore_rows_keeping_null( 'post', $post, '_aioseo_title', array( 'Back', null ) ) );
+		$this->assertSame( array( 'Back', null ), aafm_meta_rows_keeping_null( 'post', $post, '_aioseo_title' )['rows'] );
+	}
+
+	/**
+	 * The stub mirrors title and description the way AIOSEO 5.0.5 does (Models\Post::checkForDefaultFormat):
+	 * a NULL becomes '', and only a value equal to the default format is stored as NULL.
+	 */
+	public function test_the_aioseo_stub_mirrors_title_like_the_vendor(): void {
+		$post = self::factory()->post->create();
+		$this->stub_aioseo();
+		\AAFM\Tests\AioseoStubStore::$mirror_meta     = true;
+		\AAFM\Tests\AioseoStubStore::$default_formats = array( 'title' => '#post_title #separator_sa #site_title' );
+
+		aafm_aioseo_write( $post, array( 'title' => null ) );
+		$cleared = aafm_meta_rows_keeping_null( 'post', $post, '_aioseo_title' )['rows'];
+		aafm_aioseo_write( $post, array( 'title' => ' #post_title #separator_sa #site_title ' ) );
+		$default = aafm_meta_rows_keeping_null( 'post', $post, '_aioseo_title' )['rows'];
+		aafm_aioseo_write( $post, array( 'og_title' => null ) );
+		$og = aafm_meta_rows_keeping_null( 'post', $post, '_aioseo_og_title' )['rows'];
+		$this->reset_integration_stubs();
+
+		$this->assertSame( array( '' ), $cleared, 'A NULL title is mirrored as an empty string.' );
+		$this->assertSame( array( null ), $default, 'A title equal to the default format is stored as NULL.' );
+		$this->assertSame( array( null ), $og, 'og and twitter keys mirror a NULL as NULL.' );
+	}
+
+	/**
+	 * Case A: a custom title replaced by the default-format title leaves column and mirror row NULL. The
+	 * undo saves the custom title again and puts the mirror row back to the recorded string.
+	 */
+	public function test_a_default_format_title_undo_restores_the_custom_title_mirror(): void {
+		global $wpdb;
+		$post = self::factory()->post->create();
+		$this->aioseo_table_with( $post, 'Original title' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$wpdb->query( $wpdb->prepare( 'ALTER TABLE %i ADD COLUMN description TEXT NULL', aafm_undo_aioseo_table() ) );
+		add_post_meta( $post, '_aioseo_title', 'Original title' );
+		$before = aafm_undo_read_fields( 'post', $post, array( 'aioseo:title', 'meta:_aioseo_title' ) );
+
+		$this->stub_aioseo();
+		\AAFM\Tests\AioseoStubStore::$mirror_meta     = true;
+		\AAFM\Tests\AioseoStubStore::$default_formats = array( 'title' => '#post_title #separator_sa #site_title' );
+		aafm_aioseo_write( $post, array( 'title' => '#post_title #separator_sa #site_title' ) ); // The forward save.
+		$after = aafm_undo_read_fields( 'post', $post, array( 'meta:_aioseo_title' ) );
+		aafm_undo_write_fields( 'post', $post, $before['values'] );
+		$saved = \AAFM\Tests\AioseoStubStore::$save_post_calls;
+		$this->reset_integration_stubs();
+
+		$this->assertSame( array( null ), $after['values']['meta:_aioseo_title'], 'The forward save left a NULL mirror row.' );
+		$this->assertArrayNotHasKey( 'meta:_aioseo_title', $after['flags'] );
+		$this->assertSame( 'Original title', end( $saved )['data']['title'], 'The undo saves the custom title again.' );
+		$this->assertSame( array( 'Original title' ), aafm_meta_rows_keeping_null( 'post', $post, '_aioseo_title' )['rows'] );
 	}
 
 	public function test_aioseo_post_without_a_row_flags_every_field_as_no_vendor_row(): void {

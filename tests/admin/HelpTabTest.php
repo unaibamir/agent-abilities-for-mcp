@@ -34,8 +34,8 @@ final class HelpTabTest extends TestCase {
 		aafm_render_help_tab();
 		$html = (string) ob_get_clean();
 
-		// One <details> accordion per documented issue (19 total).
-		$this->assertSame( 19, substr_count( $html, '<details class="aafm-help-entry">' ) );
+		// One <details> accordion per documented issue (20 total).
+		$this->assertSame( 20, substr_count( $html, '<details class="aafm-help-entry">' ) );
 
 		// Spot-check the load-bearing technical fixes are present and accurate.
 		$this->assertStringContainsString( 'rest_route=/agent-abilities-for-mcp/mcp', $html );
@@ -48,7 +48,7 @@ final class HelpTabTest extends TestCase {
 
 		// The rate-limit answer points at the shipped Settings control, not the old "not yet" copy.
 		$this->assertStringNotContainsString( 'Not in this release', $html );
-		$this->assertStringContainsString( 'Rate limit (per minute)', $html );
+		$this->assertStringContainsString( 'has a &quot;Rate limit&quot; field, set per minute', $html, 'The field is labelled Rate limit (settings.php).' );
 		$this->assertStringContainsString( 'per agent user', $html );
 	}
 
@@ -84,6 +84,18 @@ final class HelpTabTest extends TestCase {
 		$this->assertStringNotContainsString( 'do not eat into each other', $html );
 		$this->assertStringContainsString( 'per agent user, not per connection', $html );
 		$this->assertStringContainsString( 'share one budget', $html );
+	}
+
+	public function test_help_tab_explains_the_backup_gate(): void {
+		$this->acting_as( 'administrator' );
+
+		ob_start();
+		aafm_render_help_tab();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'What is the backup gate?', $html );
+		$this->assertStringContainsString( 'These tools cannot start a backup.', $html );
+		$this->assertStringContainsString( 'Verify now', $html );
 	}
 
 	public function test_help_tab_documents_the_waf_cdn_unreachable_cluster(): void {
@@ -170,7 +182,7 @@ final class HelpTabTest extends TestCase {
 		$this->assertStringNotContainsString( 'records only the argument KEYS', $html );
 		// The heading claims free text is not logged, not that every value is absent, and the foreign
 		// code is described as kept only when it has the key shape, never as trimmed to it.
-		$this->assertStringContainsString( 'Everything is logged, free text is not.', $html );
+		$this->assertStringContainsString( 'Tool calls are logged, free text is not.', $html );
 		$this->assertStringNotContainsString( 'values are not', $html );
 		$this->assertStringNotContainsString( 'trimmed to a short key-shaped string', $html );
 		$this->assertStringContainsString( 'kept only when it is a short key-shaped string of letters, digits, underscore and hyphen', $html );
@@ -285,7 +297,7 @@ final class HelpTabTest extends TestCase {
 		$this->assertStringContainsString( 'wrong or expired Application Password', $line );
 		$this->assertStringContainsString( 'membership', $line );
 		$this->assertStringContainsString( 'stops OAuth sign-in, not a correct Application Password', $line, 'Same as the Connection tab and the Doctor: a signed-in request gets through.' );
-		$this->assertStringContainsString( 'Connection Doctor', $line );
+		$this->assertStringContainsString( '&quot;Check my connection&quot; on the Connection tab', $line );
 		$this->assertStringContainsString( 'names the plugins it recognises', $line, 'No promise to name a plugin the Doctor does not know.' );
 		$this->assertStringNotContainsString( 'to see which plugin', $line );
 	}

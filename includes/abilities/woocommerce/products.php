@@ -57,7 +57,7 @@ function aafm_wc_products_registry_definitions(): array {
 	return array(
 		'aafm/wc-list-products'  => array(
 			'label'        => __( 'List WooCommerce products', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists WooCommerce products with their id, name, SKU, price, stock status, status, categories, and featured flag, plus a total. Only status is filtered server-side; there is no price, name, or other field filter, so narrowing the returned rows (for example to products under a price) is the caller\'s job. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Lists WooCommerce products with their id, name, SKU, price, regular and sale price, stock status, stock quantity, status, categories, and featured flag, plus a total. Sale price is empty when there is none, and stock quantity is null when stock is not managed; a variable product has empty regular and sale prices, because its variations carry their own. Only status is filtered server-side; there is no price, name, or other field filter, so narrowing the returned rows (for example to products under a price) is the caller\'s job. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -93,7 +93,7 @@ function aafm_wc_products_registry_definitions(): array {
 
 		'aafm/wc-delete-product' => array(
 			'label'        => __( 'Delete WooCommerce product', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Permanently deletes a WooCommerce product by id. This bypasses the Trash and cannot be undone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Permanently deletes a WooCommerce product by id. This bypasses the Trash and cannot be undone. Requires the manage-WooCommerce capability and permission to delete that product.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'destructive',
 			'subject'      => 'woocommerce',
@@ -302,12 +302,12 @@ function aafm_wc_product_output_properties(): array {
 					'name'     => array( 'type' => 'string' ),
 					'taxonomy' => array(
 						'type'        => 'boolean',
-						'description' => 'True when this is a global (taxonomy-backed) attribute shared across products, false when it is a custom attribute defined on this product alone. The two behave differently on write: a custom attribute\'s options can be edited through wc-update-product, a global one\'s cannot.',
+						'description' => __( 'True when this is a global (taxonomy-backed) attribute shared across products, false when it is a custom attribute defined on this product alone. The two behave differently on write: a custom attribute\'s options can be edited through wc-update-product, a global one\'s cannot.', 'agent-abilities-for-mcp' ),
 					),
 					'options'  => array(
 						'type'        => 'array',
 						'items'       => array( 'type' => 'string' ),
-						'description' => 'The attribute\'s declared values, always in the form every write path here accepts. For a global attribute these are term SLUGS (the form wc-create-product-variation expects), not term ids or display names; for a custom attribute they are the literal option strings.',
+						'description' => __( 'The attribute\'s declared values, always in the form every write path here accepts. For a global attribute these are term SLUGS (the form wc-create-product-variation expects), not term ids or display names; for a custom attribute they are the literal option strings.', 'agent-abilities-for-mcp' ),
 					),
 				),
 			),
@@ -341,7 +341,7 @@ function aafm_args_wc_list_products(): array {
 				array(
 					'status' => array(
 						'type'        => 'string',
-						'description' => "Status filter; 'any' returns all states.",
+						'description' => __( "Status filter; 'any' returns all states.", 'agent-abilities-for-mcp' ),
 						'enum'        => array( 'any', 'publish', 'draft', 'pending', 'private' ),
 					),
 				),
@@ -357,17 +357,20 @@ function aafm_args_wc_list_products(): array {
 					'items' => array(
 						'type'                 => 'object',
 						'properties'           => array(
-							'id'           => array( 'type' => 'integer' ),
-							'name'         => array( 'type' => 'string' ),
-							'sku'          => array( 'type' => 'string' ),
-							'price'        => array( 'type' => 'string' ),
-							'stock_status' => array( 'type' => 'string' ),
-							'status'       => array( 'type' => 'string' ),
-							'categories'   => array(
+							'id'             => array( 'type' => 'integer' ),
+							'name'           => array( 'type' => 'string' ),
+							'sku'            => array( 'type' => 'string' ),
+							'price'          => array( 'type' => 'string' ),
+							'stock_status'   => array( 'type' => 'string' ),
+							'status'         => array( 'type' => 'string' ),
+							'categories'     => array(
 								'type'  => 'array',
 								'items' => array( 'type' => 'integer' ),
 							),
-							'featured'     => array( 'type' => 'boolean' ),
+							'featured'       => array( 'type' => 'boolean' ),
+							'stock_quantity' => array( 'type' => array( 'integer', 'null' ) ),
+							'regular_price'  => array( 'type' => 'string' ),
+							'sale_price'     => array( 'type' => 'string' ),
 						),
 						'additionalProperties' => false,
 					),
@@ -450,7 +453,12 @@ function aafm_exec_wc_list_products( array $input ) {
 				$rows       = array();
 				foreach ( $page_items as $product ) {
 					if ( $product instanceof \WC_Product ) {
-						$rows[] = aafm_redact_wc_product( $product );
+						// The list row adds what a price or stock sweep needs without a get per product.
+						$rows[] = aafm_redact_wc_product( $product ) + array(
+							'stock_quantity' => null === $product->get_stock_quantity() ? null : (int) $product->get_stock_quantity(),
+							'regular_price'  => (string) $product->get_regular_price(),
+							'sale_price'     => (string) $product->get_sale_price(),
+						);
 					}
 				}
 				return array(
@@ -546,7 +554,7 @@ function aafm_wc_product_write_properties(): array {
 		),
 		'status'            => array(
 			'type'        => 'string',
-			'description' => "The product's publish state.",
+			'description' => __( "The product's publish state.", 'agent-abilities-for-mcp' ),
 			'enum'        => array( 'publish', 'draft', 'pending', 'private' ),
 		),
 		'description'       => array(
@@ -570,14 +578,14 @@ function aafm_wc_product_write_properties(): array {
 			// `_regular_price` by sending exactly that. A pattern that only matched a populated
 			// decimal made that documented route impossible to call.
 			'pattern'     => '^$|^\\d+(\\.\\d{1,2})?$',
-			'description' => 'A decimal price as a string, e.g. "19.99" (no currency symbol or thousands separator), or an empty string to clear the price.',
+			'description' => __( 'A decimal price as a string, e.g. "19.99" (no currency symbol or thousands separator), or an empty string to clear the price.', 'agent-abilities-for-mcp' ),
 		),
 		'sale_price'        => array(
 			'type'        => 'string',
 			// Same reasoning as regular_price above: an empty string is the normal way to end a
 			// sale (clear the sale price) rather than an invalid one.
 			'pattern'     => '^$|^\\d+(\\.\\d{1,2})?$',
-			'description' => 'A decimal price as a string, e.g. "14.99" (must be at or below regular_price to take effect), or an empty string to clear the sale price.',
+			'description' => __( 'A decimal price as a string, e.g. "14.99" (must be at or below regular_price to take effect), or an empty string to clear the sale price.', 'agent-abilities-for-mcp' ),
 		),
 		'stock_status'      => array(
 			'type'        => 'string',
@@ -587,7 +595,7 @@ function aafm_wc_product_write_properties(): array {
 		'stock_quantity'    => array(
 			'type'        => 'integer',
 			'minimum'     => 0,
-			'description' => 'On-hand quantity (only applied when manage_stock is true).',
+			'description' => __( 'On-hand quantity (only applied when manage_stock is true).', 'agent-abilities-for-mcp' ),
 		),
 		'manage_stock'      => array(
 			'type'        => 'boolean',
@@ -1430,7 +1438,7 @@ function aafm_wc_product_type_mismatch_error( string $current_type, string $requ
 		'aafm_wc_product_type_mismatch',
 		sprintf(
 			/* translators: 1: the product's actual current type. 2: the type the caller requested. */
-			__( 'This product is a %1$s product and cannot be changed to %2$s -- converting a product between types is not supported. Omit type, or send its current value, to leave it unchanged.', 'agent-abilities-for-mcp' ),
+			__( 'This product is a %1$s product and cannot be changed to %2$s, because converting a product between types is not supported. Omit type, or send its current value, to leave it unchanged.', 'agent-abilities-for-mcp' ),
 			$current_type,
 			$requested_type
 		)

@@ -185,7 +185,7 @@ final class PlaybookIndexTest extends TestCase {
 		$index = aafm_playbook_index();
 		$this->assertLessThanOrEqual( 600, mb_strlen( $index ) );
 		$listed = substr_count( $index, "\n- playbook-" );
-		$this->assertStringEndsWith( sprintf( '- and %d more: call list-playbooks.', 50 - $listed ), $index );
+		$this->assertStringEndsWith( sprintf( '- and %d more: call aafm-list-playbooks.', 50 - $listed ), $index );
 	}
 
 	/**

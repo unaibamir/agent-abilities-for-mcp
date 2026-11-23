@@ -1675,6 +1675,19 @@ final class AvadaSiteTest extends TestCase {
 		$this->assertSame( array(), self::$resets );
 	}
 
+	public function test_an_unknown_global_option_key_is_repeated_cleaned_and_capped(): void {
+		$key = '<b>x</b>' . str_repeat( 'k', 10240 );
+		$out = $this->global_write( array( $key => '1' ) );
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_builder_attribute_not_writable', $out->get_error_code() );
+		$shown = 'x' . str_repeat( 'k', 99 );
+		$this->assertStringContainsString( 'Setting: ' . $shown . '.', $out->get_error_message() );
+		$this->assertStringNotContainsString( '<b>', $out->get_error_message() );
+		$this->assertLessThan( 300, strlen( $out->get_error_message() ) );
+		$this->assertSame( $shown, $out->get_error_data()['setting'] );
+	}
+
 	public function test_each_rule_refuses_what_it_should(): void {
 		$cases = array(
 			array( 'primary_color' => 'red;}body{x' ),

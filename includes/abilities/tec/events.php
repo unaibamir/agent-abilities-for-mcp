@@ -72,7 +72,7 @@ function aafm_tec_events_registry_definitions(): array {
 		),
 		'aafm/tec-get-event'    => array(
 			'label'        => __( 'Get event', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Read a single event by ID, including its start/end dates, venue, organizers, and description (the stored body, blank for a password-protected event).', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Read a single event by ID, including its start/end dates, venue, organizers, and description (the stored body, blank for a password-protected event). An event that is not published needs edit access to it.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'tec',
@@ -472,7 +472,10 @@ function aafm_args_tec_create_event(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array( 'event' => array( 'type' => 'object' ) ),
+			'properties' => array(
+				'event'            => array( 'type' => 'object' ),
+				'content_warnings' => array( 'type' => 'array' ),
+			),
 		),
 		'execute_callback'    => 'aafm_exec_tec_create_event',
 		'permission_callback' => 'aafm_tec_perm_create_event',
@@ -600,7 +603,10 @@ function aafm_args_tec_update_event(): array {
 		'input_schema'        => $schema['input_schema'],
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array( 'event' => array( 'type' => 'object' ) ),
+			'properties' => array(
+				'event'            => array( 'type' => 'object' ),
+				'content_warnings' => array( 'type' => 'array' ),
+			),
 		),
 		'execute_callback'    => 'aafm_exec_tec_update_event',
 		'permission_callback' => 'aafm_tec_perm_edit_event',

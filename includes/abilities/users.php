@@ -59,7 +59,7 @@ function aafm_register_users_definitions( array $registry ): array {
 	);
 	$registry['aafm/create-user'] = array(
 		'label'        => __( 'Create user', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Create a new user with the site default role (never a caller-chosen role). Requires the create-users capability. Off by default.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Create a new user with the site default role, or subscriber when the default is administrator or a role the caller cannot assign (never a caller-chosen role). Requires the create-users capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'users',
@@ -75,7 +75,7 @@ function aafm_register_users_definitions( array $registry ): array {
 	);
 	$registry['aafm/delete-user'] = array(
 		'label'        => __( 'Delete user', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Permanently delete a user and reassign their content to another user. Never deletes you or the last administrator. Requires the delete-users capability. Off by default. On multisite this removes the user from the current site only; the network account and its logins remain.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Permanently delete a user and reassign their content to another user. Never deletes you or the last administrator. Requires the delete-users capability. On multisite this removes the user from the current site only; the network account and its logins remain.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'users',
@@ -359,7 +359,18 @@ function aafm_exec_create_user( array $input ) {
 		return aafm_generic_error();
 	}
 	if ( username_exists( $username ) || email_exists( $email ) ) {
-		return aafm_generic_error();
+		// Named only for a caller who may list users anyway; for anyone else it stays generic, so
+		// create-user never answers "does this person have an account".
+		if ( ! current_user_can( 'list_users' ) ) {
+			return aafm_generic_error();
+		}
+		return new WP_Error(
+			'aafm_user_exists',
+			username_exists( $username )
+				? __( 'A user with that username already exists, so no user was created.', 'agent-abilities-for-mcp' )
+				: __( 'A user with that email address already exists, so no user was created.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 409 )
+		);
 	}
 
 	$password = isset( $input['password'] ) && '' !== (string) $input['password']
@@ -827,6 +838,15 @@ function aafm_exec_delete_user( array $input ) {
 	);
 	$victim = is_wp_error( $loaded ) ? null : $loaded['user'];
 	if ( ! $victim instanceof WP_User ) {
+		// Named only when the database certainly holds no such user and the caller may list users;
+		// a failed load, or a caller who may not see who exists, gets the generic refusal.
+		if ( ! is_wp_error( $loaded ) && $id && current_user_can( 'list_users' ) && aafm_object_absent( 'user', $id ) ) {
+			return new WP_Error(
+				'aafm_user_not_found',
+				__( 'No user has that id, so nothing was deleted.', 'agent-abilities-for-mcp' ),
+				array( 'status' => 404 )
+			);
+		}
 		return aafm_generic_error();
 	}
 

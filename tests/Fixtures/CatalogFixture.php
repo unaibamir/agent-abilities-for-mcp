@@ -129,6 +129,16 @@ final class CatalogFixture {
 		'aafm/avada-list-studio-items',
 		'aafm/geodirectory-get-listings',
 		'aafm/geodirectory-get-listing',
+		'aafm/site-health-status',
+		'aafm/site-list-updates',
+		'aafm/site-cron-status',
+		'aafm/site-cache-status',
+		'aafm/site-list-redirects',
+		'aafm/site-get-redirect',
+		'aafm/site-list-404s',
+		'aafm/site-test-redirect',
+		'aafm/site-backup-status',
+		'aafm/site-list-backups',
 	);
 
 	/**
@@ -249,6 +259,9 @@ final class CatalogFixture {
 		'aafm/avada-update-slider-settings',
 		'aafm/geodirectory-create-listing',
 		'aafm/geodirectory-update-listing',
+		'aafm/site-purge-post-cache',
+		'aafm/site-purge-url-cache',
+		'aafm/site-purge-site-cache',
 	);
 
 	/**
@@ -311,5 +324,6 @@ final class CatalogFixture {
 		'aafm/wpbakery-update-settings',
 		'aafm/avada-update-global-options',
 		'aafm/avada-update-layout',
+		'aafm/site-purge-site-cache',
 	);
 }

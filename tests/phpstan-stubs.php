@@ -1523,6 +1523,33 @@ if ( ! function_exists( 'geodir_save_post_meta' ) ) {
 	}
 }
 
+if ( ! class_exists( 'UpdraftPlus' ) ) {
+	/**
+	 * Minimal UpdraftPlus signature for static analysis only. Real UpdraftPlus (or the test stub,
+	 * tests/stubs/UpdraftStubStore.php) supplies the real class at runtime.
+	 */
+	class UpdraftPlus {
+	}
+}
+
+if ( ! class_exists( 'UpdraftPlus_Backup_History' ) ) {
+	/**
+	 * Minimal UpdraftPlus signature for static analysis only.
+	 */
+	class UpdraftPlus_Backup_History {
+		/**
+		 * The backup history, timestamp => entry, newest first.
+		 *
+		 * @param int|false $timestamp One set, or false for all.
+		 * @return array<int|string,mixed>
+		 */
+		public static function get_history( $timestamp = false ) {
+			unset( $timestamp );
+			return array();
+		}
+	}
+}
+
 if ( ! class_exists( 'WP_CLI' ) ) {
 	/**
 	 * Minimal WP-CLI signature for static analysis only. Real WP_CLI is provided by the
@@ -1578,5 +1605,432 @@ if ( ! function_exists( 'update_field' ) ) {
 	function update_field( $selector, $value, $post_id = false ) {
 		return false;
 	}
+}
+if ( ! function_exists( 'get_supercache_dir' ) ) {
+	/**
+	 * Minimal WP Super Cache signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @param int $blog_id Blog id. Always 0 on a single site.
+	 * @return string
+	 */
+	function get_supercache_dir( $blog_id = 0 ) {
+		return '';
+	}
+}
+
+if ( ! function_exists( 'wpsc_normalize_uri_case' ) ) {
+	/**
+	 * Minimal WP Super Cache signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @param string $uri URI.
+	 * @return string
+	 */
+	function wpsc_normalize_uri_case( $uri ) {
+		return $uri;
+	}
+}
+
+if ( ! function_exists( 'wpsc_delete_url_cache' ) ) {
+	/**
+	 * Minimal WP Super Cache signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @param string $url URL.
+	 * @return bool
+	 */
+	function wpsc_delete_url_cache( $url ) {
+		return true;
+	}
+}
+
+if ( ! function_exists( 'wpsc_delete_post_cache' ) ) {
+	/**
+	 * Minimal WP Super Cache signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @param int $id Post id.
+	 * @return bool
+	 */
+	function wpsc_delete_post_cache( $id ) {
+		return true;
+	}
+}
+
+if ( ! function_exists( 'wp_cache_clear_cache' ) ) {
+	/**
+	 * Minimal WP Super Cache signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @param int $blog_id Blog id. Always 0 on a single site.
+	 * @return void
+	 */
+	function wp_cache_clear_cache( $blog_id = 0 ) {
+	}
+}
+if ( ! function_exists( 'wpfc_clear_post_cache_by_id' ) ) {
+	/**
+	 * Minimal WP Fastest Cache signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @param int|false $post_id Post id.
+	 * @return mixed
+	 */
+	function wpfc_clear_post_cache_by_id( $post_id = false ) {
+		return null;
+	}
+}
+
+if ( ! function_exists( 'wpfc_clear_cache_by_url' ) ) {
+	/**
+	 * Minimal WP Fastest Cache signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @param string|false $url URL.
+	 * @return mixed
+	 */
+	function wpfc_clear_cache_by_url( $url = false ) {
+		return null;
+	}
+}
+
+if ( ! function_exists( 'wpfc_clear_all_cache' ) ) {
+	/**
+	 * Minimal WP Fastest Cache signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @param bool $minified Also clear minified files.
+	 * @return mixed
+	 */
+	function wpfc_clear_all_cache( $minified = false ) {
+		return null;
+	}
+}
+if ( ! function_exists( 'w3tc_config' ) ) {
+	/**
+	 * Minimal W3 Total Cache signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @return mixed
+	 */
+	function w3tc_config() {
+		return null;
+	}
+}
+
+if ( ! function_exists( 'w3tc_flush_post' ) ) {
+	/**
+	 * Minimal W3 Total Cache signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @param int   $post_id Post id.
+	 * @param bool  $force   Flush although the post type is excluded.
+	 * @param mixed $extras  Extras.
+	 * @return void
+	 */
+	function w3tc_flush_post( $post_id, $force = false, $extras = null ) {
+	}
+}
+
+if ( ! function_exists( 'w3tc_flush_url' ) ) {
+	/**
+	 * Minimal W3 Total Cache signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @param string $w3tc_url URL.
+	 * @param mixed  $extras   Extras.
+	 * @return void
+	 */
+	function w3tc_flush_url( $w3tc_url, $extras = null ) {
+	}
+}
+
+if ( ! function_exists( 'w3tc_flush_posts' ) ) {
+	/**
+	 * Minimal W3 Total Cache signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @param mixed $extras Extras.
+	 * @return void
+	 */
+	function w3tc_flush_posts( $extras = null ) {
+	}
+}
+if ( ! function_exists( 'WP_Optimize' ) ) {
+	/**
+	 * Minimal WP-Optimize signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @return mixed
+	 */
+	function WP_Optimize() {
+		return null;
+	}
+}
+if ( ! function_exists( 'breeze_get_cache_base_path' ) ) {
+	/**
+	 * Minimal Breeze signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @param bool $is_network        Network path.
+	 * @param int  $blog_id_requested Blog id.
+	 * @return string
+	 */
+	function breeze_get_cache_base_path( $is_network = false, $blog_id_requested = 0 ) {
+		return '';
+	}
+}
+
+if ( ! function_exists( 'breeze_purge_local_cache_for_urls' ) ) {
+	/**
+	 * Minimal Breeze signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @param array<int,string> $urls            URLs.
+	 * @param string            $cache_base_path Cache base path.
+	 * @return mixed
+	 */
+	function breeze_purge_local_cache_for_urls( array $urls, string $cache_base_path ) {
+		return null;
+	}
+}
+if ( ! function_exists( 'sg_cachepress_purge_cache' ) ) {
+	/**
+	 * Minimal SiteGround Speed Optimizer signature for static analysis only. The real plugin, or the test stub in
+	 * tests/stubs/SiteopsCacheStubStore.php, supplies the real function at runtime.
+	 *
+	 * @param string|false $url URL.
+	 * @return mixed
+	 */
+	function sg_cachepress_purge_cache( $url = false ) {
+		return null;
+	}
+}
+if ( ! defined( 'REDIRECTION_DB_VERSION' ) ) {
+	define( 'REDIRECTION_DB_VERSION', '4.2' );
+}
+
+if ( ! class_exists( 'EPS_Redirects' ) ) {
+	/**
+	 * Minimal 301 Redirects (EPS) signature for static analysis only.
+	 */
+	class EPS_Redirects {
+		/**
+		 * @param bool $active_only Only rows that are on.
+		 * @return mixed
+		 */
+		public static function get_redirects( $active_only = false ) {
+			return array();
+		}
+	}
+}
+
+if ( ! class_exists( 'Red_Options' ) ) {
+	/**
+	 * Minimal Redirection signatures for static analysis only.
+	 */
+	class Red_Options {
+		/** @return mixed */
+		public static function get() {
+			return array();
+		}
+		/** @return void */
+		public static function reset() {}
+	}
+	class Red_Item {
+		/** @var mixed */
+		public $source_flags = null;
+		/** @var mixed */
+		public $match = null;
+		/**
+		 * @param array<string,mixed> $params Filter parameters.
+		 * @return mixed
+		 */
+		public static function get_filtered( array $params ) {
+			return array();
+		}
+		/**
+		 * @param string $url URL to match.
+		 * @return array<int,mixed>
+		 */
+		public static function get_for_url( $url ) {
+			return array();
+		}
+		/** @return string */
+		public function get_url() {
+			return '';
+		}
+		/** @return int */
+		public function get_id() {
+			return 0;
+		}
+		/** @return int */
+		public function get_action_code() {
+			return 0;
+		}
+	}
+	class Red_Url_Request {
+		/** @param string $url URL. */
+		public function __construct( $url ) {}
+		/** @return string */
+		public function get_original_url() {
+			return '';
+		}
+		/** @return string */
+		public function get_decoded_url() {
+			return '';
+		}
+		/** @return bool */
+		public function is_protected_url() {
+			return false;
+		}
+	}
+	class Red_Url {
+		/** @param string $url URL. */
+		public function __construct( $url = '' ) {}
+		/**
+		 * @param string $requested_url Requested URL.
+		 * @param mixed  $flags         Source flags.
+		 * @return bool
+		 */
+		public function is_match( $requested_url, $flags ) {
+			return false;
+		}
+	}
+	class Red_404_Log {
+		/**
+		 * @param string              $group  Group column.
+		 * @param array<string,mixed> $params Query parameters.
+		 * @return mixed
+		 */
+		public static function get_grouped( $group, array $params ) {
+			return array();
+		}
+	}
+}
+
+if ( ! function_exists( 'red_is_disabled' ) ) {
+	/**
+	 * Minimal Redirection signature for static analysis only.
+	 *
+	 * @return bool
+	 */
+	function red_is_disabled() {
+		return false;
+	}
+}
+
+if ( ! function_exists( 'srm_get_redirect_data' ) ) {
+	/**
+	 * Minimal Safe Redirect Manager signatures for static analysis only.
+	 *
+	 * @param int               $redirect_id     Redirect post id.
+	 * @param array<int,string> $optional_fields Extra fields.
+	 * @return mixed
+	 */
+	function srm_get_redirect_data( $redirect_id, $optional_fields = array() ) {
+		return array();
+	}
+	/** @return mixed */
+	function srm_get_max_redirects() {
+		return 1000;
+	}
+	/** @return mixed */
+	function srm_get_valid_status_codes() {
+		return array();
+	}
+}
+
+if ( ! class_exists( 'RankMath\\Helper' ) ) {
+	/**
+	 * Minimal Rank Math signatures for static analysis only.
+	 */
+	class Aafm_Phpstan_Rank_Math_Helper {
+		/**
+		 * @param string $id Module id.
+		 * @return mixed
+		 */
+		public static function is_module_active( $id ) {
+			return false;
+		}
+		/**
+		 * @param string $field_id      Setting id, group.field.
+		 * @param mixed  $default_value Default.
+		 * @return mixed
+		 */
+		public static function get_settings( $field_id = '', $default_value = false ) {
+			return $default_value;
+		}
+		/**
+		 * @return bool
+		 */
+		public static function is_invalid_registration() {
+			return false;
+		}
+	}
+	class Aafm_Phpstan_Rank_Math_Redirections_Db {
+		/**
+		 * @param array<string,mixed> $args Filters.
+		 * @return mixed
+		 */
+		public static function get_redirections( $args = array() ) {
+			return array();
+		}
+		/**
+		 * @param string $uri URI to match.
+		 * @param bool   $all Get all.
+		 * @return mixed
+		 */
+		public static function match_redirections( $uri, $all = false ) {
+			return false;
+		}
+	}
+	class Aafm_Phpstan_Rank_Math_Redirection {
+		/**
+		 * @param string $url URL to strip from.
+		 * @return string
+		 */
+		public static function strip_subdirectory( $url ) {
+			return $url;
+		}
+	}
+	class_alias( 'Aafm_Phpstan_Rank_Math_Helper', 'RankMath\\Helper' );
+	class_alias( 'Aafm_Phpstan_Rank_Math_Redirections_Db', 'RankMath\\Redirections\\DB' );
+	class_alias( 'Aafm_Phpstan_Rank_Math_Redirection', 'RankMath\\Redirections\\Redirection' );
+}
+
+if ( ! class_exists( 'SlimSEO\\Redirection\\Database\\Redirects' ) ) {
+	/**
+	 * Minimal Slim SEO redirection signatures for static analysis only.
+	 */
+	class Aafm_Phpstan_Slim_Seo_Redirects {
+		/** @return mixed */
+		public function list() {
+			return array();
+		}
+	}
+	class Aafm_Phpstan_Slim_Seo_Redirection_Helper {
+		/**
+		 * @param string $url     URL.
+		 * @param bool   $unslash Unslash first.
+		 * @return string
+		 */
+		public static function normalize_url( string $url, $unslash = true ) {
+			return $url;
+		}
+	}
+	class Aafm_Phpstan_Slim_Seo_Redirection_Settings {
+		/**
+		 * @param string $name Setting name.
+		 * @return mixed
+		 */
+		public static function get( string $name ) {
+			return false;
+		}
+	}
+	class_alias( 'Aafm_Phpstan_Slim_Seo_Redirects', 'SlimSEO\\Redirection\\Database\\Redirects' );
+	class_alias( 'Aafm_Phpstan_Slim_Seo_Redirection_Helper', 'SlimSEO\\Redirection\\Helper' );
+	class_alias( 'Aafm_Phpstan_Slim_Seo_Redirection_Settings', 'SlimSEO\\Redirection\\Settings' );
 }
 // phpcs:enable

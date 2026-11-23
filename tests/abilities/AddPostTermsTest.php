@@ -155,4 +155,10 @@ final class AddPostTermsTest extends TestCase {
 			)
 		);
 	}
+
+	public function test_the_required_taxonomy_declares_no_default(): void {
+		$schema = aafm_args_add_post_terms()['input_schema'];
+		$this->assertContains( 'taxonomy', $schema['required'] );
+		$this->assertArrayNotHasKey( 'default', $schema['properties']['taxonomy'], 'A required field with a default tells a client it may leave it out.' );
+	}
 }

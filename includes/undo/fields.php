@@ -141,7 +141,9 @@ function aafm_undo_aioseo_table(): string {
  *
  * Post columns come from one row read after the post cache is cleaned, meta from one raw snapshot
  * query for the whole family, term relationships from one join, term columns from one join. A meta
- * key with rows under another spelling, or a NULL value, is flagged not_exact.
+ * key with rows under another spelling, or a NULL value, is flagged not_exact, except a NULL row of one
+ * of AIOSEO's _aioseo_* mirror keys (aafm_undo_aioseo_shadow_meta_keys()), which AIOSEO writes itself:
+ * that reads as null in the key's list of rows, so it is recorded and restored like any other value.
  *
  * @param string               $object_type 'post' or 'term'.
  * @param int                  $object_id   Object id.
@@ -198,6 +200,17 @@ function aafm_undo_read_fields( string $object_type, int $object_id, array $fiel
 		foreach ( $groups['meta'] as $field => $key ) {
 			$entry            = $snapshot['by_key'][ $key ];
 			$values[ $field ] = $entry['raw'];
+			if ( $entry['aliased'] > 0 && in_array( $key, aafm_undo_aioseo_shadow_meta_keys(), true ) ) {
+				// AIOSEO writes NULL into its own mirror rows, so a NULL row there is a state to record.
+				$nullable = aafm_meta_rows_keeping_null( $object_type, $object_id, $key );
+				if ( ! $nullable['ok'] ) {
+					return null;
+				}
+				if ( 0 === $nullable['aliased'] ) {
+					$values[ $field ] = $nullable['rows'];
+					continue;
+				}
+			}
 			if ( $entry['aliased'] > 0 ) {
 				$flags[ $field ] = 'not_exact';
 			}
@@ -399,7 +412,7 @@ function aafm_undo_certify( string $object_type, int $object_id, array $values, 
  * Put AIOSEO columns back through its own model, the way the forward tool writes them.
  *
  * The model's savePost() reads the title and description of its patch unconditionally, so when the restore does not
- * carry them the current values go along and are written back unchanged.
+ * carry them the current values go along and are written back unchanged. A NULL current value stays out of the patch.
  *
  * @param int                 $post_id Post id.
  * @param array<string,mixed> $columns Column to the value that was there (strings, or null for SQL NULL).
@@ -421,7 +434,11 @@ function aafm_undo_write_aioseo( int $post_id, array $columns ): bool {
 			if ( null === $now ) {
 				return false;
 			}
-			$data[ $key ] = (string) $now['values'][ 'aioseo:' . $key ];
+			// A NULL column is left out: AIOSEO stores a missing title or description as NULL either
+			// way, and sending '' would make it mirror an empty _aioseo_* meta row that was not there.
+			if ( null !== $now['values'][ 'aioseo:' . $key ] ) {
+				$data[ $key ] = (string) $now['values'][ 'aioseo:' . $key ];
+			}
 		}
 	}
 	aafm_aioseo_write( $post_id, $data );
@@ -447,12 +464,20 @@ function aafm_undo_write_fields( string $object_type, int $object_id, array $val
 	$post_cols = array();
 	$aioseo    = array();
 	foreach ( $values as $field => $value ) {
+		if ( 0 === strpos( $field, 'aioseo:' ) ) {
+			$aioseo[ substr( $field, 7 ) ] = $value;
+		}
+	}
+	// AIOSEO's save mirrors its text columns into _aioseo_* meta, so it runs before the meta rows are
+	// put back: the restore below then leaves those rows exactly as they were, absent ones included.
+	if ( array() !== $aioseo ) {
+		aafm_undo_write_aioseo( $object_id, $aioseo );
+	}
+	foreach ( $values as $field => $value ) {
 		$kind = (string) strstr( $field, ':', true );
 		$name = substr( $field, strlen( $kind ) + 1 );
 		if ( 'post' === $kind ) {
 			$post_cols[ $name ] = $value;
-		} elseif ( 'aioseo' === $kind ) {
-			$aioseo[ $name ] = $value;
 		} elseif ( 'terms' === $kind ) {
 			$post = aafm_exact_object_chain( 'post', $object_id );
 			if ( $post instanceof WP_Post ) {
@@ -461,17 +486,21 @@ function aafm_undo_write_fields( string $object_type, int $object_id, array $val
 				wp_set_object_terms( $object_id, array_map( 'intval', (array) $value ), $name );
 			}
 		} elseif ( 'meta' === $kind ) {
-			aafm_meta_restore_rows( $object_type, $object_id, $name, array_map( 'strval', (array) $value ) );
+			if ( in_array( null, (array) $value, true ) ) {
+				// A recorded NULL row (only AIOSEO's _aioseo_* mirror keys record one) goes back as NULL.
+				aafm_meta_restore_rows_keeping_null( $object_type, $object_id, $name, array_values( (array) $value ) );
+			} else {
+				// The AIOSEO save above can write a NULL into its mirror row; a recorded value without one
+				// means that row came after the change, so it goes before the exact restore.
+				aafm_meta_delete_null_rows( $object_type, $object_id, $name );
+				aafm_meta_restore_rows( $object_type, $object_id, $name, array_map( 'strval', (array) $value ) );
+			}
 			// Rank Math's sitemap reads rank_math_robots but only invalidates on a post save, so a bare
 			// meta write needs the same nudge the forward tool gives (rankmath.php).
 			if ( 'rank_math_robots' === $name && 'post' === $object_type && class_exists( 'RankMath\\Sitemap\\Cache_Watcher' ) ) {
 				\RankMath\Sitemap\Cache_Watcher::invalidate_post( $object_id );
 			}
 		}
-	}
-
-	if ( array() !== $aioseo ) {
-		aafm_undo_write_aioseo( $object_id, $aioseo );
 	}
 
 	if ( array() !== $post_cols ) {

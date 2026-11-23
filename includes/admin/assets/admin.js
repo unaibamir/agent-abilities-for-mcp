@@ -75,6 +75,7 @@
 			this.#bindReviewInbox();
 			this.#bindChanges();
 			this.#bindClearLog();
+			this.#bindBackupVerify();
 			this.#bindNotifyTest();
 			this.#bindLogPaginationAndFilters();
 			this.#bindResetPlugin();
@@ -1006,7 +1007,7 @@
 						( b ) => ! b.checked && ! b.closest( '.aafm-ability-row' )?.hasAttribute( 'data-own-switch' )
 					);
 					if ( enabling && btn.dataset.hasSensitive === '1' ) {
-						const msg = this.#t(
+						const msg = btn.dataset.confirm || this.#t(
 							'integrationToggleConfirm',
 							'These abilities can read and change personal data such as customer details and orders. Turn all of them on?'
 						);
@@ -1997,6 +1998,18 @@
 						body.append( 'aafm_oauth_connect_roles[]', box.value );
 					} );
 				}
+				// Backup gate: the marker says the card was on the page, because an unchecked box sends nothing.
+				if ( form.querySelector( 'input[name="aafm_backup_gate_present"]' ) ) {
+					body.append( 'aafm_backup_gate_present', '1' );
+					[ 'aafm_backup_gate', 'aafm_backup_gate_accept_remote', 'aafm_backup_gate_accept_size' ].forEach( ( name ) => {
+						if ( form.querySelector( `input[name="${ name }"]` )?.checked ) {
+							body.append( name, '1' );
+						}
+					} );
+					form.querySelectorAll( 'input[name="aafm_backup_gate_abilities[]"]:checked' ).forEach( ( box ) => {
+						body.append( 'aafm_backup_gate_abilities[]', box.value );
+					} );
+				}
 				if ( proxyMode ) {
 					body.append( 'aafm_proxy_mode', proxyMode.value );
 					body.append( 'aafm_proxy_header', form.querySelector( 'select[name="aafm_proxy_header"]' )?.value ?? '' );
@@ -2049,7 +2062,7 @@
 							status.textContent = this.#format(
 								this.#t(
 									'allowlistDropped',
-									'Saved. Dropped %d line(s) that were not a valid IP or range - check the allowlist.'
+									'Saved. Dropped %d line(s) that were not a valid IP or range. Check the allowlist.'
 								),
 								dropped
 							);
@@ -2161,13 +2174,13 @@
 				if ( json?.success && json.data.redirected ) {
 					status.textContent = this.#t(
 						'connectionRedirected',
-						'The endpoint redirected, so the test stopped before sending your login anywhere else. Run the Connection Doctor to see where it goes.'
+						'The endpoint redirected, so the test stopped before sending your login anywhere else. Run "Check my connection" to see where it goes.'
 					);
 				} else if ( json?.success && json.data.reachable ) {
 					status.textContent = this.#format(
 						this.#t(
 							'connectionOk',
-							'Reachable (HTTP %1$s) - %2$s tool(s) in your admin view.'
+							'Reachable (HTTP %1$s): %2$s tool(s) in your admin view.'
 						),
 						json.data.http_code,
 						json.data.admin_tool_count
@@ -2411,6 +2424,7 @@
 				you: this.#t( 'doctorWhoYou', 'You can fix this' ),
 				host: this.#t( 'doctorWhoHost', 'Your host can fix this' ),
 				plugin: this.#t( 'doctorWhoPlugin', 'A security or membership plugin may be the cause' ),
+				other: this.#t( 'doctorWhoOther', 'Another plugin on this site may be the cause' ),
 			};
 
 			const applyFilter = () => {
@@ -2517,6 +2531,30 @@
 				const json = await this.#post( 'aafm_notify_test' );
 				if ( status ) {
 					status.textContent = json?.data?.message ?? this.#t( 'error', 'Error' );
+				}
+			} );
+		}
+
+		#bindBackupVerify() {
+			const btn = document.querySelector( '.aafm-backup-verify-now' );
+			if ( ! btn ) {
+				return;
+			}
+			btn.addEventListener( 'click', async () => {
+				const status = document.querySelector( '.aafm-backup-verify-status' );
+				btn.disabled = true;
+				if ( status ) {
+					status.textContent = this.#t( 'backupVerifyChecking', 'Checking…' );
+				}
+				try {
+					const json = await this.#post( 'aafm_backup_verify_now' );
+					if ( status ) {
+						status.textContent = json?.data?.message ?? this.#t( 'backupVerifyFailed', 'The check could not be run. Reload this page and try again.' );
+					}
+				} finally {
+					// Re-enable and hand focus back, so it does not drop to the page body.
+					btn.disabled = false;
+					btn.focus();
 				}
 			} );
 		}

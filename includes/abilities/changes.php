@@ -32,7 +32,7 @@ function aafm_register_changes_definitions( array $registry ): array {
 	);
 	$registry['aafm/undo-change']  = array(
 		'label'        => __( 'Undo change', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Reverts one change this connection made in the last 24 hours, by the id list-changes gave. It puts back the earlier value of the fields that change touched, only if nothing else has edited them since, and it checks again that this connection may still make that edit. Undoing a create moves the item to the Trash. An undo cannot itself be undone from here, and notifications, webhooks and anything already read are not recalled. One change per call, 30 calls an hour. Off by default.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Reverts one change this connection made in the last 24 hours, by the id list-changes gave. It puts back the earlier value of the fields that change touched, only if nothing else has edited them since, and it checks again that this connection may still make that edit. Undoing a create moves the item to the Trash. An undo cannot itself be undone from here, and notifications, webhooks and anything already read are not recalled. One change per call, 30 calls an hour.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'content',

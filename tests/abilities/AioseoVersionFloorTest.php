@@ -26,7 +26,7 @@ final class AioseoVersionFloorTest extends TestCase {
 	public function set_up(): void {
 		parent::set_up();
 		if ( ! function_exists( 'aioseo' ) ) {
-			eval( 'function aioseo() { return new \stdClass(); }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only marker stub for tests; never shipped.
+			eval( 'function aioseo() { return \AAFM\Tests\AioseoStubStore::app(); }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only marker stub for tests; never shipped.
 		}
 	}
 

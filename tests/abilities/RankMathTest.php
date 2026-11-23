@@ -911,4 +911,26 @@ final class RankMathTest extends TestCase {
 		$this->assertArrayNotHasKey( 'note', $res );
 		$this->assertArrayHasKey( 'head_status', aafm_args_rankmath_get_head()['output_schema']['properties'] );
 	}
+
+	/**
+	 * The SEO write tools describe themselves once, in the registry, and say what the URL check
+	 * and the Twitter switch really do.
+	 */
+	public function test_seo_update_descriptions_come_from_the_registry_and_match_the_code(): void {
+		$texts = array();
+		foreach ( array( 'rankmath', 'yoast', 'aioseo' ) as $plugin ) {
+			$args = call_user_func( 'aafm_args_' . $plugin . '_update_post' );
+			$this->assertSame( aafm_ability_description( 'aafm/' . $plugin . '-update-post' ), $args['description'], $plugin );
+			$texts[] = $args['description'];
+			foreach ( $args['input_schema']['properties'] as $field ) {
+				$texts[] = (string) ( $field['description'] ?? '' );
+			}
+		}
+		$all = implode( "\n", $texts );
+		$this->assertStringNotContainsString( 'sanitized as a URL', $all, 'aafm_checked_url() refuses a value it would have to rewrite; it does not sanitize.' );
+		$this->assertStringNotContainsString( 'Setting a Twitter field', $all );
+		$this->assertStringNotContainsString( 'Setting any twitter_* field', $all, 'Only a non-empty Twitter field turns the fallback off.' );
+		$this->assertStringContainsString( 'checked as a URL; a value that would need rewriting is refused', $all );
+		$this->assertStringContainsString( 'Setting a non-empty Twitter field', $all );
+	}
 }

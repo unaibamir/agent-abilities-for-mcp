@@ -315,7 +315,7 @@ function aafm_args_wc_list_orders(): array {
 					'status' => array(
 						'type'        => 'string',
 						'enum'        => array( 'any', 'pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed', 'checkout-draft' ),
-						'description' => "Order status to filter by; 'any' (the default) covers every registered order status (including custom ones) but never the internal checkout-draft status, which must be requested explicitly. Uses the short form without the wc- prefix.",
+						'description' => __( "Order status to filter by; 'any' (the default) covers every registered order status (including custom ones) but never the internal checkout-draft status, which must be requested explicitly. Uses the short form without the wc- prefix.", 'agent-abilities-for-mcp' ),
 					),
 				)
 			),
@@ -501,7 +501,7 @@ function aafm_wc_order_write_properties(): array {
 	return array(
 		'status'        => array(
 			'type'        => 'string',
-			'description' => 'Order status slug (e.g. processing, completed, on-hold). Must match a key returned by wc_get_order_statuses().',
+			'description' => __( 'Order status slug (e.g. processing, completed, on-hold). Must match a key returned by wc_get_order_statuses().', 'agent-abilities-for-mcp' ),
 		),
 		'customer_id'   => array(
 			'type'        => 'integer',
@@ -1668,7 +1668,7 @@ function aafm_args_wc_update_order(): array {
 	// wc-create-order request has no existing order to add to.
 	$properties['add_line_items'] = array(
 		'type'        => 'array',
-		'description' => __( 'Products to add as NEW line items on the existing order, each given as a product_id and quantity pair. Items are always ADDED; this ability has no way to modify, replace, or remove an existing line item. If any product_id cannot be resolved to a real product, the whole request fails with no partial write. Sending the deprecated line_items field at the same time combines both lists -- every item in either is added.', 'agent-abilities-for-mcp' ),
+		'description' => __( 'Products to add as NEW line items on the existing order, each given as a product_id and quantity pair. Items are always ADDED; this ability has no way to modify, replace, or remove an existing line item. If any product_id cannot be resolved to a real product, the whole request fails with no partial write. Sending the deprecated line_items field at the same time combines both lists, so every item in either is added.', 'agent-abilities-for-mcp' ),
 		'items'       => aafm_wc_order_line_item_schema(),
 	);
 	// line_items predates add_line_items and its original name reads as if it replaces an order's
@@ -1911,7 +1911,16 @@ function aafm_exec_wc_update_order_status( array $input ) {
 
 	$status = (string) ( $input['status'] ?? '' );
 	if ( ! aafm_wc_order_status_valid( $status ) ) {
-		return aafm_generic_error();
+		$valid = function_exists( 'wc_get_order_statuses' ) ? array_keys( wc_get_order_statuses() ) : array();
+		return new \WP_Error(
+			'aafm_wc_invalid_order_status',
+			sprintf(
+				/* translators: %s: comma-separated list of the order statuses this site accepts. */
+				__( 'That is not an order status on this site, so the order was not changed. Valid statuses: %s.', 'agent-abilities-for-mcp' ),
+				implode( ', ', array_map( static fn( string $key ): string => (string) preg_replace( '/^wc-/', '', $key ), $valid ) )
+			),
+			array( 'status' => 400 )
+		);
 	}
 
 	// Strip the wc- prefix before handing to update_status() -- the stub and

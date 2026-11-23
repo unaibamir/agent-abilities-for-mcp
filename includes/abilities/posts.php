@@ -40,7 +40,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_posts_definitions' );
 function aafm_register_posts_definitions( array $registry ): array {
 	$registry['aafm/get-posts']        = array(
 		'label'        => __( 'Get posts', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'List posts filtered by type, status, and search term. Each item returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per item; content_format (rendered or raw) only takes effect when include_content is true. Response includes total.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'List posts filtered by type, status, and search term. Each item returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per item; content_format (rendered or raw) only takes effect when include_content is true. Response includes total. Someone else\'s draft, pending or scheduled item is listed only for a user who can edit other people\'s items of that type.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',
@@ -72,7 +72,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/create-post']      = array(
 		'label'        => __( 'Create post', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Create a new post, published by default (requires publish capability to call this ability at all). An explicit draft, pending, or private status is also accepted. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Create a new post, published by default unless the operator\'s force-draft setting holds every new post as a draft, whatever status is requested (requires publish capability to call this ability at all). An explicit draft, pending, or private status is also accepted. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -116,7 +116,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/replace-sitewide'] = array(
 		'label'        => __( 'Replace sitewide', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Literal find-and-replace across multiple posts, scoped by post type and status. Skips pages, products, events, venues, organizers and listings while that type\'s own update tool is off. Dry-run by default (previews the match count and which posts would change, writes nothing); pass dry_run:false to apply. Each candidate post is guarded by the same structure-preserving check as replace-in-post, so a match landing inside markup is skipped and reported, not applied. A candidate owned by a foreign page builder is likewise skipped and counted in skipped_builder_owned, not applied. One call changes at most 50 posts. If the response says truncated:true, run the call again, since changed posts stop matching. Skipped posts keep matching, and so do posts whose new text contains the search text, so stop when a call changes nothing rather than repeating blindly.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Literal find-and-replace across multiple posts, scoped by post type and status. Skips pages, products, events, venues, organizers and listings while that type\'s own update tool is off. Dry-run by default (returns counts only, never a list of posts, and writes nothing); pass dry_run:false to apply. Each candidate post is guarded by the same structure-preserving check as replace-in-post, so a match landing inside markup is skipped and reported, not applied. A candidate owned by a foreign page builder is likewise skipped and counted in skipped_builder_owned, not applied. One call changes at most 50 posts. If the response says truncated:true, run the call again, since changed posts stop matching. Skipped posts keep matching, and so do posts whose new text contains the search text, so stop when a call changes nothing rather than repeating blindly.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -183,7 +183,7 @@ function aafm_args_get_posts(): array {
 					'status'    => array(
 						'type'        => 'string',
 						'default'     => 'publish',
-						'description' => __( 'Post status to filter by. Defaults to publish. A non-public status (draft, pending, future, private) is only returned when the caller can read private content for this type; any, trash, auto-draft, inherit, and unrecognized values are rejected.', 'agent-abilities-for-mcp' ),
+						'description' => __( 'Post status to filter by. Defaults to publish. A non-public status (draft, pending, future, private) is only returned when the caller can read private content for this type, and someone else\'s draft, pending or scheduled item only when the caller can also edit other people\'s items of this type; any, trash, auto-draft, inherit, and unrecognized values are rejected.', 'agent-abilities-for-mcp' ),
 					),
 					'search'    => array(
 						'type'        => 'string',
@@ -296,7 +296,7 @@ function aafm_exec_get_posts( array $input ) {
 			// author__in, not author: an author of 0 would drop the condition instead of matching nothing.
 			$args['author__in'] = array( get_current_user_id() );
 		}
-		return new WP_Query( $args );
+		return aafm_paged_query( aafm_tec_unfiltered_query_args( $args ) );
 	};
 
 	$format          = isset( $input['content_format'] ) ? (string) $input['content_format'] : 'rendered';
@@ -750,8 +750,9 @@ function aafm_args_create_draft(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'post'       => array( 'type' => 'object' ),
-				'enrichment' => aafm_write_enrichment_output_schema(),
+				'post'             => array( 'type' => 'object' ),
+				'enrichment'       => aafm_write_enrichment_output_schema(),
+				'content_warnings' => array( 'type' => 'array' ),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_create_draft',
@@ -1106,8 +1107,9 @@ function aafm_args_create_post(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'post'       => array( 'type' => 'object' ),
-				'enrichment' => aafm_write_enrichment_output_schema(),
+				'post'             => array( 'type' => 'object' ),
+				'enrichment'       => aafm_write_enrichment_output_schema(),
+				'content_warnings' => array( 'type' => 'array' ),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_create_post',
@@ -1146,8 +1148,9 @@ function aafm_args_create_cpt_item(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'post'       => array( 'type' => 'object' ),
-				'enrichment' => aafm_write_enrichment_output_schema(),
+				'post'             => array( 'type' => 'object' ),
+				'enrichment'       => aafm_write_enrichment_output_schema(),
+				'content_warnings' => array( 'type' => 'array' ),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_create_cpt_item',
@@ -1255,8 +1258,9 @@ function aafm_args_update_post(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'post'       => array( 'type' => 'object' ),
-				'enrichment' => aafm_write_enrichment_output_schema(),
+				'post'             => array( 'type' => 'object' ),
+				'enrichment'       => aafm_write_enrichment_output_schema(),
+				'content_warnings' => array( 'type' => 'array' ),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_update_post',
@@ -1478,7 +1482,7 @@ function aafm_args_replace_in_post(): array {
 				),
 				'replace' => array(
 					'type'        => 'string',
-					'description' => __( 'Literal text to substitute for every match of search. Sanitized the same way as a full content update.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'Literal text to substitute for every match of search. Plain text. It is sanitized with wp_kses_post, and a replacement that introduces markup is refused.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id', 'search', 'replace' ),
@@ -1487,8 +1491,9 @@ function aafm_args_replace_in_post(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'post'         => array( 'type' => 'object' ),
-				'replacements' => array( 'type' => 'integer' ),
+				'post'             => array( 'type' => 'object' ),
+				'replacements'     => array( 'type' => 'integer' ),
+				'content_warnings' => array( 'type' => 'array' ),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_replace_in_post',
@@ -2252,14 +2257,16 @@ function aafm_exec_replace_sitewide( array $input ) {
 		// no_found_rows is false, regardless of posts_per_page, so a 1-row probe query gets the
 		// real total without ever fetching the matching ids themselves.
 		$count_probe   = new WP_Query(
-			array(
-				'post_type'         => $type,
-				'post_status'       => $status,
-				'fields'            => 'ids',
-				'posts_per_page'    => 1,
-				'no_found_rows'     => false,
-				'aafm_query_marker' => $query_marker,
-			) + $own_scope
+			aafm_tec_unfiltered_query_args(
+				array(
+					'post_type'         => $type,
+					'post_status'       => $status,
+					'fields'            => 'ids',
+					'posts_per_page'    => 1,
+					'no_found_rows'     => false,
+					'aafm_query_marker' => $query_marker,
+				) + $own_scope
+			)
 		);
 		$total_matches = (int) $count_probe->found_posts;
 		$truncated     = $total_matches > AAFM_REPLACE_SITEWIDE_MAX_POSTS;
@@ -2289,16 +2296,18 @@ function aafm_exec_replace_sitewide( array $input ) {
 		add_filter( 'posts_pre_query', $scan_filter, PHP_INT_MAX, 2 );
 		try {
 			$scan_query = new WP_Query(
-				array(
-					'post_type'         => $type,
-					'post_status'       => $status,
-					'fields'            => 'ids',
-					'posts_per_page'    => $max_scan,
-					'orderby'           => 'ID',
-					'order'             => 'ASC',
-					'no_found_rows'     => true,
-					'aafm_query_marker' => $query_marker,
-				) + $own_scope
+				aafm_tec_unfiltered_query_args(
+					array(
+						'post_type'         => $type,
+						'post_status'       => $status,
+						'fields'            => 'ids',
+						'posts_per_page'    => $max_scan,
+						'orderby'           => 'ID',
+						'order'             => 'ASC',
+						'no_found_rows'     => true,
+						'aafm_query_marker' => $query_marker,
+					) + $own_scope
+				)
 			);
 		} finally {
 			remove_filter( 'posts_pre_query', $scan_filter, PHP_INT_MAX );
@@ -2466,8 +2475,9 @@ function aafm_args_update_cpt_item(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'post'       => array( 'type' => 'object' ),
-				'enrichment' => aafm_write_enrichment_output_schema(),
+				'post'             => array( 'type' => 'object' ),
+				'enrichment'       => aafm_write_enrichment_output_schema(),
+				'content_warnings' => array( 'type' => 'array' ),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_update_cpt_item',

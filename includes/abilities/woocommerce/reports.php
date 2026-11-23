@@ -58,7 +58,7 @@ function aafm_wc_reports_registry_definitions(): array {
 		// Reports, counts, and payment gateways (sub-slice W4-WC7).
 		'aafm/wc-get-sales-report'       => array(
 			'label'        => __( 'Get WooCommerce sales report', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Returns a sales summary for a date range: total sales, order count, net sales, and average order value. Defaults to the current calendar month. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Returns a sales summary for a date range: total sales, order count, net sales, and average order value, counting completed and processing orders only. Defaults to the current calendar month. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -67,7 +67,7 @@ function aafm_wc_reports_registry_definitions(): array {
 
 		'aafm/wc-get-top-sellers-report' => array(
 			'label'        => __( 'Get WooCommerce top sellers report', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Returns the best-selling products for a period (week, month, or year) ordered by quantity sold. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Returns the best-selling products for a period (week, month, or year) ordered by quantity sold, counting completed and processing orders only. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -115,11 +115,11 @@ function aafm_args_wc_get_sales_report(): array {
 			'properties'           => array(
 				'start_date' => array(
 					'type'        => 'string',
-					'description' => 'Start date in Y-m-d format. Defaults to the first day of the current month.',
+					'description' => __( 'Start date in Y-m-d format. Defaults to the first day of the current month.', 'agent-abilities-for-mcp' ),
 				),
 				'end_date'   => array(
 					'type'        => 'string',
-					'description' => 'End date in Y-m-d format. Defaults to today.',
+					'description' => __( 'End date in Y-m-d format. Defaults to today.', 'agent-abilities-for-mcp' ),
 				),
 			),
 		),

@@ -678,12 +678,11 @@ function aafm_discover_foreign_abilities(): array {
 	$groups = array();
 	foreach ( $registry->get_all_registered() as $slug => $ability ) {
 		$slug = (string) $slug;
-		$pos  = strpos( $slug, '/' );
-		$ns   = false !== $pos ? substr( $slug, 0, $pos ) : 'core';
+		$ns   = aafm_bridge_namespace_of( $slug );
 		// The adapter's own meta abilities (discover/get-info/execute) are skipped too: on 0.7.x
 		// they exist whenever the registries start in Automatic mode, even with no default server,
 		// and bridging the adapter's own executor makes no sense.
-		if ( 'aafm' === $ns || AAFM_BRIDGE_NAMESPACE === $ns || 'mcp-adapter' === $ns ) {
+		if ( aafm_bridge_never_bridged( $slug ) ) {
 			continue;
 		}
 		$risk                         = aafm_bridge_risk( $ability );
@@ -731,8 +730,8 @@ function aafm_bridge_normalize_stored_slugs( $stored ): array {
 	// Keep only non-empty strings. array_map('strval', ...) would FATAL on an object with no
 	// __toString, so filter to strings first rather than coercing arbitrary values.
 	foreach ( array_filter( $stored, 'is_string' ) as $slug ) {
-		if ( '' === $slug || aafm_bridge_is_native_namespace( $slug ) ) {
-			continue; // Never bridge our own aafm/* abilities or aafm-bridge/* wrappers.
+		if ( '' === $slug || aafm_bridge_never_bridged( $slug ) ) {
+			continue; // Never our own aafm/* abilities, aafm-bridge/* wrappers or the adapter's mcp-adapter/* tools.
 		}
 		$clean[] = $slug;
 	}
@@ -819,18 +818,18 @@ function aafm_get_enabled_bridged_abilities(): array {
 }
 
 /**
- * Whether a slug lives in one of our own namespaces (aafm or aafm-bridge).
+ * Whether a slug is in a namespace that is never bridged: our own (aafm, aafm-bridge), or the MCP
+ * adapter's meta tools, whose execute-ability would run any public foreign ability past the bridged
+ * enable list and the high-risk lock.
  *
- * Guards the enabled-bridged list and the registration walk so a polluted option can never
- * bridge one of our native abilities back onto itself as aafm-bridge/aafm-*.
+ * The one rule for the catalog, the review detector, the enabled-bridged list and the registration
+ * walk, so a polluted option can never register what the catalog never offers.
  *
  * @param string $slug Ability slug, e.g. "woocommerce/list-products".
  * @return bool
  */
-function aafm_bridge_is_native_namespace( string $slug ): bool {
-	$pos = strpos( $slug, '/' );
-	$ns  = false !== $pos ? substr( $slug, 0, $pos ) : '';
-	return 'aafm' === $ns || AAFM_BRIDGE_NAMESPACE === $ns;
+function aafm_bridge_never_bridged( string $slug ): bool {
+	return in_array( aafm_bridge_namespace_of( $slug ), array( 'aafm', AAFM_BRIDGE_NAMESPACE, 'mcp-adapter' ), true );
 }
 
 /**
@@ -873,9 +872,9 @@ function aafm_register_enabled_bridged_abilities(): void {
 	$claimed    = array();
 	$collisions = array();
 	foreach ( aafm_get_enabled_bridged_abilities() as $foreign_slug ) {
-		// Belt-and-suspenders: never register a wrapper for one of our own namespaces even if the
+		// Belt-and-suspenders: never register a wrapper for a never-bridged namespace even if the
 		// option was polluted past the accessor's guard.
-		if ( aafm_bridge_is_native_namespace( $foreign_slug ) ) {
+		if ( aafm_bridge_never_bridged( $foreign_slug ) ) {
 			continue;
 		}
 		$wrapper = aafm_bridge_tool_name( $foreign_slug );

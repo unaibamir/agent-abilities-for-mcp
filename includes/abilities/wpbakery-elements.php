@@ -69,7 +69,7 @@ function aafm_wpbakery_elements_registry_definitions(): array {
 		),
 		'aafm/wpbakery-insert-element' => array(
 			'label'        => __( 'Insert a WPBakery element', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Adds an element with its children to a WPBakery page or Grid Builder template, before or after an element from the outline of wpbakery-get-page-content or as its first or last child; element takes tag, atts in the input form of each kind from wpbakery-list-elements, text and children. WPBakery\'s own nesting rules apply: the top level takes rows and sections, a row takes columns, a column takes content elements or an inner row. At most 50 elements, nested at most 6 deep. On an empty post with no builder, leave out the anchor to start the page; this one check follows WPBakery\'s own setting for which post types its editor is on for. Raw HTML, raw JS, maps, custom onclick settings and Design Options need a user who may post unfiltered HTML, and only such a user can put square brackets, percent-encoded brackets or data-* attributes in body text. Requires page_fingerprint from the last read or write and returns the new one; a changed page is refused and nothing is saved. Other indexes may move, so read the outline again before the next structural change. When a revision is kept, restore_revision_id brings the page back through restore-revision. The page\'s generated CSS is rebuilt. Not undoable from this plugin\'s change history. Requires edit access to the post; WPBakery\'s Role Manager settings are not applied, though its own save filter still runs. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Adds an element with its children to a WPBakery page or Grid Builder template, before or after an element from the outline of wpbakery-get-page-content or as its first or last child; element takes tag, atts in the input form of each kind from wpbakery-list-elements, text and children. WPBakery\'s own nesting rules apply: the top level takes rows and sections, a row takes columns, a column takes content elements or an inner row. At most 50 elements, nested at most 6 deep. On an empty post with no builder, leave out the anchor to start the page; this one check follows WPBakery\'s own setting for which post types its editor is on for. Raw HTML, raw JS, maps, custom onclick settings and Design Options need a user who may post unfiltered HTML, and only such a user can put square brackets, percent-encoded brackets or data-* attributes in body text, and even then text that would add an element is refused. Requires page_fingerprint from the last read or write and returns the new one; a changed page is refused and nothing is saved. Other indexes may move, so read the outline again before the next structural change. When a revision is kept, restore_revision_id brings the page back through restore-revision. The page\'s generated CSS is rebuilt. Not undoable from this plugin\'s change history. Requires edit access to the post; WPBakery\'s Role Manager adds no access, though an empty post takes its first element only when WPBakery\'s editor is on for that post type and user; its own save filter still runs. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'wpbakery',
@@ -85,7 +85,7 @@ function aafm_wpbakery_elements_registry_definitions(): array {
 		),
 		'aafm/wpbakery-remove-element' => array(
 			'label'        => __( 'Remove a WPBakery element', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Removes one element, with everything inside it, from a WPBakery page or Grid Builder template, named by its index and by the tag and fingerprint from the outline of wpbakery-get-page-content. The fingerprint covers the whole element, so one that gained content since the read is refused. Refused when the post keeps no revisions (a Grid Builder template keeps none) or the site keeps only one, for the page\'s last row or section, and when a row would be left with no column. Requires page_fingerprint from the last read or write and returns the new one; a changed page is refused and nothing is saved. Other indexes may move, so read the outline again before the next structural change. restore_revision_id brings the page back through restore-revision. The page\'s generated CSS is rebuilt. Not undoable from this plugin\'s change history. Requires edit access to the post; WPBakery\'s Role Manager settings are not applied, though its own save filter still runs. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Removes one element, with everything inside it, from a WPBakery page or Grid Builder template, named by its index and by the tag and fingerprint from the outline of wpbakery-get-page-content. The fingerprint covers the whole element, so one that gained content since the read is refused. Refused when the post keeps no revisions (a Grid Builder or Templatera template keeps none), when the site keeps only one revision per post, when removing it would leave the page with no row, section or container, and when a row would be left with no column. Requires page_fingerprint from the last read or write and returns the new one; a changed page is refused and nothing is saved. Other indexes may move, so read the outline again before the next structural change. restore_revision_id brings the page back through restore-revision. The page\'s generated CSS is rebuilt. Not undoable from this plugin\'s change history. Requires edit access to the post; WPBakery\'s Role Manager settings are not applied, though its own save filter still runs. Only while WPBakery Page Builder is active.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'destructive',
 			'subject'      => 'wpbakery',
@@ -256,7 +256,12 @@ function aafm_wpbakery_param_type( string $tag, string $name ): ?string {
 	if ( null === $row || '' === $name ) {
 		return null;
 	}
-	$type = $row( $tag, $name );
+	try {
+		$type = $row( $tag, $name );
+	} catch ( \Throwable $e ) {
+		// An add-on's map row can throw; an unknown type is not writable, so this fails closed.
+		return null;
+	}
 	return is_string( $type ) ? $type : null;
 }
 
@@ -337,6 +342,7 @@ function aafm_wpbakery_script_gate( string $kind ) {
  * @return WP_Error
  */
 function aafm_wpbakery_setting_error( string $code, string $name ): WP_Error {
+	$name  = aafm_builder_shown_key( $name );
 	$error = aafm_builder_error( $code, array( 'setting' => $name ) );
 	return new WP_Error(
 		$code,
@@ -344,6 +350,46 @@ function aafm_wpbakery_setting_error( string $code, string $name ): WP_Error {
 		sprintf( __( '%1$s Setting: %2$s.', 'agent-abilities-for-mcp' ), $error->get_error_message(), $name ),
 		$error->get_error_data()
 	);
+}
+
+/**
+ * A setting key a caller sent, as a refusal may repeat it: plain text, at most 100 characters. Every
+ * builder refusal that names a key goes through this, so a key of any length or markup comes back safe.
+ *
+ * @param string $key The key sent.
+ * @return string
+ */
+function aafm_builder_shown_key( string $key ): string {
+	return mb_substr( aafm_sanitize_plain_text( $key ), 0, 100 );
+}
+
+/**
+ * The refusal of a settings tool (wpbakery-update-settings, avada-update-slider-settings) for a key it does not
+ * change: the key named, with the same code as an element setting that cannot be written.
+ *
+ * @param string $key The key sent.
+ * @return WP_Error
+ */
+function aafm_builder_unknown_setting_error( string $key ): WP_Error {
+	$shown = aafm_builder_shown_key( $key );
+	return new WP_Error(
+		'aafm_builder_attribute_not_writable',
+		/* translators: %s: the setting key the caller sent. */
+		sprintf( __( '"%s" is not a setting this tool can change. Nothing was changed.', 'agent-abilities-for-mcp' ), $shown ),
+		array(
+			'status'  => 400,
+			'setting' => $shown,
+		)
+	);
+}
+
+/**
+ * The refusal of a settings tool for an empty or missing set.
+ *
+ * @return WP_Error
+ */
+function aafm_builder_no_settings_error(): WP_Error {
+	return new WP_Error( 'aafm_builder_invalid_value', __( 'Give at least one setting. Nothing was changed.', 'agent-abilities-for-mcp' ), array( 'status' => 400 ) );
 }
 
 /**
@@ -685,7 +731,12 @@ function aafm_wpbakery_encode_image( $value, bool $many ): ?string {
 	if ( ! is_array( $ids ) || array() === $ids || array_values( $ids ) !== $ids ) {
 		return null;
 	}
+	$clean = array();
 	foreach ( $ids as $id ) {
+		// A decoded param group row carries the id as a digit string; take that form too, as the number kind does.
+		if ( is_string( $id ) && '' !== $id && ctype_digit( $id ) ) {
+			$id = (int) $id;
+		}
 		if ( ! is_int( $id ) || $id < 1 ) {
 			return null;
 		}
@@ -693,8 +744,9 @@ function aafm_wpbakery_encode_image( $value, bool $many ): ?string {
 		if ( ! $attachment instanceof WP_Post || 'attachment' !== $attachment->post_type || ! wp_attachment_is_image( $id ) ) {
 			return null;
 		}
+		$clean[] = $id;
 	}
-	return implode( ',', $ids );
+	return implode( ',', $clean );
 }
 
 /**
@@ -2416,6 +2468,7 @@ function aafm_args_wpbakery_remove_element(): array {
 				'removed'             => array( 'type' => 'integer' ),
 				'page_fingerprint'    => array( 'type' => 'string' ),
 				'restore_revision_id' => array( 'type' => array( 'integer', 'null' ) ),
+				'reversible'          => array( 'type' => 'boolean' ),
 				'reversible_reason'   => array(
 					'type'        => 'string',
 					'description' => __( 'Present only when there is no restore point: the site or the content type keeps no revisions, WordPress saved none before the change, or the one saved was deleted during the save by the revision limit or another plugin. Says why there is no way back.', 'agent-abilities-for-mcp' ),
@@ -2497,6 +2550,7 @@ function aafm_exec_wpbakery_remove_element( array $input ) {
 		'removed'             => aafm_builder_subtree_size( $elements, $index ),
 		'page_fingerprint'    => $result['page_fingerprint'],
 		'restore_revision_id' => $result['restore_revision_id'],
+		'reversible'          => $result['reversible'],
 	) + aafm_wpbakery_reversible_reason( $result );
 }
 

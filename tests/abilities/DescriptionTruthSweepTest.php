@@ -19,7 +19,7 @@ use AAFM\Tests\TestCase;
 
 final class DescriptionTruthSweepTest extends TestCase {
 
-	private const INTEGRATIONS = array( 'yoast', 'rankmath', 'aioseo', 'acf', 'woocommerce', 'slim_seo', 'tec', 'event_tickets', 'avada', 'wpbakery', 'geodirectory' );
+	private const INTEGRATIONS = array( 'yoast', 'rankmath', 'aioseo', 'acf', 'woocommerce', 'slim_seo', 'tec', 'event_tickets', 'avada', 'wpbakery', 'geodirectory', 'site_cache', 'site_redirects', 'site_backups' );
 
 	/**
 	 * Capabilities a description may name, each with the spellings the descriptions use.
@@ -309,7 +309,7 @@ final class DescriptionTruthSweepTest extends TestCase {
 		$customer = $registry['aafm/wc-update-customer']['description'];
 		$this->assertStringContainsString( 'edit-users', $customer );
 		$this->assertStringContainsString( 'manage-WooCommerce', $customer );
-		$this->assertStringContainsString( 'High-risk', aafm_ability_disclosures()['aafm/wc-update-customer'] );
+		$this->assertStringContainsString( 'Unlock the category', aafm_ability_disclosures()['aafm/wc-update-customer'], 'The high-risk lock is named by its Settings label.' );
 		$this->assertStringContainsString( 'edit-users', aafm_ability_disclosures()['aafm/wc-update-customer'] );
 		foreach ( array( 'aafm/tec-update-event', 'aafm/geodirectory-update-listing' ) as $name ) {
 			foreach ( $this->builder_labels() as $label ) {

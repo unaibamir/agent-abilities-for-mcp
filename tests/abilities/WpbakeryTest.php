@@ -383,7 +383,7 @@ WPB;
 		$this->assertIsArray( $out );
 		$this->assertSame( 1, $out['replacements'] );
 		$this->assertSame( str_replace( 'Opening paragraph alpha.', 'Opening paragraph changed.', self::PAGE ), get_post_field( 'post_content', $id, 'raw' ) );
-		$this->assertSame( $revisions + 1, count( wp_get_post_revisions( $id ) ) );
+		$this->assertSame( $revisions + 2, count( wp_get_post_revisions( $id ) ) );
 	}
 
 	public function test_replace_succeeds_on_a_page_with_bracketed_words_in_body_text(): void {
@@ -405,6 +405,17 @@ WPB;
 
 		$this->assert_refused( $out, 'aafm_replace_inside_shortcode', $id, self::PAGE, 400 );
 		$this->assertStringContainsString( 'heading', strtolower( $out->get_error_message() ) );
+	}
+
+	public function test_replace_on_an_unreadable_page_points_to_structure_status(): void {
+		$page = '[vc_row][vc_column][vc_column_text el_class="a[1]"]<p>Opening paragraph alpha.</p>[/vc_column_text][/vc_column][/vc_row]';
+		$id   = $this->make_page( $page );
+		$this->acting_as( 'editor' );
+
+		$out = $this->replace( $id, 'Opening paragraph alpha.', 'Opening paragraph changed.' );
+
+		$this->assert_refused( $out, 'aafm_builder_unparseable', $id, $page, 409 );
+		$this->assertStringContainsString( 'structure_status unparseable', $out->get_error_message() );
 	}
 
 	public function test_replace_refuses_part_of_a_tag_name(): void {
@@ -662,6 +673,106 @@ WPB;
 
 	public function test_replace_is_reported_as_not_covered_by_undo(): void {
 		$this->assertSame( 'not_covered', aafm_undo_refusals()['aafm/wpbakery-replace-text'] );
+	}
+
+	public function test_replace_returns_the_revision_wordpress_kept(): void {
+		$content = self::PAGE;
+		$search  = 'Opening paragraph alpha.';
+		$replace = 'Opening paragraph changed.';
+
+		$id = $this->make_page( $content );
+		$this->acting_as( 'editor' );
+		$out = aafm_exec_wpbakery_replace_text(
+			array(
+				'post_id' => $id,
+				'search'  => $search,
+				'replace' => $replace,
+			)
+		);
+		$this->assertIsArray( $out );
+		$this->assertIsInt( $out['restore_revision_id'] );
+		$this->assertArrayNotHasKey( 'reversible_reason', $out );
+		$revision = get_post( $out['restore_revision_id'] );
+		$this->assertSame( 'revision', $revision->post_type );
+		$this->assertSame( $id, (int) $revision->post_parent );
+		$this->assertSame( $content, $revision->post_content );
+		$properties = aafm_args_wpbakery_replace_text()['output_schema']['properties'];
+		$this->assertSame( 'integer', $properties['restore_revision_id']['type'] );
+		$this->assertSame( 'string', $properties['reversible_reason']['type'] );
+		$this->assertStringContainsString( 'restore_revision_id', aafm_ability_description( 'aafm/wpbakery-replace-text' ) );
+		$this->assertStringContainsString( 'reversible_reason', aafm_ability_description( 'aafm/wpbakery-replace-text' ) );
+	}
+
+	public function test_replace_without_a_restore_point_says_why(): void {
+		$content = self::PAGE;
+		$search  = 'Opening paragraph alpha.';
+		$replace = 'Opening paragraph changed.';
+
+		$id = $this->make_page( $content );
+		$this->acting_as( 'editor' );
+		$keep = static fn(): int => 0;
+		add_filter( 'wp_revisions_to_keep', $keep );
+
+		$out = aafm_exec_wpbakery_replace_text(
+			array(
+				'post_id' => $id,
+				'search'  => $search,
+				'replace' => $replace,
+			)
+		);
+		remove_filter( 'wp_revisions_to_keep', $keep );
+		$this->assertIsArray( $out );
+		$this->assertArrayNotHasKey( 'restore_revision_id', $out );
+		$this->assertSame( aafm_builder_revisions_off_reason(), $out['reversible_reason'] );
+	}
+
+	/**
+	 * With one revision kept, core prunes the restore point during the save; the id must not be returned.
+	 */
+	public function test_replace_never_returns_a_restore_point_the_save_pruned(): void {
+		$content = self::PAGE;
+		$search  = 'Opening paragraph alpha.';
+		$replace = 'Opening paragraph changed.';
+
+		$id = $this->make_page( $content );
+		$this->acting_as( 'editor' );
+		$keep = static fn(): int => 1;
+		add_filter( 'wp_revisions_to_keep', $keep );
+
+		$out    = aafm_exec_wpbakery_replace_text(
+			array(
+				'post_id' => $id,
+				'search'  => $search,
+				'replace' => $replace,
+			)
+		);
+		$reason = aafm_builder_pruned_reason( get_post( $id ) );
+		remove_filter( 'wp_revisions_to_keep', $keep );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( 1, $out['replacements'] );
+		$this->assertArrayNotHasKey( 'restore_revision_id', $out );
+		$this->assertSame( $reason, $out['reversible_reason'] );
+	}
+
+	public function test_replace_with_no_match_creates_no_revision(): void {
+		$content = self::PAGE;
+		$search  = 'Opening paragraph alpha.';
+		$replace = 'Opening paragraph changed.';
+
+		$id = $this->make_page( $content );
+		$this->acting_as( 'editor' );
+		$before = count( wp_get_post_revisions( $id ) );
+		$out    = aafm_exec_wpbakery_replace_text(
+			array(
+				'post_id' => $id,
+				'search'  => 'text that is not on the page 7c1e',
+				'replace' => 'x',
+			)
+		);
+		$this->assertSame( array( 'post', 'replacements' ), array_keys( $out ) );
+		$this->assertSame( 0, $out['replacements'] );
+		$this->assertSame( $before, count( wp_get_post_revisions( $id ) ) );
 	}
 
 	public function test_replace_schema_is_closed_and_requires_all_three(): void {

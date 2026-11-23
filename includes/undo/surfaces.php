@@ -196,12 +196,34 @@ function aafm_undo_surfaces(): array {
 			'post',
 			'post_id',
 			array( 'post_id', 'title', 'description', 'canonical', 'og_title', 'og_description', 'og_image', 'twitter_title', 'twitter_description', 'twitter_image', 'robots_noindex', 'robots_nofollow' ),
-			static fn(): array => array_map( static fn( string $column ): string => 'aioseo:' . $column, array_values( aafm_undo_aioseo_columns() ) )
+			static fn(): array => array_merge(
+				array_map( static fn( string $column ): string => 'aioseo:' . $column, array_values( aafm_undo_aioseo_columns() ) ),
+				array_map( static fn( string $key ): string => 'meta:' . $key, aafm_undo_aioseo_shadow_meta_keys() )
+			)
 		),
 		'aafm/replace-sitewide'       => aafm_undo_surface( 'sitewide', '', '', array( 'search', 'replace', 'post_type', 'status', 'dry_run' ), 'aafm_undo_fields_none' ),
 	);
 
 	return $surfaces;
+}
+
+/**
+ * The post meta rows AIOSEO mirrors its text columns into on every save (Models\Post::updatePostMeta()),
+ * for the columns the forward tool can write. Recorded with the change so an undo restores their
+ * exact presence: a save that only carries a NULL column still mirrors '' into a row that was absent.
+ *
+ * @return string[] Meta keys.
+ */
+function aafm_undo_aioseo_shadow_meta_keys(): array {
+	$shadow = array(
+		'title'               => '_aioseo_title',
+		'description'         => '_aioseo_description',
+		'og_title'            => '_aioseo_og_title',
+		'og_description'      => '_aioseo_og_description',
+		'twitter_title'       => '_aioseo_twitter_title',
+		'twitter_description' => '_aioseo_twitter_description',
+	);
+	return array_values( array_intersect_key( $shadow, aafm_undo_aioseo_columns() ) );
 }
 
 /**
@@ -325,6 +347,7 @@ function aafm_undo_reasons(): array {
 		'already_reverted' => __( 'This change was already reverted.', 'agent-abilities-for-mcp' ),
 		'window_passed'    => __( 'Agents can only undo changes from the last 24 hours.', 'agent-abilities-for-mcp' ),
 		'needs_owner'      => __( 'Only a site owner can undo this change, from the Changes tab.', 'agent-abilities-for-mcp' ),
+		'other_connection' => __( 'This change was made through another agent connection, so it cannot be undone from this one. A site owner can review it in the Changes tab.', 'agent-abilities-for-mcp' ),
 		'builder_owned'    => __( 'A page builder now owns this post, so the change cannot be restored.', 'agent-abilities-for-mcp' ),
 		'dependency_gone'  => __( 'Something this change depends on no longer exists.', 'agent-abilities-for-mcp' ),
 		'trash_off'        => __( 'The Trash is switched off, so this cannot be undone.', 'agent-abilities-for-mcp' ),

@@ -35,6 +35,11 @@ if ( 'lying-stream' === $mode ) {
 	}
 }
 
+if ( 'moved' === $mode ) {
+	header( 'Location: https://cdn.example.com/files/photo.png', true, 301 );
+	exit;
+}
+
 if ( 'small-ok' === $mode ) {
 	$body = 'ok';
 	header( 'Content-Length: ' . strlen( $body ) );

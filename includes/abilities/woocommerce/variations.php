@@ -60,7 +60,7 @@ function aafm_wc_variations_registry_definitions(): array {
 		// Variations (sub-slice W4-WC1b) - a variable product's child variations, parent_id-scoped.
 		'aafm/wc-list-product-variations'  => array(
 			'label'        => __( 'List WooCommerce product variations', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists a variable product\'s variations by parent product id, each with its id, parent id, SKU, price, stock status, and status, plus a total. A parent that is not a variable product (e.g. simple or grouped) is refused, since only variable products have variations. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Lists a variable product\'s variations by parent product id, each with its id, parent id, SKU, price, regular and sale price, stock status, and status, plus a total. A parent that is not a variable product (e.g. simple or grouped) is refused, since only variable products have variations. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -96,7 +96,7 @@ function aafm_wc_variations_registry_definitions(): array {
 
 		'aafm/wc-delete-product-variation' => array(
 			'label'        => __( 'Delete WooCommerce product variation', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Permanently deletes a product variation by id. This bypasses the Trash and cannot be undone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Permanently deletes a product variation by id. This bypasses the Trash and cannot be undone. Requires the manage-WooCommerce capability and permission to delete that variation.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'destructive',
 			'subject'      => 'woocommerce',
@@ -265,7 +265,7 @@ function aafm_args_wc_list_product_variations(): array {
 					'product_id' => array(
 						'type'        => 'integer',
 						'minimum'     => 1,
-						'description' => 'The parent (variable) product id.',
+						'description' => __( 'The parent (variable) product id.', 'agent-abilities-for-mcp' ),
 					),
 				),
 				aafm_pagination_schema_props(
@@ -285,12 +285,14 @@ function aafm_args_wc_list_product_variations(): array {
 					'items' => array(
 						'type'                 => 'object',
 						'properties'           => array(
-							'id'           => array( 'type' => 'integer' ),
-							'parent_id'    => array( 'type' => 'integer' ),
-							'sku'          => array( 'type' => 'string' ),
-							'price'        => array( 'type' => 'string' ),
-							'stock_status' => array( 'type' => 'string' ),
-							'status'       => array( 'type' => 'string' ),
+							'id'            => array( 'type' => 'integer' ),
+							'parent_id'     => array( 'type' => 'integer' ),
+							'sku'           => array( 'type' => 'string' ),
+							'price'         => array( 'type' => 'string' ),
+							'stock_status'  => array( 'type' => 'string' ),
+							'status'        => array( 'type' => 'string' ),
+							'regular_price' => array( 'type' => 'string' ),
+							'sale_price'    => array( 'type' => 'string' ),
 						),
 						'additionalProperties' => false,
 					),
@@ -356,7 +358,10 @@ function aafm_exec_wc_list_product_variations( array $input ) {
 	foreach ( $page_ids as $child_id ) {
 		$variation = aafm_wc_get_variation( (int) $child_id );
 		if ( null !== $variation ) {
-			$variations[] = aafm_redact_wc_variation( $variation );
+			$variations[] = aafm_redact_wc_variation( $variation ) + array(
+				'regular_price' => (string) $variation->get_regular_price(),
+				'sale_price'    => (string) $variation->get_sale_price(),
+			);
 		}
 	}
 
@@ -433,7 +438,7 @@ function aafm_wc_variation_write_properties(): array {
 	return array(
 		'status'         => array(
 			'type'        => 'string',
-			'description' => "The variation's publish state.",
+			'description' => __( "The variation's publish state.", 'agent-abilities-for-mcp' ),
 			'enum'        => array( 'publish', 'private' ),
 		),
 		'description'    => array(
@@ -447,13 +452,13 @@ function aafm_wc_variation_write_properties(): array {
 		'regular_price'  => array(
 			'type'        => 'string',
 			'pattern'     => '^\\d+(\\.\\d{1,2})?$',
-			'description' => 'A decimal price as a string, e.g. "19.99" (no currency symbol or thousands separator).',
+			'description' => __( 'A decimal price as a string, e.g. "19.99" (no currency symbol or thousands separator).', 'agent-abilities-for-mcp' ),
 		),
 		'sale_price'     => array(
 			'type'        => 'string',
 			// An empty string ends the sale, the same as on wc-update-product.
 			'pattern'     => '^$|^\\d+(\\.\\d{1,2})?$',
-			'description' => 'A decimal price as a string, e.g. "14.99" (must be at or below regular_price to take effect), or an empty string to clear the sale price.',
+			'description' => __( 'A decimal price as a string, e.g. "14.99" (must be at or below regular_price to take effect), or an empty string to clear the sale price.', 'agent-abilities-for-mcp' ),
 		),
 		'stock_status'   => array(
 			'type'        => 'string',
@@ -463,7 +468,7 @@ function aafm_wc_variation_write_properties(): array {
 		'stock_quantity' => array(
 			'type'        => 'integer',
 			'minimum'     => 0,
-			'description' => 'On-hand quantity (only applied when manage_stock is true).',
+			'description' => __( 'On-hand quantity (only applied when manage_stock is true).', 'agent-abilities-for-mcp' ),
 		),
 		'manage_stock'   => array(
 			'type'        => 'boolean',
@@ -921,7 +926,7 @@ function aafm_args_wc_create_product_variation(): array {
 	$properties['product_id'] = array(
 		'type'        => 'integer',
 		'minimum'     => 1,
-		'description' => 'The parent (variable) product id the variation attaches to.',
+		'description' => __( 'The parent (variable) product id the variation attaches to.', 'agent-abilities-for-mcp' ),
 	);
 
 	return array(

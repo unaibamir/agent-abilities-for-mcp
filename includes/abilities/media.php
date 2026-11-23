@@ -21,7 +21,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_media_definitions' );
 function aafm_register_media_definitions( array $registry ): array {
 	$registry['aafm/get-media']             = array(
 		'label'        => __( 'Get media', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'List media library items (URL, alt, mime, dimensions). Response includes total (the full match count).', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'List media library items (URL, alt, caption, mime, dimensions). Response includes total (the full match count). Without the edit-others-posts capability, only the caller\'s own uploads are listed.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'media',
@@ -29,7 +29,7 @@ function aafm_register_media_definitions( array $registry ): array {
 	);
 	$registry['aafm/get-media-item']        = array(
 		'label'        => __( 'Get media item', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Read one media item by id: caption, description, date, filesize, parent, and all image sizes.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Read one media item by id: caption, description, date, filesize, parent, and all image sizes. Without the edit-others-posts capability, only the caller\'s own uploads can be read.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'media',
@@ -37,7 +37,7 @@ function aafm_register_media_definitions( array $registry ): array {
 	);
 	$registry['aafm/count-media']           = array(
 		'label'        => __( 'Count media', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Count media library items, total and broken down by mime type.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Count media library items, total and broken down by mime type. Without the edit-others-posts capability, only the caller\'s own uploads are counted.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'media',
@@ -205,7 +205,7 @@ function aafm_exec_get_media( array $input ) {
 
 		if ( '' === $search ) {
 			$args['s'] = '';
-			return new WP_Query( $args );
+			return aafm_paged_query( $args );
 		}
 
 		// Core 's' search and meta_query combine with implicit AND, so an OR across title,
@@ -251,7 +251,7 @@ function aafm_exec_get_media( array $input ) {
 
 		add_filter( 'posts_where', $where_filter, 10, 2 );
 		try {
-			return new WP_Query( $args );
+			return aafm_paged_query( $args );
 		} finally {
 			remove_filter( 'posts_where', $where_filter, 10 );
 		}
@@ -270,7 +270,7 @@ function aafm_exec_get_media( array $input ) {
 				return array(
 					'rows'  => array_values(
 						array_map(
-							'aafm_redact_media',
+							static fn( WP_Post $post ): array => aafm_redact_media( $post ) + array( 'caption' => (string) $post->post_excerpt ),
 							array_values( array_filter( $query->posts, static fn( $post ): bool => $post instanceof WP_Post ) )
 						)
 					),
@@ -1051,7 +1051,7 @@ function aafm_args_upload_media_from_url(): array {
 				'url'      => array(
 					'type'        => 'string',
 					'format'      => 'uri',
-					'description' => __( 'HTTPS URL of an image to fetch and upload. Must resolve to a public IP address; private, loopback, and link-local ranges are refused, and redirects are not followed into them either.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'HTTPS URL of an image to fetch and upload. Must resolve to a public IP address; private, loopback, and link-local ranges are refused, and redirects are never followed, so a URL that redirects fails; give the final URL. Only ports 80, 443 and 8080 are allowed by default, and a bare IP address is refused as the host.', 'agent-abilities-for-mcp' ),
 				),
 				'filename' => array(
 					'type'        => 'string',
@@ -1291,9 +1291,30 @@ function aafm_ssrf_process_fetch_response( $response, int $max_bytes ) {
 	}
 
 	$status = (int) wp_remote_retrieve_response_code( $response );
+	if ( $status >= 300 && $status < 400 ) {
+		// A redirect is never followed (each hop would need the same address checks), but the caller
+		// is told, and given the target when it is a plain https URL, so it can send that one instead.
+		$header = wp_remote_retrieve_header( $response, 'location' );
+		// The header comes from the remote server: a target longer than a sane URL is never repeated.
+		$target = is_string( $header ) && strlen( $header ) <= 2048 ? $header : '';
+		$parts  = wp_parse_url( $target );
+		if ( is_array( $parts ) && ( isset( $parts['user'] ) || isset( $parts['pass'] ) ) ) {
+			// Never repeat credentials a server put in the target; the path and query stay, the agent may need them.
+			$target = 'https://' . ( $parts['host'] ?? '' ) . ( isset( $parts['port'] ) ? ':' . (int) $parts['port'] : '' ) . ( $parts['path'] ?? '' ) . ( isset( $parts['query'] ) ? '?' . $parts['query'] : '' ) . ( isset( $parts['fragment'] ) ? '#' . $parts['fragment'] : '' );
+		}
+		if ( is_array( $parts ) && 'https' === strtolower( (string) ( $parts['scheme'] ?? '' ) ) && ! empty( $parts['host'] ) && esc_url_raw( $target, array( 'https' ) ) === $target ) {
+			return new WP_Error(
+				'aafm_fetch_redirect',
+				sprintf(
+					/* translators: %s: the https URL the requested address redirects to. */
+					__( 'The URL redirects to %s, and redirects are not followed. Send that URL instead if you trust it. Nothing was uploaded.', 'agent-abilities-for-mcp' ),
+					$target
+				)
+			);
+		}
+		return new WP_Error( 'aafm_fetch_redirect', __( 'The URL redirects, but not to an https address this tool can name, and redirects are not followed. Send the final https URL instead. Nothing was uploaded.', 'agent-abilities-for-mcp' ) );
+	}
 	if ( $status < 200 || $status >= 300 ) {
-		// Covers redirects too: redirection => 0 means a 3xx is returned as-is rather than
-		// followed, so it lands here as a plain failure instead of a fetched file.
 		return new WP_Error( 'aafm_fetch_failed', __( 'The URL could not be fetched.', 'agent-abilities-for-mcp' ) );
 	}
 
@@ -1438,6 +1459,7 @@ function aafm_ssrf_owned_curl_fetch( string $url, string $host, int $port, strin
 	}
 
 	$body                  = '';
+	$location              = '';
 	$header_content_length = '';
 	$aborted_on_header     = false;
 	$aborted_on_body       = false;
@@ -1465,8 +1487,11 @@ function aafm_ssrf_owned_curl_fetch( string $url, string $host, int $port, strin
 		// A neutral, non-identifying User-Agent - WP core's default
 		// discloses this site's own URL to whatever host the caller supplied.
 		CURLOPT_USERAGENT      => 'Agent Abilities for MCP (media fetch)',
-		CURLOPT_HEADERFUNCTION => static function ( $handle, string $header_line ) use ( $max_bytes, &$header_content_length, &$aborted_on_header ): int {
+		CURLOPT_HEADERFUNCTION => static function ( $handle, string $header_line ) use ( $max_bytes, &$header_content_length, &$aborted_on_header, &$location ): int {
 			$len = strlen( $header_line );
+			if ( preg_match( '/^location:\s*(\S+)/i', $header_line, $matches ) ) {
+				$location = $matches[1]; // Kept only to name a redirect; never fetched.
+			}
 			if ( preg_match( '/^content-length:\s*(\d+)/i', $header_line, $matches ) && (int) $matches[1] > $max_bytes ) {
 				$header_content_length = $matches[1];
 				$aborted_on_header     = true;
@@ -1584,7 +1609,7 @@ function aafm_ssrf_owned_curl_fetch( string $url, string $host, int $port, strin
 	}
 
 	return array(
-		'headers'  => array(),
+		'headers'  => '' === $location ? array() : array( 'location' => $location ),
 		'body'     => $body,
 		'response' => array(
 			'code'    => $code,

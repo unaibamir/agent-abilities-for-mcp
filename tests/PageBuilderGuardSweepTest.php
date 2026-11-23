@@ -607,7 +607,7 @@ final class PageBuilderGuardSweepTest extends TestCase {
 
 		$this->assertInstanceOf( \WP_Error::class, $out );
 		$this->assertSame( 'aafm_not_avada_owned', $out->get_error_code() );
-		$this->assertSame( 'This post is not owned by Avada/Fusion Builder.', $out->get_error_message() );
+		$this->assertSame( 'This post is not an Avada page. Use replace-in-post for an ordinary post, and edit a page built with another builder in that builder. Nothing was changed.', $out->get_error_message() );
 		$this->assertSame( array( 'status' => 409 ), $out->get_error_data() );
 		$this->assertSame( '[fusion_text]body[/fusion_text]', get_post( $id )->post_content );
 	}

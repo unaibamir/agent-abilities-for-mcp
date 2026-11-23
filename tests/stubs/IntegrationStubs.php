@@ -128,7 +128,7 @@ trait IntegrationStubs {
 	protected function stub_aioseo(): void {
 		AioseoStubStore::reset();
 		if ( ! function_exists( 'aioseo' ) ) {
-			eval( 'function aioseo() { return new \stdClass(); }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a function-only marker stub for tests; never shipped.
+			eval( 'function aioseo() { return \AAFM\Tests\AioseoStubStore::app(); }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a function-only marker stub for tests; never shipped.
 		}
 		if ( ! class_exists( 'AIOSEO\\Plugin\\Common\\Models\\Post' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
@@ -209,6 +209,10 @@ class Post {
 		$model->post_id = (int) $post_id;
 		return $model;
 	}
+	public function exists() {
+		// Real AIOSEO: true once the post has its row in aioseo_posts.
+		return \AAFM\Tests\AioseoStubStore::has( (int) $this->post_id );
+	}
 	public static function savePost( $postId, $data ) {
 		// Fix round 1, delegation audit sweep: mirrors the SHAPE of the real AIOSEO
 		// Post::savePost($postId, $data) - a patch-keyed $data array applied onto the CURRENT
@@ -230,6 +234,24 @@ class Post {
 			'nofollow' => 'robots_nofollow',
 			'default'  => 'robots_default',
 		);
+		// Models\Post::checkForDefaultFormat() (AIOSEO 5.0.5): title and description are trimmed as
+		// strings, so a NULL becomes '', and a value equal to its default format is stored as NULL.
+		foreach ( array( 'title', 'description' ) as $format_key ) {
+			if ( array_key_exists( $format_key, $data ) ) {
+				$trimmed             = trim( (string) $data[ $format_key ] );
+				$default             = \AAFM\Tests\AioseoStubStore::$default_formats[ $format_key ] ?? null;
+				$data[ $format_key ] = '' !== $trimmed && $trimmed === $default ? null : $trimmed;
+			}
+		}
+		if ( \AAFM\Tests\AioseoStubStore::$mirror_meta ) {
+			// updatePostMeta() writes each text key as the save leaves it: og and twitter keys untrimmed,
+			// so a NULL there is stored as a NULL row.
+			foreach ( array( 'title', 'description', 'og_title', 'og_description', 'twitter_title', 'twitter_description' ) as $text_key ) {
+				if ( array_key_exists( $text_key, $data ) ) {
+					update_post_meta( (int) $postId, '_aioseo_' . $text_key, $data[ $text_key ] );
+				}
+			}
+		}
 		$model = self::getPost( $postId );
 		foreach ( $data as $key => $value ) {
 			$column = $robots_columns[ $key ] ?? $key;

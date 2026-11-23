@@ -377,15 +377,15 @@ function aafm_args_wc_create_tax_rate(): array {
 				'rate'     => array(
 					'type'        => 'string',
 					'pattern'     => '^\\d+(\\.\\d{1,4})?$',
-					'description' => 'Tax rate percentage as a decimal string, up to 4 decimal places (e.g. "8.25").',
+					'description' => __( 'Tax rate percentage as a decimal string, up to 4 decimal places (e.g. "8.25").', 'agent-abilities-for-mcp' ),
 				),
 				'country'  => array(
 					'type'        => 'string',
-					'description' => 'ISO 3166-1 alpha-2 country code (e.g. "US", "GB"). An empty string means the rate applies to all countries.',
+					'description' => __( 'ISO 3166-1 alpha-2 country code (e.g. "US", "GB"). An empty string means the rate applies to all countries.', 'agent-abilities-for-mcp' ),
 				),
 				'state'    => array(
 					'type'        => 'string',
-					'description' => 'WooCommerce state/region code (e.g. the 2-letter US state code "CA"). An empty string means the rate applies to all states within the country.',
+					'description' => __( 'WooCommerce state/region code (e.g. the 2-letter US state code "CA"). An empty string means the rate applies to all states within the country.', 'agent-abilities-for-mcp' ),
 				),
 				'name'     => array(
 					'type'        => 'string',
@@ -596,15 +596,15 @@ function aafm_args_wc_update_tax_rate(): array {
 				'rate'     => array(
 					'type'        => 'string',
 					'pattern'     => '^\\d+(\\.\\d{1,4})?$',
-					'description' => 'Tax rate percentage as a decimal string, up to 4 decimal places (e.g. "8.25").',
+					'description' => __( 'Tax rate percentage as a decimal string, up to 4 decimal places (e.g. "8.25").', 'agent-abilities-for-mcp' ),
 				),
 				'country'  => array(
 					'type'        => 'string',
-					'description' => 'ISO 3166-1 alpha-2 country code (e.g. "US", "GB"). An empty string means the rate applies to all countries.',
+					'description' => __( 'ISO 3166-1 alpha-2 country code (e.g. "US", "GB"). An empty string means the rate applies to all countries.', 'agent-abilities-for-mcp' ),
 				),
 				'state'    => array(
 					'type'        => 'string',
-					'description' => 'WooCommerce state/region code (e.g. the 2-letter US state code "CA"). An empty string means the rate applies to all states within the country.',
+					'description' => __( 'WooCommerce state/region code (e.g. the 2-letter US state code "CA"). An empty string means the rate applies to all states within the country.', 'agent-abilities-for-mcp' ),
 				),
 				'name'     => array(
 					'type'        => 'string',

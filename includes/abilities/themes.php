@@ -406,7 +406,7 @@ function aafm_args_update_template(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => aafm_rich_template_output_properties(),
+			'properties' => aafm_rich_template_output_properties() + array( 'content_warnings' => array( 'type' => 'array' ) ),
 		),
 		'execute_callback'    => 'aafm_exec_update_template',
 		'permission_callback' => 'aafm_perm_edit_theme_options',

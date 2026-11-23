@@ -805,7 +805,7 @@ function aafm_args_wc_get_shipping_method(): array {
 				'instance_id' => array(
 					'type'        => 'integer',
 					'minimum'     => 1,
-					'description' => 'The shipping method INSTANCE id within the zone (a method added to a zone, not the method type). Get it from wc-list-shipping-methods for the zone, or from the instance_id returned by wc-create-shipping-method.',
+					'description' => __( 'The shipping method INSTANCE id within the zone (a method added to a zone, not the method type). Get it from wc-list-shipping-methods for the zone, or from the instance_id returned by wc-create-shipping-method.', 'agent-abilities-for-mcp' ),
 				),
 			),
 		),
@@ -868,7 +868,7 @@ function aafm_args_wc_create_shipping_method(): array {
 				'method_type' => array(
 					'type'        => 'string',
 					'enum'        => array( 'flat_rate', 'free_shipping', 'local_pickup' ),
-					'description' => 'The WooCommerce shipping method type to add to the zone: flat_rate, free_shipping, or local_pickup.',
+					'description' => __( 'The WooCommerce shipping method type to add to the zone: flat_rate, free_shipping, or local_pickup.', 'agent-abilities-for-mcp' ),
 				),
 			),
 		),
@@ -948,7 +948,7 @@ function aafm_args_wc_update_shipping_method(): array {
 				'instance_id'  => array(
 					'type'        => 'integer',
 					'minimum'     => 1,
-					'description' => 'The shipping method INSTANCE id within the zone (from wc-list-shipping-methods or the instance_id returned by wc-create-shipping-method).',
+					'description' => __( 'The shipping method INSTANCE id within the zone (from wc-list-shipping-methods or the instance_id returned by wc-create-shipping-method).', 'agent-abilities-for-mcp' ),
 				),
 				'method_title' => array(
 					'type'        => 'string',
@@ -957,7 +957,7 @@ function aafm_args_wc_update_shipping_method(): array {
 				'enabled'      => array(
 					'type'        => 'string',
 					'enum'        => array( 'yes', 'no' ),
-					'description' => 'Whether the shipping method is enabled, as the string "yes" or "no". This differs from the payment-gateway abilities, where the equivalent enabled flag is a boolean (true/false); shipping keeps a string to match WooCommerce\'s own shipping-method storage.',
+					'description' => __( 'Whether the shipping method is enabled, as the string "yes" or "no". This differs from the payment-gateway abilities, where the equivalent enabled flag is a boolean (true/false); shipping keeps a string to match WooCommerce\'s own shipping-method storage.', 'agent-abilities-for-mcp' ),
 				),
 			),
 		),

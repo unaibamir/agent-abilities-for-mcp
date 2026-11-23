@@ -57,7 +57,7 @@ function aafm_wc_products_registry_definitions(): array {
 	return array(
 		'aafm/wc-list-products'  => array(
 			'label'        => __( 'List WooCommerce products', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists WooCommerce products with their id, name, SKU, price, regular and sale price, stock status, stock quantity, status, categories, and featured flag, plus a total. Only status is filtered server-side; there is no price, name, or other field filter, so narrowing the returned rows (for example to products under a price) is the caller\'s job. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Lists WooCommerce products with their id, name, SKU, price, regular and sale price, stock status, stock quantity, status, categories, and featured flag, plus a total. Sale price is empty when there is none, and stock quantity is null when stock is not managed; a variable product has empty regular and sale prices, because its variations carry their own. Only status is filtered server-side; there is no price, name, or other field filter, so narrowing the returned rows (for example to products under a price) is the caller\'s job. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',

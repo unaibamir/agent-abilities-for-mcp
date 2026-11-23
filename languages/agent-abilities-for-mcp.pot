@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-23T16:55:23+05:00\n"
+"POT-Creation-Date: 2026-11-23T17:08:42+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -278,67 +278,67 @@ msgstr ""
 msgid "Reads the rendered SEO head markup for a post from All in One SEO, best-effort: the returned head string is empty when All in One SEO renders no head for that post, with head_status set to empty and a note; an empty head does not mean the page has no SEO tags. Requires the edit-posts capability and edit access to that post."
 msgstr ""
 
-#: includes/abilities/aioseo.php:369
+#: includes/abilities/aioseo.php:405
 msgid "ID of the post whose All in One SEO fields to read. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/aioseo.php:415
+#: includes/abilities/aioseo.php:451
 msgid "ID of the post whose All in One SEO fields to write. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/aioseo.php:419
+#: includes/abilities/aioseo.php:455
 #: includes/abilities/yoast.php:541
 msgid "SEO title override for the post."
 msgstr ""
 
-#: includes/abilities/aioseo.php:420
+#: includes/abilities/aioseo.php:456
 #: includes/abilities/yoast.php:542
 msgid "Meta description override for the post."
 msgstr ""
 
-#: includes/abilities/aioseo.php:421
+#: includes/abilities/aioseo.php:457
 #: includes/abilities/rankmath.php:421
 #: includes/abilities/yoast.php:544
 msgid "Canonical URL override for the post, checked as a URL; a value that would need rewriting is refused."
 msgstr ""
 
-#: includes/abilities/aioseo.php:422
+#: includes/abilities/aioseo.php:458
 #: includes/abilities/rankmath.php:422
 #: includes/abilities/yoast.php:545
 msgid "Open Graph (Facebook) title override for the post."
 msgstr ""
 
-#: includes/abilities/aioseo.php:423
+#: includes/abilities/aioseo.php:459
 #: includes/abilities/rankmath.php:423
 #: includes/abilities/yoast.php:546
 msgid "Open Graph (Facebook) description override for the post."
 msgstr ""
 
-#: includes/abilities/aioseo.php:424
+#: includes/abilities/aioseo.php:460
 msgid "Open Graph (Facebook) share image URL. A non-empty value switches AIOSEO's image source to custom so this URL actually renders instead of its default source; clearing the value resets that source only when it was already set to custom."
 msgstr ""
 
-#: includes/abilities/aioseo.php:425
+#: includes/abilities/aioseo.php:461
 msgid "Twitter Card title override. Setting any non-empty twitter_* field turns off AIOSEO's use-OpenGraph fallback so this value renders instead of the Facebook/OG title."
 msgstr ""
 
-#: includes/abilities/aioseo.php:426
+#: includes/abilities/aioseo.php:462
 msgid "Twitter Card description override. Setting any non-empty twitter_* field turns off AIOSEO's use-OpenGraph fallback so this value renders instead of the Facebook/OG description."
 msgstr ""
 
-#: includes/abilities/aioseo.php:427
+#: includes/abilities/aioseo.php:463
 msgid "Twitter Card share image URL (same custom-source switch as og_image). Setting any non-empty twitter_* field also turns off the use-OpenGraph fallback."
 msgstr ""
 
-#: includes/abilities/aioseo.php:436
+#: includes/abilities/aioseo.php:472
 msgid "Whether to noindex this post. Setting either robots flag turns off AIOSEO's 'use site default' robots setting so the explicit flags actually take effect."
 msgstr ""
 
-#: includes/abilities/aioseo.php:437
+#: includes/abilities/aioseo.php:473
 msgid "Whether to nofollow links on this post (see robots_noindex for the site-default interaction this also turns off)."
 msgstr ""
 
-#: includes/abilities/aioseo.php:664
+#: includes/abilities/aioseo.php:700
 msgid "ID of the post to render the All in One SEO head for."
 msgstr ""
 

@@ -48,6 +48,14 @@ class AioseoStubStore {
 	public static bool $normalize_urls = false;
 
 	/**
+	 * When true, savePost() mirrors the text keys of its patch into _aioseo_* post meta the way the
+	 * real Models\Post::updatePostMeta() does, a NULL becoming '' after the model trims it as a string.
+	 *
+	 * @var bool
+	 */
+	public static bool $mirror_meta = false;
+
+	/**
 	 * Every call made to the stub Post::savePost($postId, $data), in order: array{post_id:int,
 	 * data:array<string,mixed>}. Delegation audit sweep - lets a test assert the
 	 * vendor's own savePost() path was actually taken, and with which patch-data keys, rather than
@@ -72,6 +80,7 @@ class AioseoStubStore {
 	 * @return void
 	 */
 	public static function reset(): void {
+		self::$mirror_meta      = false;
 		self::$rows             = array();
 		self::$save_should_fail = false;
 		self::$normalize_urls   = false;

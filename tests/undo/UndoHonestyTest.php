@@ -433,6 +433,28 @@ final class UndoHonestyTest extends UndoTestCase {
 		$this->assertSame( array( 'description' => 'first' ), $calls[0]['data'] );
 	}
 
+	/**
+	 * A title written over a NULL column with no _aioseo_title row: AIOSEO mirrored the new title into
+	 * that row, and the restore's save of NULL mirrors '' into it again. The change records the shadow
+	 * row, so the undo leaves it absent, as it was.
+	 */
+	public function test_an_aioseo_title_undo_restores_an_absent_shadow_meta_row(): void {
+		$post = self::factory()->post->create();
+		$this->aioseo_table_with( $post, null );
+		$fields = aafm_undo_surfaces()['aafm/aioseo-update-post']['fields']( array() );
+		$this->assertContains( 'meta:_aioseo_title', $fields, 'the change records the shadow row' );
+
+		$this->stub_aioseo();
+		\AAFM\Tests\AioseoStubStore::$mirror_meta = true;
+		$before                                   = aafm_undo_read_fields( 'post', $post, array( 'aioseo:title', 'meta:_aioseo_title' ) );
+		update_post_meta( $post, '_aioseo_title', 'New title' ); // What the forward save mirrored.
+
+		aafm_undo_write_fields( 'post', $post, $before['values'] );
+		$this->reset_integration_stubs();
+
+		$this->assertSame( array(), aafm_meta_raw_snapshot( 'post', $post, array( '_aioseo_title' ) )['by_key']['_aioseo_title']['raw'] );
+	}
+
 	public function test_aioseo_post_without_a_row_flags_every_field_as_no_vendor_row(): void {
 		$post = self::factory()->post->create();
 		$this->aioseo_table_with( $post + 1, 'Someone else' );

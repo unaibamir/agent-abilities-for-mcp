@@ -230,6 +230,13 @@ class Post {
 			'nofollow' => 'robots_nofollow',
 			'default'  => 'robots_default',
 		);
+		if ( \AAFM\Tests\AioseoStubStore::$mirror_meta ) {
+			foreach ( array( 'title', 'description', 'og_title', 'og_description', 'twitter_title', 'twitter_description' ) as $text_key ) {
+				if ( array_key_exists( $text_key, $data ) ) {
+					update_post_meta( (int) $postId, '_aioseo_' . $text_key, trim( (string) $data[ $text_key ] ) );
+				}
+			}
+		}
 		$model = self::getPost( $postId );
 		foreach ( $data as $key => $value ) {
 			$column = $robots_columns[ $key ] ?? $key;

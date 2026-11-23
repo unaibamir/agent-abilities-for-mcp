@@ -451,12 +451,20 @@ function aafm_undo_write_fields( string $object_type, int $object_id, array $val
 	$post_cols = array();
 	$aioseo    = array();
 	foreach ( $values as $field => $value ) {
+		if ( 0 === strpos( $field, 'aioseo:' ) ) {
+			$aioseo[ substr( $field, 7 ) ] = $value;
+		}
+	}
+	// AIOSEO's save mirrors its text columns into _aioseo_* meta, so it runs before the meta rows are
+	// put back: the restore below then leaves those rows exactly as they were, absent ones included.
+	if ( array() !== $aioseo ) {
+		aafm_undo_write_aioseo( $object_id, $aioseo );
+	}
+	foreach ( $values as $field => $value ) {
 		$kind = (string) strstr( $field, ':', true );
 		$name = substr( $field, strlen( $kind ) + 1 );
 		if ( 'post' === $kind ) {
 			$post_cols[ $name ] = $value;
-		} elseif ( 'aioseo' === $kind ) {
-			$aioseo[ $name ] = $value;
 		} elseif ( 'terms' === $kind ) {
 			$post = aafm_exact_object_chain( 'post', $object_id );
 			if ( $post instanceof WP_Post ) {
@@ -472,10 +480,6 @@ function aafm_undo_write_fields( string $object_type, int $object_id, array $val
 				\RankMath\Sitemap\Cache_Watcher::invalidate_post( $object_id );
 			}
 		}
-	}
-
-	if ( array() !== $aioseo ) {
-		aafm_undo_write_aioseo( $object_id, $aioseo );
 	}
 
 	if ( array() !== $post_cols ) {

@@ -9,6 +9,14 @@ name: Release
 # main is branch-protected, so only an authorized, reviewed merge can trigger a
 # release. That branch protection is the gate; there is no separate publish click.
 #
+# Publishing also waits on the full check suite. The test, contract and
+# plugin-check jobs below call test.yml, contract.yml and plugin-check.yml for
+# the same commit, and publish needs all three: a failed, skipped or cancelled
+# check blocks publish and the registry job after it. Those three workflows no
+# longer trigger on push to main themselves; this run is where a merge is
+# checked. If a check flakes, "Re-run failed jobs" reruns it and then publish,
+# which still finds the tag missing and ships normally.
+#
 # It only fires on a real, prepared release: the plugin header version has no tag
 # yet AND readme.txt already carries a changelog block for it. A normal commit or
 # a bare version bump does nothing.
@@ -45,15 +53,41 @@ on:
 
 permissions: {}
 
-concurrency:
-  group: wporg-release
-  cancel-in-progress: false
-
 jobs:
+  # The pre-publish gates. Each called workflow's jobs ask only for contents: read
+  # and none of them reads a secret, so that is all they get, and no secrets are
+  # passed. On a workflow_dispatch re-deploy they check the dispatched branch's
+  # commit; publish then pins the tree to the tag.
+  test:
+    name: Test
+    uses: ./.github/workflows/test.yml
+    permissions:
+      contents: read
+
+  contract:
+    name: Contract
+    uses: ./.github/workflows/contract.yml
+    permissions:
+      contents: read
+
+  plugin-check:
+    name: Plugin Check
+    uses: ./.github/workflows/plugin-check.yml
+    permissions:
+      contents: read
+
   publish:
     name: Tag, build, and publish to wordpress.org
+    needs: [test, contract, plugin-check]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    # Serialise publishing, not the whole run. At workflow level this group would
+    # hold every main push in a queue for the length of the check suite, and a
+    # newer pending run cancels an older pending one, so commits would go
+    # unchecked. Here only the publish step queues.
+    concurrency:
+      group: wporg-release
+      cancel-in-progress: false
     permissions:
       contents: write   # push the tag and create the GitHub Release
     env:

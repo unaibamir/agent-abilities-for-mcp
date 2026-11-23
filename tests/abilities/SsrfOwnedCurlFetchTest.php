@@ -141,7 +141,7 @@ final class SsrfOwnedCurlFetchTest extends TestCase {
 	 * A redirect target that is not an absolute https URL is not repeated to the caller.
 	 */
 	public function test_a_redirect_to_a_target_that_is_not_https_gives_no_target(): void {
-		foreach ( array( 'http://cdn.example.com/a.png', '/relative/a.png', "https://x.example/a\u{0}b", '' ) as $location ) {
+		foreach ( array( 'http://cdn.example.com/a.png', '/relative/a.png', "https://x.example/a\u{0}b", '', 'https://cdn.example.com/' . str_repeat( 'a', 2100 ) ) as $location ) {
 			$out = aafm_ssrf_process_fetch_response(
 				array(
 					'headers'  => array( 'location' => $location ),

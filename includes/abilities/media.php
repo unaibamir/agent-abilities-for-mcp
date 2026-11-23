@@ -1295,7 +1295,8 @@ function aafm_ssrf_process_fetch_response( $response, int $max_bytes ) {
 		// A redirect is never followed (each hop would need the same address checks), but the caller
 		// is told, and given the target when it is a plain https URL, so it can send that one instead.
 		$header = wp_remote_retrieve_header( $response, 'location' );
-		$target = is_string( $header ) ? $header : '';
+		// The header comes from the remote server: a target longer than a sane URL is never repeated.
+		$target = is_string( $header ) && strlen( $header ) <= 2048 ? $header : '';
 		$parts  = wp_parse_url( $target );
 		if ( is_array( $parts ) && 'https' === strtolower( (string) ( $parts['scheme'] ?? '' ) ) && ! empty( $parts['host'] ) && esc_url_raw( $target, array( 'https' ) ) === $target ) {
 			return new WP_Error(
@@ -1307,7 +1308,7 @@ function aafm_ssrf_process_fetch_response( $response, int $max_bytes ) {
 				)
 			);
 		}
-		return new WP_Error( 'aafm_fetch_redirect', __( 'The URL redirects to another address, and redirects are not followed. Send the final https URL instead. Nothing was uploaded.', 'agent-abilities-for-mcp' ) );
+		return new WP_Error( 'aafm_fetch_redirect', __( 'The URL redirects, but not to an https address this tool can name, and redirects are not followed. Send the final https URL instead. Nothing was uploaded.', 'agent-abilities-for-mcp' ) );
 	}
 	if ( $status < 200 || $status >= 300 ) {
 		return new WP_Error( 'aafm_fetch_failed', __( 'The URL could not be fetched.', 'agent-abilities-for-mcp' ) );

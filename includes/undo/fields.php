@@ -198,6 +198,17 @@ function aafm_undo_read_fields( string $object_type, int $object_id, array $fiel
 		foreach ( $groups['meta'] as $field => $key ) {
 			$entry            = $snapshot['by_key'][ $key ];
 			$values[ $field ] = $entry['raw'];
+			if ( $entry['aliased'] > 0 && in_array( $key, aafm_undo_aioseo_shadow_meta_keys(), true ) ) {
+				// AIOSEO writes NULL into its own mirror rows, so a NULL row there is a state to record.
+				$nullable = aafm_meta_rows_keeping_null( $object_type, $object_id, $key );
+				if ( ! $nullable['ok'] ) {
+					return null;
+				}
+				if ( 0 === $nullable['aliased'] ) {
+					$values[ $field ] = $nullable['rows'];
+					continue;
+				}
+			}
 			if ( $entry['aliased'] > 0 ) {
 				$flags[ $field ] = 'not_exact';
 			}
@@ -473,10 +484,15 @@ function aafm_undo_write_fields( string $object_type, int $object_id, array $val
 				wp_set_object_terms( $object_id, array_map( 'intval', (array) $value ), $name );
 			}
 		} elseif ( 'meta' === $kind ) {
-			// AIOSEO mirrors a NULL og or twitter column into its _aioseo_* row when the restore saves it,
-			// and a capture never records a key that already held a NULL row (it is flagged not_exact).
-			aafm_meta_delete_null_rows( $object_type, $object_id, $name );
-			aafm_meta_restore_rows( $object_type, $object_id, $name, array_map( 'strval', (array) $value ) );
+			if ( in_array( null, (array) $value, true ) ) {
+				// A recorded NULL row (only AIOSEO's _aioseo_* mirror keys record one) goes back as NULL.
+				aafm_meta_restore_rows_keeping_null( $object_type, $object_id, $name, array_values( (array) $value ) );
+			} else {
+				// The AIOSEO save above can write a NULL into its mirror row; a recorded value without one
+				// means that row came after the change, so it goes before the exact restore.
+				aafm_meta_delete_null_rows( $object_type, $object_id, $name );
+				aafm_meta_restore_rows( $object_type, $object_id, $name, array_map( 'strval', (array) $value ) );
+			}
 			// Rank Math's sitemap reads rank_math_robots but only invalidates on a post save, so a bare
 			// meta write needs the same nudge the forward tool gives (rankmath.php).
 			if ( 'rank_math_robots' === $name && 'post' === $object_type && class_exists( 'RankMath\\Sitemap\\Cache_Watcher' ) ) {

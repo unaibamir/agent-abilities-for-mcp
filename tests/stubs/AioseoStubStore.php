@@ -49,8 +49,7 @@ class AioseoStubStore {
 
 	/**
 	 * When true, savePost() mirrors the text keys of its patch into _aioseo_* post meta the way the
-	 * real Models\Post::updatePostMeta() does: title and description trimmed to strings (a NULL becomes
-	 * ''), every other text key as sent (a NULL becomes a NULL meta_value row).
+	 * real Models\Post::updatePostMeta() does: a string trimmed, a NULL as a NULL meta_value row.
 	 *
 	 * @var bool
 	 */

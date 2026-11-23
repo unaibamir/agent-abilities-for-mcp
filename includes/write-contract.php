@@ -535,6 +535,89 @@ function aafm_meta_object_fingerprint( string $type, int $id, array $skip_keys )
 }
 
 /**
+ * Every row of one meta key on an object, in id order, with a NULL meta_value kept as null.
+ *
+ * The raw snapshot (aafm_meta_raw_snapshot()) counts a NULL row as aliased, which is right for a
+ * value that has to round-trip as a string. AIOSEO's own save writes NULL into its _aioseo_* mirror rows, so the undo
+ * reads those keys through this instead: a NULL row is a state it can record and put back exactly.
+ * aliased counts only rows under another spelling of the key, which still cannot be restored.
+ *
+ * @param string $object_type 'post' or 'term'.
+ * @param int    $object_id   Object id.
+ * @param string $key         Meta key.
+ * @return array{ok: bool, rows: list<string|null>, aliased: int}
+ */
+function aafm_meta_rows_keeping_null( string $object_type, int $object_id, string $key ): array {
+	global $wpdb;
+	$table = _get_meta_table( $object_type );
+	if ( ! $table ) {
+		return array(
+			'ok'      => false,
+			'rows'    => array(),
+			'aliased' => 0,
+		);
+	}
+	$cols = aafm_meta_columns( $object_type );
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- the column names come from aafm_meta_columns().
+	$read    = aafm_wpdb_results( $wpdb->prepare( "SELECT meta_key, meta_value FROM %i WHERE {$cols['object_id_column']} = %d AND meta_key = %s ORDER BY {$cols['id_column']}", $table, $object_id, $key ) );
+	$rows    = array();
+	$aliased = 0;
+	foreach ( $read['ok'] ? (array) $read['value'] : array() as $row ) {
+		if ( $key !== (string) $row['meta_key'] ) {
+			++$aliased;
+			continue;
+		}
+		$rows[] = null === $row['meta_value'] ? null : (string) $row['meta_value'];
+	}
+	return array(
+		'ok'      => $read['ok'],
+		'rows'    => $rows,
+		'aliased' => $aliased,
+	);
+}
+
+/**
+ * Put one meta key of an object back to an exact list of rows that holds a NULL row, in order.
+ *
+ * Only for a value read with aafm_meta_rows_keeping_null(); a list without a NULL row goes through
+ * aafm_meta_restore_rows(), which proves each row. Every exact-key row is removed and the list added
+ * back (add_metadata() stores a null as a NULL meta_value), then the key is read again and compared.
+ *
+ * @param string            $object_type 'post' or 'term'.
+ * @param int               $object_id   Object id.
+ * @param string            $key         Meta key.
+ * @param list<string|null> $rows        The rows to put back, strings raw as stored.
+ * @return bool Whether the key now holds exactly these rows.
+ */
+function aafm_meta_restore_rows_keeping_null( string $object_type, int $object_id, string $key, array $rows ): bool {
+	global $wpdb;
+	$table = _get_meta_table( $object_type );
+	if ( ! $table ) {
+		return false;
+	}
+	$cols = aafm_meta_columns( $object_type );
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- the column names come from aafm_meta_columns().
+	$existing = aafm_wpdb_results( $wpdb->prepare( "SELECT {$cols['id_column']} AS mid, meta_key FROM %i WHERE {$cols['object_id_column']} = %d AND meta_key = %s", $table, $object_id, $key ) );
+	if ( ! $existing['ok'] ) {
+		return false;
+	}
+	foreach ( (array) $existing['value'] as $row ) {
+		if ( $key === (string) $row['meta_key'] ) {
+			delete_metadata_by_mid( $object_type, (int) $row['mid'] );
+		}
+	}
+	foreach ( $rows as $raw ) {
+		// A stored string goes back as its own bytes: maybe_unserialize() undoes the serialization
+		// add_metadata() applies again.
+		add_metadata( $object_type, $object_id, wp_slash( $key ), null === $raw ? null : wp_slash( maybe_unserialize( $raw ) ) );
+	}
+	wp_cache_delete( $object_id, $object_type . '_meta' );
+	$after  = aafm_meta_rows_keeping_null( $object_type, $object_id, $key );
+	$wanted = array_values( $rows );
+	return $after['ok'] && 0 === $after['aliased'] && $wanted === $after['rows'];
+}
+
+/**
  * Remove this key's NULL meta_value rows from an object. aafm_meta_raw_snapshot() counts such a row as
  * aliased, so aafm_meta_restore_rows() refuses a key that holds one and a read-back cannot see it. The
  * undo calls this before a restore, for rows written after the change it reverts. Exact key only.

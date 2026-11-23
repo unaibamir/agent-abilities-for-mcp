@@ -506,6 +506,65 @@ final class UndoHonestyTest extends UndoTestCase {
 		);
 	}
 
+	/**
+	 * AIOSEO's own save leaves NULL _aioseo_* rows on an ordinary post (a page saved by its analysis
+	 * holds _aioseo_title NULL). That is a state the change records and the undo puts back as NULL,
+	 * never a reason to refuse the change.
+	 */
+	public function test_a_null_aioseo_shadow_row_before_the_change_is_recorded_and_restored(): void {
+		global $wpdb;
+		$post = self::factory()->post->create();
+		$this->aioseo_table_with( $post, null );
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery
+		$wpdb->query( $wpdb->prepare( 'ALTER TABLE %i ADD COLUMN description TEXT NULL', aafm_undo_aioseo_table() ) );
+		$wpdb->insert(
+			$wpdb->postmeta,
+			array(
+				'post_id'    => $post,
+				'meta_key'   => '_aioseo_title', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- a test fixture row.
+				'meta_value' => null, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- a test fixture row.
+			)
+		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery
+		wp_cache_delete( $post, 'post_meta' );
+
+		$before = aafm_undo_read_fields( 'post', $post, array( 'aioseo:title', 'meta:_aioseo_title' ) );
+		$this->assertSame( array( null ), $before['values']['meta:_aioseo_title'] );
+		$this->assertArrayNotHasKey( 'meta:_aioseo_title', $before['flags'], 'A NULL mirror row is not a reason to refuse the change.' );
+
+		$this->stub_aioseo();
+		\AAFM\Tests\AioseoStubStore::$mirror_meta = true;
+		update_post_meta( $post, '_aioseo_title', 'New title' ); // What the forward save mirrored.
+		$result = aafm_undo_write_fields( 'post', $post, $before['values'] );
+		$this->reset_integration_stubs();
+
+		$this->assertSame( array(), $result['missed'], wp_json_encode( $result ) );
+		$this->assertSame( array( null ), aafm_meta_rows_keeping_null( 'post', $post, '_aioseo_title' )['rows'] );
+	}
+
+	/**
+	 * A title equal to AIOSEO's default format is saved as NULL, and AIOSEO mirrors that NULL into
+	 * _aioseo_title. The after state reads as a NULL row, so the change stays undoable.
+	 */
+	public function test_a_null_aioseo_shadow_row_after_the_change_reads_as_a_value(): void {
+		global $wpdb;
+		$post = self::factory()->post->create();
+		$this->aioseo_table_with( $post, null );
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery
+		$wpdb->insert(
+			$wpdb->postmeta,
+			array(
+				'post_id'    => $post,
+				'meta_key'   => '_aioseo_title', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- a test fixture row.
+				'meta_value' => null, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- a test fixture row.
+			)
+		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery
+		$after = aafm_undo_read_fields( 'post', $post, array( 'meta:_aioseo_title', 'meta:aafm_note' ) );
+		$this->assertSame( array( null ), $after['values']['meta:_aioseo_title'] );
+		$this->assertArrayNotHasKey( 'meta:_aioseo_title', $after['flags'] );
+	}
+
 	public function test_aioseo_post_without_a_row_flags_every_field_as_no_vendor_row(): void {
 		$post = self::factory()->post->create();
 		$this->aioseo_table_with( $post + 1, 'Someone else' );

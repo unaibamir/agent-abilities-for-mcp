@@ -473,6 +473,9 @@ function aafm_undo_write_fields( string $object_type, int $object_id, array $val
 				wp_set_object_terms( $object_id, array_map( 'intval', (array) $value ), $name );
 			}
 		} elseif ( 'meta' === $kind ) {
+			// AIOSEO mirrors a NULL og or twitter column into its _aioseo_* row when the restore saves it,
+			// and a capture never records a key that already held a NULL row (it is flagged not_exact).
+			aafm_meta_delete_null_rows( $object_type, $object_id, $name );
 			aafm_meta_restore_rows( $object_type, $object_id, $name, array_map( 'strval', (array) $value ) );
 			// Rank Math's sitemap reads rank_math_robots but only invalidates on a post save, so a bare
 			// meta write needs the same nudge the forward tool gives (rankmath.php).

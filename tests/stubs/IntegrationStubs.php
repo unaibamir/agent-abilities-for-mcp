@@ -233,7 +233,10 @@ class Post {
 		if ( \AAFM\Tests\AioseoStubStore::$mirror_meta ) {
 			foreach ( array( 'title', 'description', 'og_title', 'og_description', 'twitter_title', 'twitter_description' ) as $text_key ) {
 				if ( array_key_exists( $text_key, $data ) ) {
-					update_post_meta( (int) $postId, '_aioseo_' . $text_key, trim( (string) $data[ $text_key ] ) );
+					// AIOSEO 5.x trims only title and description to strings (checkForDefaultFormat); the
+					// other text keys reach update_post_meta() as sent, so a NULL is stored as a NULL row.
+					$mirrored = in_array( $text_key, array( 'title', 'description' ), true ) ? trim( (string) $data[ $text_key ] ) : $data[ $text_key ];
+					update_post_meta( (int) $postId, '_aioseo_' . $text_key, $mirrored );
 				}
 			}
 		}

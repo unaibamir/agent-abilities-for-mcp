@@ -535,6 +535,33 @@ function aafm_meta_object_fingerprint( string $type, int $id, array $skip_keys )
 }
 
 /**
+ * Remove this key's NULL meta_value rows from an object. aafm_meta_raw_snapshot() counts such a row as
+ * aliased, so aafm_meta_restore_rows() refuses a key that holds one and a read-back cannot see it. The
+ * undo calls this before a restore, for rows written after the change it reverts. Exact key only.
+ *
+ * @param string $object_type 'post' or 'term'.
+ * @param int    $object_id   Object id.
+ * @param string $key         Meta key.
+ * @return void
+ */
+function aafm_meta_delete_null_rows( string $object_type, int $object_id, string $key ): void {
+	global $wpdb;
+	$table = _get_meta_table( $object_type );
+	if ( ! $table ) {
+		return;
+	}
+	$cols = aafm_meta_columns( $object_type );
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- the column names come from aafm_meta_columns().
+	$rows = aafm_wpdb_results( $wpdb->prepare( "SELECT {$cols['id_column']} AS mid, meta_key FROM %i WHERE {$cols['object_id_column']} = %d AND meta_key = %s AND meta_value IS NULL", $table, $object_id, $key ) );
+	foreach ( $rows['ok'] ? (array) $rows['value'] : array() as $row ) {
+		if ( $key === (string) $row['meta_key'] ) {
+			delete_metadata_by_mid( $object_type, (int) $row['mid'] );
+		}
+	}
+	wp_cache_delete( $object_id, $object_type . '_meta' );
+}
+
+/**
  * Put the rows of one meta key back to exactly the given raw strings, adding before removing.
  *
  * Refuses with no write unless nothing can change or fake a write of the key, the baseline reads

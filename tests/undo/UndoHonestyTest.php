@@ -443,6 +443,9 @@ final class UndoHonestyTest extends UndoTestCase {
 		$this->aioseo_table_with( $post, null );
 		$fields = aafm_undo_surfaces()['aafm/aioseo-update-post']['fields']( array() );
 		$this->assertContains( 'meta:_aioseo_title', $fields, 'the change records the shadow row' );
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$wpdb->query( $wpdb->prepare( 'ALTER TABLE %i ADD COLUMN description TEXT NULL', aafm_undo_aioseo_table() ) );
 
 		$this->stub_aioseo();
 		\AAFM\Tests\AioseoStubStore::$mirror_meta = true;
@@ -450,9 +453,57 @@ final class UndoHonestyTest extends UndoTestCase {
 		update_post_meta( $post, '_aioseo_title', 'New title' ); // What the forward save mirrored.
 
 		aafm_undo_write_fields( 'post', $post, $before['values'] );
+		$saved = \AAFM\Tests\AioseoStubStore::$save_post_calls;
 		$this->reset_integration_stubs();
 
+		$this->assertCount( 1, $saved, 'precondition: the restore reached the AIOSEO save' );
 		$this->assertSame( array(), aafm_meta_raw_snapshot( 'post', $post, array( '_aioseo_title' ) )['by_key']['_aioseo_title']['raw'] );
+	}
+
+	/**
+	 * The og and twitter text keys reach AIOSEO's meta mirror untrimmed, so restoring a NULL column
+	 * writes a NULL meta_value row. Every touched shadow row must still end absent, as before.
+	 *
+	 * @dataProvider aioseo_untrimmed_columns
+	 *
+	 * @param string $column AIOSEO column.
+	 */
+	public function test_an_aioseo_og_or_twitter_undo_leaves_no_null_shadow_row( string $column ): void {
+		global $wpdb;
+		$post = self::factory()->post->create();
+		$this->aioseo_table_with( $post, null );
+		// The description column too: the restore reads it as a companion, and without it nothing is saved.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$wpdb->query( $wpdb->prepare( 'ALTER TABLE %i ADD COLUMN description TEXT NULL, ADD COLUMN %i TEXT NULL', aafm_undo_aioseo_table(), $column ) );
+
+		$this->stub_aioseo();
+		\AAFM\Tests\AioseoStubStore::$mirror_meta = true;
+		$key                                      = '_aioseo_' . $column;
+		$before                                   = aafm_undo_read_fields( 'post', $post, array( 'aioseo:' . $column, 'meta:' . $key ) );
+		update_post_meta( $post, $key, 'New value' ); // What the forward save mirrored.
+
+		aafm_undo_write_fields( 'post', $post, $before['values'] );
+		$saved = \AAFM\Tests\AioseoStubStore::$save_post_calls;
+		$this->reset_integration_stubs();
+		$this->assertCount( 1, $saved, 'precondition: the restore reached the AIOSEO save, which mirrors a NULL row' );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$rows = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE post_id = %d AND meta_key = %s', $wpdb->postmeta, $post, $key ) );
+		$this->assertSame( 0, $rows, "No {$key} row, not even a NULL one." );
+	}
+
+	/**
+	 * The text columns AIOSEO mirrors without trimming.
+	 *
+	 * @return array<string,array{0:string}>
+	 */
+	public function aioseo_untrimmed_columns(): array {
+		return array(
+			'og_title'            => array( 'og_title' ),
+			'og_description'      => array( 'og_description' ),
+			'twitter_title'       => array( 'twitter_title' ),
+			'twitter_description' => array( 'twitter_description' ),
+		);
 	}
 
 	public function test_aioseo_post_without_a_row_flags_every_field_as_no_vendor_row(): void {

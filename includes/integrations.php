@@ -269,18 +269,20 @@ function aafm_tec_active(): bool {
 }
 
 /**
- * WP_Query args with The Events Calendar's display filter suppressed while TEC is active.
+ * WP_Query args with The Events Calendar's display filter suppressed when the query can return events.
  *
  * TEC hides past events from an event-only query it has not been told to leave alone, through its
  * own tribe_suppress_query_filters query var (Tribe__Events__Query::parse_query() and
  * filter_and_order_by_date() both bail on it, and its own repositories set it). An agent query is a
- * data read, not a calendar view, so it sees every event whatever its date.
+ * data read, not a calendar view, so it sees every event whatever its date. Keyed on the post type,
+ * not aafm_tec_active(): a TEC below the floor of the dedicated event tools still filters, and the
+ * var is ignored when TEC is absent.
  *
  * @param array<string,mixed> $args WP_Query args.
  * @return array<string,mixed>
  */
 function aafm_tec_unfiltered_query_args( array $args ): array {
-	if ( aafm_tec_active() ) {
+	if ( array() !== array_intersect( array( 'tribe_events', 'any' ), (array) ( $args['post_type'] ?? array() ) ) ) {
 		$args['tribe_suppress_query_filters'] = true;
 	}
 	return $args;

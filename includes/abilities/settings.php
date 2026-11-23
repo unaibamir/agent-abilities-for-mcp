@@ -149,7 +149,7 @@ function aafm_args_update_site_settings(): array {
 				'settings'     => array( 'type' => 'object' ),
 				'adjusted'     => array(
 					'type'        => 'array',
-					'description' => __( 'Present only when a value was changed to fit the setting before it was saved (posts_per_page is kept between 1 and 100, start_of_week between 0 and 6, and text is cleaned): each such setting with the value you sent and the value saved.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'Present only when a setting does not hold the value you sent once the write is done (posts_per_page is kept between 1 and 100, start_of_week between 0 and 6, text is cleaned, and another plugin can keep the old value): each such setting with the value you sent and the value it holds now.', 'agent-abilities-for-mcp' ),
 					'items'       => array(
 						'type'       => 'object',
 						'properties' => array(
@@ -338,16 +338,6 @@ function aafm_exec_update_site_settings( array $input ) {
 	$adjusted      = array();
 	foreach ( $settings as $key => $value ) {
 		$key = (string) $key;
-		// A value the sanitizer changed (a clamp, or text cleaned) is reported, never applied silently.
-		$kept = aafm_sanitize_site_setting( $key, $value );
-		$sent = (string) $value;
-		if ( (string) $kept !== $sent ) {
-			$adjusted[] = array(
-				'setting'   => $key,
-				'requested' => $value,
-				'stored'    => $kept,
-			);
-		}
 		if ( array() !== array_intersect( $report['failed'], $homepage ) && in_array( $key, $homepage, true ) ) {
 			// A homepage key did not land: the homepage keys after it are not written.
 			$report['failed'][] = $key;
@@ -396,6 +386,21 @@ function aafm_exec_update_site_settings( array $input ) {
 		// blogname and blogdescription come back one write behind, and the next request reads the
 		// new value. The one-write-behind sequencing is measured here, not promised by WPML.
 		$updated[ $key ] = get_option( $key );
+
+		// A value that does not reach the row as sent (a clamp, cleaned text, or a filter that kept the old
+		// value) is reported with what the row holds now, read after the write, never with what was meant.
+		$row = aafm_option_row( $key );
+		if ( $row['ok'] && $row['found'] && is_scalar( $row['value'] ) ) {
+			$stored = in_array( $key, $integer_keys, true ) ? (int) $row['value'] : wp_specialchars_decode( (string) $row['value'], ENT_QUOTES );
+			$sent   = (string) $value;
+			if ( (string) $stored !== $sent ) {
+				$adjusted[] = array(
+					'setting'   => $key,
+					'requested' => $value,
+					'stored'    => $stored,
+				);
+			}
+		}
 	}
 
 	$adjusted = array() === $adjusted ? array() : array( 'adjusted' => $adjusted );

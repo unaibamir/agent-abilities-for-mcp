@@ -267,6 +267,29 @@ final class SiteSettingsTest extends TestCase {
 		);
 	}
 
+	public function test_adjusted_reports_the_value_the_row_holds_after_the_write(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		update_option( 'posts_per_page', 12 );
+		$keep = static fn( $new_value, $old_value ) => $old_value;
+		add_filter( 'pre_update_option_posts_per_page', $keep, 10, 2 );
+		$res  = wp_get_ability( 'aafm/update-site-settings' )->execute( array( 'settings' => array( 'posts_per_page' => 500 ) ) ); // phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page -- the over-limit value is the test input.
+		remove_filter( 'pre_update_option_posts_per_page', $keep, 10 );
+
+		$this->assertIsArray( $res );
+		$this->assertSame(
+			array(
+				array(
+					'setting'   => 'posts_per_page',
+					'requested' => 500,
+					'stored'    => 12,
+				),
+			),
+			$res['adjusted'],
+			'A filter kept the old value, so the response must not claim 100 was stored.'
+		);
+	}
+
 	public function test_update_site_settings_reports_no_adjusted_list_when_nothing_was_changed_in_range(): void {
 		$this->register_all();
 		$this->acting_as( 'administrator' );
@@ -544,7 +567,20 @@ final class SiteSettingsTest extends TestCase {
 		remove_all_filters( 'pre_update_option_blogname' );
 		remove_all_filters( 'option_blogname' );
 
-		$this->assertSame( array( 'settings' => array( 'blogname' => 'Translated Name' ) ), $this->without_undo( $res ) );
+		// The filter kept the old value, so the response says what the row holds, not what was sent.
+		$this->assertSame(
+			array(
+				'settings' => array( 'blogname' => 'Translated Name' ),
+				'adjusted' => array(
+					array(
+						'setting'   => 'blogname',
+						'requested' => 'New Name',
+						'stored'    => 'Old Name',
+					),
+				),
+			),
+			$this->without_undo( $res )
+		);
 		$this->assertSame( 'Old Name', $this->option_row( 'blogname' ) );
 		$rows = $this->write_outcome_rows();
 		$this->assertCount( 1, $rows );

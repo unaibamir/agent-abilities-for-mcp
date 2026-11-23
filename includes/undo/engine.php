@@ -1041,6 +1041,11 @@ function aafm_undo_apply( int $change_id, string $source ) {
 	if ( 'agent' === $source ) {
 		$connection = aafm_undo_connection_id();
 		if ( 'agent' !== $row['source'] || get_current_user_id() !== (int) $row['principal_user_id'] || '' === $connection || $row['client_id'] !== $connection ) {
+			// A site owner sees every change in the Changes tab, so naming the reason tells them nothing new.
+			// Anyone else gets the answer a missing id gets: no oracle for other connections' changes.
+			if ( 'agent' === $row['source'] && current_user_can( 'manage_options' ) ) {
+				return aafm_undo_refusal( 'other_connection' );
+			}
 			return aafm_generic_error();
 		}
 	}

@@ -83,7 +83,17 @@ final class UndoPermissionTest extends UndoTestCase {
 		$this->assertSame( 'A', get_post( $post )->post_title );
 	}
 
-	public function test_a_foreign_row_answers_the_same_as_a_missing_id(): void {
+	public function test_a_site_owner_on_another_connection_is_told_whose_change_it_is(): void {
+		$post   = self::factory()->post->create( array( 'post_title' => 'A' ) );
+		$change = $this->edit( $post );
+		aafm_oauth_current_client_id( 'client-b' );
+
+		$this->assertSame( 'aafm_undo_other_connection', $this->undo_code( $change ) );
+		$this->assertSame( 'B', get_post( $post )->post_title );
+	}
+
+	public function test_a_foreign_row_answers_the_same_as_a_missing_id_for_a_caller_without_the_changes_tab(): void {
+		$this->acting_as( 'editor' );
 		$post   = self::factory()->post->create( array( 'post_title' => 'A' ) );
 		$change = $this->edit( $post );
 		aafm_oauth_current_client_id( 'client-b' );
@@ -112,7 +122,7 @@ final class UndoPermissionTest extends UndoTestCase {
 		$post   = self::factory()->post->create( array( 'post_title' => 'A' ) );
 		$change = $this->edit( $post );
 
-		$this->assertSame( $this->undo_code( 999999 ), $this->undo_code( $change ) );
+		$this->assertSame( 'aafm_undo_other_connection', $this->undo_code( $change ) );
 		$this->assertSame( 'B', get_post( $post )->post_title );
 	}
 

@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-23T14:40:41+05:00\n"
+"POT-Creation-Date: 2026-11-23T15:16:09+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -1827,7 +1827,7 @@ msgid "New link text for the item. Sanitized as plain text. Omit to leave the cu
 msgstr ""
 
 #: includes/abilities/menus.php:961
-msgid "New destination URL for the item. Only a custom link takes a URL; for an item that links to a page, post or term the call is refused. An invalid or unsafe URL is refused and the current URL stays. Omit to leave the current URL unchanged."
+msgid "New destination URL for the item. Only a custom link takes a URL; for an item that links to a page, post, term or archive the call is refused. An invalid or unsafe URL is refused and the current URL stays. Omit to leave the current URL unchanged."
 msgstr ""
 
 #: includes/abilities/menus.php:966
@@ -1839,7 +1839,7 @@ msgid "The item's stored position (its menu order). Items sort by this value; ot
 msgstr ""
 
 #: includes/abilities/menus.php:1067
-msgid "Only a custom link takes a URL. This item links to a page, post or term, and its URL follows that target. Nothing was changed."
+msgid "Only a custom link takes a URL. This item links to something on the site, such as a page, post, term or archive, and its URL follows that target. Nothing was changed."
 msgstr ""
 
 #: includes/abilities/menus.php:1168
@@ -2729,7 +2729,7 @@ msgid "A map of setting name to new value. Allowed keys: blogname, blogdescripti
 msgstr ""
 
 #: includes/abilities/settings.php:152
-msgid "Present only when a value was changed to fit the setting before it was saved (posts_per_page is kept between 1 and 100, start_of_week between 0 and 6, and text is cleaned): each such setting with the value you sent and the value saved."
+msgid "Present only when a setting does not hold the value you sent once the write is done (posts_per_page is kept between 1 and 100, start_of_week between 0 and 6, text is cleaned, and another plugin can keep the old value): each such setting with the value you sent and the value it holds now."
 msgstr ""
 
 #: includes/abilities/settings.php:164
@@ -2767,36 +2767,36 @@ msgid "The value for \"%s\" is not valid and was not applied."
 msgstr ""
 
 #. translators: 1: keys that were saved, 2: keys that already held the value, 3: keys that were not saved. "none" when a list is empty.
-#: includes/abilities/settings.php:429
+#: includes/abilities/settings.php:434
 #, php-format
 msgid "Not every setting was saved. Saved: %1$s. Already set: %2$s. Not saved: %3$s. Check the homepage settings before trying again."
 msgstr ""
 
-#: includes/abilities/settings.php:430
-#: includes/abilities/settings.php:431
+#: includes/abilities/settings.php:435
+#: includes/abilities/settings.php:436
 msgid "none"
 msgstr ""
 
-#: includes/abilities/settings.php:466
+#: includes/abilities/settings.php:471
 msgid "show_on_front must be \"posts\" or \"page\", so nothing was changed."
 msgstr ""
 
 #. translators: %s: the setting key.
-#: includes/abilities/settings.php:475
+#: includes/abilities/settings.php:480
 #, php-format
 msgid "The setting \"%s\" takes a page id, or 0 for none, so nothing was changed."
 msgstr ""
 
-#: includes/abilities/settings.php:499
+#: includes/abilities/settings.php:504
 msgid "The front page and the posts page must be different pages, so nothing was changed."
 msgstr ""
 
-#: includes/abilities/settings.php:502
+#: includes/abilities/settings.php:507
 msgid "Showing a static front page needs page_on_front set to a published page, so nothing was changed."
 msgstr ""
 
 #. translators: %s: the setting key.
-#: includes/abilities/settings.php:533
+#: includes/abilities/settings.php:538
 #, php-format
 msgid "The setting \"%s\" must name a published page, or 0 for none, so nothing was changed."
 msgstr ""
@@ -8112,7 +8112,7 @@ msgid "Reads one WooCommerce product by id: description, prices, stock, images, 
 msgstr ""
 
 #: includes/admin/disclosures.php:96
-msgid "Lists a variable product's variations by parent product id: each variation's id, parent id, SKU, price, stock status, and status, plus a total. Requires the manage-WooCommerce capability."
+msgid "Lists a variable product's variations by parent product id: each variation's id, parent id, SKU, price, regular and sale price, stock status, and status, plus a total. Requires the manage-WooCommerce capability."
 msgstr ""
 
 #: includes/admin/disclosures.php:97
@@ -12033,163 +12033,163 @@ msgid "Read meta key `%1$s` on user #%2$s"
 msgstr ""
 
 #. translators: %s: the new page's numeric ID.
-#: includes/audit/detail.php:259
+#: includes/audit/detail.php:260
 #, php-format
 msgid "Created page #%s"
 msgstr ""
 
 #. translators: 1: the order's numeric ID. 2: the new order status key.
-#: includes/audit/detail.php:269
+#: includes/audit/detail.php:270
 #, php-format
 msgid "Set order #%1$s to status `%2$s`"
 msgstr ""
 
 #. translators: %s: the new post's numeric ID.
-#: includes/audit/detail.php:290
+#: includes/audit/detail.php:291
 #, php-format
 msgid "Created post #%s"
 msgstr ""
 
 #. translators: %s: the new draft's numeric ID.
-#: includes/audit/detail.php:298
+#: includes/audit/detail.php:299
 #, php-format
 msgid "Created draft #%s"
 msgstr ""
 
 #. translators: %s: the new user's numeric ID.
-#: includes/audit/detail.php:304
+#: includes/audit/detail.php:305
 #, php-format
 msgid "Created user #%s"
 msgstr ""
 
 #. translators: 1: meta key name. 2: the post's numeric ID.
-#: includes/audit/detail.php:312
+#: includes/audit/detail.php:313
 #, php-format
 msgid "Deleted meta key `%1$s` on post #%2$s"
 msgstr ""
 
 #. translators: %s: the post's numeric ID.
-#: includes/audit/detail.php:327
+#: includes/audit/detail.php:328
 #, php-format
 msgid "Updated post #%s"
 msgstr ""
 
 #. translators: %s: the page's numeric ID.
-#: includes/audit/detail.php:338
+#: includes/audit/detail.php:339
 #, php-format
 msgid "Updated page #%s"
 msgstr ""
 
 #. translators: %s: the post's numeric ID.
-#: includes/audit/detail.php:352
+#: includes/audit/detail.php:353
 #, php-format
 msgid "Deleted post #%s"
 msgstr ""
 
 #. translators: %s: the page's numeric ID.
-#: includes/audit/detail.php:363
+#: includes/audit/detail.php:364
 #, php-format
 msgid "Deleted page #%s"
 msgstr ""
 
 #. translators: %s: the post's numeric ID.
-#: includes/audit/detail.php:375
+#: includes/audit/detail.php:376
 #, php-format
 msgid "Trashed post #%s"
 msgstr ""
 
 #. translators: %s: the page's numeric ID.
-#: includes/audit/detail.php:386
+#: includes/audit/detail.php:387
 #, php-format
 msgid "Trashed page #%s"
 msgstr ""
 
 #. translators: %s: the restored revision's numeric ID.
-#: includes/audit/detail.php:398
+#: includes/audit/detail.php:399
 #, php-format
 msgid "Restored revision #%s"
 msgstr ""
 
 #. translators: 1: the user's numeric ID. 2: the role slug assigned, such as shop_manager.
-#: includes/audit/detail.php:412
+#: includes/audit/detail.php:413
 #, php-format
 msgid "Updated user #%1$s, role set to %2$s"
 msgstr ""
 
 #. translators: %s: the user's numeric ID.
-#: includes/audit/detail.php:414
+#: includes/audit/detail.php:415
 #, php-format
 msgid "Updated user #%s"
 msgstr ""
 
 #. translators: %s: the user's numeric ID.
-#: includes/audit/detail.php:432
+#: includes/audit/detail.php:433
 #, php-format
 msgid "Deleted user #%s"
 msgstr ""
 
 #. translators: %s: the order's numeric ID.
-#: includes/audit/detail.php:443
+#: includes/audit/detail.php:444
 #, php-format
 msgid "Refunded order #%s"
 msgstr ""
 
 #. translators: %s: the payment gateway's id slug.
-#: includes/audit/detail.php:454
+#: includes/audit/detail.php:455
 #, php-format
 msgid "Updated payment gateway `%s`"
 msgstr ""
 
 #. translators: %s: the comment's numeric ID.
-#: includes/audit/detail.php:493
+#: includes/audit/detail.php:494
 #, php-format
 msgid "Deleted comment #%s"
 msgstr ""
 
 #. translators: %s: the attachment's numeric ID.
-#: includes/audit/detail.php:506
+#: includes/audit/detail.php:507
 #, php-format
 msgid "Deleted media #%s"
 msgstr ""
 
 #. translators: %s: the navigation menu's numeric ID.
-#: includes/audit/detail.php:518
+#: includes/audit/detail.php:519
 #, php-format
 msgid "Deleted menu #%s"
 msgstr ""
 
 #. translators: %s: the menu item's numeric ID.
-#: includes/audit/detail.php:531
+#: includes/audit/detail.php:532
 #, php-format
 msgid "Deleted menu item #%s"
 msgstr ""
 
 #. translators: %s: the deleted revision's numeric ID.
-#: includes/audit/detail.php:544
+#: includes/audit/detail.php:545
 #, php-format
 msgid "Deleted revision #%s"
 msgstr ""
 
 #. translators: 1: meta key name. 2: the term's numeric ID.
-#: includes/audit/detail.php:576
+#: includes/audit/detail.php:577
 #, php-format
 msgid "Updated meta key `%1$s` on term #%2$s"
 msgstr ""
 
 #. translators: 1: meta key name. 2: the user's numeric ID.
-#: includes/audit/detail.php:594
+#: includes/audit/detail.php:595
 #, php-format
 msgid "Updated meta key `%1$s` on user #%2$s"
 msgstr ""
 
 #. translators: 1: meta key name. 2: the term's numeric ID.
-#: includes/audit/detail.php:612
+#: includes/audit/detail.php:613
 #, php-format
 msgid "Deleted meta key `%1$s` on term #%2$s"
 msgstr ""
 
 #. translators: 1: meta key name. 2: the user's numeric ID.
-#: includes/audit/detail.php:631
+#: includes/audit/detail.php:632
 #, php-format
 msgid "Deleted meta key `%1$s` on user #%2$s"
 msgstr ""
@@ -13509,7 +13509,7 @@ msgid "Trash is disabled on this site, so this content cannot be moved to the Tr
 msgstr ""
 
 #: includes/helpers.php:3307
-msgid "The item's place in the menu, numbered 1 to N, the same number list-menu-items, create-menu-item and update-menu-item give it. It is not the stored position that update-menu-item's position sets, which can start at 0 and have gaps."
+msgid "The item's place in the menu, numbered 1 to N, the same number list-menu-items, create-menu-item and update-menu-item give it. It is not the stored position that update-menu-item's position sets, which can start at 0 and have gaps. A draft item, which list-menu-items leaves out, shows its stored position instead."
 msgstr ""
 
 #. translators: 1: name of the value that saved, 2: name of the value that could not be.
@@ -14483,7 +14483,7 @@ msgstr ""
 msgid "The site owner requires a checked backup from the last 24 hours before this tool can run, and this site has none that passed. The Backup gate card under Settings says why. This connection cannot start a backup."
 msgstr ""
 
-#: includes/siteops/backup-updraft.php:760
+#: includes/siteops/backup-updraft.php:786
 msgid "The backup check results"
 msgstr ""
 
@@ -14579,34 +14579,34 @@ msgstr ""
 msgid "The %s value is not a valid URL, so nothing was changed. Use an https:// or http:// address, a mailto: or tel: link, a path starting with /, or an anchor starting with #."
 msgstr ""
 
-#: includes/undo/engine.php:1085
+#: includes/undo/engine.php:1088
 msgid "The undo did not finish, so check the item before trying again."
 msgstr ""
 
-#: includes/undo/engine.php:1213
+#: includes/undo/engine.php:1216
 msgid "The undo could not be confirmed, so check the item before trying again."
 msgstr ""
 
-#: includes/undo/engine.php:1237
+#: includes/undo/engine.php:1240
 msgid "The undo did not change anything: the field could not be restored exactly, possibly because a plugin altered the value as it was written, so it was left as it is."
 msgstr ""
 
-#: includes/undo/engine.php:1238
+#: includes/undo/engine.php:1241
 msgid "The undo did not change anything, so nothing was written."
 msgstr ""
 
-#: includes/undo/engine.php:1262
+#: includes/undo/engine.php:1265
 msgid "The undo was applied, but its history entry could not be saved. Check the item."
 msgstr ""
 
 #. translators: 1: comma-separated field names, 2: change id
-#: includes/undo/engine.php:1271
+#: includes/undo/engine.php:1274
 #, php-format
 msgid "The undo did not fully apply: %1$s did not match, so the value may have been changed as it was restored, possibly by a plugin. Change %2$d records the current state and can be reverted."
 msgstr ""
 
 #. translators: 1: comma-separated field names, 2: change id
-#: includes/undo/engine.php:1273
+#: includes/undo/engine.php:1276
 #, php-format
 msgid "The undo did not fully apply: %1$s did not match. Change %2$d records the current state and can be reverted."
 msgstr ""
@@ -14708,7 +14708,7 @@ msgid "Only a site owner can undo this change, from the Changes tab."
 msgstr ""
 
 #: includes/undo/surfaces.php:350
-msgid "This change was made through another agent connection, and only that connection can undo it here. A site owner can revert it from the Changes tab."
+msgid "This change was made through another agent connection, so it cannot be undone from this one. A site owner can review it in the Changes tab."
 msgstr ""
 
 #: includes/undo/surfaces.php:351

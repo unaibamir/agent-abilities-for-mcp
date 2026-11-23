@@ -432,6 +432,31 @@ final class BackupGateTest extends TestCase {
 		$this->assertSame( 'failed', $summary['database_check'] );
 	}
 
+	/**
+	 * A set with no database archive on record, a named remote service and local file archives is never
+	 * a usable backup, even with both permissive switches on: there is no database to trust off-site.
+	 */
+	public function test_a_files_only_set_with_a_remote_service_and_no_database_is_refused(): void {
+		aafm_updraft_stub_add_file( 'plugins.zip', 10 );
+		aafm_updraft_stub_add_set(
+			'aaaaaaaaaaa1',
+			3600,
+			2048,
+			array(
+				'db'           => null,
+				'db-size'      => null,
+				'service'      => array( 's3' ),
+				'plugins'      => array( 'plugins.zip' ),
+				'plugins-size' => 10,
+			)
+		);
+		update_option( 'aafm_backup_gate_accept_remote', '1' );
+		update_option( 'aafm_backup_gate_accept_size', '1' );
+
+		$this->assertSame( 'backup_gate', $this->adapter_fire() );
+		$this->assertNull( aafm_backup_gate_state()['last_good'] ?? null );
+	}
+
 	public function test_a_history_reader_that_throws_refuses(): void {
 		aafm_updraft_stub_add_set( 'aaaaaaaaaaa1', 3600 );
 		aafm_updraft_stub_throw( true );

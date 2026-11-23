@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-23T14:20:31+05:00\n"
+"POT-Creation-Date: 2026-11-23T14:40:41+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -241,7 +241,7 @@ msgstr ""
 #: includes/abilities/tec/venues.php:207
 #: includes/abilities/terms.php:115
 #: includes/abilities/users.php:113
-#: includes/abilities/wpbakery-elements.php:988
+#: includes/abilities/wpbakery-elements.php:1016
 #: includes/abilities/wpbakery-site.php:231
 msgid "1-based page number for pagination. Defaults to 1."
 msgstr ""
@@ -420,12 +420,12 @@ msgid "One element's shortcode tag, such as fusion_button. Returns that element 
 msgstr ""
 
 #: includes/abilities/avada-elements.php:710
-#: includes/abilities/wpbakery-elements.php:982
+#: includes/abilities/wpbakery-elements.php:1010
 msgid "Only elements whose name or tag contains this text."
 msgstr ""
 
 #: includes/abilities/avada-elements.php:715
-#: includes/abilities/wpbakery-elements.php:987
+#: includes/abilities/wpbakery-elements.php:1015
 msgid "Number of elements per page, clamped to the 1-50 range. Defaults to 20 when omitted."
 msgstr ""
 
@@ -442,16 +442,16 @@ msgid "Settings left out because the map gave them no setting name."
 msgstr ""
 
 #: includes/abilities/avada-elements.php:879
-#: includes/abilities/wpbakery-elements.php:1248
+#: includes/abilities/wpbakery-elements.php:1276
 msgid "Pass to restore-revision to put the page back as it was. Null when nothing was saved or no revision is kept."
 msgstr ""
 
 #: includes/abilities/avada-elements.php:884
 #: includes/abilities/avada.php:984
-#: includes/abilities/wpbakery-elements.php:1253
-#: includes/abilities/wpbakery-elements.php:2203
-#: includes/abilities/wpbakery-elements.php:2290
-#: includes/abilities/wpbakery-elements.php:2432
+#: includes/abilities/wpbakery-elements.php:1281
+#: includes/abilities/wpbakery-elements.php:2231
+#: includes/abilities/wpbakery-elements.php:2318
+#: includes/abilities/wpbakery-elements.php:2461
 #: includes/abilities/wpbakery.php:609
 msgid "Present only when there is no restore point: the site or the content type keeps no revisions, WordPress saved none before the change, or the one saved was deleted during the save by the revision limit or another plugin. Says why there is no way back."
 msgstr ""
@@ -461,7 +461,7 @@ msgid "The element's index in the outline from avada-get-page-content with inclu
 msgstr ""
 
 #: includes/abilities/avada-elements.php:914
-#: includes/abilities/wpbakery-elements.php:1215
+#: includes/abilities/wpbakery-elements.php:1243
 msgid "The tag and fingerprint the outline returned for that index. A page that changed since is refused."
 msgstr ""
 
@@ -483,7 +483,7 @@ msgid "New inner content for an element with no child elements, such as a text b
 msgstr ""
 
 #: includes/abilities/avada-elements.php:966
-#: includes/abilities/wpbakery-elements.php:1244
+#: includes/abilities/wpbakery-elements.php:1272
 msgid "Settings whose stored value changed, and text when the inner content did. Empty when nothing was saved."
 msgstr ""
 
@@ -498,7 +498,7 @@ msgid "Dynamic data drives the setting %s on this element, so a stored value wou
 msgstr ""
 
 #: includes/abilities/avada-elements.php:1055
-#: includes/abilities/wpbakery-elements.php:1333
+#: includes/abilities/wpbakery-elements.php:1361
 msgid "Give at least one of set_atts, remove_atts or text. Nothing was changed."
 msgstr ""
 
@@ -509,20 +509,20 @@ msgid "This element shows the global library item %1$d, which every page that sh
 msgstr ""
 
 #: includes/abilities/avada-elements.php:1238
-#: includes/abilities/wpbakery-elements.php:1623
+#: includes/abilities/wpbakery-elements.php:1651
 msgid "One insert may add at most 50 elements, nested at most 6 deep. Split the change into smaller inserts. Nothing was changed."
 msgstr ""
 
 #. translators: 1: the refusal, 2: the parent tag or "top level", 3: the child tag.
 #: includes/abilities/avada-elements.php:1310
-#: includes/abilities/wpbakery-elements.php:1574
+#: includes/abilities/wpbakery-elements.php:1602
 #, php-format
 msgid "%1$s Parent: %2$s. Child: %3$s."
 msgstr ""
 
 #. translators: 1: the refusal, 2: the parent tag or "top level", 3: the child tag.
 #: includes/abilities/avada-elements.php:1310
-#: includes/abilities/wpbakery-elements.php:1574
+#: includes/abilities/wpbakery-elements.php:1602
 msgid "top level"
 msgstr ""
 
@@ -531,8 +531,8 @@ msgid "A column needs type set to its width, a fraction such as 1_2 or a percent
 msgstr ""
 
 #: includes/abilities/avada-elements.php:1590
-#: includes/abilities/wpbakery-elements.php:1940
-#: includes/abilities/wpbakery-elements.php:1967
+#: includes/abilities/wpbakery-elements.php:1968
+#: includes/abilities/wpbakery-elements.php:1995
 msgid "Give anchor_index, anchor_expect and placement together. Only an empty post takes an insert without them. Nothing was changed."
 msgstr ""
 
@@ -551,7 +551,7 @@ msgid "The page fingerprint from the last avada-get-page-content read or the las
 msgstr ""
 
 #: includes/abilities/avada-elements.php:1927
-#: includes/abilities/wpbakery-elements.php:2127
+#: includes/abilities/wpbakery-elements.php:2155
 msgid "Index of the element the new place is named against, from the same outline."
 msgstr ""
 
@@ -560,7 +560,7 @@ msgid "The tag and fingerprint the outline returned for anchor_index."
 msgstr ""
 
 #: includes/abilities/avada-elements.php:1932
-#: includes/abilities/wpbakery-elements.php:2146
+#: includes/abilities/wpbakery-elements.php:2174
 msgid "Where, relative to the anchor element: before or after it, or as its first or last child."
 msgstr ""
 
@@ -573,12 +573,12 @@ msgid "Inner content for an element with no children, such as a text block, a ti
 msgstr ""
 
 #: includes/abilities/avada-elements.php:1966
-#: includes/abilities/wpbakery-elements.php:2180
+#: includes/abilities/wpbakery-elements.php:2208
 msgid "Child elements, each with the same keys: tag, atts, text, children."
 msgstr ""
 
 #: includes/abilities/avada-elements.php:1971
-#: includes/abilities/wpbakery-elements.php:2185
+#: includes/abilities/wpbakery-elements.php:2213
 msgid "The element to add, with its children. At most 50 elements, nested at most 6 deep."
 msgstr ""
 
@@ -1429,7 +1429,7 @@ msgid "Get media"
 msgstr ""
 
 #: includes/abilities/media.php:24
-msgid "List media library items (URL, alt, mime, dimensions). Response includes total (the full match count). Without the edit-others-posts capability, only the caller's own uploads are listed."
+msgid "List media library items (URL, alt, caption, mime, dimensions). Response includes total (the full match count). Without the edit-others-posts capability, only the caller's own uploads are listed."
 msgstr ""
 
 #: includes/abilities/media.php:31
@@ -1505,7 +1505,7 @@ msgstr ""
 #: includes/abilities/posts.php:401
 #: includes/abilities/search.php:103
 #: includes/abilities/terms.php:131
-#: includes/abilities/woocommerce/products.php:378
+#: includes/abilities/woocommerce/products.php:381
 #: includes/abilities/woocommerce/reports.php:578
 msgid "The WPML language the list was scoped to (\"all\" for every language), or null when WPML is inactive."
 msgstr ""
@@ -1545,8 +1545,8 @@ msgid "Invalid base64 payload."
 msgstr ""
 
 #: includes/abilities/media.php:886
-#: includes/abilities/media.php:1307
-#: includes/abilities/media.php:1312
+#: includes/abilities/media.php:1323
+#: includes/abilities/media.php:1328
 msgid "File exceeds the maximum upload size."
 msgstr ""
 
@@ -1595,47 +1595,57 @@ msgid "That port is not allowed for a remote fetch."
 msgstr ""
 
 #: includes/abilities/media.php:1290
-#: includes/abilities/media.php:1297
-#: includes/abilities/media.php:1437
-#: includes/abilities/media.php:1535
-#: includes/abilities/media.php:1545
-#: includes/abilities/media.php:1583
+#: includes/abilities/media.php:1313
+#: includes/abilities/media.php:1453
+#: includes/abilities/media.php:1555
+#: includes/abilities/media.php:1565
+#: includes/abilities/media.php:1603
 msgid "The URL could not be fetched."
 msgstr ""
 
-#: includes/abilities/media.php:1315
+#. translators: %s: the https URL the requested address redirects to.
+#: includes/abilities/media.php:1305
+#, php-format
+msgid "The URL redirects to %s, and redirects are not followed. Send that URL instead if you trust it. Nothing was uploaded."
+msgstr ""
+
+#: includes/abilities/media.php:1310
+msgid "The URL redirects to another address, and redirects are not followed. Send the final https URL instead. Nothing was uploaded."
+msgstr ""
+
+#: includes/abilities/media.php:1331
 msgid "The URL returned no data."
 msgstr ""
 
-#: includes/abilities/media.php:1615
+#: includes/abilities/media.php:1635
 msgid "ID of the attachment to update."
 msgstr ""
 
-#: includes/abilities/media.php:1619
+#: includes/abilities/media.php:1639
 msgid "New attachment title, sanitized as plain text. At least one of title, alt, caption, or description must be given."
 msgstr ""
 
-#: includes/abilities/media.php:1623
+#: includes/abilities/media.php:1643
 msgid "New alt text for the image, sanitized as plain text."
 msgstr ""
 
-#: includes/abilities/media.php:1627
+#: includes/abilities/media.php:1647
 msgid "New caption, sanitized as plain text with no HTML."
 msgstr ""
 
-#: includes/abilities/media.php:1631
+#: includes/abilities/media.php:1651
 msgid "New description. Basic HTML is allowed and sanitized."
 msgstr ""
 
-#: includes/abilities/media.php:1702
+#: includes/abilities/media.php:1722
 msgid "Provide at least one field to update."
 msgstr ""
 
-#: includes/abilities/media.php:1784
+#: includes/abilities/media.php:1804
 msgid "The media item could not be confirmed as saved."
 msgstr ""
 
-#: includes/abilities/media.php:1807
+#: includes/abilities/media.php:1827
 msgid "ID of the attachment to permanently delete. Both the file and the library entry are removed; there is no undo."
 msgstr ""
 
@@ -1817,7 +1827,7 @@ msgid "New link text for the item. Sanitized as plain text. Omit to leave the cu
 msgstr ""
 
 #: includes/abilities/menus.php:961
-msgid "New destination URL for the item. An invalid or unsafe URL is refused and the current URL stays. Omit to leave the current URL unchanged."
+msgid "New destination URL for the item. Only a custom link takes a URL; for an item that links to a page, post or term the call is refused. An invalid or unsafe URL is refused and the current URL stays. Omit to leave the current URL unchanged."
 msgstr ""
 
 #: includes/abilities/menus.php:966
@@ -1828,90 +1838,102 @@ msgstr ""
 msgid "The item's stored position (its menu order). Items sort by this value; other items keep theirs, so two items can share a value. Omit to keep the current position."
 msgstr ""
 
-#: includes/abilities/menus.php:1139
+#: includes/abilities/menus.php:1067
+msgid "Only a custom link takes a URL. This item links to a page, post or term, and its URL follows that target. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/menus.php:1168
 msgid "The parent must be an existing menu item in this same menu, so nothing was changed."
 msgstr ""
 
-#: includes/abilities/menus.php:1150
+#: includes/abilities/menus.php:1179
 msgid "A menu item cannot be nested under itself or under one of its own sub-items, so nothing was changed."
 msgstr ""
 
-#: includes/abilities/menus.php:1177
+#: includes/abilities/menus.php:1206
+msgid "Optional ID of the navigation menu the item belongs to. When given, an item that is not in this menu is refused and nothing is deleted."
+msgstr ""
+
+#: includes/abilities/menus.php:1210
 msgid "ID of the menu item to permanently remove. Menu items have no Trash, so this cannot be undone."
 msgstr ""
 
-#: includes/abilities/menus.php:1382
+#: includes/abilities/menus.php:1255
+msgid "That menu item is not in the menu given by menu_id. Nothing was deleted."
+msgstr ""
+
+#: includes/abilities/menus.php:1422
 msgid "Items nested under this one, in the same shape. Up to three levels in all."
 msgstr ""
 
-#: includes/abilities/menus.php:1396
+#: includes/abilities/menus.php:1436
 msgid "The visible link text, 1 to 200 characters. Sanitized as plain text."
 msgstr ""
 
-#: includes/abilities/menus.php:1400
+#: includes/abilities/menus.php:1440
 msgid "Where the link goes: an http, https, mailto or tel link, a path starting with /, or an anchor starting with #. Other schemes, such as javascript:, data: or ftp:, are refused."
 msgstr ""
 
-#: includes/abilities/menus.php:1421
+#: includes/abilities/menus.php:1461
 msgid "The links, in order, each with label, url and children (the same shape, nested)."
 msgstr ""
 
-#: includes/abilities/menus.php:1426
+#: includes/abilities/menus.php:1466
 msgid "Names of blocks in this navigation that are not links, such as core/page-list. update-navigation replaces them too."
 msgstr ""
 
 #. translators: %d: the most items one navigation may hold.
-#: includes/abilities/menus.php:1563
+#: includes/abilities/menus.php:1603
 #, php-format
 msgid "A navigation can hold at most %d items, counting nested ones, so nothing was changed."
 msgstr ""
 
-#: includes/abilities/menus.php:1568
+#: includes/abilities/menus.php:1608
 msgid "Each navigation item must be an object with a label and a url, so nothing was changed."
 msgstr ""
 
-#: includes/abilities/menus.php:1572
+#: includes/abilities/menus.php:1612
 msgid "Every navigation item needs a label, so nothing was changed."
 msgstr ""
 
 #. translators: %d: the longest label allowed, in characters.
-#: includes/abilities/menus.php:1578
+#: includes/abilities/menus.php:1618
 #, php-format
 msgid "A navigation label can be at most %d characters, so nothing was changed."
 msgstr ""
 
-#: includes/abilities/menus.php:1588
+#: includes/abilities/menus.php:1628
 msgid "The url value is not a valid URL, so nothing was changed. Use an https:// or http:// address, a mailto: or tel: link, a path starting with /, or an anchor starting with #."
 msgstr ""
 
 #. translators: %d: the deepest nesting allowed.
-#: includes/abilities/menus.php:1597
+#: includes/abilities/menus.php:1637
 #, php-format
 msgid "Navigation items can nest at most %d levels deep, so nothing was changed."
 msgstr ""
 
-#: includes/abilities/menus.php:1668
+#: includes/abilities/menus.php:1708
 msgid "ID of the navigation to replace, from list-navigations."
 msgstr ""
 
-#: includes/abilities/menus.php:1674
+#: includes/abilities/menus.php:1714
 msgid "The complete new list of links, in order. It replaces everything in the navigation, and each link is saved as a plain custom link without per-link settings such as open in a new tab. At least 1 and at most 100 items in all, counting nested ones; an empty list is refused."
 msgstr ""
 
-#: includes/abilities/menus.php:1679
+#: includes/abilities/menus.php:1719
 msgid "New name for the navigation. Sanitized as plain text. Omit to keep the current name."
 msgstr ""
 
-#: includes/abilities/menus.php:1724
+#: includes/abilities/menus.php:1764
 msgid "An empty list would remove every link from this navigation and cannot be undone here, so nothing was changed. Send at least one item."
 msgstr ""
 
-#: includes/abilities/menus.php:1731
-#: includes/abilities/menus.php:1740
+#: includes/abilities/menus.php:1771
+#: includes/abilities/menus.php:1780
 msgid "The navigation markup did not pass block validation, so nothing was changed."
 msgstr ""
 
-#: includes/abilities/menus.php:1770
+#: includes/abilities/menus.php:1810
 msgid "The navigation was saved, but what WordPress stored is not the list that was sent. Read it with list-navigations before trying again."
 msgstr ""
 
@@ -1956,7 +1978,7 @@ msgid "The post-meta key to read. Must be on the operator's post-meta allowlist 
 msgstr ""
 
 #: includes/abilities/meta.php:109
-#: includes/abilities/user-meta.php:109
+#: includes/abilities/user-meta.php:137
 msgid "The stored scalar value. A key with no stored value is returned as an empty string, not null."
 msgstr ""
 
@@ -2707,70 +2729,74 @@ msgid "A map of setting name to new value. Allowed keys: blogname, blogdescripti
 msgstr ""
 
 #: includes/abilities/settings.php:152
+msgid "Present only when a value was changed to fit the setting before it was saved (posts_per_page is kept between 1 and 100, start_of_week between 0 and 6, and text is cleaned): each such setting with the value you sent and the value saved."
+msgstr ""
+
+#: includes/abilities/settings.php:164
 msgid "Present only when a homepage key was sent: the keys that were saved."
 msgstr ""
 
-#: includes/abilities/settings.php:157
+#: includes/abilities/settings.php:169
 msgid "Present only when a homepage key was sent: the keys that already held the value."
 msgstr ""
 
-#: includes/abilities/settings.php:162
+#: includes/abilities/settings.php:174
 msgid "Present only when a homepage key was sent: the keys that were not saved. Always empty on success."
 msgstr ""
 
-#: includes/abilities/settings.php:167
+#: includes/abilities/settings.php:179
 msgid "Present only when a homepage key was sent: homepage keys the request did not name that another plugin changed during the call, such as The Events Calendar clearing page_on_front."
 msgstr ""
 
 #. translators: 1: the rejected setting key, 2: the comma-separated list of allowed setting keys.
-#: includes/abilities/settings.php:214
+#: includes/abilities/settings.php:226
 #, php-format
 msgid "The setting \"%1$s\" cannot be changed. Allowed settings are: %2$s."
 msgstr ""
 
 #. translators: %s: the setting key that received a boolean value.
-#: includes/abilities/settings.php:261
+#: includes/abilities/settings.php:273
 #, php-format
 msgid "The setting \"%s\" expects a text value, not true/false."
 msgstr ""
 
 #. translators: %s: the setting key WordPress rejected as invalid.
-#: includes/abilities/settings.php:298
+#: includes/abilities/settings.php:310
 #, php-format
 msgid "The value for \"%s\" is not valid and was not applied."
 msgstr ""
 
 #. translators: 1: keys that were saved, 2: keys that already held the value, 3: keys that were not saved. "none" when a list is empty.
-#: includes/abilities/settings.php:405
+#: includes/abilities/settings.php:429
 #, php-format
 msgid "Not every setting was saved. Saved: %1$s. Already set: %2$s. Not saved: %3$s. Check the homepage settings before trying again."
 msgstr ""
 
-#: includes/abilities/settings.php:406
-#: includes/abilities/settings.php:407
+#: includes/abilities/settings.php:430
+#: includes/abilities/settings.php:431
 msgid "none"
 msgstr ""
 
-#: includes/abilities/settings.php:442
+#: includes/abilities/settings.php:466
 msgid "show_on_front must be \"posts\" or \"page\", so nothing was changed."
 msgstr ""
 
 #. translators: %s: the setting key.
-#: includes/abilities/settings.php:451
+#: includes/abilities/settings.php:475
 #, php-format
 msgid "The setting \"%s\" takes a page id, or 0 for none, so nothing was changed."
 msgstr ""
 
-#: includes/abilities/settings.php:475
+#: includes/abilities/settings.php:499
 msgid "The front page and the posts page must be different pages, so nothing was changed."
 msgstr ""
 
-#: includes/abilities/settings.php:478
+#: includes/abilities/settings.php:502
 msgid "Showing a static front page needs page_on_front set to a published page, so nothing was changed."
 msgstr ""
 
 #. translators: %s: the setting key.
-#: includes/abilities/settings.php:509
+#: includes/abilities/settings.php:533
 #, php-format
 msgid "The setting \"%s\" must name a published page, or 0 for none, so nothing was changed."
 msgstr ""
@@ -2788,7 +2814,7 @@ msgid "List backups"
 msgstr ""
 
 #: includes/abilities/site-backups.php:60
-msgid "Lists the backup sets UpdraftPlus has on record, newest first: when each started, whether it holds the database only or files too, which parts it holds, its total size, whether it is kept on this server, off-site or both, and the result of two checks. The database check: verified means the database file on this server has the recorded size and matched its checksum when the background check last looked, at the time given; pending means a backup of the last 24 hours that has not been checked yet; too_large means the background check could not finish it; size_only means one of those two on a site whose owner accepts large backups on size alone; not_checked means a backup older than 24 hours with the right size, which is not checked; trusted_unchecked means the set is kept only off-site and the site owner chose to trust UpdraftPlus's record of it; failed means none of these. The background check runs only while the backup gate is on. This tool never computes a checksum itself, so a small backup can show as pending here while site-backup-status, which compares small files on the spot, already reports it as verified. The files check compares sizes only: size_ok, failed, not_local, or not_included for a database-only set. It changes nothing. Never returns file names, download links, storage settings or credentials. Refused on multisite. Requires the manage-options capability."
+msgid "Lists the backup sets UpdraftPlus has on record, newest first: when each started, whether it holds the database only or files too, which parts it holds, its total size, whether it is kept on this server, off-site, both or nowhere any more (none), and the result of two checks. The database check: verified means the database file on this server has the recorded size and matched its checksum when the background check last looked, at the time given; pending means a backup of the last 24 hours that has not been checked yet; too_large means the background check could not finish it; size_only means one of those two on a site whose owner accepts large backups on size alone; not_checked means a backup older than 24 hours with the right size, which is not checked; trusted_unchecked means the set is kept only off-site and the site owner chose to trust UpdraftPlus's record of it; failed means none of these. The background check runs only while the backup gate is on. This tool never computes a checksum itself, so a small backup can show as pending here while site-backup-status, which compares small files on the spot, already reports it as verified. The files check compares sizes only: size_ok, failed, not_local, or not_included for a database-only set. It changes nothing. Never returns file names, download links, storage settings or credentials. Refused on multisite. Requires the manage-options capability."
 msgstr ""
 
 #: includes/abilities/site-backups.php:75
@@ -2884,7 +2910,7 @@ msgid "Site health summary"
 msgstr ""
 
 #: includes/abilities/site-health.php:29
-msgid "Runs WordPress's own Site Health checks that need no network request and returns each check's name and result (good, recommended or critical) with a count of each. Also says whether debug mode is on, whether a debug log file exists, whether WordPress is in recovery mode and whether any plugin or theme is paused after a fatal error. Outbound requests are blocked while it runs. Also names the checks it does not run (those that need a network request or a file system connection, and the ones the Site Health screen runs in the background), so its counts can be lower than that screen's. Returns no log lines, no file paths, no version numbers and no server details; use the plugin list tool for plugin versions. Requires the manage-options capability. On a multisite network, a super admin only."
+msgid "Runs WordPress's own Site Health checks that need no network request and returns each check's name, result (good, recommended or critical) and WordPress's own label for that result, with a count of each. The label says what the check found; do not guess a cause from the check's name (theme_version, for example, also flags inactive themes, not only waiting updates). Also says whether debug mode is on, whether a debug log file exists, whether WordPress is in recovery mode and whether any plugin or theme is paused after a fatal error. Outbound requests are blocked while it runs. Also names the checks it does not run (those that need a network request or a file system connection, and the ones the Site Health screen runs in the background), so its counts can be lower than that screen's. Returns no log lines, no file paths, no version numbers and no server details; use the plugin list tool for plugin versions. Requires the manage-options capability. On a multisite network, a super admin only."
 msgstr ""
 
 #: includes/abilities/site-health.php:36
@@ -2903,7 +2929,11 @@ msgstr ""
 msgid "Summarises WordPress's scheduled tasks: whether WP-Cron is switched off in configuration, how many tasks are scheduled, how many are due now and how many are more than five minutes late, how late the oldest one is, and the 50 hooks with the soonest next run, each with its schedule and how many events it has. Hook names are identifiers chosen by plugin code; names with unusual characters are shown as other. Task arguments are never returned. It runs nothing and changes nothing. Requires the manage-options capability. On a multisite network, a super admin only."
 msgstr ""
 
-#: includes/abilities/site-health.php:133
+#: includes/abilities/site-health.php:121
+msgid "WordPress's own label for this result, as the Site Health screen shows it; empty when it has none that can be shown. Read this, not the check name, to say what was found."
+msgstr ""
+
+#: includes/abilities/site-health.php:137
 msgid "Site Health checks of WordPress itself that this tool does not run. Checks added by plugins are not run either."
 msgstr ""
 
@@ -3656,25 +3686,39 @@ msgstr ""
 msgid "Delete an allowlisted meta key from a user the agent can edit. Removes all values of that key. Auth and capability keys can never be touched. The response returns the old value when it is plain text or a number. Keys are opt-in: an administrator exposes each one under Exposed user meta keys in the Users sub-tab of the Abilities tab."
 msgstr ""
 
-#: includes/abilities/user-meta.php:91
+#: includes/abilities/user-meta.php:90
+msgid "key and meta_key name different keys. Send one of them, or the same key in both. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/user-meta.php:93
+msgid "Send the user-meta key as key or meta_key."
+msgstr ""
+
+#: includes/abilities/user-meta.php:114
 msgid "ID of the user whose meta to read. The current user must have edit access to this user."
 msgstr ""
 
-#: includes/abilities/user-meta.php:96
-#: includes/abilities/user-meta.php:146
-#: includes/abilities/user-meta.php:201
-msgid "The user-meta key to operate on. Must be on the operator's user-meta allowlist (or the allow-all wildcard) and not explicitly denied or hard-blocked; session tokens, application passwords, capability, user-level, and 2FA/passkey keys can never be exposed under any allowlist, and a key that fails any of those checks is rejected before the operation runs. (The post-meta abilities name the equivalent parameter meta_key; the two are kept distinct for back-compatibility and are not interchangeable.)"
+#: includes/abilities/user-meta.php:119
+#: includes/abilities/user-meta.php:174
+#: includes/abilities/user-meta.php:234
+msgid "The user-meta key to operate on. Must be on the operator's user-meta allowlist (or the allow-all wildcard) and not explicitly denied or hard-blocked; session tokens, application passwords, capability, user-level, and 2FA/passkey keys can never be exposed under any allowlist, and a key that fails any of those checks is rejected before the operation runs. Send key or meta_key."
 msgstr ""
 
-#: includes/abilities/user-meta.php:141
+#: includes/abilities/user-meta.php:124
+#: includes/abilities/user-meta.php:179
+#: includes/abilities/user-meta.php:239
+msgid "The same key under the name the post and term meta tools use. Send key or meta_key; when both are sent they must be the same."
+msgstr ""
+
+#: includes/abilities/user-meta.php:169
 msgid "ID of the user whose meta to write. The current user must have edit access to this user."
 msgstr ""
 
-#: includes/abilities/user-meta.php:150
+#: includes/abilities/user-meta.php:183
 msgid "The scalar value to store. Only text, number, or boolean values are accepted; the value is plain-text sanitized and then run through any registered sanitize_user_meta_{key} callback."
 msgstr ""
 
-#: includes/abilities/user-meta.php:196
+#: includes/abilities/user-meta.php:229
 msgid "ID of the user whose meta to delete. The current user must have edit access to this user."
 msgstr ""
 
@@ -3758,59 +3802,71 @@ msgstr ""
 msgid "Password for the new account. Omit it, or send an empty string, to have WordPress generate a strong random password instead of setting one yourself."
 msgstr ""
 
-#: includes/abilities/users.php:478
+#: includes/abilities/users.php:370
+msgid "A user with that username already exists, so no user was created."
+msgstr ""
+
+#: includes/abilities/users.php:371
+msgid "A user with that email address already exists, so no user was created."
+msgstr ""
+
+#: includes/abilities/users.php:489
 msgid "ID of the user to edit. The caller needs the edit-users capability plus edit access to this specific user."
 msgstr ""
 
-#: includes/abilities/users.php:482
+#: includes/abilities/users.php:493
 msgid "New public display name. Sanitized as plain text; omit to leave the current value unchanged."
 msgstr ""
 
-#: includes/abilities/users.php:486
+#: includes/abilities/users.php:497
 msgid "New first name. Sanitized as plain text; omit to leave the current value unchanged."
 msgstr ""
 
-#: includes/abilities/users.php:490
+#: includes/abilities/users.php:501
 msgid "New last name. Sanitized as plain text; omit to leave the current value unchanged."
 msgstr ""
 
-#: includes/abilities/users.php:495
+#: includes/abilities/users.php:506
 msgid "New email address, applied immediately via wp_update_user rather than WordPress's usual pending-email confirmation step. Must be a valid address."
 msgstr ""
 
-#: includes/abilities/users.php:499
+#: includes/abilities/users.php:510
 msgid "New role slug to assign. Only honored when the caller holds the promote-users capability, can promote this specific user, and the role is one they are allowed to hand out; otherwise the whole update is rejected, not just the role change. A change that would demote the site's last remaining administrator is always refused."
 msgstr ""
 
-#: includes/abilities/users.php:729
+#: includes/abilities/users.php:740
 msgid "This is the site's last administrator, so it was not deleted. Give another user the administrator role first."
 msgstr ""
 
-#: includes/abilities/users.php:730
+#: includes/abilities/users.php:741
 msgid "This is the site's last administrator, so its role was not changed. Give another user the administrator role first."
 msgstr ""
 
-#: includes/abilities/users.php:756
+#: includes/abilities/users.php:767
 msgid "ID of the user to permanently delete. Refused for the caller's own account and for the site's last remaining administrator."
 msgstr ""
 
-#: includes/abilities/users.php:761
+#: includes/abilities/users.php:772
 msgid "ID of an existing user to reassign the deleted user's content to. Not marked required by the schema, but the delete is refused without it: it must be given, must exist, and must differ from the user being deleted."
 msgstr ""
 
-#: includes/abilities/users.php:772
+#: includes/abilities/users.php:783
 msgid "True when the account was permanently deleted (single-site). False on multisite, where core only removes the user from the current site."
 msgstr ""
 
-#: includes/abilities/users.php:776
+#: includes/abilities/users.php:787
 msgid "Present on multisite: the user was removed from the current site, but the network account and its logins still exist."
 msgstr ""
 
-#: includes/abilities/users.php:837
+#: includes/abilities/users.php:846
+msgid "No user has that id, so nothing was deleted."
+msgstr ""
+
+#: includes/abilities/users.php:857
 msgid "You cannot delete your own account, so nothing was deleted."
 msgstr ""
 
-#: includes/abilities/users.php:852
+#: includes/abilities/users.php:872
 msgid "Pass reassign_to as the id of another existing user who takes over this user's content, so nothing was deleted."
 msgstr ""
 
@@ -4377,88 +4433,94 @@ msgstr ""
 msgid "New order status. Accepts either the short slug (e.g. \"completed\") or the wc- prefixed form (e.g. \"wc-completed\"); must match a status registered with wc_get_order_statuses(). No transition is blocked based on the order's current status."
 msgstr ""
 
+#. translators: %s: comma-separated list of the order statuses this site accepts.
+#: includes/abilities/woocommerce/orders.php:1919
+#, php-format
+msgid "That is not an order status on this site, so the order was not changed. Valid statuses: %s."
+msgstr ""
+
 #. translators: %s: the requested order status.
-#: includes/abilities/woocommerce/orders.php:1937
+#: includes/abilities/woocommerce/orders.php:1946
 #, php-format
 msgid "The order status could not be changed to \"%s\". The order keeps its previous status."
 msgstr ""
 
 #. translators: 1: the requested order status, 2: the status the order actually holds.
-#: includes/abilities/woocommerce/orders.php:1961
+#: includes/abilities/woocommerce/orders.php:1970
 #, php-format
 msgid "The order status did not persist as \"%1$s\"; it currently reads \"%2$s\"."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2094
+#: includes/abilities/woocommerce/orders.php:2103
 msgid "The order's post ID whose notes to list."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2164
+#: includes/abilities/woocommerce/orders.php:2173
 msgid "The order's post ID to attach the note to."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2169
+#: includes/abilities/woocommerce/orders.php:2178
 msgid "The note text to add to the order."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2173
+#: includes/abilities/woocommerce/orders.php:2182
 msgid "When true, the note is customer-facing and appears in the customer's My Account order view and order emails. When false (the default), it is a private, admin-only note."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2310
+#: includes/abilities/woocommerce/orders.php:2319
 msgid "The order's post ID whose refunds to list."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2382
+#: includes/abilities/woocommerce/orders.php:2391
 msgid "The refund's own post ID (not the order id). Get it from wc-list-order-refunds or the id returned by wc-create-order-refund."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2440
+#: includes/abilities/woocommerce/orders.php:2449
 msgid "The order's post ID to refund."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2445
+#: includes/abilities/woocommerce/orders.php:2454
 msgid "Total refund amount as a decimal string, e.g. \"12.50\" (no currency symbol or thousands separator). Required even when line_items is also sent."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2449
+#: includes/abilities/woocommerce/orders.php:2458
 msgid "Optional free-text reason recorded on the refund and returned verbatim under the Integrations security disclaimer."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2453
+#: includes/abilities/woocommerce/orders.php:2462
 msgid "Optional per-line-item refund breakdown, each with line_item_id (the order's own line item id), refund_total, and refund_tax as decimal strings. When omitted, the refund is recorded against the order as a whole with no per-line allocation. A non-numeric or negative refund_total or refund_tax on any line, or a line_item_id that does not exist on the order, fails the entire request."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2459
+#: includes/abilities/woocommerce/orders.php:2468
 msgid "The order's own line item id, from the id field of the line_items returned by wc-get-order. This is not a product id. An id that does not exist on the order fails the entire request."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2463
+#: includes/abilities/woocommerce/orders.php:2472
 msgid "Amount to refund against this line, as a decimal string, e.g. \"12.50\" (no currency symbol or thousands separator). Unlike the top-level amount this is not constrained by the schema, so it is checked when the refund runs: a non-numeric or negative value fails the whole request before any refund is created."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2467
+#: includes/abilities/woocommerce/orders.php:2476
 msgid "Tax portion to refund against this line, as a decimal string. Same validation as refund_total: non-numeric or negative fails the whole request before any refund is created."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2520
+#: includes/abilities/woocommerce/orders.php:2529
 msgid "The refund amount must be greater than zero, so no refund was created."
 msgstr ""
 
 #. translators: %s: the amount still refundable on the order.
-#: includes/abilities/woocommerce/orders.php:2534
+#: includes/abilities/woocommerce/orders.php:2543
 #, php-format
 msgid "The refund amount is more than the %s still refundable on this order, so no refund was created."
 msgstr ""
 
 #. translators: %d: the line item id that does not exist on the order.
-#: includes/abilities/woocommerce/orders.php:2566
+#: includes/abilities/woocommerce/orders.php:2575
 #, php-format
 msgid "Line item %d does not exist on this order. Use an id from the line_items returned by reading the order."
 msgstr ""
 
 #. translators: 1: the line item id, 2: its actual item type, e.g. "coupon" or "tax".
-#: includes/abilities/woocommerce/orders.php:2585
+#: includes/abilities/woocommerce/orders.php:2594
 #, php-format
 msgid "Line item %1$d is a %2$s, which WooCommerce cannot refund a per-line amount against. Refund a coupon or tax adjustment through the top-level amount instead."
 msgstr ""
@@ -4468,7 +4530,7 @@ msgid "List WooCommerce products"
 msgstr ""
 
 #: includes/abilities/woocommerce/products.php:60
-msgid "Lists WooCommerce products with their id, name, SKU, price, stock status, status, categories, and featured flag, plus a total. Only status is filtered server-side; there is no price, name, or other field filter, so narrowing the returned rows (for example to products under a price) is the caller's job. Requires the manage-WooCommerce capability."
+msgid "Lists WooCommerce products with their id, name, SKU, price, regular and sale price, stock status, stock quantity, status, categories, and featured flag, plus a total. Only status is filtered server-side; there is no price, name, or other field filter, so narrowing the returned rows (for example to products under a price) is the caller's job. Requires the manage-WooCommerce capability."
 msgstr ""
 
 #: includes/abilities/woocommerce/products.php:68
@@ -4527,162 +4589,162 @@ msgstr ""
 msgid "Status filter; 'any' returns all states."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:495
+#: includes/abilities/woocommerce/products.php:503
 msgid "The WooCommerce product id to read."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:549
+#: includes/abilities/woocommerce/products.php:557
 msgid "The product's publish state."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:554
+#: includes/abilities/woocommerce/products.php:562
 msgid "The product's full description, shown on the single product page. Accepts the same HTML as post content."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:558
+#: includes/abilities/woocommerce/products.php:566
 msgid "A short summary shown near the price on the single product page. Accepts limited HTML."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:562
+#: includes/abilities/woocommerce/products.php:570
 msgid "The product's SKU (stock keeping unit). WooCommerce requires SKUs to be unique across products."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:573
+#: includes/abilities/woocommerce/products.php:581
 msgid "A decimal price as a string, e.g. \"19.99\" (no currency symbol or thousands separator), or an empty string to clear the price."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:580
-#: includes/abilities/woocommerce/variations.php:456
+#: includes/abilities/woocommerce/products.php:588
+#: includes/abilities/woocommerce/variations.php:461
 msgid "A decimal price as a string, e.g. \"14.99\" (must be at or below regular_price to take effect), or an empty string to clear the sale price."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:585
+#: includes/abilities/woocommerce/products.php:593
 msgid "Whether the product is in stock, out of stock, or on backorder."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:590
-#: includes/abilities/woocommerce/variations.php:466
+#: includes/abilities/woocommerce/products.php:598
+#: includes/abilities/woocommerce/variations.php:471
 msgid "On-hand quantity (only applied when manage_stock is true)."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:594
+#: includes/abilities/woocommerce/products.php:602
 msgid "Whether WooCommerce tracks a numeric stock_quantity for this product."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:598
+#: includes/abilities/woocommerce/products.php:606
 msgid "Whether the product is marked as featured (used by 'featured products' widgets and shortcodes)."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:606
+#: includes/abilities/woocommerce/products.php:614
 msgid "Product category term ids. Replaces the product's current categories."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:614
+#: includes/abilities/woocommerce/products.php:622
 msgid "Product tag term ids. Replaces the product's current tags."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:619
+#: includes/abilities/woocommerce/products.php:627
 msgid "Attachment id to use as the product's main image."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:627
+#: includes/abilities/woocommerce/products.php:635
 msgid "Attachment ids for the product's image gallery, in display order. Replaces the current gallery."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:636
+#: includes/abilities/woocommerce/products.php:644
 msgid "Display name of the custom attribute, for example \"Material\". This is also the key it is upserted by, so reusing an existing name updates that attribute rather than adding a second one."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:641
+#: includes/abilities/woocommerce/products.php:649
 msgid "The attribute's possible values, for example [\"Cotton\", \"Wool\"]. Sending this replaces that attribute's full option list rather than appending to it."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:648
+#: includes/abilities/woocommerce/products.php:656
 msgid "Custom (product-level) attributes as {name, options[]} objects. Each is upserted by name; existing custom attributes not included here are left unchanged, not removed. Global/taxonomy attributes already on the product are not affected by this field."
 msgstr ""
 
 #. translators: %s: the conflicting SKU value.
-#: includes/abilities/woocommerce/products.php:691
+#: includes/abilities/woocommerce/products.php:699
 #, php-format
 msgid "The SKU \"%s\" is already in use by another product."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:737
-#: includes/abilities/woocommerce/variations.php:568
+#: includes/abilities/woocommerce/products.php:745
+#: includes/abilities/woocommerce/variations.php:573
 msgid "The sale price cannot be higher than the regular price, so nothing was saved. Lower the sale price or raise the regular price."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:751
+#: includes/abilities/woocommerce/products.php:759
 msgid "stock_status cannot be set while manage_stock is true: WooCommerce derives it from stock_quantity. Set stock_quantity instead, or set manage_stock to false."
 msgstr ""
 
 #. translators: %s: comma-separated attribute names the product does not have.
-#: includes/abilities/woocommerce/products.php:853
+#: includes/abilities/woocommerce/products.php:861
 #, php-format
 msgid "This product has no attribute named %s, so nothing was saved."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:859
+#: includes/abilities/woocommerce/products.php:867
 msgid "The same attribute cannot be removed and sent in one call, so nothing was saved."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:882
+#: includes/abilities/woocommerce/products.php:890
 msgid "This product has more than 1,000 unpublished variations, too many to check, so nothing was saved. Remove the attribute in WooCommerce instead."
 msgstr ""
 
 #. translators: %s: attribute slugs, each with the ids of the variations that use it.
-#: includes/abilities/woocommerce/products.php:903
+#: includes/abilities/woocommerce/products.php:911
 #, php-format
 msgid "Variations use these attributes, so nothing was saved: %s. Delete or change those variations first."
 msgstr ""
 
 #. translators: %s: comma-separated list of global attribute slugs whose displayed options differ from the stored ones.
-#: includes/abilities/woocommerce/products.php:1042
+#: includes/abilities/woocommerce/products.php:1050
 #, php-format
 msgid "Something on this site is filtering what these global attributes show, so the options you were given for them are not the ones stored: %s. Sending those options back could mean \"leave this alone\" or it could mean \"remove the terms I was not shown\", and nothing in the request says which, so it is refused instead of guessed at. To change other fields, leave the attributes field out. Changing a global attribute's own options is not available through this plugin; that has to be done in the WooCommerce admin."
 msgstr ""
 
 #. translators: %s: comma-separated list of global attribute slugs the request tried to change.
-#: includes/abilities/woocommerce/products.php:1056
+#: includes/abilities/woocommerce/products.php:1064
 #, php-format
 msgid "These are global attributes, shared with every other product that uses them, so their options cannot be changed through this product: %s. This field only describes a product's own custom attributes, and it has no way to express a global attribute's terms. Changing a global attribute's options is not available through this plugin's abilities; add or remove the option in the WooCommerce admin under Products > Attributes, then use wc-create-product-variation or wc-update-product-variation here to build variations with it. Send its current options back unchanged to leave it alone."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:1204
+#: includes/abilities/woocommerce/products.php:1212
 msgid "The product's title. Required; the product is not created without one."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:1211
+#: includes/abilities/woocommerce/products.php:1219
 msgid "The product's type. This ability only creates simple products. For a variable product, create the parent in WooCommerce and add its variations with wc-create-product-variation."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:1261
+#: includes/abilities/woocommerce/products.php:1269
 msgid "This tool only creates simple products. For a variable product, create the parent in WooCommerce and add its variations with wc-create-product-variation."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:1310
+#: includes/abilities/woocommerce/products.php:1318
 msgid "The WooCommerce product id to update."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:1315
+#: includes/abilities/woocommerce/products.php:1323
 msgid "The product's title. Omit to leave the existing title unchanged."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:1319
+#: includes/abilities/woocommerce/products.php:1327
 msgid "Names or slugs of attributes to remove from this product, for example [\"Color\"] or [\"pa_color\"]. An attribute any variation of the product uses is refused, naming those variations, and so is a name the product does not have. A product with more than 1,000 unpublished variations is too many to check, so the removal is refused. Do not send the same attribute in attributes too."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:1332
+#: includes/abilities/woocommerce/products.php:1340
 msgid "The product's current type. A value matching the product's existing type is accepted as a no-op; a different value is rejected with an error, since converting a product between simple, grouped, external, and variable is not supported. Omit this field to leave the type unchanged."
 msgstr ""
 
 #. translators: 1: the product's actual current type. 2: the type the caller requested.
-#: includes/abilities/woocommerce/products.php:1433
+#: includes/abilities/woocommerce/products.php:1441
 #, php-format
 msgid "This product is a %1$s product and cannot be changed to %2$s, because converting a product between types is not supported. Omit type, or send its current value, to leave it unchanged."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:1456
+#: includes/abilities/woocommerce/products.php:1464
 msgid "The WooCommerce product id to permanently delete."
 msgstr ""
 
@@ -5053,7 +5115,7 @@ msgid "List WooCommerce product variations"
 msgstr ""
 
 #: includes/abilities/woocommerce/variations.php:63
-msgid "Lists a variable product's variations by parent product id, each with its id, parent id, SKU, price, stock status, and status, plus a total. A parent that is not a variable product (e.g. simple or grouped) is refused, since only variable products have variations. Requires the manage-WooCommerce capability."
+msgid "Lists a variable product's variations by parent product id, each with its id, parent id, SKU, price, regular and sale price, stock status, and status, plus a total. A parent that is not a variable product (e.g. simple or grouped) is refused, since only variable products have variations. Requires the manage-WooCommerce capability."
 msgstr ""
 
 #: includes/abilities/woocommerce/variations.php:71
@@ -5101,106 +5163,106 @@ msgid "Page number of variations to return, 1-indexed. Defaults to 1."
 msgstr ""
 
 #. translators: 1: the product id, 2: the product's actual type (e.g. simple, grouped).
-#: includes/abilities/woocommerce/variations.php:339
+#: includes/abilities/woocommerce/variations.php:341
 #, php-format
 msgid "Product %1$d is a %2$s product, not a variable product, so it has no variations to list."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:385
+#: includes/abilities/woocommerce/variations.php:390
 msgid "The variation's own product id (not the parent product's id)."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:436
+#: includes/abilities/woocommerce/variations.php:441
 msgid "The variation's publish state."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:441
+#: includes/abilities/woocommerce/variations.php:446
 msgid "The variation's own description. Shown instead of the parent product's description when this variation is selected."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:445
+#: includes/abilities/woocommerce/variations.php:450
 msgid "The variation's own SKU. WooCommerce requires SKUs to be unique across products and variations."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:450
+#: includes/abilities/woocommerce/variations.php:455
 msgid "A decimal price as a string, e.g. \"19.99\" (no currency symbol or thousands separator)."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:461
+#: includes/abilities/woocommerce/variations.php:466
 msgid "Whether this variation is in stock, out of stock, or on backorder."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:470
+#: includes/abilities/woocommerce/variations.php:475
 msgid "Whether WooCommerce tracks a numeric stock_quantity for this variation, independent of the parent product."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:475
+#: includes/abilities/woocommerce/variations.php:480
 msgid "Attachment id for this variation's own image. Falls back to the parent product's image when unset."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:479
+#: includes/abilities/woocommerce/variations.php:484
 msgid "A flat map of attribute name to the chosen value (strings only). Every key must be one the PARENT product already declares, in the parent's own form: a global attribute uses its pa_-prefixed taxonomy slug (pa_size), a custom one its sanitized name (size). A key the parent does not declare is rejected, and the error names the keys that would have worked. An empty value means \"Any\"."
 msgstr ""
 
 #. translators: %s: the conflicting SKU value.
-#: includes/abilities/woocommerce/variations.php:545
+#: includes/abilities/woocommerce/variations.php:550
 #, php-format
 msgid "The SKU \"%s\" is already in use by another product or variation."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:587
+#: includes/abilities/woocommerce/variations.php:592
 msgid "stock_status cannot be set while this variation manages or inherits stock management: WooCommerce derives it from stock_quantity. Set stock_quantity instead, or set manage_stock to false on a variation whose parent does not manage stock."
 msgstr ""
 
 #. translators: %s: comma-separated list of the rejected attribute keys.
-#: includes/abilities/woocommerce/variations.php:690
+#: includes/abilities/woocommerce/variations.php:695
 #, php-format
 msgid "The parent product declares no attributes, so no attribute can be set on its variations. Rejected: %s. Add the attributes to the parent product first."
 msgstr ""
 
 #. translators: 1: comma-separated list of the rejected attribute keys. 2: comma-separated list of every attribute key the parent declares.
-#: includes/abilities/woocommerce/variations.php:699
+#: includes/abilities/woocommerce/variations.php:704
 #, php-format
 msgid "The parent product uses none of its attributes for variations, so no attribute can be set on its variations. Rejected: %1$s. It declares %2$s for display only; turn on \"Used for variations\" for one of those on the parent product first."
 msgstr ""
 
 #. translators: 1: comma-separated list of the rejected attribute keys. 2: comma-separated list of the parent's variation attribute keys.
-#: includes/abilities/woocommerce/variations.php:711
+#: includes/abilities/woocommerce/variations.php:716
 #, php-format
 msgid "The parent product does not declare these attributes: %1$s. Its variation attribute keys are: %2$s. Use those exactly (a global attribute is prefixed pa_)."
 msgstr ""
 
 #. translators: 1: comma-separated list of the rejected attribute keys. 2: comma-separated list of the parent's variation attribute keys.
-#: includes/abilities/woocommerce/variations.php:722
+#: includes/abilities/woocommerce/variations.php:727
 #, php-format
 msgid "The parent product declares these attributes but does not use them for variations, so setting them would apply nothing: %1$s. Its variation attribute keys are: %2$s. Use one of those, or turn on \"Used for variations\" for the attribute on the parent product first."
 msgstr ""
 
 #. translators: 1: attribute key. 2: the rejected value. 3: comma-separated list of the parent's options for that attribute.
-#: includes/abilities/woocommerce/variations.php:784
+#: includes/abilities/woocommerce/variations.php:789
 #, php-format
 msgid "%1$s=%2$s (its options are: %3$s)"
 msgstr ""
 
 #. translators: %s: semicolon-separated list of rejected key=value pairs, each with the parent's options for that attribute.
-#: includes/abilities/woocommerce/variations.php:799
+#: includes/abilities/woocommerce/variations.php:804
 #, php-format
 msgid "These attribute values are not options the parent product declares, so setting them would apply nothing: %s. Use one of the listed options exactly (the match is case-sensitive), or send an empty string to leave the attribute as \"Any\"."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:924
+#: includes/abilities/woocommerce/variations.php:929
 msgid "The parent (variable) product id the variation attaches to."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:1012
+#: includes/abilities/woocommerce/variations.php:1017
 msgid "The variation id to update."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:1019
+#: includes/abilities/woocommerce/variations.php:1024
 msgid "A flat map of attribute name to the chosen value (strings only). Every key must be one the PARENT product already declares, in the parent's own form: a global attribute uses its pa_-prefixed taxonomy slug (pa_size), a custom one its sanitized name (size). A key the parent does not declare is rejected, and the error names the keys that would have worked. Unlike every other field on this ability, this replaces the variation's entire attribute map: any attribute not included here is cleared, not preserved."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:1209
+#: includes/abilities/woocommerce/variations.php:1214
 msgid "The variation id to permanently delete."
 msgstr ""
 
@@ -5346,93 +5408,103 @@ msgstr ""
 msgid "%1$s Setting: %2$s."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:974
+#. translators: %s: the setting key the caller sent.
+#: includes/abilities/wpbakery-elements.php:365
+#, php-format
+msgid "\"%s\" is not a setting this tool can change. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:379
+msgid "Give at least one setting. Nothing was changed."
+msgstr ""
+
+#: includes/abilities/wpbakery-elements.php:1002
 msgid "page for the elements of a page (the default), grid to include the Grid Builder's elements for a grid template."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:978
+#: includes/abilities/wpbakery-elements.php:1006
 msgid "One element's shortcode tag, such as vc_custom_heading. Returns that element with its settings."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:1007
+#: includes/abilities/wpbakery-elements.php:1035
 msgid "From the map: only, the elements allowed inside, and except, the ones refused. Both empty when the map sets no rule."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:1011
+#: includes/abilities/wpbakery-elements.php:1039
 msgid "From the map: only, the elements it may sit in, and except, the ones it may not. Both empty when the map sets no rule."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:1016
+#: includes/abilities/wpbakery-elements.php:1044
 msgid "Only with tag. kind is how wpbakery-update-element takes the value; writable says whether it can; needs is unfiltered_html for Design Options and for settings that can carry script or raw HTML."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:1024
+#: includes/abilities/wpbakery-elements.php:1052
 msgid "Map entries and settings left out because the map could not resolve them or they had no setting name."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:1197
-#: includes/abilities/wpbakery-elements.php:2114
+#: includes/abilities/wpbakery-elements.php:1225
+#: includes/abilities/wpbakery-elements.php:2142
 msgid "ID of the page, post or Grid Builder template."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:1202
-#: includes/abilities/wpbakery-elements.php:2126
+#: includes/abilities/wpbakery-elements.php:1230
+#: includes/abilities/wpbakery-elements.php:2154
 msgid "The element's index in the outline from wpbakery-get-page-content with include_structure."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:1219
+#: includes/abilities/wpbakery-elements.php:1247
 msgid "Setting name to value, each value in the input form of its kind from wpbakery-list-elements."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:1224
+#: includes/abilities/wpbakery-elements.php:1252
 msgid "Setting names to remove, which returns them to the element's default."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:1228
+#: includes/abilities/wpbakery-elements.php:1256
 msgid "New inner content for an element with a content setting and no child elements, such as a text block. HTML is filtered as in a post; the code of a raw HTML or raw JS element needs unfiltered HTML."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:1322
-#: includes/abilities/wpbakery-elements.php:2085
+#: includes/abilities/wpbakery-elements.php:1350
+#: includes/abilities/wpbakery-elements.php:2113
 #: includes/abilities/wpbakery-site.php:599
 msgid "This post is not a WPBakery page. Edit a page built with another builder in that builder. Nothing was changed."
 msgstr ""
 
 #. translators: 1: the parent tag, 2: the child tag.
-#: includes/abilities/wpbakery-elements.php:1556
+#: includes/abilities/wpbakery-elements.php:1584
 #, php-format
 msgid "WPBakery's element map on this site does not list %1$s, so its nesting rule cannot be read and nothing can be placed inside it with this tool. Use WPBakery's editor for this container. Nothing was changed. Child: %2$s."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:1636
+#: includes/abilities/wpbakery-elements.php:1664
 msgid "A row must keep at least one column, so this change would break the layout. Remove or move the whole row instead. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:1846
+#: includes/abilities/wpbakery-elements.php:1874
 msgid "Text in this template holds HTML that WordPress removes for a user who may not post unfiltered HTML, such as a script, an event attribute or a link protocol it does not allow. Remove it from the template, or ask such a user to insert it. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:1953
+#: includes/abilities/wpbakery-elements.php:1981
 msgid "WPBakery's editor is not switched on for this post type for this user, so a WPBakery page cannot be started here. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:2119
+#: includes/abilities/wpbakery-elements.php:2147
 msgid "The page fingerprint from the last wpbakery-get-page-content read or the last write's response. A page that changed since is refused."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:2140
+#: includes/abilities/wpbakery-elements.php:2168
 msgid "The tag and fingerprint the outline returned for that index."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:2171
+#: includes/abilities/wpbakery-elements.php:2199
 msgid "Setting name to value, each in the input form of its kind from wpbakery-list-elements."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:2175
+#: includes/abilities/wpbakery-elements.php:2203
 msgid "Inner content for an element with a content setting and no children, such as a text block."
 msgstr ""
 
-#: includes/abilities/wpbakery-elements.php:2467
+#: includes/abilities/wpbakery-elements.php:2496
 msgid "This site keeps only 1 revision per post (WP_POST_REVISIONS or the wp_revisions_to_keep filter), so WordPress would delete the revision that brings the removed element back during the same save. Raise the limit to 2 or more, or remove the element in WPBakery's editor. Nothing was changed."
 msgstr ""
 
@@ -7876,7 +7948,7 @@ msgid "Reads one comment by id: author name, content, status, and date. Author e
 msgstr ""
 
 #: includes/admin/disclosures.php:47
-msgid "Lists media library items: URL, alt text, mime type, and dimensions."
+msgid "Lists media library items: URL, alt text, caption, mime type, and dimensions."
 msgstr ""
 
 #: includes/admin/disclosures.php:48
@@ -8032,7 +8104,7 @@ msgid "Reads all of a user's ACF field values as a hydrated map keyed by field n
 msgstr ""
 
 #: includes/admin/disclosures.php:94
-msgid "Lists your WooCommerce products with their id, name, SKU, price, stock status, status, categories, and featured flag, and the total count. Requires the manage-WooCommerce capability."
+msgid "Lists your WooCommerce products with their id, name, SKU, price, regular and sale price, stock status, stock quantity, status, categories, and featured flag, and the total count. Requires the manage-WooCommerce capability."
 msgstr ""
 
 #: includes/admin/disclosures.php:95
@@ -8622,7 +8694,7 @@ msgid "Updates an existing GeoDirectory listing's title, content, or address/coo
 msgstr ""
 
 #: includes/admin/disclosures.php:284
-msgid "Runs WordPress's own Site Health checks that need no network request and returns each check's result, plus whether debug mode, a debug log, recovery mode or a paused plugin or theme is present. Never a log line, a file path or a version number."
+msgid "Runs WordPress's own Site Health checks that need no network request and returns each check's result with WordPress's label for it, plus whether debug mode, a debug log, recovery mode or a paused plugin or theme is present. Never a log line, a file path or a version number."
 msgstr ""
 
 #: includes/admin/disclosures.php:285
@@ -9287,7 +9359,7 @@ msgstr ""
 
 #. translators: %s: the name of the setting, for example "Read-only mode".
 #: includes/admin/onboarding-pointer.php:102
-#: includes/helpers.php:3354
+#: includes/helpers.php:3351
 #, php-format
 msgid "%s could not be changed: the site's persistent object cache is still returning the old value. Flush the object cache (Redis, Memcached, or your host's cache) and save again."
 msgstr ""
@@ -13436,22 +13508,18 @@ msgstr ""
 msgid "Trash is disabled on this site, so this content cannot be moved to the Trash. Refusing to permanently delete it."
 msgstr ""
 
-#: includes/helpers.php:3309
-msgid "The item's place in this list, numbered 1 to N. It is not the stored position, which create-menu-item and update-menu-item return."
-msgstr ""
-
-#: includes/helpers.php:3310
-msgid "The item's stored position (menu_order), which can start at 0 and have gaps. list-menu-items numbers its items 1 to N instead, so compare places there."
+#: includes/helpers.php:3307
+msgid "The item's place in the menu, numbered 1 to N, the same number list-menu-items, create-menu-item and update-menu-item give it. It is not the stored position that update-menu-item's position sets, which can start at 0 and have gaps."
 msgstr ""
 
 #. translators: 1: name of the value that saved, 2: name of the value that could not be.
-#: includes/helpers.php:3371
+#: includes/helpers.php:3368
 #, php-format
 msgid "%1$s was saved, but %2$s could not be changed: the site's persistent object cache is still returning the old value. The site is now stricter than requested. Flush the object cache (Redis, Memcached, or your host's cache) and save again."
 msgstr ""
 
 #. translators: 1: name of the value that saved, 2: name of the value that could not be.
-#: includes/helpers.php:3392
+#: includes/helpers.php:3389
 #, php-format
 msgid "%1$s was saved, but %2$s could not be changed: the site's persistent object cache is still returning the old value. Some of your changes did not take, so re-check your settings rather than assuming this save either fully applied or fully failed. Flush the object cache (Redis, Memcached, or your host's cache) and save again."
 msgstr ""
@@ -14511,34 +14579,34 @@ msgstr ""
 msgid "The %s value is not a valid URL, so nothing was changed. Use an https:// or http:// address, a mailto: or tel: link, a path starting with /, or an anchor starting with #."
 msgstr ""
 
-#: includes/undo/engine.php:1080
+#: includes/undo/engine.php:1085
 msgid "The undo did not finish, so check the item before trying again."
 msgstr ""
 
-#: includes/undo/engine.php:1208
+#: includes/undo/engine.php:1213
 msgid "The undo could not be confirmed, so check the item before trying again."
 msgstr ""
 
-#: includes/undo/engine.php:1232
+#: includes/undo/engine.php:1237
 msgid "The undo did not change anything: the field could not be restored exactly, possibly because a plugin altered the value as it was written, so it was left as it is."
 msgstr ""
 
-#: includes/undo/engine.php:1233
+#: includes/undo/engine.php:1238
 msgid "The undo did not change anything, so nothing was written."
 msgstr ""
 
-#: includes/undo/engine.php:1257
+#: includes/undo/engine.php:1262
 msgid "The undo was applied, but its history entry could not be saved. Check the item."
 msgstr ""
 
 #. translators: 1: comma-separated field names, 2: change id
-#: includes/undo/engine.php:1266
+#: includes/undo/engine.php:1271
 #, php-format
 msgid "The undo did not fully apply: %1$s did not match, so the value may have been changed as it was restored, possibly by a plugin. Change %2$d records the current state and can be reverted."
 msgstr ""
 
 #. translators: 1: comma-separated field names, 2: change id
-#: includes/undo/engine.php:1268
+#: includes/undo/engine.php:1273
 #, php-format
 msgid "The undo did not fully apply: %1$s did not match. Change %2$d records the current state and can be reverted."
 msgstr ""
@@ -14640,44 +14708,48 @@ msgid "Only a site owner can undo this change, from the Changes tab."
 msgstr ""
 
 #: includes/undo/surfaces.php:350
-msgid "A page builder now owns this post, so the change cannot be restored."
+msgid "This change was made through another agent connection, and only that connection can undo it here. A site owner can revert it from the Changes tab."
 msgstr ""
 
 #: includes/undo/surfaces.php:351
-msgid "Something this change depends on no longer exists."
+msgid "A page builder now owns this post, so the change cannot be restored."
 msgstr ""
 
 #: includes/undo/surfaces.php:352
-msgid "The Trash is switched off, so this cannot be undone."
+msgid "Something this change depends on no longer exists."
 msgstr ""
 
 #: includes/undo/surfaces.php:353
-msgid "The item is no longer in the Trash."
+msgid "The Trash is switched off, so this cannot be undone."
 msgstr ""
 
 #: includes/undo/surfaces.php:354
-msgid "WordPress would store the old value differently now, so a restore would not be exact. Use Revisions instead."
+msgid "The item is no longer in the Trash."
 msgstr ""
 
 #: includes/undo/surfaces.php:355
-msgid "Force draft would change the status this undo restores."
+msgid "WordPress would store the old value differently now, so a restore would not be exact. Use Revisions instead."
 msgstr ""
 
 #: includes/undo/surfaces.php:356
-msgid "This undo is not allowed."
+msgid "Force draft would change the status this undo restores."
 msgstr ""
 
 #: includes/undo/surfaces.php:357
+msgid "This undo is not allowed."
+msgstr ""
+
+#: includes/undo/surfaces.php:358
 msgid "The stored change could not be read."
 msgstr ""
 
 #. translators: %d: how many undo calls one agent connection may make per hour.
-#: includes/undo/surfaces.php:359
+#: includes/undo/surfaces.php:360
 #, php-format
 msgid "Too many undo calls: an agent connection may make %d per hour. Try again within the hour."
 msgstr ""
 
-#: includes/undo/surfaces.php:382
+#: includes/undo/surfaces.php:383
 msgid "Whether this change can be undone, with the change ids, or the reason it cannot. When only some posts of a find and replace were recorded, undoable is false with a reason and change_ids still lists the ones that can be undone."
 msgstr ""
 

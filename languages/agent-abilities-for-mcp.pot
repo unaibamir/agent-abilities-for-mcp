@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-23T16:18:02+05:00\n"
+"POT-Creation-Date: 2026-11-23T16:34:26+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -2729,7 +2729,7 @@ msgid "A map of setting name to new value. Allowed keys: blogname, blogdescripti
 msgstr ""
 
 #: includes/abilities/settings.php:152
-msgid "Present only when a setting does not hold the value you sent once the write is done (posts_per_page is kept between 1 and 100, start_of_week between 0 and 6, text is cleaned, and another plugin can keep the old value): each such setting with the value you sent and the value it holds now."
+msgid "Present only when a setting does not hold the value you sent once the write is done (posts_per_page is kept between 1 and 100, start_of_week between 0 and 6, text is cleaned, and another plugin can change the value or keep the old one): each such setting with the value you sent and the value it holds now."
 msgstr ""
 
 #: includes/abilities/settings.php:164
@@ -2814,7 +2814,7 @@ msgid "List backups"
 msgstr ""
 
 #: includes/abilities/site-backups.php:60
-msgid "Lists the backup sets UpdraftPlus has on record, newest first: when each started, whether it holds the database only or files too, which parts it holds, its total size, whether it is kept on this server, off-site, both or nowhere any more (none), and the result of two checks. The database check: verified means the database file on this server has the recorded size and matched its checksum when the background check last looked, at the time given; pending means a backup of the last 24 hours that has not been checked yet; too_large means the background check could not finish it; size_only means one of those two on a site whose owner accepts large backups on size alone; not_checked means a backup older than 24 hours with the right size, which is not checked; trusted_unchecked means the set is kept only off-site and the site owner chose to trust UpdraftPlus's record of it; failed means none of these. The background check runs only while the backup gate is on. This tool never computes a checksum itself, so a small backup can show as pending here while site-backup-status, which compares small files on the spot, already reports it as verified. The files check compares sizes only: size_ok, failed, not_local, or not_included for a database-only set. It changes nothing. Never returns file names, download links, storage settings or credentials. Refused on multisite. Requires the manage-options capability."
+msgid "Lists the backup sets UpdraftPlus has on record, newest first: when each started, whether it holds the database only or files too, which parts it holds, its total size, whether it is kept on this server, off-site, both or nowhere any more (none), and the result of two checks. The database check: verified means the database file on this server has the recorded size and matched its checksum when the background check last looked, at the time given; pending means a backup of the last 24 hours that has not been checked yet; too_large means the background check could not finish it; size_only means one of those two on a site whose owner accepts large backups on size alone; not_checked means a backup older than 24 hours with the right size, which is not checked; trusted_unchecked means the set's database file is kept only off-site and the site owner chose to trust UpdraftPlus's record of it; failed means none of these. The background check runs only while the backup gate is on. This tool never computes a checksum itself, so a small backup can show as pending here while site-backup-status, which compares small files on the spot, already reports it as verified. The files check compares sizes only: size_ok, failed, not_local, or not_included for a database-only set. It changes nothing. Never returns file names, download links, storage settings or credentials. Refused on multisite. Requires the manage-options capability."
 msgstr ""
 
 #: includes/abilities/site-backups.php:75
@@ -2910,7 +2910,7 @@ msgid "Site health summary"
 msgstr ""
 
 #: includes/abilities/site-health.php:29
-msgid "Runs WordPress's own Site Health checks that need no network request and returns each check's name, result (good, recommended or critical) and WordPress's own label for that result, with a count of each. The label says what the check found; do not guess a cause from the check's name (theme_version, for example, also flags inactive themes, not only waiting updates). Also says whether debug mode is on, whether a debug log file exists, whether WordPress is in recovery mode and whether any plugin or theme is paused after a fatal error. Outbound requests are blocked while it runs. Also names the checks it does not run (those that need a network request or a file system connection, and the ones the Site Health screen runs in the background), so its counts can be lower than that screen's. Returns no log lines, no file paths, no version numbers and no server details; use the plugin list tool for plugin versions. Requires the manage-options capability. On a multisite network, a super admin only."
+msgid "Runs WordPress's own Site Health checks that need no network request and returns each check's name, result (good, recommended or critical) and WordPress's own label for that result, with a count of each. The label says what the check found, and is empty when WordPress has none that can be shown; do not guess a cause from the check's name (theme_version, for example, also flags inactive themes, not only waiting updates). Also says whether debug mode is on, whether a debug log file exists, whether WordPress is in recovery mode and whether any plugin or theme is paused after a fatal error. Outbound requests are blocked while it runs. Also names the checks it does not run (those that need a network request or a file system connection, and the ones the Site Health screen runs in the background), so its counts can be lower than that screen's. Returns no log lines, no file paths, no version numbers and no server details; use the plugin list tool for plugin versions. Requires the manage-options capability. On a multisite network, a super admin only."
 msgstr ""
 
 #: includes/abilities/site-health.php:36
@@ -13449,8 +13449,8 @@ msgstr ""
 
 #: includes/helpers.php:1264
 #: includes/helpers.php:1271
-#: includes/write-contract.php:989
-#: includes/write-contract.php:1236
+#: includes/write-contract.php:1072
+#: includes/write-contract.php:1319
 msgid "Only text, number, or boolean meta values are supported."
 msgstr ""
 

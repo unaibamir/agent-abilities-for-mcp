@@ -359,13 +359,15 @@ function aafm_wpbakery_setting_error( string $code, string $name ): WP_Error {
  * @return WP_Error
  */
 function aafm_builder_unknown_setting_error( string $key ): WP_Error {
+	// The key is the caller's: repeated as plain text and at most 100 characters.
+	$shown = mb_substr( aafm_sanitize_plain_text( $key ), 0, 100 );
 	return new WP_Error(
 		'aafm_builder_attribute_not_writable',
 		/* translators: %s: the setting key the caller sent. */
-		sprintf( __( '"%s" is not a setting this tool can change. Nothing was changed.', 'agent-abilities-for-mcp' ), $key ),
+		sprintf( __( '"%s" is not a setting this tool can change. Nothing was changed.', 'agent-abilities-for-mcp' ), $shown ),
 		array(
 			'status'  => 400,
-			'setting' => $key,
+			'setting' => $shown,
 		)
 	);
 }

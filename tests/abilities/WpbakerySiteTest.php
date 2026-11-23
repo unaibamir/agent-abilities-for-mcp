@@ -1507,6 +1507,9 @@ final class WpbakerySiteTest extends TestCase {
 		}
 		$this->assert_error( aafm_exec_wpbakery_update_settings( array( 'set' => array() ) ), 'aafm_builder_invalid_value', 400 );
 		$this->assertSame( 'Give at least one setting. Nothing was changed.', aafm_exec_wpbakery_update_settings( array( 'set' => array() ) )->get_error_message() );
+		// The key is the caller's: it is repeated as plain text, at most 100 characters.
+		$long = aafm_exec_wpbakery_update_settings( array( 'set' => array( '<b>x</b>' . str_repeat( 'k', 300 ) => true ) ) );
+		$this->assertSame( '"x' . str_repeat( 'k', 99 ) . '" is not a setting this tool can change. Nothing was changed.', $long->get_error_message() );
 		$this->assert_error( aafm_exec_wpbakery_update_settings( array( 'set' => 'x' ) ), 'aafm_builder_invalid_value', 400 );
 		remove_filter( 'aafm_builder_vendor', $filter, 20 );
 		$this->assertSame( array(), self::$calls );

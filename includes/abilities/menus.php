@@ -958,7 +958,7 @@ function aafm_args_update_menu_item(): array {
 				),
 				'url'       => array(
 					'type'        => 'string',
-					'description' => __( 'New destination URL for the item. Only a custom link takes a URL; for an item that links to a page, post or term the call is refused. An invalid or unsafe URL is refused and the current URL stays. Omit to leave the current URL unchanged.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'New destination URL for the item. Only a custom link takes a URL; for an item that links to a page, post, term or archive the call is refused. An invalid or unsafe URL is refused and the current URL stays. Omit to leave the current URL unchanged.', 'agent-abilities-for-mcp' ),
 				),
 				'parent_id' => array(
 					'type'        => 'integer',
@@ -1064,7 +1064,7 @@ function aafm_exec_update_menu_item( array $input ) {
 		if ( 'custom' !== $args['menu-item-type'] ) {
 			return new WP_Error(
 				'aafm_menu_item_url_not_custom',
-				__( 'Only a custom link takes a URL. This item links to a page, post or term, and its URL follows that target. Nothing was changed.', 'agent-abilities-for-mcp' ),
+				__( 'Only a custom link takes a URL. This item links to something on the site, such as a page, post, term or archive, and its URL follows that target. Nothing was changed.', 'agent-abilities-for-mcp' ),
 				array( 'status' => 400 )
 			);
 		}

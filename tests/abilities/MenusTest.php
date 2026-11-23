@@ -1058,6 +1058,8 @@ final class MenusTest extends TestCase {
 
 		$this->assertWPError( $res );
 		$this->assertSame( 'aafm_menu_item_url_not_custom', $res->get_error_code() );
+		$this->assertStringContainsString( 'archive', $res->get_error_message(), 'The refusal covers every kind of item that is not a custom link.' );
+		$this->assertStringContainsString( 'archive', aafm_args_update_menu_item()['input_schema']['properties']['url']['description'] );
 		$this->assertSame( get_permalink( $page_id ), $this->listed_url( $menu_id, $item['id'] ) );
 	}
 

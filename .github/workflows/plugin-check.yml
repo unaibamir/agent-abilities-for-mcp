@@ -63,6 +63,9 @@ jobs:
           coverage: none
           tools: wp-cli
 
+      - name: Make sure WP-CLI is installed
+        uses: ./.github/actions/ensure-wp-cli
+
       # See the note in test.yml's PHPCS job: the direct composer install lost
       # ramsey/composer-install's caching, and the runs after that change died on HTTP 429 from
       # codeload.

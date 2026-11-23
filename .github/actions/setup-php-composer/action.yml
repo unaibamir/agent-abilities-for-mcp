@@ -36,6 +36,11 @@ runs:
         coverage: none
         tools: ${{ inputs.tools }}
 
+    # setup-php can fail to install wp-cli without failing the step; see ensure-wp-cli.
+    - name: Make sure WP-CLI is installed
+      if: ${{ contains(inputs.tools, 'wp-cli') }}
+      uses: ./.github/actions/ensure-wp-cli
+
     # Ask Composer where its download cache lives rather than hardcoding ~/.cache/composer,
     # which is only correct until something sets COMPOSER_HOME or COMPOSER_CACHE_DIR.
     - name: Resolve the Composer cache directory

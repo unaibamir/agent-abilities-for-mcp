@@ -147,6 +147,18 @@ function aafm_args_update_site_settings(): array {
 			'type'       => 'object',
 			'properties' => array(
 				'settings'     => array( 'type' => 'object' ),
+				'adjusted'     => array(
+					'type'        => 'array',
+					'description' => __( 'Present only when a value was changed to fit the setting before it was saved (posts_per_page is kept between 1 and 100, start_of_week between 0 and 6, and text is cleaned): each such setting with the value you sent and the value saved.', 'agent-abilities-for-mcp' ),
+					'items'       => array(
+						'type'       => 'object',
+						'properties' => array(
+							'setting'   => array( 'type' => 'string' ),
+							'requested' => array( 'type' => array( 'string', 'integer', 'number', 'boolean' ) ),
+							'stored'    => array( 'type' => array( 'string', 'integer' ) ),
+						),
+					),
+				),
 				'landed'       => array(
 					'type'        => 'array',
 					'description' => __( 'Present only when a homepage key was sent: the keys that were saved.', 'agent-abilities-for-mcp' ),
@@ -323,8 +335,19 @@ function aafm_exec_update_site_settings( array $input ) {
 		'side_effects' => array(),
 	);
 	$intended_rows = array();
+	$adjusted      = array();
 	foreach ( $settings as $key => $value ) {
 		$key = (string) $key;
+		// A value the sanitizer changed (a clamp, or text cleaned) is reported, never applied silently.
+		$kept = aafm_sanitize_site_setting( $key, $value );
+		$sent = (string) $value;
+		if ( (string) $kept !== $sent ) {
+			$adjusted[] = array(
+				'setting'   => $key,
+				'requested' => $value,
+				'stored'    => $kept,
+			);
+		}
 		if ( array() !== array_intersect( $report['failed'], $homepage ) && in_array( $key, $homepage, true ) ) {
 			// A homepage key did not land: the homepage keys after it are not written.
 			$report['failed'][] = $key;
@@ -375,8 +398,9 @@ function aafm_exec_update_site_settings( array $input ) {
 		$updated[ $key ] = get_option( $key );
 	}
 
+	$adjusted = array() === $adjusted ? array() : array( 'adjusted' => $adjusted );
 	if ( array() === $homepage ) {
-		return array( 'settings' => $updated );
+		return array( 'settings' => $updated ) + $adjusted;
 	}
 	// Each requested homepage key that was written, judged now against the rows before the call (demo #1): another
 	// plugin's sanitize hook can change one during the dry run or during a later key's write.
@@ -410,7 +434,7 @@ function aafm_exec_update_site_settings( array $input ) {
 			array_merge( array( 'status' => 500 ), $report )
 		);
 	}
-	return array_merge( array( 'settings' => $updated ), $report );
+	return array_merge( array( 'settings' => $updated ), $report, $adjusted );
 }
 
 /**

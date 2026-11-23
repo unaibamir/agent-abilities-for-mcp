@@ -249,6 +249,30 @@ final class SiteSettingsTest extends TestCase {
 		$this->assertIsArray( $res );
 		$this->assertSame( 1, (int) get_option( 'posts_per_page' ), 'posts_per_page=0 must floor to 1.' );
 		$this->assertSame( 6, (int) get_option( 'start_of_week' ), 'start_of_week=99 must clamp to 6.' );
+		$this->assertSame(
+			array(
+				array(
+					'setting'   => 'posts_per_page',
+					'requested' => 0,
+					'stored'    => 1,
+				),
+				array(
+					'setting'   => 'start_of_week',
+					'requested' => 99,
+					'stored'    => 6,
+				),
+			),
+			$res['adjusted'],
+			'A clamped value is reported, not applied silently.'
+		);
+	}
+
+	public function test_update_site_settings_reports_no_adjusted_list_when_nothing_was_changed_in_range(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute( array( 'settings' => array( 'posts_per_page' => 12 ) ) );
+		$this->assertIsArray( $res );
+		$this->assertArrayNotHasKey( 'adjusted', $res );
 	}
 
 	public function test_update_site_settings_clamps_a_negative_posts_per_page_to_one(): void {

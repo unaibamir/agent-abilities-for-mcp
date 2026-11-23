@@ -995,13 +995,13 @@ function aafm_exec_wpbakery_update_settings( array $input ) {
 		$set = (array) $set;
 	}
 	if ( ! is_array( $set ) || array() === $set ) {
-		return aafm_builder_error( 'aafm_builder_invalid_value' );
+		return aafm_builder_no_settings_error();
 	}
 	$apply = array();
 	foreach ( $set as $key => $value ) {
 		$key = (string) $key;
 		if ( ! in_array( $key, aafm_wpbakery_settings_writable(), true ) ) {
-			return aafm_wpbakery_setting_error( 'aafm_builder_attribute_not_writable', $key );
+			return aafm_builder_unknown_setting_error( $key );
 		}
 		if ( in_array( $key, array( 'custom_css', 'custom_js_header', 'custom_js_footer' ), true ) && ! current_user_can( 'unfiltered_html' ) ) {
 			return aafm_builder_error( 'aafm_builder_needs_unfiltered_html' );

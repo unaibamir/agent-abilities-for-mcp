@@ -241,7 +241,7 @@ final class BuilderAddonsWireTest extends TestCase {
 			'req-slider-2'
 		);
 		$this->assertTrue( $refused->getIsError() );
-		$this->assertSame( aafm_wpbakery_setting_error( 'aafm_builder_attribute_not_writable', 'orderby' )->get_error_message(), $refused->getContent()[0]->getText() );
+		$this->assertSame( aafm_builder_unknown_setting_error( 'orderby' )->get_error_message(), $refused->getContent()[0]->getText() );
 		$this->assertArrayNotHasKey( 'orderby', $this->db );
 	}
 

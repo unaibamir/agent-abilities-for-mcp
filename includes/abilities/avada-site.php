@@ -2069,14 +2069,14 @@ function aafm_exec_avada_update_slider_settings( array $input ) {
 		$set = (array) $set;
 	}
 	if ( ! is_array( $set ) || array() === $set ) {
-		return aafm_builder_error( 'aafm_builder_invalid_value' );
+		return aafm_builder_no_settings_error();
 	}
 	$keys  = aafm_avada_slider_setting_keys();
 	$apply = array();
 	foreach ( $set as $key => $value ) {
 		$key = (string) $key;
 		if ( ! isset( $keys[ $key ] ) ) {
-			return aafm_wpbakery_setting_error( 'aafm_builder_attribute_not_writable', $key );
+			return aafm_builder_unknown_setting_error( $key );
 		}
 		if ( null === $value ) {
 			// previous names a setting that was not stored with null; Avada's set() drops a key set to ''.

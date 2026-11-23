@@ -1419,6 +1419,7 @@ final class WpbakerySiteTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		foreach ( array( 'use_custom', 'gutenberg_disable', 'auto_save', 'js_composer_purchase_code', 'nope' ) as $key ) {
 			$this->assert_error( aafm_exec_wpbakery_update_settings( array( 'set' => array( $key => true ) ) ), 'aafm_builder_attribute_not_writable', 400 );
+			$this->assertSame( '"' . $key . '" is not a setting this tool can change. Nothing was changed.', aafm_exec_wpbakery_update_settings( array( 'set' => array( $key => true ) ) )->get_error_message() );
 			$this->assertFalse( get_option( 'wpb_js_' . $key ), $key );
 		}
 		remove_filter( 'aafm_builder_vendor', $filter, 20 );
@@ -1505,6 +1506,7 @@ final class WpbakerySiteTest extends TestCase {
 			$this->assert_error( aafm_exec_wpbakery_update_settings( array( 'set' => $set ) ), 'aafm_builder_invalid_value', 400 );
 		}
 		$this->assert_error( aafm_exec_wpbakery_update_settings( array( 'set' => array() ) ), 'aafm_builder_invalid_value', 400 );
+		$this->assertSame( 'Give at least one setting. Nothing was changed.', aafm_exec_wpbakery_update_settings( array( 'set' => array() ) )->get_error_message() );
 		$this->assert_error( aafm_exec_wpbakery_update_settings( array( 'set' => 'x' ) ), 'aafm_builder_invalid_value', 400 );
 		remove_filter( 'aafm_builder_vendor', $filter, 20 );
 		$this->assertSame( array(), self::$calls );

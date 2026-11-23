@@ -352,6 +352,34 @@ function aafm_wpbakery_setting_error( string $code, string $name ): WP_Error {
 }
 
 /**
+ * The refusal of a settings tool (wpbakery-update-settings, avada-update-slider-settings) for a key it does not
+ * change: the key named, with the same code as an element setting that cannot be written.
+ *
+ * @param string $key The key sent.
+ * @return WP_Error
+ */
+function aafm_builder_unknown_setting_error( string $key ): WP_Error {
+	return new WP_Error(
+		'aafm_builder_attribute_not_writable',
+		/* translators: %s: the setting key the caller sent. */
+		sprintf( __( '"%s" is not a setting this tool can change. Nothing was changed.', 'agent-abilities-for-mcp' ), $key ),
+		array(
+			'status'  => 400,
+			'setting' => $key,
+		)
+	);
+}
+
+/**
+ * The refusal of a settings tool for an empty or missing set.
+ *
+ * @return WP_Error
+ */
+function aafm_builder_no_settings_error(): WP_Error {
+	return new WP_Error( 'aafm_builder_invalid_value', __( 'Give at least one setting. Nothing was changed.', 'agent-abilities-for-mcp' ), array( 'status' => 400 ) );
+}
+
+/**
  * URL-encodes like the editor's encodeURIComponent(): rawurlencode() with ! * ' ( ) left as they are.
  *
  * @param string $value Value.

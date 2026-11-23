@@ -164,4 +164,14 @@ final class AbilitiesDisclosureTest extends TestCase {
 		}
 		$this->assertSame( 'one two three', aafm_sanitize_plain_text( "one\ntwo\r\n\tthree" ), 'The description matches what the sanitizer does.' );
 	}
+
+	/**
+	 * The list summaries name the row fields the tools return, prices included.
+	 */
+	public function test_the_woo_list_summaries_name_the_regular_and_sale_price(): void {
+		$disclosures = aafm_ability_disclosures();
+		foreach ( array( 'aafm/wc-list-products', 'aafm/wc-list-product-variations' ) as $name ) {
+			$this->assertStringContainsString( 'regular and sale price', $disclosures[ $name ], $name );
+		}
+	}
 }

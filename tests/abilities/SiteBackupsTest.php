@@ -318,6 +318,23 @@ final class SiteBackupsTest extends TestCase {
 		$this->assertNull( aafm_site_updraft_window_walk( array(), true, true )['good'], 'The gate and site-backup-status never take it as a good backup.' );
 	}
 
+	public function test_a_set_whose_file_archives_remain_is_local_without_its_database(): void {
+		aafm_updraft_stub_delete( aafm_updraft_stub_add_set( 'aaaaaaaaaaa1', 3600 ) );
+		aafm_updraft_stub_add_file( 'plugins.zip', 10 );
+		$entry  = array_merge(
+			aafm_updraft_stub_entry( 'aaaaaaaaaaa1' ),
+			array(
+				'plugins'      => array( 'plugins.zip' ),
+				'plugins-size' => 10,
+			)
+		);
+		$budget = 8388608;
+
+		$summary = aafm_site_updraft_set_summary( time() - 3600, $entry, array(), true, true, $budget );
+		$this->assertSame( 'local', $summary['storage'], 'A plugins archive is still on this server.' );
+		$this->assertSame( 'failed', $summary['database_check'], 'Without its database archive the set is never usable.' );
+	}
+
 	public function test_the_summary_holds_only_the_fixed_fields(): void {
 		aafm_updraft_stub_add_set( 'aaaaaaaaaaa1', 3600, 2048, array( 'service_instance_ids' => array( 's3' => array( 'secret-id' ) ) ) );
 		aafm_updraft_stub_add_file( 'plugins.zip', 10 );

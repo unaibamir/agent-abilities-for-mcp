@@ -451,6 +451,32 @@ function aafm_site_updraft_db_on_disk( array $entry ): bool {
 }
 
 /**
+ * Whether any of an entry's file archives (plugins, uploads and the rest) is still on this server. Storage only: a
+ * set without its database archive stays unusable whatever this says.
+ *
+ * @param array<string,mixed> $entry History entry.
+ * @return bool
+ */
+function aafm_site_updraft_file_archive_on_disk( array $entry ): bool {
+	$dir = aafm_site_updraft_dir();
+	if ( null === $dir ) {
+		return false;
+	}
+	foreach ( array( 'plugins', 'themes', 'uploads', 'others', 'mu-plugins', 'wpcore', 'more' ) as $entity ) {
+		foreach ( is_array( $entry[ $entity ] ?? null ) ? $entry[ $entity ] : array() as $name ) {
+			$file = is_string( $name ) && '' !== $name && basename( $name ) === $name ? aafm_siteops_confined_path( $dir, $name ) : null;
+			if ( null !== $file ) {
+				clearstatcache( true, $file );
+				if ( is_file( $file ) ) {
+					return true;
+				}
+			}
+		}
+	}
+	return false;
+}
+
+/**
  * The size check of an entry's file archives. Sizes only; file archives are never hashed.
  *
  * @param array<string,mixed> $entry History entry.
@@ -525,7 +551,7 @@ function aafm_site_updraft_summary_from( int $timestamp, array $entry, array $de
 	}
 
 	$remote = array() !== aafm_site_updraft_services( $entry );
-	if ( aafm_site_updraft_db_on_disk( $entry ) ) {
+	if ( aafm_site_updraft_db_on_disk( $entry ) || aafm_site_updraft_file_archive_on_disk( $entry ) ) {
 		$storage = $remote ? 'local_and_remote' : 'local';
 	} else {
 		$storage = $remote ? 'remote' : 'none';

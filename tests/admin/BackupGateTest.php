@@ -404,6 +404,34 @@ final class BackupGateTest extends TestCase {
 		$this->assertSame( 'trusted_unchecked', aafm_backup_gate_state()['last_good']['database_check'] );
 	}
 
+	/**
+	 * Storage counts any archive left on this server, but the gate never does: a set whose database
+	 * file is gone and whose plugins archive is still here is refused, with both permissive switches on.
+	 */
+	public function test_a_files_only_local_set_is_refused(): void {
+		aafm_updraft_stub_add_file( 'plugins.zip', 10 );
+		aafm_updraft_stub_delete(
+			aafm_updraft_stub_add_set(
+				'aaaaaaaaaaa1',
+				3600,
+				2048,
+				array(
+					'plugins'      => array( 'plugins.zip' ),
+					'plugins-size' => 10,
+				)
+			)
+		);
+		update_option( 'aafm_backup_gate_accept_remote', '1' );
+		update_option( 'aafm_backup_gate_accept_size', '1' );
+
+		$this->assertSame( 'backup_gate', $this->adapter_fire() );
+		$this->assertNull( aafm_backup_gate_state()['last_good'] ?? null );
+		$budget  = 0;
+		$summary = aafm_site_updraft_set_summary( time() - 3600, aafm_updraft_stub_entry( 'aaaaaaaaaaa1' ), array(), true, true, $budget );
+		$this->assertSame( 'local', $summary['storage'], 'The list still reports where the archives are.' );
+		$this->assertSame( 'failed', $summary['database_check'] );
+	}
+
 	public function test_a_history_reader_that_throws_refuses(): void {
 		aafm_updraft_stub_add_set( 'aaaaaaaaaaa1', 3600 );
 		aafm_updraft_stub_throw( true );

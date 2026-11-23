@@ -118,7 +118,7 @@ function aafm_args_site_health_status(): array {
 						),
 						'label'  => array(
 							'type'        => 'string',
-							'description' => __( 'WordPress\'s own label for this result, as the Site Health screen shows it; empty when it has none that can be shown. Read this, not the check name, to say what was found.', 'agent-abilities-for-mcp' ),
+							'description' => __( 'WordPress\'s own label for this result, as the Site Health screen words it, without any version number; empty when it has none that can be shown. Read this, not the check name, to say what was found.', 'agent-abilities-for-mcp' ),
 						),
 					),
 				),

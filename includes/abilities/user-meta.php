@@ -87,7 +87,7 @@ function aafm_can_access_user_meta( array $input ): bool {
 function aafm_user_meta_key( array $input ) {
 	$named = array_values( array_unique( array_map( 'strval', array_intersect_key( $input, array_flip( array( 'key', 'meta_key' ) ) ) ) ) );
 	if ( count( $named ) > 1 ) {
-		return new WP_Error( 'aafm_user_meta_key_conflict', __( 'key and meta_key name different keys. Send one of them, or the same key in both. Nothing was changed.', 'agent-abilities-for-mcp' ), array( 'status' => 400 ) );
+		return new WP_Error( 'aafm_user_meta_key_conflict', __( 'key and meta_key name different keys. Send one of them, or the same key in both. Nothing was read or changed.', 'agent-abilities-for-mcp' ), array( 'status' => 400 ) );
 	}
 	if ( array() === $named ) {
 		return new WP_Error( 'aafm_user_meta_key_missing', __( 'Send the user-meta key as key or meta_key.', 'agent-abilities-for-mcp' ), array( 'status' => 400 ) );

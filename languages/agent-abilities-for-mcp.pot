@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-23T15:16:09+05:00\n"
+"POT-Creation-Date: 2026-11-23T15:30:47+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -1545,8 +1545,8 @@ msgid "Invalid base64 payload."
 msgstr ""
 
 #: includes/abilities/media.php:886
-#: includes/abilities/media.php:1323
-#: includes/abilities/media.php:1328
+#: includes/abilities/media.php:1324
+#: includes/abilities/media.php:1329
 msgid "File exceeds the maximum upload size."
 msgstr ""
 
@@ -1595,57 +1595,57 @@ msgid "That port is not allowed for a remote fetch."
 msgstr ""
 
 #: includes/abilities/media.php:1290
-#: includes/abilities/media.php:1313
-#: includes/abilities/media.php:1453
-#: includes/abilities/media.php:1555
-#: includes/abilities/media.php:1565
-#: includes/abilities/media.php:1603
+#: includes/abilities/media.php:1314
+#: includes/abilities/media.php:1454
+#: includes/abilities/media.php:1556
+#: includes/abilities/media.php:1566
+#: includes/abilities/media.php:1604
 msgid "The URL could not be fetched."
 msgstr ""
 
 #. translators: %s: the https URL the requested address redirects to.
-#: includes/abilities/media.php:1305
+#: includes/abilities/media.php:1306
 #, php-format
 msgid "The URL redirects to %s, and redirects are not followed. Send that URL instead if you trust it. Nothing was uploaded."
 msgstr ""
 
-#: includes/abilities/media.php:1310
-msgid "The URL redirects to another address, and redirects are not followed. Send the final https URL instead. Nothing was uploaded."
+#: includes/abilities/media.php:1311
+msgid "The URL redirects, but not to an https address this tool can name, and redirects are not followed. Send the final https URL instead. Nothing was uploaded."
 msgstr ""
 
-#: includes/abilities/media.php:1331
+#: includes/abilities/media.php:1332
 msgid "The URL returned no data."
 msgstr ""
 
-#: includes/abilities/media.php:1635
+#: includes/abilities/media.php:1636
 msgid "ID of the attachment to update."
 msgstr ""
 
-#: includes/abilities/media.php:1639
+#: includes/abilities/media.php:1640
 msgid "New attachment title, sanitized as plain text. At least one of title, alt, caption, or description must be given."
 msgstr ""
 
-#: includes/abilities/media.php:1643
+#: includes/abilities/media.php:1644
 msgid "New alt text for the image, sanitized as plain text."
 msgstr ""
 
-#: includes/abilities/media.php:1647
+#: includes/abilities/media.php:1648
 msgid "New caption, sanitized as plain text with no HTML."
 msgstr ""
 
-#: includes/abilities/media.php:1651
+#: includes/abilities/media.php:1652
 msgid "New description. Basic HTML is allowed and sanitized."
 msgstr ""
 
-#: includes/abilities/media.php:1722
+#: includes/abilities/media.php:1723
 msgid "Provide at least one field to update."
 msgstr ""
 
-#: includes/abilities/media.php:1804
+#: includes/abilities/media.php:1805
 msgid "The media item could not be confirmed as saved."
 msgstr ""
 
-#: includes/abilities/media.php:1827
+#: includes/abilities/media.php:1828
 msgid "ID of the attachment to permanently delete. Both the file and the library entry are removed; there is no undo."
 msgstr ""
 
@@ -1711,7 +1711,7 @@ msgid "Update menu item"
 msgstr ""
 
 #: includes/abilities/menus.php:101
-msgid "Updates a menu item by id: its title, URL, parent item (to nest it, or 0 for the top level) or stored position. A parent must be another item of the same menu and cannot be the item itself or one of its own descendants. Requires the edit-theme-options capability."
+msgid "Updates a menu item by id: its title, a custom link's URL, parent item (to nest it, or 0 for the top level) or stored position. A parent must be another item of the same menu and cannot be the item itself or one of its own descendants. Requires the edit-theme-options capability."
 msgstr ""
 
 #: includes/abilities/menus.php:108
@@ -2930,7 +2930,7 @@ msgid "Summarises WordPress's scheduled tasks: whether WP-Cron is switched off i
 msgstr ""
 
 #: includes/abilities/site-health.php:121
-msgid "WordPress's own label for this result, as the Site Health screen shows it; empty when it has none that can be shown. Read this, not the check name, to say what was found."
+msgid "WordPress's own label for this result, as the Site Health screen words it, without any version number; empty when it has none that can be shown. Read this, not the check name, to say what was found."
 msgstr ""
 
 #: includes/abilities/site-health.php:137
@@ -3687,7 +3687,7 @@ msgid "Delete an allowlisted meta key from a user the agent can edit. Removes al
 msgstr ""
 
 #: includes/abilities/user-meta.php:90
-msgid "key and meta_key name different keys. Send one of them, or the same key in both. Nothing was changed."
+msgid "key and meta_key name different keys. Send one of them, or the same key in both. Nothing was read or changed."
 msgstr ""
 
 #: includes/abilities/user-meta.php:93
@@ -4530,7 +4530,7 @@ msgid "List WooCommerce products"
 msgstr ""
 
 #: includes/abilities/woocommerce/products.php:60
-msgid "Lists WooCommerce products with their id, name, SKU, price, regular and sale price, stock status, stock quantity, status, categories, and featured flag, plus a total. Only status is filtered server-side; there is no price, name, or other field filter, so narrowing the returned rows (for example to products under a price) is the caller's job. Requires the manage-WooCommerce capability."
+msgid "Lists WooCommerce products with their id, name, SKU, price, regular and sale price, stock status, stock quantity, status, categories, and featured flag, plus a total. Sale price is empty when there is none, and stock quantity is null when stock is not managed; a variable product has empty regular and sale prices, because its variations carry their own. Only status is filtered server-side; there is no price, name, or other field filter, so narrowing the returned rows (for example to products under a price) is the caller's job. Requires the manage-WooCommerce capability."
 msgstr ""
 
 #: includes/abilities/woocommerce/products.php:68
@@ -8104,7 +8104,7 @@ msgid "Reads all of a user's ACF field values as a hydrated map keyed by field n
 msgstr ""
 
 #: includes/admin/disclosures.php:94
-msgid "Lists your WooCommerce products with their id, name, SKU, price, regular and sale price, stock status, stock quantity, status, categories, and featured flag, and the total count. Requires the manage-WooCommerce capability."
+msgid "Lists your WooCommerce products with their id, name, SKU, price, regular and sale price, stock status, stock quantity, status, categories, and featured flag, and the total count. Sale price is empty when there is none, and stock quantity is null when stock is not managed; a variable product has empty regular and sale prices, because its variations carry their own. Requires the manage-WooCommerce capability."
 msgstr ""
 
 #: includes/admin/disclosures.php:95
@@ -8282,7 +8282,7 @@ msgid "Adds an item (link) to a navigation menu. The URL is sanitized. Requires 
 msgstr ""
 
 #: includes/admin/disclosures.php:147
-msgid "Updates a menu item's title, URL, parent item or position by id. A parent must be another item of the same menu, never the item itself or one of its sub-items. Requires the edit-theme-options capability."
+msgid "Updates a menu item's title, a custom link's URL, parent item or position by id. A parent must be another item of the same menu, never the item itself or one of its sub-items. Requires the edit-theme-options capability."
 msgstr ""
 
 #: includes/admin/disclosures.php:148
@@ -13509,7 +13509,7 @@ msgid "Trash is disabled on this site, so this content cannot be moved to the Tr
 msgstr ""
 
 #: includes/helpers.php:3307
-msgid "The item's place in the menu, numbered 1 to N, the same number list-menu-items, create-menu-item and update-menu-item give it. It is not the stored position that update-menu-item's position sets, which can start at 0 and have gaps. A draft item, which list-menu-items leaves out, shows its stored position instead."
+msgid "For an item list-menu-items shows, its place in the menu, numbered 1 to N, the same number list-menu-items, create-menu-item and update-menu-item give it. It is not the stored position that update-menu-item's position sets, which can start at 0 and have gaps. An item the list leaves out, such as a draft or one whose target is gone, shows its stored position instead."
 msgstr ""
 
 #. translators: 1: name of the value that saved, 2: name of the value that could not be.

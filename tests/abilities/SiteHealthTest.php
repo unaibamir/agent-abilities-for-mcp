@@ -104,6 +104,11 @@ final class SiteHealthTest extends TestCase {
 	 * result, so on a good result that label would name a problem the site does not have.
 	 */
 	public function test_a_good_insecure_registration_result_carries_no_label(): void {
+		require_once ABSPATH . 'wp-admin/includes/class-wp-site-health.php';
+		if ( ! method_exists( \WP_Site_Health::class, 'get_test_insecure_registration' ) ) {
+			// WordPress 6.9, the plugin's floor, has no such check; the tool skips a check core lacks.
+			$this->markTestSkipped( 'This WordPress has no insecure_registration Site Health check.' );
+		}
 		$this->acting_as( 'administrator' );
 		update_option( 'users_can_register', 0 );
 		$rows = wp_list_filter( wp_get_ability( 'aafm/site-health-status' )->execute( array() )['tests'], array( 'test' => 'insecure_registration' ) );

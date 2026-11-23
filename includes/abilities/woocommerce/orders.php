@@ -1911,7 +1911,16 @@ function aafm_exec_wc_update_order_status( array $input ) {
 
 	$status = (string) ( $input['status'] ?? '' );
 	if ( ! aafm_wc_order_status_valid( $status ) ) {
-		return aafm_generic_error();
+		$valid = function_exists( 'wc_get_order_statuses' ) ? array_keys( wc_get_order_statuses() ) : array();
+		return new \WP_Error(
+			'aafm_wc_invalid_order_status',
+			sprintf(
+				/* translators: %s: comma-separated list of the order statuses this site accepts. */
+				__( 'That is not an order status on this site, so the order was not changed. Valid statuses: %s.', 'agent-abilities-for-mcp' ),
+				implode( ', ', array_map( static fn( string $key ): string => (string) preg_replace( '/^wc-/', '', $key ), $valid ) )
+			),
+			array( 'status' => 400 )
+		);
 	}
 
 	// Strip the wc- prefix before handing to update_status() -- the stub and

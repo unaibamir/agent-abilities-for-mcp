@@ -1294,6 +1294,9 @@ final class WooOrdersTest extends TestCase {
 			$res,
 			'An unrecognised status slug must be rejected.'
 		);
+		$this->assertSame( 'aafm_wc_invalid_order_status', $res->get_error_code() );
+		$this->assertStringContainsString( 'completed', $res->get_error_message(), 'The valid statuses are named.' );
+		$this->assertStringNotContainsString( 'not-a-real-status', $res->get_error_message() );
 	}
 
 	public function test_update_order_status_unknown_order_returns_error(): void {

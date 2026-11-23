@@ -300,6 +300,75 @@ final class UsersWriteTest extends TestCase {
 		$this->assertFalse( get_userdata( $victim ), 'victim must be gone.' );
 	}
 
+	public function test_create_user_names_a_taken_username_or_email(): void {
+		$this->acting_as( 'administrator' );
+		self::factory()->user->create(
+			array(
+				'user_login' => 'taken_login',
+				'user_email' => 'taken@example.com',
+			)
+		);
+		$create = wp_get_ability( 'aafm/create-user' );
+
+		$login = $create->execute(
+			array(
+				'username' => 'taken_login',
+				'email'    => 'fresh@example.com',
+			)
+		);
+		$this->assertWPError( $login );
+		$this->assertSame( 'aafm_user_exists', $login->get_error_code() );
+		$this->assertStringContainsString( 'username', $login->get_error_message() );
+
+		$email = $create->execute(
+			array(
+				'username' => 'fresh_login',
+				'email'    => 'taken@example.com',
+			)
+		);
+		$this->assertWPError( $email );
+		$this->assertSame( 'aafm_user_exists', $email->get_error_code() );
+		$this->assertStringContainsString( 'email', $email->get_error_message() );
+	}
+
+	public function test_a_caller_who_cannot_list_users_learns_nothing_about_who_exists(): void {
+		$this->acting_as( 'administrator' );
+		self::factory()->user->create( array( 'user_login' => 'hidden_login' ) );
+		$deny = static function ( array $allcaps ): array {
+			$allcaps['list_users'] = false;
+			return $allcaps;
+		};
+		add_filter( 'user_has_cap', $deny );
+		$taken   = wp_get_ability( 'aafm/create-user' )->execute(
+			array(
+				'username' => 'hidden_login',
+				'email'    => 'other@example.com',
+			)
+		);
+		$missing = wp_get_ability( 'aafm/delete-user' )->execute(
+			array(
+				'user_id'     => 999999,
+				'reassign_to' => get_current_user_id(),
+			)
+		);
+		remove_filter( 'user_has_cap', $deny );
+		$this->assertSame( 'aafm_error', $taken->get_error_code() );
+		$this->assertTrue( ! is_array( $missing ) );
+		$this->assertNotSame( 'aafm_user_not_found', is_wp_error( $missing ) ? $missing->get_error_code() : '' );
+	}
+
+	public function test_delete_user_names_a_user_that_does_not_exist(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/delete-user' )->execute(
+			array(
+				'user_id'     => 999999,
+				'reassign_to' => get_current_user_id(),
+			)
+		);
+		$this->assertWPError( $res );
+		$this->assertSame( 'aafm_user_not_found', $res->get_error_code() );
+	}
+
 	public function test_delete_user_cannot_delete_self(): void {
 		$admin = $this->acting_as( 'administrator' );
 		$other = self::factory()->user->create( array( 'role' => 'editor' ) );

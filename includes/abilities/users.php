@@ -359,7 +359,18 @@ function aafm_exec_create_user( array $input ) {
 		return aafm_generic_error();
 	}
 	if ( username_exists( $username ) || email_exists( $email ) ) {
-		return aafm_generic_error();
+		// Named only for a caller who may list users anyway; for anyone else it stays generic, so
+		// create-user never answers "does this person have an account".
+		if ( ! current_user_can( 'list_users' ) ) {
+			return aafm_generic_error();
+		}
+		return new WP_Error(
+			'aafm_user_exists',
+			username_exists( $username )
+				? __( 'A user with that username already exists, so no user was created.', 'agent-abilities-for-mcp' )
+				: __( 'A user with that email address already exists, so no user was created.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 409 )
+		);
 	}
 
 	$password = isset( $input['password'] ) && '' !== (string) $input['password']
@@ -827,6 +838,15 @@ function aafm_exec_delete_user( array $input ) {
 	);
 	$victim = is_wp_error( $loaded ) ? null : $loaded['user'];
 	if ( ! $victim instanceof WP_User ) {
+		// Named only when the database certainly holds no such user and the caller may list users;
+		// a failed load, or a caller who may not see who exists, gets the generic refusal.
+		if ( ! is_wp_error( $loaded ) && $id && current_user_can( 'list_users' ) && aafm_object_absent( 'user', $id ) ) {
+			return new WP_Error(
+				'aafm_user_not_found',
+				__( 'No user has that id, so nothing was deleted.', 'agent-abilities-for-mcp' ),
+				array( 'status' => 404 )
+			);
+		}
 		return aafm_generic_error();
 	}
 

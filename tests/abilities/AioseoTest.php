@@ -119,6 +119,74 @@ final class AioseoTest extends TestCase {
 	}
 
 	/**
+	 * A default-format write reads back empty, so the success answer says which fields took that path
+	 * and why, or an agent reads the empty title as a failed write and retries (G-1). A normal write
+	 * carries neither key.
+	 */
+	public function test_a_default_format_write_says_which_fields_use_the_default(): void {
+		$admin_id                                     = $this->acting_as( 'administrator' );
+		$title_format                                 = '#post_title #separator_sa #site_title';
+		$description_format                           = '#post_excerpt';
+		\AAFM\Tests\AioseoStubStore::$default_formats = array(
+			'title'       => $title_format,
+			'description' => $description_format,
+		);
+		$update                                       = wp_get_ability( 'aafm/aioseo-update-post' );
+		$cases                                        = array(
+			array(
+				array( 'title' => $title_format ),
+				array( 'title' ),
+			),
+			array(
+				array( 'description' => $description_format ),
+				array( 'description' ),
+			),
+			array(
+				array(
+					'title'       => $title_format,
+					'description' => $description_format,
+				),
+				array( 'title', 'description' ),
+			),
+		);
+		foreach ( $cases as list( $fields, $expected ) ) {
+			$post_id = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+			$res     = $update->execute( array( 'post_id' => $post_id ) + $fields );
+			$this->assertIsArray( $res );
+			$this->assertSame( $expected, $res['stored_as_default'] ?? null );
+			$this->assertIsString( $res['note'] ?? null );
+			$this->assertNotSame( '', $res['note'] );
+		}
+
+		// A normal write, and a mixed one where only the description is literal, name only what applies.
+		$post_id = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+		$normal  = $update->execute(
+			array(
+				'post_id'     => $post_id,
+				'title'       => 'A custom title',
+				'description' => 'A custom description.',
+			)
+		);
+		$this->assertIsArray( $normal );
+		$this->assertArrayNotHasKey( 'stored_as_default', $normal );
+		$this->assertArrayNotHasKey( 'note', $normal );
+
+		$mixed = $update->execute(
+			array(
+				'post_id'     => $post_id,
+				'title'       => $title_format,
+				'description' => 'Another description.',
+			)
+		);
+		$this->assertSame( array( 'title' ), $mixed['stored_as_default'] ?? null );
+
+		// Both keys are declared on the update tool's output schema.
+		$props = $update->get_output_schema()['properties'];
+		$this->assertSame( 'array', $props['stored_as_default']['type'] ?? null );
+		$this->assertSame( 'string', $props['note']['type'] ?? null );
+	}
+
+	/**
 	 * The default-format confirmation needs AIOSEO's own default state: a row for the post that holds
 	 * NULL. A save that failed, or a post with no row, leaves an empty read-back that is not that state.
 	 */

@@ -127,7 +127,7 @@ function aafm_aioseo_registry_definitions(): array {
 		),
 		'aafm/aioseo-update-post' => array(
 			'label'        => __( 'Update post SEO (All in One SEO)', 'agent-abilities-for-mcp' ),
-			'description'  => __( "Writes a post's SEO fields through All in One SEO's own data store (not post meta). URL fields are checked as URLs, and a value that would need rewriting is refused. Setting a non-empty Twitter field turns off the use-OpenGraph fallback so the Twitter title, description, and image render on their own. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+			'description'  => __( "Writes a post's SEO fields through All in One SEO's own data store (not post meta). URL fields are checked as URLs, and a value that would need rewriting is refused. Setting a non-empty Twitter field turns off the use-OpenGraph fallback so the Twitter title, description, and image render on their own. All in One SEO keeps a title or description that equals the post type's default format empty, so the page uses that format; the response then names those fields in stored_as_default and adds a note. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'aioseo',
@@ -499,7 +499,17 @@ function aafm_args_aioseo_update_post(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => aafm_aioseo_output_properties(),
+			'properties' => aafm_aioseo_output_properties() + array(
+				'stored_as_default' => array(
+					'type'        => 'array',
+					'items'       => array( 'type' => 'string' ),
+					'description' => __( 'Present only when a requested title or description equals the post type\'s default format. Names those fields. All in One SEO keeps them empty, so the page uses the default format, and the write succeeded.', 'agent-abilities-for-mcp' ),
+				),
+				'note'              => array(
+					'type'        => 'string',
+					'description' => __( 'Present only with stored_as_default. Says the write succeeded and there is nothing to retry.', 'agent-abilities-for-mcp' ),
+				),
+			),
 		),
 		'execute_callback'    => 'aafm_exec_aioseo_update_post',
 		'permission_callback' => 'aafm_perm_seo_post_object',
@@ -529,15 +539,9 @@ function aafm_args_aioseo_update_post(): array {
  * skipped rather than sent (so the write never invents a property). Returns the refreshed read
  * shape.
  *
- * Known, deliberately unhandled edge case: savePost()'s own checkForDefaultFormat() nulls a
- * caller-provided title/description that is byte-identical to the site's CURRENT default title/
- * description FORMAT TEMPLATE (e.g. the literal tag string, not a rendered title), so that future
- * template edits keep propagating to that post. Adopting that is the whole point of delegating to
- * savePost() and is not treated as a defect - but it means a write whose literal value happens to
- * match that template reads back as the vendor's dynamic default rather than the literal string, so
- * the read-back verification below could report a false failure for that single, narrow case. Not
- * modelled here: it requires an agent to write the exact configured template tag text verbatim,
- * which is not a value an agent-driven title/description write would plausibly produce.
+ * savePost()'s own checkForDefaultFormat() stores a title or description equal to the post type's
+ * default format as NULL, so it reads back empty. aafm_aioseo_stored_as_default_format() confirms that
+ * state as the write landing, and the response names those fields in stored_as_default with a note.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
@@ -663,7 +667,8 @@ function aafm_exec_aioseo_update_post( array $input ) {
 		}
 	}
 
-	$after = aafm_aioseo_read_fields( $id );
+	$after      = aafm_aioseo_read_fields( $id );
+	$as_default = array();
 	foreach ( $desired as $field => $value ) {
 		if ( is_bool( $value ) ) {
 			// Robots flags are stored verbatim; an exact bool check is right, and a genuine failure
@@ -678,9 +683,20 @@ function aafm_exec_aioseo_update_post( array $input ) {
 		// a failure just because the stored form differs cosmetically. A real non-persist - the old or
 		// default value still sitting in the row - is not a normalized form of what we wrote, so it
 		// still fails.
-		if ( ! aafm_aioseo_value_persisted( (string) $after[ $field ], (string) $value, ! empty( aafm_aioseo_fields()[ $field ]['url'] ) ) && ! aafm_aioseo_stored_as_default_format( $id, $field, (string) $value, (string) $after[ $field ] ) ) {
+		if ( aafm_aioseo_value_persisted( (string) $after[ $field ], (string) $value, ! empty( aafm_aioseo_fields()[ $field ]['url'] ) ) ) {
+			continue;
+		}
+		if ( ! aafm_aioseo_stored_as_default_format( $id, $field, (string) $value, (string) $after[ $field ] ) ) {
 			return aafm_generic_error();
 		}
+		$as_default[] = $field;
+	}
+
+	// A default-format field reads back empty. Say so, or an agent takes the empty value for a failed
+	// write and retries through another tool. Both keys are absent when no field took this path.
+	if ( array() !== $as_default ) {
+		$after['stored_as_default'] = $as_default;
+		$after['note']              = __( 'The write succeeded. All in One SEO keeps a title or description that matches its default format empty, so the page uses that format. There is nothing to retry.', 'agent-abilities-for-mcp' );
 	}
 
 	// AIOSEO stores its fields in its own table, not post meta, so tell the meta-write refresh about

@@ -230,14 +230,21 @@ class Post {
 			'nofollow' => 'robots_nofollow',
 			'default'  => 'robots_default',
 		);
+		// Models\Post::checkForDefaultFormat() (AIOSEO 5.0.5): title and description are trimmed as
+		// strings, so a NULL becomes '', and a value equal to its default format is stored as NULL.
+		foreach ( array( 'title', 'description' ) as $format_key ) {
+			if ( array_key_exists( $format_key, $data ) ) {
+				$trimmed             = trim( (string) $data[ $format_key ] );
+				$default             = \AAFM\Tests\AioseoStubStore::$default_formats[ $format_key ] ?? null;
+				$data[ $format_key ] = '' !== $trimmed && $trimmed === $default ? null : $trimmed;
+			}
+		}
 		if ( \AAFM\Tests\AioseoStubStore::$mirror_meta ) {
+			// updatePostMeta() writes each text key as the save leaves it: og and twitter keys untrimmed,
+			// so a NULL there is stored as a NULL row.
 			foreach ( array( 'title', 'description', 'og_title', 'og_description', 'twitter_title', 'twitter_description' ) as $text_key ) {
 				if ( array_key_exists( $text_key, $data ) ) {
-					// AIOSEO writes every text key to update_post_meta() as its save leaves it: a NULL (a
-					// cleared value, or a title equal to the default format) is stored as a NULL row,
-					// and a string is stored trimmed.
-					$mirrored = null === $data[ $text_key ] ? null : trim( (string) $data[ $text_key ] );
-					update_post_meta( (int) $postId, '_aioseo_' . $text_key, $mirrored );
+					update_post_meta( (int) $postId, '_aioseo_' . $text_key, $data[ $text_key ] );
 				}
 			}
 		}

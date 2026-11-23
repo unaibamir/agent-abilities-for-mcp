@@ -56,6 +56,15 @@ class AioseoStubStore {
 	public static bool $mirror_meta = false;
 
 	/**
+	 * The Search Appearance default formats savePost() compares against, keyed 'title' and
+	 * 'description'. A sent value equal to its default format is stored as NULL, as
+	 * Models\Post::checkForDefaultFormat() does.
+	 *
+	 * @var array<string,string>
+	 */
+	public static array $default_formats = array();
+
+	/**
 	 * Every call made to the stub Post::savePost($postId, $data), in order: array{post_id:int,
 	 * data:array<string,mixed>}. Delegation audit sweep - lets a test assert the
 	 * vendor's own savePost() path was actually taken, and with which patch-data keys, rather than
@@ -81,6 +90,7 @@ class AioseoStubStore {
 	 */
 	public static function reset(): void {
 		self::$mirror_meta      = false;
+		self::$default_formats  = array();
 		self::$rows             = array();
 		self::$save_should_fail = false;
 		self::$normalize_urls   = false;

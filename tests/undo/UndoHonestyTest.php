@@ -593,6 +593,57 @@ final class UndoHonestyTest extends UndoTestCase {
 		$this->assertSame( array( 'Back', null ), aafm_meta_rows_keeping_null( 'post', $post, '_aioseo_title' )['rows'] );
 	}
 
+	/**
+	 * The stub mirrors title and description the way AIOSEO 5.0.5 does (Models\Post::checkForDefaultFormat):
+	 * a NULL becomes '', and only a value equal to the default format is stored as NULL.
+	 */
+	public function test_the_aioseo_stub_mirrors_title_like_the_vendor(): void {
+		$post = self::factory()->post->create();
+		$this->stub_aioseo();
+		\AAFM\Tests\AioseoStubStore::$mirror_meta     = true;
+		\AAFM\Tests\AioseoStubStore::$default_formats = array( 'title' => '#post_title #separator_sa #site_title' );
+
+		aafm_aioseo_write( $post, array( 'title' => null ) );
+		$cleared = aafm_meta_rows_keeping_null( 'post', $post, '_aioseo_title' )['rows'];
+		aafm_aioseo_write( $post, array( 'title' => ' #post_title #separator_sa #site_title ' ) );
+		$default = aafm_meta_rows_keeping_null( 'post', $post, '_aioseo_title' )['rows'];
+		aafm_aioseo_write( $post, array( 'og_title' => null ) );
+		$og = aafm_meta_rows_keeping_null( 'post', $post, '_aioseo_og_title' )['rows'];
+		$this->reset_integration_stubs();
+
+		$this->assertSame( array( '' ), $cleared, 'A NULL title is mirrored as an empty string.' );
+		$this->assertSame( array( null ), $default, 'A title equal to the default format is stored as NULL.' );
+		$this->assertSame( array( null ), $og, 'og and twitter keys mirror a NULL as NULL.' );
+	}
+
+	/**
+	 * Case A: a custom title replaced by the default-format title leaves column and mirror row NULL. The
+	 * undo saves the custom title again and puts the mirror row back to the recorded string.
+	 */
+	public function test_a_default_format_title_undo_restores_the_custom_title_mirror(): void {
+		global $wpdb;
+		$post = self::factory()->post->create();
+		$this->aioseo_table_with( $post, 'Original title' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$wpdb->query( $wpdb->prepare( 'ALTER TABLE %i ADD COLUMN description TEXT NULL', aafm_undo_aioseo_table() ) );
+		add_post_meta( $post, '_aioseo_title', 'Original title' );
+		$before = aafm_undo_read_fields( 'post', $post, array( 'aioseo:title', 'meta:_aioseo_title' ) );
+
+		$this->stub_aioseo();
+		\AAFM\Tests\AioseoStubStore::$mirror_meta     = true;
+		\AAFM\Tests\AioseoStubStore::$default_formats = array( 'title' => '#post_title #separator_sa #site_title' );
+		aafm_aioseo_write( $post, array( 'title' => '#post_title #separator_sa #site_title' ) ); // The forward save.
+		$after = aafm_undo_read_fields( 'post', $post, array( 'meta:_aioseo_title' ) );
+		aafm_undo_write_fields( 'post', $post, $before['values'] );
+		$saved = \AAFM\Tests\AioseoStubStore::$save_post_calls;
+		$this->reset_integration_stubs();
+
+		$this->assertSame( array( null ), $after['values']['meta:_aioseo_title'], 'The forward save left a NULL mirror row.' );
+		$this->assertArrayNotHasKey( 'meta:_aioseo_title', $after['flags'] );
+		$this->assertSame( 'Original title', end( $saved )['data']['title'], 'The undo saves the custom title again.' );
+		$this->assertSame( array( 'Original title' ), aafm_meta_rows_keeping_null( 'post', $post, '_aioseo_title' )['rows'] );
+	}
+
 	public function test_aioseo_post_without_a_row_flags_every_field_as_no_vendor_row(): void {
 		$post = self::factory()->post->create();
 		$this->aioseo_table_with( $post + 1, 'Someone else' );

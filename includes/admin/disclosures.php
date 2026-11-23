@@ -44,7 +44,7 @@ function aafm_ability_disclosures(): array {
 		'aafm/get-comments'                 => __( 'Lists approved comments on a post. Author email and IP are never returned.', 'agent-abilities-for-mcp' ),
 		'aafm/get-pending-comments'         => __( 'Lists the comment moderation queue. Requires the moderate_comments capability.', 'agent-abilities-for-mcp' ),
 		'aafm/get-comment'                  => __( 'Reads one comment by id: author name, content, status, and date. Author email and IP are never returned.', 'agent-abilities-for-mcp' ),
-		'aafm/get-media'                    => __( 'Lists media library items: URL, alt text, mime type, and dimensions.', 'agent-abilities-for-mcp' ),
+		'aafm/get-media'                    => __( 'Lists media library items: URL, alt text, caption, mime type, and dimensions.', 'agent-abilities-for-mcp' ),
 		'aafm/get-media-item'               => __( 'Reads one media item by id: caption, description, date, byte size, parent post, and every image size URL. Never the server file path.', 'agent-abilities-for-mcp' ),
 		'aafm/count-media'                  => __( 'Counts media library items, total and by mime type. An optional mime filter narrows the breakdown.', 'agent-abilities-for-mcp' ),
 		'aafm/count-posts'                  => __( 'Counts posts of an allowlisted type, total and by status (publish, draft, pending, and so on). No post content is returned. Agents that cannot edit the type see zero for non-public statuses instead of the real counts.', 'agent-abilities-for-mcp' ),
@@ -91,7 +91,7 @@ function aafm_ability_disclosures(): array {
 		'aafm/acf-get-post-fields'          => __( "Reads all of a post's ACF field values as a hydrated map keyed by field name. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
 		'aafm/acf-get-term-fields'          => __( "Reads all of a term's ACF field values as a hydrated map keyed by field name. Requires edit access to that term.", 'agent-abilities-for-mcp' ),
 		'aafm/acf-get-user-fields'          => __( "Reads all of a user's ACF field values as a hydrated map keyed by field name. If a field stores an email address (a user_email-type field), the real address is returned under the integration disclaimer. Requires edit access to that user.", 'agent-abilities-for-mcp' ),
-		'aafm/wc-list-products'             => __( 'Lists your WooCommerce products with their id, name, SKU, price, stock status, status, categories, and featured flag, and the total count. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'aafm/wc-list-products'             => __( 'Lists your WooCommerce products with their id, name, SKU, price, regular and sale price, stock status, stock quantity, status, categories, and featured flag, and the total count. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 		'aafm/wc-get-product'               => __( 'Reads one WooCommerce product by id: description, prices, stock, images, attributes, variation ids, and categories. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 		'aafm/wc-list-product-variations'   => __( "Lists a variable product's variations by parent product id: each variation's id, parent id, SKU, price, stock status, and status, plus a total. Requires the manage-WooCommerce capability.", 'agent-abilities-for-mcp' ),
 		'aafm/wc-get-product-variation'     => __( 'Reads one product variation by id: parent id, prices, stock, description, image, and its chosen attribute values. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
@@ -281,7 +281,7 @@ function aafm_ability_disclosures(): array {
 		'aafm/geodirectory-update-listing'  => __( "Updates an existing GeoDirectory listing's title, content, or address/coordinates. Fields omitted from the call are left untouched.", 'agent-abilities-for-mcp' ),
 
 		// Site health (1.13.0).
-		'aafm/site-health-status'           => __( "Runs WordPress's own Site Health checks that need no network request and returns each check's result, plus whether debug mode, a debug log, recovery mode or a paused plugin or theme is present. Never a log line, a file path or a version number.", 'agent-abilities-for-mcp' ),
+		'aafm/site-health-status'           => __( "Runs WordPress's own Site Health checks that need no network request and returns each check's result with WordPress's label for it, plus whether debug mode, a debug log, recovery mode or a paused plugin or theme is present. Never a log line, a file path or a version number.", 'agent-abilities-for-mcp' ),
 		'aafm/site-list-updates'            => __( 'Lists the core, plugin and theme updates WordPress already knows are waiting, from its last update check. It never starts a check, never returns a download address and updates nothing.', 'agent-abilities-for-mcp' ),
 		'aafm/site-cron-status'             => __( "Summarises WordPress's scheduled tasks: how many are scheduled, due and late, and the 50 due soonest by hook name. It runs nothing and never returns a task's arguments.", 'agent-abilities-for-mcp' ),
 

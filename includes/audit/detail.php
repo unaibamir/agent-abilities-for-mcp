@@ -479,9 +479,9 @@ function aafm_activity_detail_map(): array {
 		//
 		// Every key below is read from that ability's OWN args builder, never inferred from a
 		// sibling. aafm/delete-user-meta is why that rule is written down: it names its parameter
-		// `key` where the post-meta abilities name theirs `meta_key`, and its schema description
-		// says in as many words that the two "are not interchangeable". A sibling-shaped guess of
-		// `meta_key` there resolves to null through the all-or-nothing rule in
+		// `key` where the post-meta abilities name theirs `meta_key`, and since 1.13.0 also takes
+		// `meta_key` as an alias, so its entry names both (`key` plus `alias`). An entry naming a
+		// key the ability does not take resolves to null through the all-or-nothing rule in
 		// aafm_build_activity_detail(), logging exactly the blindness this block removes, with
 		// every gate still green.
 		//

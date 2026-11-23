@@ -340,7 +340,7 @@ final class WpbakeryElementsWireTest extends TestCase {
 		);
 		$stored               = str_replace( self::HEADING, '', self::PAGE );
 		$this->assertSame( $stored, get_post_field( 'post_content', $id, 'raw' ) );
-		$this->assertSame( array( 'post', 'removed', 'page_fingerprint', 'restore_revision_id', 'undo' ), array_keys( $done ) );
+		$this->assertSame( array( 'post', 'removed', 'page_fingerprint', 'restore_revision_id', 'reversible', 'undo' ), array_keys( $done ) );
 		$this->assertSame( 1, $done['removed'] );
 		$this->assertSame( self::fp( $stored ), $done['page_fingerprint'] );
 		$this->assertSame( self::PAGE, get_post( $done['restore_revision_id'] )->post_content );

@@ -2454,7 +2454,8 @@ final class WpbakeryElementsTest extends TestCase {
 		$this->acting_as( 'editor' );
 		$out = $this->remove( $id, 2 );
 		$this->assertIsArray( $out );
-		$this->assertSame( array( 'post', 'removed', 'page_fingerprint', 'restore_revision_id' ), array_keys( $out ) );
+		$this->assertSame( array( 'post', 'removed', 'page_fingerprint', 'restore_revision_id', 'reversible' ), array_keys( $out ) );
+		$this->assertTrue( $out['reversible'], 'Reported like avada-remove-element.' );
 		$this->assertSame( 1, $out['removed'] );
 		$this->assertSame( str_replace( '[vc_column_text]<p>A</p>[/vc_column_text]', '', self::TWO_ROWS ), get_post_field( 'post_content', $id, 'raw' ) );
 		$this->assertSame( self::TWO_ROWS, get_post( $out['restore_revision_id'] )->post_content );

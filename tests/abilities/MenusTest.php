@@ -1000,6 +1000,56 @@ final class MenusTest extends TestCase {
 		$this->assertSame( 0, $this->stored_parent( $child ) );
 	}
 
+	public function test_update_menu_item_refuses_a_url_for_an_item_that_is_not_a_custom_link(): void {
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_id = $this->make_menu( 'Typed' );
+		$page_id = (int) self::factory()->post->create(
+			array(
+				'post_type'   => 'page',
+				'post_status' => 'publish',
+			)
+		);
+		$item    = wp_get_ability( 'aafm/create-menu-item' )->execute(
+			array(
+				'menu_id'   => $menu_id,
+				'title'     => 'Page item',
+				'type'      => 'post_type',
+				'object_id' => $page_id,
+			)
+		);
+		$this->assertIsArray( $item );
+
+		$res = wp_get_ability( 'aafm/update-menu-item' )->execute(
+			array(
+				'menu_id' => $menu_id,
+				'item_id' => $item['id'],
+				'url'     => 'https://example.org/elsewhere',
+			)
+		);
+
+		$this->assertWPError( $res );
+		$this->assertSame( 'aafm_menu_item_url_not_custom', $res->get_error_code() );
+		$this->assertSame( get_permalink( $page_id ), $this->listed_url( $menu_id, $item['id'] ) );
+	}
+
+	/**
+	 * The URL list-menu-items gives an item.
+	 *
+	 * @param int $menu_id Menu id.
+	 * @param int $item_id Item id.
+	 * @return string|null
+	 */
+	private function listed_url( int $menu_id, int $item_id ): ?string {
+		$listed = wp_get_ability( 'aafm/list-menu-items' )->execute( array( 'menu_id' => $menu_id ) );
+		foreach ( $listed['items'] as $row ) {
+			if ( $item_id === $row['id'] ) {
+				return $row['url'];
+			}
+		}
+		return null;
+	}
+
 	public function test_item_can_be_moved_to_a_position(): void {
 		$this->register_menus();
 		$this->acting_as( 'administrator' );

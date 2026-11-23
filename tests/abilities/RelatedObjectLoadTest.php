@@ -1149,7 +1149,7 @@ final class RelatedObjectLoadTest extends TestCase {
 	 */
 	private function assert_retitled( $out, int $menu, int $item, int $writes ): void {
 		$this->assertIsArray( $out );
-		$this->assertSame( aafm_redact_menu_item( aafm_menu_item_by_id( $menu, $item ) ), $out );
+		$this->assertSame( aafm_menu_item_listed_order( $menu, aafm_redact_menu_item( aafm_menu_item_by_id( $menu, $item ) ) ), $out );
 		$this->assertSame( 'Renamed', get_post( $item )->post_title );
 		$this->assertGreaterThan( $writes, did_action( 'save_post_nav_menu_item' ), 'the item was written' );
 	}

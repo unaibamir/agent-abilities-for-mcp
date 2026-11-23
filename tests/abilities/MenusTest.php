@@ -50,8 +50,59 @@ final class MenusTest extends TestCase {
 		$update = aafm_args_update_menu_item()['output_schema']['properties']['order']['description'];
 
 		$this->assertStringContainsString( '1 to N', $list );
-		$this->assertStringContainsString( 'stored position', $create );
+		$this->assertSame( $list, $create, 'Every menu item tool numbers order the same way.' );
 		$this->assertSame( $create, $update );
+	}
+
+	/**
+	 * The order list-menu-items gives an item, or null when it is not listed.
+	 *
+	 * @param int $menu_id Menu id.
+	 * @param int $item_id Item id.
+	 * @return int|null
+	 */
+	private function listed_order( int $menu_id, int $item_id ): ?int {
+		$listed = wp_get_ability( 'aafm/list-menu-items' )->execute( array( 'menu_id' => $menu_id ) );
+		foreach ( $listed['items'] as $row ) {
+			if ( $item_id === $row['id'] ) {
+				return $row['order'];
+			}
+		}
+		return null;
+	}
+
+	public function test_create_and_update_report_the_order_list_menu_items_shows(): void {
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_id = $this->make_menu( 'Ranks' );
+
+		$first = wp_get_ability( 'aafm/create-menu-item' )->execute(
+			array(
+				'menu_id' => $menu_id,
+				'title'   => 'First',
+				'url'     => home_url( '/first' ),
+			)
+		);
+		$this->assertSame( 1, $first['order'], 'The first item of an empty menu is 1, as the list shows it.' );
+		$this->assertSame( $this->listed_order( $menu_id, $first['id'] ), $first['order'] );
+
+		$second = wp_get_ability( 'aafm/create-menu-item' )->execute(
+			array(
+				'menu_id' => $menu_id,
+				'title'   => 'Second',
+				'url'     => home_url( '/second' ),
+			)
+		);
+		$this->assertSame( 2, $second['order'] );
+
+		$up = wp_get_ability( 'aafm/update-menu-item' )->execute(
+			array(
+				'menu_id' => $menu_id,
+				'item_id' => $first['id'],
+				'title'   => 'First again',
+			)
+		);
+		$this->assertSame( 1, $up['order'] );
 	}
 
 	public function test_list_menus_requires_edit_theme_options(): void {
@@ -339,9 +390,8 @@ final class MenusTest extends TestCase {
 		$this->assertSame( 'page', $up['object'], 'returned object survives.' );
 		$this->assertSame( $page_id, (int) $up['object_id'], 'returned object_id survives.' );
 		$this->assertSame( (int) $parent_id, (int) $up['parent'], 'returned parent survives.' );
-		// update-menu-item re-reads via aafm_menu_item_by_id(), which carries the raw stored
-		// menu_order, so the returned order is the preserved stored position (5), not a reindex.
-		$this->assertSame( $before_order, (int) $up['order'], 'returned order (stored menu_order) survives.' );
+		// The returned order is the item's place as list-menu-items numbers it.
+		$this->assertSame( $this->listed_order( $menu_id, $item_id ), $up['order'], 'returned order is the listed place.' );
 		// A post_type item derives its url from the object, so it must resolve to the page permalink,
 		// never the empty url a custom-link flip would leave behind.
 		$this->assertSame( get_permalink( $page_id ), $up['url'], 'url resolves to the page permalink.' );
@@ -966,7 +1016,7 @@ final class MenusTest extends TestCase {
 		);
 
 		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$this->assertSame( 7, $res['order'] );
+		$this->assertSame( 2, $res['order'], 'Stored position 7 puts it second of two.' );
 		clean_post_cache( $first );
 		$this->assertSame( 7, (int) get_post( $first )->menu_order );
 		$listed = wp_get_ability( 'aafm/list-menu-items' )->execute( array( 'menu_id' => $menu_id ) );
@@ -1054,6 +1104,7 @@ final class MenusTest extends TestCase {
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertSame( 'Renamed', $res['title'] );
 		$this->assertSame( $parent, $res['parent'] );
-		$this->assertSame( $order, $res['order'] );
+		$this->assertSame( $order, (int) get_post( $item )->menu_order );
+		$this->assertSame( 2, $res['order'] );
 	}
 }

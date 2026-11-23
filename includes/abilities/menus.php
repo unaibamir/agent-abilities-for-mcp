@@ -289,7 +289,7 @@ function aafm_args_list_menu_items(): array {
 					'type'  => 'array',
 					'items' => array(
 						'type'       => 'object',
-						'properties' => aafm_menu_item_output_properties( true ),
+						'properties' => aafm_menu_item_output_properties(),
 					),
 				),
 			),
@@ -779,7 +779,7 @@ function aafm_exec_create_menu_item( array $input ) {
 			array( 'status' => 400 )
 		);
 	}
-	return aafm_redact_menu_item( $saved );
+	return aafm_menu_item_listed_order( $menu_id, aafm_redact_menu_item( $saved ) );
 }
 
 /**
@@ -1116,6 +1116,26 @@ function aafm_exec_update_menu_item( array $input ) {
 	if ( ( isset( $input['parent_id'] ) && $shape['parent'] !== $args['menu-item-parent-id'] )
 		|| ( isset( $input['position'] ) && $shape['order'] !== $args['menu-item-position'] ) ) {
 		return aafm_generic_error();
+	}
+	return aafm_menu_item_listed_order( $menu_id, $shape );
+}
+
+/**
+ * A written item's order as list-menu-items numbers it (1 to N), so an agent comparing the two sees
+ * one number. The stored menu_order can start at 0 and have gaps; it stays core's. An item the list
+ * leaves out (a draft) keeps its stored value, the only order it has.
+ *
+ * @param int                 $menu_id Menu id.
+ * @param array<string,mixed> $shape   The redacted item.
+ * @return array<string,mixed>
+ */
+function aafm_menu_item_listed_order( int $menu_id, array $shape ): array {
+	$listed = aafm_exec_list_menu_items( array( 'menu_id' => $menu_id ) );
+	foreach ( is_array( $listed ) ? $listed['items'] : array() as $row ) {
+		if ( $row['id'] === $shape['id'] ) {
+			$shape['order'] = $row['order'];
+			break;
+		}
 	}
 	return $shape;
 }

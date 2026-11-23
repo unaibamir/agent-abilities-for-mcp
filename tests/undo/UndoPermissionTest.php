@@ -145,6 +145,21 @@ final class UndoPermissionTest extends UndoTestCase {
 		$this->assertSame( 'aafm_undo_expired', $this->undo_code( $expired ) );
 	}
 
+	/**
+	 * The pre-check asks what a site owner can do: a change older than 24 hours is past the agent window
+	 * but still revertible from the Changes tab, so needs_owner (pointing there) is the true answer.
+	 */
+	public function test_a_site_owner_on_a_shared_connector_gets_needs_owner_for_a_change_older_than_a_day(): void {
+		global $wpdb;
+		aafm_oauth_current_client_id( null, true );
+		$post   = self::factory()->post->create( array( 'post_title' => 'A' ) );
+		$change = $this->edit( $post );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->update( aafm_changes_table(), array( 'created_at' => gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS - 60 ) ), array( 'id' => $change ) );
+
+		$this->assertSame( 'aafm_undo_needs_owner', $this->undo_code( $change ) );
+	}
+
 	public function test_older_than_24_hours_is_refused(): void {
 		global $wpdb;
 		$post   = self::factory()->post->create( array( 'post_title' => 'A' ) );

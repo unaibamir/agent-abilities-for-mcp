@@ -1052,7 +1052,8 @@ function aafm_undo_apply( int $change_id, string $source ) {
 				}
 				// needs_owner says the change can be undone from the Changes tab, so a row that cannot be
 				// (reverted, expired) gets its own state answer first. The state tells an owner nothing new.
-				$state = aafm_undo_row_state( $row, $source );
+				// Asked as the owner: the agent-only refusals (the 24 hour window and the rest) do not apply there.
+				$state = aafm_undo_row_state( $row, 'owner' );
 				return aafm_undo_refusal( $state['undoable'] ? 'needs_owner' : (string) ( $state['reason'] ?? 'not_allowed' ) );
 			}
 			return aafm_generic_error();

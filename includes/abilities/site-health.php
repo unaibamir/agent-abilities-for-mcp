@@ -26,7 +26,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_site_health_definitions' )
 function aafm_register_site_health_definitions( array $registry ): array {
 	$registry['aafm/site-health-status'] = array(
 		'label'        => __( 'Site health summary', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Runs WordPress's own Site Health checks that need no network request and returns each check's name and result (good, recommended or critical) with a count of each. Also says whether debug mode is on, whether a debug log file exists, whether WordPress is in recovery mode and whether any plugin or theme is paused after a fatal error. Outbound requests are blocked while it runs. Also names the checks it does not run (those that need a network request or a file system connection, and the ones the Site Health screen runs in the background), so its counts can be lower than that screen's. Returns no log lines, no file paths, no version numbers and no server details; use the plugin list tool for plugin versions. Requires the manage-options capability. On a multisite network, a super admin only.", 'agent-abilities-for-mcp' ),
+		'description'  => __( "Runs WordPress's own Site Health checks that need no network request and returns each check's name, result (good, recommended or critical) and WordPress's own label for that result, with a count of each. The label says what the check found; do not guess a cause from the check's name (theme_version, for example, also flags inactive themes, not only waiting updates). Also says whether debug mode is on, whether a debug log file exists, whether WordPress is in recovery mode and whether any plugin or theme is paused after a fatal error. Outbound requests are blocked while it runs. Also names the checks it does not run (those that need a network request or a file system connection, and the ones the Site Health screen runs in the background), so its counts can be lower than that screen's. Returns no log lines, no file paths, no version numbers and no server details; use the plugin list tool for plugin versions. Requires the manage-options capability. On a multisite network, a super admin only.", 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
@@ -115,6 +115,10 @@ function aafm_args_site_health_status(): array {
 						'status' => array(
 							'type' => 'string',
 							'enum' => array( 'good', 'recommended', 'critical' ),
+						),
+						'label'  => array(
+							'type'        => 'string',
+							'description' => __( 'WordPress\'s own label for this result, as the Site Health screen shows it; empty when it has none that can be shown. Read this, not the check name, to say what was found.', 'agent-abilities-for-mcp' ),
 						),
 					),
 				),
@@ -316,13 +320,29 @@ function aafm_site_health_block_weekly_check( $pre, $event ) {
 }
 
 /**
+ * A Site Health result's own label as plain text: core's translated words, with markup and entities
+ * removed and a bracketed version dropped ("WordPress update available (7.1.5)"). A label that still
+ * carries a version number is not shown at all, so the tool keeps returning no version numbers.
+ *
+ * @param mixed $result A get_test_*() result.
+ * @return string
+ */
+function aafm_site_health_label( $result ): string {
+	$label = is_array( $result ) && isset( $result['label'] ) && is_string( $result['label'] ) ? $result['label'] : '';
+	$label = html_entity_decode( wp_strip_all_tags( $label ), ENT_QUOTES, 'UTF-8' );
+	$label = trim( (string) preg_replace( '/\s*\([^()]*\d[^()]*\)/u', '', $label ) );
+	return 1 === preg_match( '/\d+\.\d+/', $label ) ? '' : $label;
+}
+
+/**
  * Execute aafm/site-health-status.
  *
  * WP_Site_Health::get_instance() is used and never the constructor: WordPress creates the
  * instance on every request, and constructing a second one would schedule its weekly event.
  * Should the instance not exist yet, get_instance() runs the constructor, so the weekly event is
- * refused for the length of that call. Only each test's status is kept; labels, descriptions and
- * actions are HTML that can name plugins and versions.
+ * refused for the length of that call. Each test keeps its status and its label as plain text
+ * without versions (aafm_site_health_label()); descriptions and actions are HTML that can name
+ * plugins and versions, and are dropped.
  *
  * @return array<string,mixed>
  */
@@ -363,6 +383,7 @@ function aafm_exec_site_health_status(): array {
 		$tests[] = array(
 			'test'   => $name,
 			'status' => $status,
+			'label'  => aafm_site_health_label( $call['value'] ),
 		);
 		++$counts[ $status ];
 	}

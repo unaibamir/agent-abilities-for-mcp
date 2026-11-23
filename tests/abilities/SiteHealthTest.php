@@ -69,7 +69,8 @@ final class SiteHealthTest extends TestCase {
 		$this->assertSame( aafm_site_health_not_run(), $result['not_run'] );
 		$this->assertNotEmpty( $result['tests'] );
 		foreach ( $result['tests'] as $row ) {
-			$this->assertSame( array( 'test', 'status' ), array_keys( $row ) );
+			$this->assertSame( array( 'test', 'status', 'label' ), array_keys( $row ) );
+			$this->assertIsString( $row['label'] );
 			$this->assertContains( $row['test'], aafm_site_health_allowlist() );
 			$this->assertContains( $row['status'], array( 'good', 'recommended', 'critical' ) );
 		}
@@ -84,6 +85,18 @@ final class SiteHealthTest extends TestCase {
 		$this->assertStringNotContainsString( ABSPATH, $json );
 		$this->assertStringNotContainsString( WP_CONTENT_DIR, $json );
 		$this->assertStringNotContainsString( get_bloginfo( 'version' ), $json );
+	}
+
+	/**
+	 * The label is core's own result label as plain text, never with a version number in it: a bare
+	 * check id such as theme_version was read as "a theme update is waiting".
+	 */
+	public function test_the_label_is_core_text_without_markup_or_versions(): void {
+		$this->assertSame( 'You should remove inactive themes', aafm_site_health_label( array( 'label' => 'You should remove <strong>inactive</strong> themes' ) ) );
+		$this->assertSame( 'WordPress update available', aafm_site_health_label( array( 'label' => 'WordPress update available (7.1.5)' ) ) );
+		$this->assertSame( "Your site isn\u{2019}t safe", aafm_site_health_label( array( 'label' => 'Your site isn&#8217;t safe' ) ) );
+		$this->assertSame( '', aafm_site_health_label( array( 'label' => 'PHP 8.3.1 is running' ) ), 'A version outside brackets drops the label.' );
+		$this->assertSame( '', aafm_site_health_label( null ) );
 	}
 
 	public function test_health_status_never_schedules_the_weekly_check_when_it_builds_the_instance(): void {

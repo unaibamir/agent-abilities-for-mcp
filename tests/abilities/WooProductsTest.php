@@ -71,6 +71,31 @@ final class WooProductsTest extends TestCase {
 		}
 	}
 
+	public function test_list_product_rows_carry_the_right_prices_and_stock_quantity(): void {
+		\AAFM\Tests\WcStubStore::seed(
+			102,
+			array(
+				'name'           => 'On Sale',
+				'sku'            => 'SALE-102',
+				'regular_price'  => '30.00',
+				'sale_price'     => '24.00',
+				'price'          => '24.00',
+				'stock_quantity' => 7,
+				'status'         => 'publish',
+				'stock_status'   => 'instock',
+			)
+		);
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-list-products' )->execute( array() );
+		$row = array_values( array_filter( $res['products'], static fn( array $r ): bool => 102 === $r['id'] ) )[0];
+
+		$this->assertSame( '24.00', $row['price'] );
+		$this->assertSame( '30.00', $row['regular_price'], 'regular and sale are not swapped.' );
+		$this->assertSame( '24.00', $row['sale_price'] );
+		$this->assertSame( 7, $row['stock_quantity'] );
+		$this->assertNull( array_values( array_filter( $res['products'], static fn( array $r ): bool => 101 === $r['id'] ) )[0]['stock_quantity'], 'No managed stock reads as null.' );
+	}
+
 	public function test_list_products_reports_language_null_without_wpml(): void {
 		if ( ! class_exists( 'WooCommerce' ) ) {
 			$this->markTestSkipped( 'WooCommerce not active' );

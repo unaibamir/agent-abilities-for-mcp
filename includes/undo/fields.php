@@ -141,7 +141,9 @@ function aafm_undo_aioseo_table(): string {
  *
  * Post columns come from one row read after the post cache is cleaned, meta from one raw snapshot
  * query for the whole family, term relationships from one join, term columns from one join. A meta
- * key with rows under another spelling, or a NULL value, is flagged not_exact.
+ * key with rows under another spelling, or a NULL value, is flagged not_exact, except a NULL row of one
+ * of AIOSEO's _aioseo_* mirror keys (aafm_undo_aioseo_shadow_meta_keys()), which AIOSEO writes itself:
+ * that reads as null in the key's list of rows, so it is recorded and restored like any other value.
  *
  * @param string               $object_type 'post' or 'term'.
  * @param int                  $object_id   Object id.

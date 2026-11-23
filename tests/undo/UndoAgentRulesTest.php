@@ -186,6 +186,8 @@ final class UndoAgentRulesTest extends UndoTestCase {
 
 		// A site owner is told the change belongs to another connection, alike in every status; see UndoPermissionTest for a caller without the Changes tab.
 		$this->assertSame( 'aafm_undo_other_connection', $this->undo_code( $change ) );
+		// The words hold in every status: a reverted or expired change cannot be reverted again.
+		$this->assertStringNotContainsString( 'revert', aafm_undo_reason_message( 'other_connection' ) );
 		$this->assertSame( 'B', get_post( $post )->post_title );
 	}
 

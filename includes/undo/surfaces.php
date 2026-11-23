@@ -347,7 +347,7 @@ function aafm_undo_reasons(): array {
 		'already_reverted' => __( 'This change was already reverted.', 'agent-abilities-for-mcp' ),
 		'window_passed'    => __( 'Agents can only undo changes from the last 24 hours.', 'agent-abilities-for-mcp' ),
 		'needs_owner'      => __( 'Only a site owner can undo this change, from the Changes tab.', 'agent-abilities-for-mcp' ),
-		'other_connection' => __( 'This change was made through another agent connection, and only that connection can undo it here. A site owner can revert it from the Changes tab.', 'agent-abilities-for-mcp' ),
+		'other_connection' => __( 'This change was made through another agent connection, so it cannot be undone from this one. A site owner can review it in the Changes tab.', 'agent-abilities-for-mcp' ),
 		'builder_owned'    => __( 'A page builder now owns this post, so the change cannot be restored.', 'agent-abilities-for-mcp' ),
 		'dependency_gone'  => __( 'Something this change depends on no longer exists.', 'agent-abilities-for-mcp' ),
 		'trash_off'        => __( 'The Trash is switched off, so this cannot be undone.', 'agent-abilities-for-mcp' ),

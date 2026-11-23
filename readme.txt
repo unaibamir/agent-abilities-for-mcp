@@ -143,7 +143,7 @@ Connecting a client happens in the client. Some clients reach your endpoint dire
 == Installation ==
 
 1. Upload the plugin to `/wp-content/plugins/agent-abilities-for-mcp`, or install it from Plugins, Add New in your admin, then activate it.
-2. Open Agent Abilities for MCP in the admin menu and, on the Abilities tab, switch on the tools you want the AI to have.
+2. Open Agent Abilities for MCP in the admin menu. First-run setup switches on a set of content and site read tools, and read-only mode unless you tick writes; the Abilities tab turns any tool on or off.
 3. On the Connection tab, copy your MCP endpoint and paste it into your AI client. Most clients ask you to approve the connection once in the browser, as your own account.
 4. If a client can't use OAuth, create the low-privilege agent user the Connection tab offers, add an Application Password for it and connect with that, using the config the tab builds for you.
 5. Click Check my connection to confirm your server answers.
@@ -204,7 +204,7 @@ Turn on read-only mode in Settings and this plugin loads no write tool, whatever
 
 = Can I let ChatGPT draft posts without publishing them? =
 
-With Force draft on create switched on in Settings, anything the AI creates and any request to publish is saved as a draft, which covers posts, pages, custom content items, reusable blocks and WooCommerce products. Product variations save as disabled instead, because a draft variation disappears from WooCommerce's editor. Edits to a post that's already live still go live, so if every change should be reviewed, connect the AI as a Contributor, who can't edit published posts. The drafts wait on the Needs review card on the Dashboard.
+With Force draft on create switched on in Settings, a post, page, custom content item, reusable block or WooCommerce product the AI creates, and any request to publish one, is saved as a draft. Product variations save as disabled instead, because a draft variation disappears from WooCommerce's editor. Edits to a post that's already live still go live, so if every change should be reviewed, connect the AI as a Contributor, who can't edit published posts. The drafts wait on the Needs review card on the Dashboard.
 
 = Can I stop an AI agent from deleting my posts? =
 
@@ -220,7 +220,7 @@ Yes, once you set it. Enter a number under Rate limit (per minute) on the Settin
 
 = Can I limit the MCP endpoint to certain IP addresses? =
 
-Yes. Enter addresses or CIDR ranges, one per line, under IP allowlist on the Settings tab and requests from anywhere else are refused before they sign in. Behind Cloudflare or another proxy, switch on Real visitor address behind a proxy or CDN first, because otherwise the plugin sees the proxy's address and the allowlist can lock your agents out.
+Yes. Enter addresses or CIDR ranges, one per line, under IP allowlist on the Settings tab and requests to the MCP endpoint from anywhere else are refused, even with valid credentials. Behind Cloudflare or another proxy, switch on Real visitor address behind a proxy or CDN first, because otherwise the plugin sees the proxy's address and the allowlist can lock your agents out.
 
 = What are the access presets? =
 
@@ -255,15 +255,15 @@ Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Bri
 
 Avada and WPBakery Page Builder pages have editing tools of their own: they read a page as an outline of elements, change an element's settings or text, add, move and remove elements, and place a saved template or Library item. Each write is refused, with nothing saved, if saving the page as your user would change anything else on it.
 
-Restore revision works on these pages too, and when WordPress keeps a revision the editing tool returns it so the page can be brought back. Remove element is refused when no revision could bring the element back, which means revisions are off, the site keeps only one revision, or the target is an Avada form or off canvas panel. All of these tools start off, and the writes are in no preset except Custom.
+Restore revision works on these pages too, and when WordPress keeps a revision the editing tool returns it so the page can be brought back. Remove element is refused when no revision could bring the element back, which means revisions are off, the site keeps only one revision, or the target keeps none, such as an Avada form or off canvas panel or a WPBakery Templatera or Grid Builder template. All of these tools start off, and the writes are in no preset except Custom.
 
 = What can an agent change on a WPBakery or Avada page? =
 
-Text, links, images, colours and spacing work for anyone who can edit the page. Code blocks, raw HTML and JS, Design Options, page CSS and JS, and settings that can carry script need a user who may post unfiltered HTML, and so do square brackets, percent-encoded brackets and data-* attributes in body text.
+Text, links and images work for anyone who can edit the page, and so do colours and spacing on Avada. Code blocks, raw HTML and JS, page CSS and JS, and settings that can carry script need a user who may post unfiltered HTML, and so do square brackets, percent-encoded brackets and data-* attributes in body text. On WPBakery that also covers Design Options, where its margins, padding, borders and background colours live.
 
 The site-wide tools (WPBakery settings, Avada Global Options, Avada layouts and their sections, Avada Slider settings and both Avada Studio tools) need a user who can manage options, and so does editing the elements of an Avada layout section. Neither builder's Role Manager gives the agent extra access. The agent gets what its WordPress user can do and no more. WPBakery's Role Manager can still narrow that in two places: custom JS is refused when the Role Manager would not let that user save it, and an empty post can only take its first element if WPBakery's editor is on for that post type and that user.
 
-With Templatera active, its templates are listed in place of WPBakery's saved templates and can be copied into a page or placed by reference, and a Templatera template can be edited like a WPBakery page.
+With Templatera active, its templates are listed in place of WPBakery's saved templates and can be copied into a page or placed by reference, and a Templatera template can be edited too, though it keeps no revisions.
 
 With Avada Core active, an agent can change an Avada Slider's settings, and Avada page options also work on Avada Slider and Elastic Slider slides. The settings tools return the previous values, which is the way back.
 
@@ -303,7 +303,7 @@ If the notice still shows, another plugin ships its own copy of the adapter. The
 
 = How is this different from other WordPress MCP plugins? =
 
-Because this plugin's tools are all off until you switch them on, it's a poor fit if you want everything available from day one. In exchange the AI acts as a user you choose, each OAuth connection can be paused or given an end date, and the plugin builds on the Abilities API and the MCP Adapter instead of running a server of its own.
+Because this plugin's tools are all off until you switch them on, it's a poor fit if you want everything available from day one. In exchange the AI acts as a user you choose, each OAuth connection can be paused or given an end date, and the plugin builds on the Abilities API and the MCP Adapter instead of implementing the protocol itself.
 
 = Does it send my content to OpenAI, Anthropic or Google? =
 
@@ -376,7 +376,7 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 * **Feature:** Agents can list redirects, read one and test which redirect a URL would hit in Redirection, Rank Math, Safe Redirect Manager, 301 Redirects and Slim SEO, and see not-found addresses in all of them but Safe Redirect Manager. None of it changes anything. wpbakery-replace-text now returns a restore point when the site keeps revisions, and Check my connection shows when another plugin, such as WP Rocket or Rank Math, also runs an MCP server.
 * **Feature:** Backup gate: a Settings option, off by default, that refuses the risky tools you pick unless UpdraftPlus has a checked backup from the last 24 hours. New read tools report those backups, Site Health results, waiting updates and scheduled tasks, and make no outbound requests.
 * **Fix:** A stored Bridge list could register the MCP Adapter's own tools, which let an agent run another plugin's tools past the Bridge enable list and the high-risk lock; those tools are never bridged now.
-* **Fix:** Codex and other clients that send a client title could fail to connect with an "Expected object, got array" error; they now connect. Undo now records update-term calls made without a taxonomy and puts AIOSEO's meta rows back exactly, lists and search include past events from The Events Calendar, and smaller fixes cover page totals, menu item order, clearer refusals, extra list row fields, encoded slashes in cache and redirect URLs, WPBakery image ids, REST loading, the FAQ and the admin header.
+* **Fix:** Codex and other clients that send a client title could fail to connect with an "Expected object, got array" error; they now connect. Undo now records update-term calls made without a taxonomy and puts AIOSEO's meta rows back exactly, lists and search include past events from The Events Calendar, and smaller fixes cover page totals, menu item order, clearer refusals, prices, stock quantity and captions in list rows, WPBakery image ids, skipping the MCP tool set on other REST routes, the FAQ and the admin header.
 
 = 1.12.0 =
 

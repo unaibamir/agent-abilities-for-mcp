@@ -26,7 +26,7 @@ Typical setups:
 * Pause one OAuth connection, give it an end date or a lower rate limit, or refuse every MCP request at once with Pause all access.
 * Revert what an agent changed from the Changes tab, which covers 25 of this plugin's tools and keeps 30 days.
 
-Abilities are registered on the WordPress 6.9 Abilities API and served through the official MCP Adapter, which is bundled, so if the standalone Adapter plugin is active too the plugin simply uses whichever copy loads first. Every call to its tools runs as the WordPress user the connection belongs to, over OAuth or an Application Password, and is checked against that user's capabilities.
+Abilities are registered on the WordPress 6.9 Abilities API and served through the official MCP Adapter, which is bundled, so if the standalone Adapter plugin is active too the plugin uses whichever copy loads first. Every call to its tools runs as the WordPress user the connection belongs to, over OAuth or an Application Password, and is checked against that user's capabilities.
 
 The admin screen has a switch for each ability, plus read-only mode, per-role and per-connection allowlists, a rate limit, an IP allowlist and Pause all access, and each OAuth connection gets its own pause, end date, rate limit and access preset. An Activity Log table in the site's own database records the acting user, the tool, the argument keys and an identifier-only note, and it never stores free-text content.
 
@@ -34,9 +34,9 @@ The Changes tab keeps 30 days of what agents changed with 25 of the plugin's too
 
 Playbooks are step-by-step instructions the owner writes, and agents read the Active ones through two read tools, `aafm/list-playbooks` and `aafm/get-playbook`. Writes through the plugin's general content tools to pages owned by Elementor, Divi, Beaver Builder, Avada, Visual Composer, Oxygen, Breakdance, Brizy, Bricks or WPBakery are refused, except Restore revision on Avada and WPBakery pages. An edit that only sets the excerpt goes through and leaves the stored content as it was, unless the plugin can't tell which builder owns the post. Avada and WPBakery pages have their own tools instead: they read a page as an outline, change an element's settings or text, add, move and remove elements, and refuse any save that would change something else on the page.
 
-Minimum versions: WooCommerce 9.1, All in One SEO 4.9.8, The Events Calendar 6.17.3.1 and Event Tickets 5.29.3.1. Below these, their tools stay hidden and the Integrations tab says why. A plugin that doesn't declare its reads as read-only has them treated as writes, so read-only mode unloads them. A tool whose own permission check needs an item id is listed for anyone who can edit posts, and the plugin's own check refuses the call if their role can't run it.
+Minimum versions: WooCommerce 9.1, All in One SEO 4.9.8, The Events Calendar 6.17.3.1 and Event Tickets 5.29.3.1. Below these, their tools stay hidden and the Integrations tab says why. A plugin that doesn't declare its reads as read-only has them treated as writes, so read-only mode unloads them. A tool whose own permission check needs an item id is listed for anyone who can edit posts, and that plugin's own check refuses the call if their role can't run it.
 
-One scope note: the Adapter has a default server that other plugins can publish tools to, and those tools are outside this plugin's controls. A Settings choice (Automatic, Always on, Always off) decides whether that server runs, and this plugin's own tools are never on it.
+One scope note: the Adapter has a default server that other plugins can publish tools to, and those tools are outside this plugin's controls, except that Pause all access refuses requests to that server too. A Settings choice (Automatic, Always on, Always off) decides whether that server runs, and this plugin's own tools are never on it.
 
 ## Install and connect
 
@@ -88,7 +88,7 @@ VS Code keys the same block as `servers` in `.vscode/mcp.json`. If you'd rather 
 }
 ```
 
-The Connection tab generates both blocks with your real endpoint, plus a Windows variant that wraps `npx` in `cmd /c`. Keep in mind that an Application Password works across the whole REST API, so this plugin's limits apply only to calls through its MCP endpoint, whereas a token it issues over OAuth works on that endpoint alone.
+The Connection tab generates both blocks with your real endpoint, plus a Windows variant that wraps `npx` in `cmd /c`. An Application Password works across the whole REST API, so this plugin's limits apply only to calls through its MCP endpoint, whereas a token it issues over OAuth works on that endpoint alone.
 
 ## For developers
 
@@ -189,7 +189,7 @@ The Model Context Protocol is an open specification that Anthropic originally de
 * **Feature:** Agents can list redirects, read one and test which redirect a URL would hit in Redirection, Rank Math, Safe Redirect Manager, 301 Redirects and Slim SEO, and see not-found addresses in all of them but Safe Redirect Manager. None of it changes anything. wpbakery-replace-text now returns a restore point when the site keeps revisions, and Check my connection shows when another plugin, such as WP Rocket or Rank Math, also runs an MCP server.
 * **Feature:** Backup gate: a Settings option, off by default, that refuses the risky tools you pick unless UpdraftPlus has a checked backup from the last 24 hours. New read tools report those backups, Site Health results, waiting updates and scheduled tasks, and make no outbound requests.
 * **Fix:** A stored Bridge list could register the MCP Adapter's own tools, which let an agent run another plugin's tools past the Bridge enable list and the high-risk lock; those tools are never bridged now.
-* **Fix:** Codex and other clients that send a client title could fail to connect with an "Expected object, got array" error; they now connect. Undo now records update-term calls made without a taxonomy and puts AIOSEO's meta rows back exactly, lists and search include past events from The Events Calendar, and smaller fixes cover page totals, menu item order, clearer refusals, extra list row fields, encoded slashes in cache and redirect URLs, WPBakery image ids, REST loading, the FAQ and the admin header.
+* **Fix:** Codex and other clients that send a client title could fail to connect with an "Expected object, got array" error; they now connect. Undo now records update-term calls made without a taxonomy and puts AIOSEO's meta rows back exactly, lists and search include past events from The Events Calendar, and smaller fixes cover page totals, menu item order, clearer refusals, prices, stock quantity and captions in list rows, WPBakery image ids, skipping the MCP tool set on other REST routes, the FAQ and the admin header.
 
 ### 1.12.0
 

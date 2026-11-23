@@ -3304,7 +3304,7 @@ function aafm_menu_item_output_properties(): array {
 		'parent'    => array( 'type' => 'integer' ),
 		'order'     => array(
 			'type'        => 'integer',
-			'description' => __( 'The item\'s place in the menu, numbered 1 to N, the same number list-menu-items, create-menu-item and update-menu-item give it. It is not the stored position that update-menu-item\'s position sets, which can start at 0 and have gaps.', 'agent-abilities-for-mcp' ),
+			'description' => __( 'The item\'s place in the menu, numbered 1 to N, the same number list-menu-items, create-menu-item and update-menu-item give it. It is not the stored position that update-menu-item\'s position sets, which can start at 0 and have gaps. A draft item, which list-menu-items leaves out, shows its stored position instead.', 'agent-abilities-for-mcp' ),
 		),
 	);
 }

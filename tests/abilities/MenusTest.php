@@ -1000,6 +1000,34 @@ final class MenusTest extends TestCase {
 		$this->assertSame( 0, $this->stored_parent( $child ) );
 	}
 
+	public function test_a_draft_item_reports_its_stored_position_as_the_order_description_says(): void {
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_id = $this->make_menu( 'Drafts' );
+		$this->make_item( $menu_id, 'Listed' );
+		$draft = (int) wp_update_nav_menu_item(
+			$menu_id,
+			0,
+			array(
+				'menu-item-title'    => 'Draft',
+				'menu-item-url'      => home_url( '/draft' ),
+				'menu-item-status'   => 'draft',
+				'menu-item-position' => 5,
+			)
+		);
+
+		$res = wp_get_ability( 'aafm/update-menu-item' )->execute(
+			array(
+				'menu_id' => $menu_id,
+				'item_id' => $draft,
+				'title'   => 'Draft again',
+			)
+		);
+
+		$this->assertSame( 5, $res['order'], 'list-menu-items leaves a draft out, so it keeps its stored position.' );
+		$this->assertStringContainsString( 'draft', aafm_args_update_menu_item()['output_schema']['properties']['order']['description'] );
+	}
+
 	public function test_update_menu_item_refuses_a_url_for_an_item_that_is_not_a_custom_link(): void {
 		$this->register_menus();
 		$this->acting_as( 'administrator' );

@@ -244,8 +244,9 @@ function aafm_activity_detail_map(): array {
 			'template' => __( 'Read meta key `%1$s` on user #%2$s', 'agent-abilities-for-mcp' ),
 			'args'     => array(
 				array(
-					'key'  => 'key',
-					'type' => 'key',
+					'key'   => 'key',
+					'alias' => 'meta_key',
+					'type'  => 'key',
 				),
 				array(
 					'key'  => 'user_id',
@@ -592,13 +593,13 @@ function aafm_activity_detail_map(): array {
 		'aafm/update-user-meta'             => array(
 			/* translators: 1: meta key name. 2: the user's numeric ID. */
 			'template' => __( 'Updated meta key `%1$s` on user #%2$s', 'agent-abilities-for-mcp' ),
-			// `key`, NOT `meta_key` - confirmed against aafm_args_update_user_meta(). BOTH user-meta
-			// abilities diverge from the post-meta family's spelling, so copying from the wrong
-			// neighbour still silently yields null here.
+			// `key`, with `meta_key` as its alias: the user meta tools take either name since 1.13.0
+			// (aafm_user_meta_key()), so a call naming only meta_key still renders its key.
 			'args'     => array(
 				array(
-					'key'  => 'key',
-					'type' => 'key',
+					'key'   => 'key',
+					'alias' => 'meta_key',
+					'type'  => 'key',
 				),
 				array(
 					'key'  => 'user_id',
@@ -629,13 +630,12 @@ function aafm_activity_detail_map(): array {
 		'aafm/delete-user-meta'             => array(
 			/* translators: 1: meta key name. 2: the user's numeric ID. */
 			'template' => __( 'Deleted meta key `%1$s` on user #%2$s', 'agent-abilities-for-mcp' ),
-			// `key`, NOT `meta_key` - see the block comment above. Confirmed against
-			// aafm_args_delete_user_meta(), whose own description states the post-meta abilities
-			// name the equivalent parameter differently and that the two are not interchangeable.
+			// `key` with the `meta_key` alias, as on update-user-meta above.
 			'args'     => array(
 				array(
-					'key'  => 'key',
-					'type' => 'key',
+					'key'   => 'key',
+					'alias' => 'meta_key',
+					'type'  => 'key',
 				),
 				array(
 					'key'  => 'user_id',
@@ -1577,7 +1577,7 @@ function aafm_build_activity_detail( string $ability, array $args, string $statu
 		$allowed  = isset( $field['enum'] ) ? aafm_activity_detail_enum( $field['enum'] ) : array();
 		$rendered = aafm_activity_detail_field(
 			(string) $field['type'],
-			$args[ $field['key'] ] ?? null,
+			$args[ $field['key'] ] ?? ( isset( $field['alias'] ) ? $args[ $field['alias'] ] ?? null : null ),
 			$allowed
 		);
 		if ( null === $rendered && ! empty( $field['optional'] ) && isset( $entry['fallback_template'] ) ) {

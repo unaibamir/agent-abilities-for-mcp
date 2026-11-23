@@ -375,7 +375,7 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 * **Feature:** Agents can clear one post, one URL or the whole site from the page cache of 13 cache plugins, including LiteSpeed Cache, WP Super Cache and W3 Total Cache. Each plugin's result says whether a cached copy was found and removed, the purge was only requested, or it failed or was skipped.
 * **Feature:** Agents can list redirects, read one and test which redirect a URL would hit in Redirection, Rank Math, Safe Redirect Manager, 301 Redirects and Slim SEO, and see not-found addresses in all of them but Safe Redirect Manager. None of it changes anything. wpbakery-replace-text now returns a restore point when the site keeps revisions, and Check my connection shows when another plugin, such as WP Rocket or Rank Math, also runs an MCP server.
 * **Feature:** Backup gate: a Settings option, off by default, that refuses the risky tools you pick unless UpdraftPlus has a checked backup from the last 24 hours. New read tools report those backups, Site Health results, waiting updates and scheduled tasks, and make no outbound requests.
-* **Fix:** A stored Bridge list could register the MCP adapter's own tools, which let an agent run another plugin's tools past the Bridge enable list and the high-risk lock; those tools are never bridged now.
+* **Fix:** A stored Bridge list could register the MCP Adapter's own tools, which let an agent run another plugin's tools past the Bridge enable list and the high-risk lock; those tools are never bridged now.
 * **Fix:** Codex and other clients that send a client title could fail to connect with an "Expected object, got array" error; they now connect. Undo now records update-term calls made without a taxonomy and puts AIOSEO's meta rows back exactly, lists and search include past events from The Events Calendar, and smaller fixes cover page totals, menu item order, clearer refusals, extra list row fields, encoded slashes in cache and redirect URLs, WPBakery image ids, REST loading, the FAQ and the admin header.
 
 = 1.12.0 =
@@ -503,7 +503,7 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 
 = 1.13.0 =
 
-Adds page cache, redirect, backup and site health tools, and a backup gate under Settings. Every new tool starts off, and so does the gate. Also stops the Bridge from registering the MCP adapter's own tools, which could get past the Bridge enable list.
+Adds page cache, redirect, backup and site health tools, and a backup gate under Settings. Every new tool starts off, and so does the gate. Also stops the Bridge from registering the MCP Adapter's own tools, which could get past the Bridge enable list.
 
 = 1.12.0 =
 

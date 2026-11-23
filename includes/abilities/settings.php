@@ -149,7 +149,7 @@ function aafm_args_update_site_settings(): array {
 				'settings'     => array( 'type' => 'object' ),
 				'adjusted'     => array(
 					'type'        => 'array',
-					'description' => __( 'Present only when a setting does not hold the value you sent once the write is done (posts_per_page is kept between 1 and 100, start_of_week between 0 and 6, text is cleaned, and another plugin can keep the old value): each such setting with the value you sent and the value it holds now.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'Present only when a setting does not hold the value you sent once the write is done (posts_per_page is kept between 1 and 100, start_of_week between 0 and 6, text is cleaned, and another plugin can change the value or keep the old one): each such setting with the value you sent and the value it holds now.', 'agent-abilities-for-mcp' ),
 					'items'       => array(
 						'type'       => 'object',
 						'properties' => array(

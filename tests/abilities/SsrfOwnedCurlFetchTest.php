@@ -124,6 +124,41 @@ final class SsrfOwnedCurlFetchTest extends TestCase {
 		$this->assertGreaterThan( $max_bytes, strlen( $out['body'] ), 'The accumulated body must be the proof the cap was exceeded.' );
 	}
 
+	public function test_a_redirect_is_not_followed_and_names_an_https_target(): void {
+		$this->start_local_server();
+
+		$raw = aafm_ssrf_owned_curl_fetch( "{$this->base_url}/?mode=moved", '127.0.0.1', 0, '127.0.0.1', 1000 );
+		$this->assertIsArray( $raw );
+		$this->assertSame( 301, $raw['response']['code'], 'The redirect is returned, not followed.' );
+
+		$out = aafm_ssrf_process_fetch_response( $raw, 1000 );
+		$this->assertWPError( $out );
+		$this->assertSame( 'aafm_fetch_redirect', $out->get_error_code() );
+		$this->assertStringContainsString( 'https://cdn.example.com/files/photo.png', $out->get_error_message() );
+	}
+
+	/**
+	 * A redirect target that is not an absolute https URL is not repeated to the caller.
+	 */
+	public function test_a_redirect_to_a_target_that_is_not_https_gives_no_target(): void {
+		foreach ( array( 'http://cdn.example.com/a.png', '/relative/a.png', "https://x.example/a\u{0}b", '' ) as $location ) {
+			$out = aafm_ssrf_process_fetch_response(
+				array(
+					'headers'  => array( 'location' => $location ),
+					'body'     => '',
+					'response' => array(
+						'code'    => 302,
+						'message' => '',
+					),
+				),
+				1000
+			);
+			$this->assertWPError( $out );
+			$this->assertSame( 'aafm_fetch_redirect', $out->get_error_code() );
+			$this->assertStringNotContainsString( 'example', $out->get_error_message(), $location );
+		}
+	}
+
 	public function test_a_response_at_or_under_the_cap_is_returned_untouched(): void {
 		$this->start_local_server();
 

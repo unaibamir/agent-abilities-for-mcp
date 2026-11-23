@@ -1291,9 +1291,25 @@ function aafm_ssrf_process_fetch_response( $response, int $max_bytes ) {
 	}
 
 	$status = (int) wp_remote_retrieve_response_code( $response );
+	if ( $status >= 300 && $status < 400 ) {
+		// A redirect is never followed (each hop would need the same address checks), but the caller
+		// is told, and given the target when it is a plain https URL, so it can send that one instead.
+		$header = wp_remote_retrieve_header( $response, 'location' );
+		$target = is_string( $header ) ? $header : '';
+		$parts  = wp_parse_url( $target );
+		if ( is_array( $parts ) && 'https' === strtolower( (string) ( $parts['scheme'] ?? '' ) ) && ! empty( $parts['host'] ) && esc_url_raw( $target, array( 'https' ) ) === $target ) {
+			return new WP_Error(
+				'aafm_fetch_redirect',
+				sprintf(
+					/* translators: %s: the https URL the requested address redirects to. */
+					__( 'The URL redirects to %s, and redirects are not followed. Send that URL instead if you trust it. Nothing was uploaded.', 'agent-abilities-for-mcp' ),
+					$target
+				)
+			);
+		}
+		return new WP_Error( 'aafm_fetch_redirect', __( 'The URL redirects to another address, and redirects are not followed. Send the final https URL instead. Nothing was uploaded.', 'agent-abilities-for-mcp' ) );
+	}
 	if ( $status < 200 || $status >= 300 ) {
-		// Covers redirects too: redirection => 0 means a 3xx is returned as-is rather than
-		// followed, so it lands here as a plain failure instead of a fetched file.
 		return new WP_Error( 'aafm_fetch_failed', __( 'The URL could not be fetched.', 'agent-abilities-for-mcp' ) );
 	}
 
@@ -1438,6 +1454,7 @@ function aafm_ssrf_owned_curl_fetch( string $url, string $host, int $port, strin
 	}
 
 	$body                  = '';
+	$location              = '';
 	$header_content_length = '';
 	$aborted_on_header     = false;
 	$aborted_on_body       = false;
@@ -1465,8 +1482,11 @@ function aafm_ssrf_owned_curl_fetch( string $url, string $host, int $port, strin
 		// A neutral, non-identifying User-Agent - WP core's default
 		// discloses this site's own URL to whatever host the caller supplied.
 		CURLOPT_USERAGENT      => 'Agent Abilities for MCP (media fetch)',
-		CURLOPT_HEADERFUNCTION => static function ( $handle, string $header_line ) use ( $max_bytes, &$header_content_length, &$aborted_on_header ): int {
+		CURLOPT_HEADERFUNCTION => static function ( $handle, string $header_line ) use ( $max_bytes, &$header_content_length, &$aborted_on_header, &$location ): int {
 			$len = strlen( $header_line );
+			if ( preg_match( '/^location:\s*(\S+)/i', $header_line, $matches ) ) {
+				$location = $matches[1]; // Kept only to name a redirect; never fetched.
+			}
 			if ( preg_match( '/^content-length:\s*(\d+)/i', $header_line, $matches ) && (int) $matches[1] > $max_bytes ) {
 				$header_content_length = $matches[1];
 				$aborted_on_header     = true;
@@ -1584,7 +1604,7 @@ function aafm_ssrf_owned_curl_fetch( string $url, string $host, int $port, strin
 	}
 
 	return array(
-		'headers'  => array(),
+		'headers'  => '' === $location ? array() : array( 'location' => $location ),
 		'body'     => $body,
 		'response' => array(
 			'code'    => $code,

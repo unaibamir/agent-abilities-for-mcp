@@ -424,7 +424,7 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 		);
 
 		$this->assertInstanceOf( WP_Error::class, $out );
-		$this->assertSame( 'aafm_fetch_failed', $out->get_error_code() );
+		$this->assertSame( 'aafm_fetch_redirect', $out->get_error_code(), 'A 3xx is reported as a redirect, never fetched.' );
 	}
 
 	/**

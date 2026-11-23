@@ -1,0 +1,28 @@
+name: Ensure WP-CLI
+description: >
+  Run right after shivammathur/setup-php with `tools: wp-cli`. setup-php sometimes
+  prints "Could not setup wp-cli" and carries on, so the job only fails later on
+  "wp: command not found". When `wp` is missing, this installs a pinned WP-CLI phar,
+  checks its sha256 and that it runs, and puts it at /usr/local/bin/wp. When setup-php
+  did its job, this does nothing.
+runs:
+  using: composite
+  steps:
+    - name: Install WP-CLI if setup-php did not
+      shell: bash
+      run: |
+        set -euo pipefail
+        if command -v wp >/dev/null 2>&1; then
+          echo "WP-CLI already installed: $(command -v wp)"
+          exit 0
+        fi
+        echo "::warning::setup-php did not install WP-CLI; installing the pinned phar instead."
+        # To bump: change both together. The hash is the release's wp-cli-<ver>.phar.sha256 asset.
+        WP_CLI_VERSION="2.12.0"
+        WP_CLI_SHA256="ce34ddd838f7351d6759068d09793f26755463b4a4610a5a5c0a97b68220d85c"
+        curl -fsSL --retry 3 --retry-connrefused -o "$RUNNER_TEMP/wp-cli.phar" \
+          "https://github.com/wp-cli/wp-cli/releases/download/v${WP_CLI_VERSION}/wp-cli-${WP_CLI_VERSION}.phar"
+        echo "${WP_CLI_SHA256}  $RUNNER_TEMP/wp-cli.phar" | sha256sum -c -
+        php "$RUNNER_TEMP/wp-cli.phar" --info
+        sudo install -m 0755 "$RUNNER_TEMP/wp-cli.phar" /usr/local/bin/wp
+        wp --version

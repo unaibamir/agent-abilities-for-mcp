@@ -1050,6 +1050,32 @@ final class MenusTest extends TestCase {
 		return null;
 	}
 
+	public function test_delete_menu_item_checks_an_optional_menu_id(): void {
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu  = $this->make_menu( 'Home menu' );
+		$other = $this->make_menu( 'Other menu' );
+		$item  = $this->make_item( $menu, 'Kept' );
+
+		$wrong = wp_get_ability( 'aafm/delete-menu-item' )->execute(
+			array(
+				'menu_id' => $other,
+				'item_id' => $item,
+			)
+		);
+		$this->assertWPError( $wrong );
+		$this->assertSame( 'aafm_menu_item_not_in_menu', $wrong->get_error_code() );
+		$this->assertInstanceOf( \WP_Post::class, get_post( $item ), 'Nothing was deleted.' );
+
+		$right = wp_get_ability( 'aafm/delete-menu-item' )->execute(
+			array(
+				'menu_id' => $menu,
+				'item_id' => $item,
+			)
+		);
+		$this->assertSame( true, $right['deleted'] );
+	}
+
 	public function test_item_can_be_moved_to_a_position(): void {
 		$this->register_menus();
 		$this->acting_as( 'administrator' );

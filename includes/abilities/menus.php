@@ -1201,6 +1201,10 @@ function aafm_args_delete_menu_item(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
+				'menu_id' => array(
+					'type'        => 'integer',
+					'description' => __( 'Optional ID of the navigation menu the item belongs to. When given, an item that is not in this menu is refused and nothing is deleted.', 'agent-abilities-for-mcp' ),
+				),
 				'item_id' => array(
 					'type'        => 'integer',
 					'description' => __( 'ID of the menu item to permanently remove. Menu items have no Trash, so this cannot be undone.', 'agent-abilities-for-mcp' ),
@@ -1244,6 +1248,13 @@ function aafm_exec_delete_menu_item( array $input ) {
 	$post    = aafm_exact_object( 'post', $item_id );
 	if ( ! $post instanceof WP_Post || 'nav_menu_item' !== $post->post_type ) {
 		return aafm_generic_error();
+	}
+	if ( isset( $input['menu_id'] ) && ! aafm_menu_item_post( (int) $input['menu_id'], $item_id ) instanceof WP_Post ) {
+		return new WP_Error(
+			'aafm_menu_item_not_in_menu',
+			__( 'That menu item is not in the menu given by menu_id. Nothing was deleted.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
 	}
 	wp_delete_post( $item_id );
 	// A re-read that does not load exactly proves nothing: the item is gone only when a

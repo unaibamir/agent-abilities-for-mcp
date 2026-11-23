@@ -57,7 +57,7 @@ function aafm_wc_products_registry_definitions(): array {
 	return array(
 		'aafm/wc-list-products'  => array(
 			'label'        => __( 'List WooCommerce products', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists WooCommerce products with their id, name, SKU, price, stock status, status, categories, and featured flag, plus a total. Only status is filtered server-side; there is no price, name, or other field filter, so narrowing the returned rows (for example to products under a price) is the caller\'s job. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Lists WooCommerce products with their id, name, SKU, price, regular and sale price, stock status, stock quantity, status, categories, and featured flag, plus a total. Only status is filtered server-side; there is no price, name, or other field filter, so narrowing the returned rows (for example to products under a price) is the caller\'s job. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -357,17 +357,20 @@ function aafm_args_wc_list_products(): array {
 					'items' => array(
 						'type'                 => 'object',
 						'properties'           => array(
-							'id'           => array( 'type' => 'integer' ),
-							'name'         => array( 'type' => 'string' ),
-							'sku'          => array( 'type' => 'string' ),
-							'price'        => array( 'type' => 'string' ),
-							'stock_status' => array( 'type' => 'string' ),
-							'status'       => array( 'type' => 'string' ),
-							'categories'   => array(
+							'id'             => array( 'type' => 'integer' ),
+							'name'           => array( 'type' => 'string' ),
+							'sku'            => array( 'type' => 'string' ),
+							'price'          => array( 'type' => 'string' ),
+							'stock_status'   => array( 'type' => 'string' ),
+							'status'         => array( 'type' => 'string' ),
+							'categories'     => array(
 								'type'  => 'array',
 								'items' => array( 'type' => 'integer' ),
 							),
-							'featured'     => array( 'type' => 'boolean' ),
+							'featured'       => array( 'type' => 'boolean' ),
+							'stock_quantity' => array( 'type' => array( 'integer', 'null' ) ),
+							'regular_price'  => array( 'type' => 'string' ),
+							'sale_price'     => array( 'type' => 'string' ),
 						),
 						'additionalProperties' => false,
 					),
@@ -450,7 +453,12 @@ function aafm_exec_wc_list_products( array $input ) {
 				$rows       = array();
 				foreach ( $page_items as $product ) {
 					if ( $product instanceof \WC_Product ) {
-						$rows[] = aafm_redact_wc_product( $product );
+						// The list row adds what a price or stock sweep needs without a get per product.
+						$rows[] = aafm_redact_wc_product( $product ) + array(
+							'stock_quantity' => null === $product->get_stock_quantity() ? null : (int) $product->get_stock_quantity(),
+							'regular_price'  => (string) $product->get_regular_price(),
+							'sale_price'     => (string) $product->get_sale_price(),
+						);
 					}
 				}
 				return array(

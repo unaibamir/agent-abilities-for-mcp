@@ -60,7 +60,7 @@ function aafm_wc_variations_registry_definitions(): array {
 		// Variations (sub-slice W4-WC1b) - a variable product's child variations, parent_id-scoped.
 		'aafm/wc-list-product-variations'  => array(
 			'label'        => __( 'List WooCommerce product variations', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists a variable product\'s variations by parent product id, each with its id, parent id, SKU, price, stock status, and status, plus a total. A parent that is not a variable product (e.g. simple or grouped) is refused, since only variable products have variations. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Lists a variable product\'s variations by parent product id, each with its id, parent id, SKU, price, regular and sale price, stock status, and status, plus a total. A parent that is not a variable product (e.g. simple or grouped) is refused, since only variable products have variations. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -285,12 +285,14 @@ function aafm_args_wc_list_product_variations(): array {
 					'items' => array(
 						'type'                 => 'object',
 						'properties'           => array(
-							'id'           => array( 'type' => 'integer' ),
-							'parent_id'    => array( 'type' => 'integer' ),
-							'sku'          => array( 'type' => 'string' ),
-							'price'        => array( 'type' => 'string' ),
-							'stock_status' => array( 'type' => 'string' ),
-							'status'       => array( 'type' => 'string' ),
+							'id'            => array( 'type' => 'integer' ),
+							'parent_id'     => array( 'type' => 'integer' ),
+							'sku'           => array( 'type' => 'string' ),
+							'price'         => array( 'type' => 'string' ),
+							'stock_status'  => array( 'type' => 'string' ),
+							'status'        => array( 'type' => 'string' ),
+							'regular_price' => array( 'type' => 'string' ),
+							'sale_price'    => array( 'type' => 'string' ),
 						),
 						'additionalProperties' => false,
 					),
@@ -356,7 +358,10 @@ function aafm_exec_wc_list_product_variations( array $input ) {
 	foreach ( $page_ids as $child_id ) {
 		$variation = aafm_wc_get_variation( (int) $child_id );
 		if ( null !== $variation ) {
-			$variations[] = aafm_redact_wc_variation( $variation );
+			$variations[] = aafm_redact_wc_variation( $variation ) + array(
+				'regular_price' => (string) $variation->get_regular_price(),
+				'sale_price'    => (string) $variation->get_sale_price(),
+			);
 		}
 	}
 

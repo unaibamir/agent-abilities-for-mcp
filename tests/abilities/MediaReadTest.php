@@ -24,6 +24,19 @@ final class MediaReadTest extends TestCase {
 		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}
 
+	public function test_get_media_rows_carry_the_caption(): void {
+		$this->acting_as( 'administrator' );
+		$id  = self::factory()->attachment->create(
+			array(
+				'post_title'   => 'Captioned',
+				'post_excerpt' => 'A caption',
+			)
+		);
+		$res = wp_get_ability( 'aafm/get-media' )->execute( array( 'search' => 'Captioned' ) );
+		$this->assertSame( $id, $res['media'][0]['id'] );
+		$this->assertSame( 'A caption', $res['media'][0]['caption'] );
+	}
+
 	public function test_get_media_is_in_registry(): void {
 		$registry = aafm_get_abilities_registry();
 		$this->assertArrayHasKey( 'aafm/get-media', $registry );
@@ -139,7 +152,7 @@ final class MediaReadTest extends TestCase {
 		// Inventory item exposes only the safe public field set.
 		$item = $out['media'][ array_search( $att, $ids, true ) ];
 		$this->assertSame(
-			array( 'id', 'title', 'mime_type', 'url', 'alt', 'width', 'height' ),
+			array( 'id', 'title', 'mime_type', 'url', 'alt', 'width', 'height', 'caption' ),
 			array_keys( $item )
 		);
 		$this->assertSame( 'image/jpeg', $item['mime_type'] );
@@ -482,7 +495,7 @@ final class MediaReadTest extends TestCase {
 		);
 		$out = wp_get_ability( 'aafm/get-media' )->execute( array() );
 		$this->assertSame(
-			array( 'id', 'title', 'mime_type', 'url', 'alt', 'width', 'height' ),
+			array( 'id', 'title', 'mime_type', 'url', 'alt', 'width', 'height', 'caption' ),
 			array_keys( $out['media'][0] )
 		);
 	}

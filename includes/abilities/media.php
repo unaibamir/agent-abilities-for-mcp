@@ -21,7 +21,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_media_definitions' );
 function aafm_register_media_definitions( array $registry ): array {
 	$registry['aafm/get-media']             = array(
 		'label'        => __( 'Get media', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'List media library items (URL, alt, mime, dimensions). Response includes total (the full match count). Without the edit-others-posts capability, only the caller\'s own uploads are listed.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'List media library items (URL, alt, caption, mime, dimensions). Response includes total (the full match count). Without the edit-others-posts capability, only the caller\'s own uploads are listed.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'media',
@@ -270,7 +270,7 @@ function aafm_exec_get_media( array $input ) {
 				return array(
 					'rows'  => array_values(
 						array_map(
-							'aafm_redact_media',
+							static fn( WP_Post $post ): array => aafm_redact_media( $post ) + array( 'caption' => (string) $post->post_excerpt ),
 							array_values( array_filter( $query->posts, static fn( $post ): bool => $post instanceof WP_Post ) )
 						)
 					),

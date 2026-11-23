@@ -66,6 +66,9 @@ final class WooProductsTest extends TestCase {
 		$this->assertSame( 'Test Widget', $res['products'][0]['name'] );
 		$this->assertSame( 'WIDGET-101', $res['products'][0]['sku'] );
 		$this->assertArrayNotHasKey( 'description', $res['products'][0], 'list rows are lean.' );
+		foreach ( array( 'stock_quantity', 'regular_price', 'sale_price' ) as $field ) {
+			$this->assertArrayHasKey( $field, $res['products'][0], "list rows carry $field." );
+		}
 	}
 
 	public function test_list_products_reports_language_null_without_wpml(): void {

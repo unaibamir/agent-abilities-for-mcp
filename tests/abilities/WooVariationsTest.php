@@ -232,6 +232,8 @@ final class WooVariationsTest extends TestCase {
 		$this->assertArrayHasKey( 'price', $row );
 		$this->assertArrayHasKey( 'stock_status', $row );
 		$this->assertArrayHasKey( 'status', $row );
+		$this->assertArrayHasKey( 'regular_price', $row );
+		$this->assertArrayHasKey( 'sale_price', $row );
 		$this->assertArrayNotHasKey( 'description', $row, 'list rows are lean (no description).' );
 		$this->assertArrayNotHasKey( 'attributes', $row, 'list rows are lean (no attributes).' );
 	}

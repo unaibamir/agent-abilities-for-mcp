@@ -528,7 +528,7 @@ function aafm_site_updraft_summary_from( int $timestamp, array $entry, array $de
 	if ( aafm_site_updraft_db_on_disk( $entry ) ) {
 		$storage = $remote ? 'local_and_remote' : 'local';
 	} else {
-		$storage = 'remote';
+		$storage = $remote ? 'remote' : 'none';
 	}
 
 	return array(

@@ -307,6 +307,17 @@ final class SiteBackupsTest extends TestCase {
 		$this->assertSame( 'not_local', aafm_site_updraft_files_check( $remote ) );
 	}
 
+	public function test_a_set_with_no_copy_anywhere_reports_storage_none_and_is_never_usable(): void {
+		aafm_updraft_stub_delete( aafm_updraft_stub_add_set( 'aaaaaaaaaaa1', 3600 ) );
+		$entry = aafm_updraft_stub_entry( 'aaaaaaaaaaa1' );
+
+		$budget  = 8388608;
+		$summary = aafm_site_updraft_set_summary( time() - 3600, $entry, array(), true, true, $budget );
+		$this->assertSame( 'none', $summary['storage'] );
+		$this->assertSame( 'failed', $summary['database_check'] );
+		$this->assertNull( aafm_site_updraft_window_walk( array(), true, true )['good'], 'The gate and site-backup-status never take it as a good backup.' );
+	}
+
 	public function test_the_summary_holds_only_the_fixed_fields(): void {
 		aafm_updraft_stub_add_set( 'aaaaaaaaaaa1', 3600, 2048, array( 'service_instance_ids' => array( 's3' => array( 'secret-id' ) ) ) );
 		aafm_updraft_stub_add_file( 'plugins.zip', 10 );

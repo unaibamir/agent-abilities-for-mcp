@@ -137,6 +137,24 @@ final class SsrfOwnedCurlFetchTest extends TestCase {
 		$this->assertStringContainsString( 'https://cdn.example.com/files/photo.png', $out->get_error_message() );
 	}
 
+	public function test_a_redirect_target_is_named_without_its_credentials_but_with_its_query(): void {
+		$out = aafm_ssrf_process_fetch_response(
+			array(
+				'headers'  => array( 'location' => 'https://user:secret@cdn.example.com/a.png?size=large' ),
+				'body'     => '',
+				'response' => array(
+					'code'    => 301,
+					'message' => '',
+				),
+			),
+			1000
+		);
+		$this->assertWPError( $out );
+		$this->assertStringContainsString( 'https://cdn.example.com/a.png?size=large', $out->get_error_message() );
+		$this->assertStringNotContainsString( 'secret', $out->get_error_message() );
+		$this->assertStringNotContainsString( 'user', $out->get_error_message() );
+	}
+
 	/**
 	 * A redirect target that is not an absolute https URL is not repeated to the caller.
 	 */

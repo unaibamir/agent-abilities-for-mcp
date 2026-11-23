@@ -1298,6 +1298,10 @@ function aafm_ssrf_process_fetch_response( $response, int $max_bytes ) {
 		// The header comes from the remote server: a target longer than a sane URL is never repeated.
 		$target = is_string( $header ) && strlen( $header ) <= 2048 ? $header : '';
 		$parts  = wp_parse_url( $target );
+		if ( is_array( $parts ) && ( isset( $parts['user'] ) || isset( $parts['pass'] ) ) ) {
+			// Never repeat credentials a server put in the target; the path and query stay, the agent may need them.
+			$target = 'https://' . ( $parts['host'] ?? '' ) . ( isset( $parts['port'] ) ? ':' . (int) $parts['port'] : '' ) . ( $parts['path'] ?? '' ) . ( isset( $parts['query'] ) ? '?' . $parts['query'] : '' ) . ( isset( $parts['fragment'] ) ? '#' . $parts['fragment'] : '' );
+		}
 		if ( is_array( $parts ) && 'https' === strtolower( (string) ( $parts['scheme'] ?? '' ) ) && ! empty( $parts['host'] ) && esc_url_raw( $target, array( 'https' ) ) === $target ) {
 			return new WP_Error(
 				'aafm_fetch_redirect',

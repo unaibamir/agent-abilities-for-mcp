@@ -209,6 +209,10 @@ class Post {
 		$model->post_id = (int) $post_id;
 		return $model;
 	}
+	public function exists() {
+		// Real AIOSEO: true once the post has its row in aioseo_posts.
+		return \AAFM\Tests\AioseoStubStore::has( (int) $this->post_id );
+	}
 	public static function savePost( $postId, $data ) {
 		// Fix round 1, delegation audit sweep: mirrors the SHAPE of the real AIOSEO
 		// Post::savePost($postId, $data) - a patch-keyed $data array applied onto the CURRENT

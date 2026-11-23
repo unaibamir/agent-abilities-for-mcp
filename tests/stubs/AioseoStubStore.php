@@ -147,6 +147,16 @@ class AioseoStubStore {
 	}
 
 	/**
+	 * Whether a post id has a stored row (what the real model's exists() reports).
+	 *
+	 * @param int $id Post id.
+	 * @return bool
+	 */
+	public static function has( int $id ): bool {
+		return isset( self::$rows[ $id ] );
+	}
+
+	/**
 	 * Persist a row for a post id (the model ->save() path).
 	 *
 	 * @param int                 $id  Post id.

@@ -335,8 +335,9 @@ function aafm_aioseo_value_persisted( string $persisted, string $expected, bool 
  * Whether a title or description write landed as AIOSEO's own "use the default format" state.
  *
  * AIOSEO's save (Models\Post::checkForDefaultFormat) stores a title or description equal to the post
- * type's Search Appearance default format as NULL, which reads back empty. A NULL there means the
- * post uses that default, which is exactly what the caller asked for, so it confirms the write.
+ * type's Search Appearance default format as NULL, which reads back empty. A NULL there, in a row the
+ * post has, means the post uses that default, which is exactly what the caller asked for, so it
+ * confirms the write. The caller has already refused a save AIOSEO reported as failed.
  *
  * @param int    $post_id Post id.
  * @param string $field   Field written.
@@ -351,6 +352,13 @@ function aafm_aioseo_stored_as_default_format( int $post_id, string $field, stri
 	}
 	$post = aafm_exact_object( 'post', $post_id );
 	if ( ! $post instanceof WP_Post ) {
+		return false;
+	}
+	// An empty read-back is AIOSEO's default state only when the post has its row and the column is
+	// NULL. No row, or an empty string left by a save that did not land, is a miss.
+	$class = AAFM_AIOSEO_MODEL;
+	$model = $class::getPost( $post_id );
+	if ( ! is_object( $model ) || ! method_exists( $model, 'exists' ) || ! $model->exists() || ! property_exists( $model, $field ) || null !== $model->$field ) {
 		return false;
 	}
 	try {
@@ -648,8 +656,11 @@ function aafm_exec_aioseo_update_post( array $input ) {
 		// branching on directly (mirrors the prior ->save() shape, L11: SeoContractTest::
 		// test_aioseo_model_save_returns_void_not_bool()). Verify persistence a different way: force
 		// a fresh read of the model and diff it against what we just asked to be written, field by
-		// field. A real write failure still surfaces as a read-back mismatch.
-		aafm_aioseo_write( $id, $data );
+		// field. A real write failure still surfaces as a read-back mismatch, and a save AIOSEO refused
+		// outright (a database error string) is an error whatever the read-back says.
+		if ( AAFM_WRITE_REFUSED === aafm_aioseo_write( $id, $data )['status'] ) {
+			return aafm_generic_error();
+		}
 	}
 
 	$after = aafm_aioseo_read_fields( $id );

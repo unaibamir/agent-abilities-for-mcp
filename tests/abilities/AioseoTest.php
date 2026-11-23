@@ -119,6 +119,44 @@ final class AioseoTest extends TestCase {
 	}
 
 	/**
+	 * The default-format confirmation needs AIOSEO's own default state: a row for the post that holds
+	 * NULL. A save that failed, or a post with no row, leaves an empty read-back that is not that state.
+	 */
+	public function test_a_default_format_write_that_did_not_land_is_still_an_error(): void {
+		$admin_id                                     = $this->acting_as( 'administrator' );
+		$format                                       = '#post_title #separator_sa #site_title';
+		\AAFM\Tests\AioseoStubStore::$default_formats = array( 'title' => $format );
+
+		// A save AIOSEO refused with a database error.
+		$refused = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+		\AAFM\Tests\AioseoStubStore::save( $refused, array( 'title' => '' ) );
+		\AAFM\Tests\AioseoStubStore::$save_post_error = 'Database error';
+		$this->assertInstanceOf(
+			WP_Error::class,
+			wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+				array(
+					'post_id' => $refused,
+					'title'   => $format,
+				)
+			)
+		);
+		\AAFM\Tests\AioseoStubStore::$save_post_error = '';
+
+		// A post with no AIOSEO row, whose save stored nothing.
+		$no_row                                        = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+		\AAFM\Tests\AioseoStubStore::$save_should_fail = true;
+		$this->assertInstanceOf(
+			WP_Error::class,
+			wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+				array(
+					'post_id' => $no_row,
+					'title'   => $format,
+				)
+			)
+		);
+	}
+
+	/**
 	 * Setting a robots flag must also flip the model's robots_default column to false. AIOSEO honors the
 	 * per-post robots_noindex/robots_nofollow ONLY when robots_default is falsy (its Robots meta reads
 	 * the custom flags behind `! $metaData->robots_default`, and its sitemap treats robots_default = 1 as

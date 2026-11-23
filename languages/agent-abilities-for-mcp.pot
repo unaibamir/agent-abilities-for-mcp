@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-23T17:50:23+05:00\n"
+"POT-Creation-Date: 2026-11-24T02:09:50+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -267,7 +267,7 @@ msgid "Update post SEO (All in One SEO)"
 msgstr ""
 
 #: includes/abilities/aioseo.php:130
-msgid "Writes a post's SEO fields through All in One SEO's own data store (not post meta). URL fields are checked as URLs, and a value that would need rewriting is refused. Setting a non-empty Twitter field turns off the use-OpenGraph fallback so the Twitter title, description, and image render on their own. Requires edit access to that post."
+msgid "Writes a post's SEO fields through All in One SEO's own data store (not post meta). URL fields are checked as URLs, and a value that would need rewriting is refused. Setting a non-empty Twitter field turns off the use-OpenGraph fallback so the Twitter title, description, and image render on their own. All in One SEO keeps a title or description that equals the post type's default format empty, so the page uses that format; the response then names those fields in stored_as_default and adds a note. Requires edit access to that post."
 msgstr ""
 
 #: includes/abilities/aioseo.php:137
@@ -338,7 +338,19 @@ msgstr ""
 msgid "Whether to nofollow links on this post (see robots_noindex for the site-default interaction this also turns off)."
 msgstr ""
 
-#: includes/abilities/aioseo.php:711
+#: includes/abilities/aioseo.php:506
+msgid "Present only when a requested title or description equals the post type's default format. Names those fields. All in One SEO keeps them empty, so the page uses the default format, and the write succeeded."
+msgstr ""
+
+#: includes/abilities/aioseo.php:510
+msgid "Present only with stored_as_default. Says the write succeeded and there is nothing to retry."
+msgstr ""
+
+#: includes/abilities/aioseo.php:699
+msgid "The write succeeded. All in One SEO keeps a title or description that matches its default format empty, so the page uses that format. There is nothing to retry."
+msgstr ""
+
+#: includes/abilities/aioseo.php:727
 msgid "ID of the post to render the All in One SEO head for."
 msgstr ""
 

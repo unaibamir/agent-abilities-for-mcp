@@ -513,7 +513,7 @@ final class IntegrationsTabTest extends TestCase {
 	public function test_an_aioseo_below_its_floor_shows_the_floor_reason(): void {
 		$this->acting_as( 'administrator' );
 		if ( ! function_exists( 'aioseo' ) ) {
-			eval( 'function aioseo() { return new \stdClass(); }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a function-only marker stub for tests; never shipped.
+			eval( 'function aioseo() { return \AAFM\Tests\AioseoStubStore::app(); }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a function-only marker stub for tests; never shipped.
 		}
 		add_filter( 'aafm_aioseo_version', static fn() => '4.9.0' );
 

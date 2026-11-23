@@ -202,15 +202,16 @@ final class UndoContractTest extends UndoTestCase {
 		$post = self::factory()->post->create();
 		$this->give_aioseo_row( $post );
 		$format = trim( aioseo()->meta->title->getPostTypeTitle( 'post' ) );
-		// The forward tool reads the stored null back as a miss and answers with an error, but the write landed,
-		// so the change is recorded and can be reverted.
-		$this->run_tool(
+		// AIOSEO stores the default format as null; the forward tool reads that as the write landing and
+		// answers success. The change is recorded and can be reverted.
+		$forward = $this->run_tool(
 			'aafm/aioseo-update-post',
 			array(
 				'post_id' => $post,
 				'title'   => $format,
 			)
 		);
+		$this->assertIsArray( $forward, is_wp_error( $forward ) ? $forward->get_error_code() . ': ' . $forward->get_error_message() : '' );
 		$rows = $this->change_rows();
 		$this->assertCount( 1, $rows );
 		$this->assertSame( 'ready', $rows[0]['status'] );

@@ -128,7 +128,7 @@ trait IntegrationStubs {
 	protected function stub_aioseo(): void {
 		AioseoStubStore::reset();
 		if ( ! function_exists( 'aioseo' ) ) {
-			eval( 'function aioseo() { return new \stdClass(); }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a function-only marker stub for tests; never shipped.
+			eval( 'function aioseo() { return \AAFM\Tests\AioseoStubStore::app(); }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a function-only marker stub for tests; never shipped.
 		}
 		if ( ! class_exists( 'AIOSEO\\Plugin\\Common\\Models\\Post' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.

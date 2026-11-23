@@ -99,6 +99,43 @@ class AioseoStubStore {
 	}
 
 	/**
+	 * What the stubbed aioseo() returns: only the Search Appearance default formats the plugin reads
+	 * (meta->title->getPostTypeTitle(), meta->description->getPostTypeDescription()).
+	 *
+	 * @return object
+	 */
+	public static function app(): object {
+		return (object) array(
+			'meta' => (object) array(
+				'title'       => new class() {
+					/**
+					 * The post type's default title format, as set by the test.
+					 *
+					 * @param string $post_type Post type.
+					 * @return string
+					 */
+					public function getPostTypeTitle( $post_type ): string { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid -- AIOSEO's own method name.
+						unset( $post_type );
+						return AioseoStubStore::$default_formats['title'] ?? '';
+					}
+				},
+				'description' => new class() {
+					/**
+					 * The post type's default description format, as set by the test.
+					 *
+					 * @param string $post_type Post type.
+					 * @return string
+					 */
+					public function getPostTypeDescription( $post_type ): string { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid -- AIOSEO's own method name.
+						unset( $post_type );
+						return AioseoStubStore::$default_formats['description'] ?? '';
+					}
+				},
+			),
+		);
+	}
+
+	/**
 	 * The stored row for a post id, or an empty defaults row (mirroring getPost() creating a blank
 	 * instance when no row exists yet).
 	 *

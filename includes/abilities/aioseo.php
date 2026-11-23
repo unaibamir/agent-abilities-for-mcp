@@ -332,6 +332,42 @@ function aafm_aioseo_value_persisted( string $persisted, string $expected, bool 
 }
 
 /**
+ * Whether a title or description write landed as AIOSEO's own "use the default format" state.
+ *
+ * AIOSEO's save (Models\Post::checkForDefaultFormat) stores a title or description equal to the post
+ * type's Search Appearance default format as NULL, which reads back empty. A NULL there means the
+ * post uses that default, which is exactly what the caller asked for, so it confirms the write.
+ *
+ * @param int    $post_id Post id.
+ * @param string $field   Field written.
+ * @param string $wanted  Value sent.
+ * @param string $stored  Value read back.
+ * @return bool
+ */
+function aafm_aioseo_stored_as_default_format( int $post_id, string $field, string $wanted, string $stored ): bool {
+	$wanted = trim( $wanted );
+	if ( '' !== $stored || '' === $wanted || ! in_array( $field, array( 'title', 'description' ), true ) || ! function_exists( 'aioseo' ) ) {
+		return false;
+	}
+	$post = aafm_exact_object( 'post', $post_id );
+	if ( ! $post instanceof WP_Post ) {
+		return false;
+	}
+	try {
+		$meta   = aioseo()->meta ?? null;
+		$source = is_object( $meta ) ? ( $meta->{$field} ?? null ) : null;
+		$method = 'title' === $field ? 'getPostTypeTitle' : 'getPostTypeDescription';
+		if ( ! is_object( $source ) || ! method_exists( $source, $method ) ) {
+			return false;
+		}
+		$default = $source->$method( $post->post_type );
+	} catch ( \Throwable $e ) {
+		return false;
+	}
+	return is_string( $default ) && trim( $default ) === $wanted;
+}
+
+/**
  * The shared output schema for aioseo-get-post / aioseo-update-post.
  *
  * @return array<string,array<string,mixed>>
@@ -631,7 +667,7 @@ function aafm_exec_aioseo_update_post( array $input ) {
 		// a failure just because the stored form differs cosmetically. A real non-persist - the old or
 		// default value still sitting in the row - is not a normalized form of what we wrote, so it
 		// still fails.
-		if ( ! aafm_aioseo_value_persisted( (string) $after[ $field ], (string) $value, ! empty( aafm_aioseo_fields()[ $field ]['url'] ) ) ) {
+		if ( ! aafm_aioseo_value_persisted( (string) $after[ $field ], (string) $value, ! empty( aafm_aioseo_fields()[ $field ]['url'] ) ) && ! aafm_aioseo_stored_as_default_format( $id, $field, (string) $value, (string) $after[ $field ] ) ) {
 			return aafm_generic_error();
 		}
 	}

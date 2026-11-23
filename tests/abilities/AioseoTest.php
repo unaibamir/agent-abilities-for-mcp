@@ -83,6 +83,42 @@ final class AioseoTest extends TestCase {
 	}
 
 	/**
+	 * AIOSEO stores a title or description equal to the post type's default format as NULL (its
+	 * checkForDefaultFormat), which reads back as empty. That is the write landing, not a miss: the
+	 * call answers success, not the generic error.
+	 */
+	public function test_a_default_format_title_or_description_is_a_confirmed_write(): void {
+		$admin_id                                     = $this->acting_as( 'administrator' );
+		$post_id                                      = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+		\AAFM\Tests\AioseoStubStore::$default_formats = array(
+			'title'       => '#post_title #separator_sa #site_title',
+			'description' => '#post_excerpt',
+		);
+
+		$res = wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+			array(
+				'post_id'     => $post_id,
+				'title'       => '#post_title #separator_sa #site_title',
+				'description' => '#post_excerpt',
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res, 'The write landed, so the call must not report a failure.' );
+		$this->assertNull( \AAFM\Tests\AioseoStubStore::get( $post_id )['title'] ?? null, 'AIOSEO stored the default format as NULL.' );
+		$this->assertNull( \AAFM\Tests\AioseoStubStore::get( $post_id )['description'] ?? null );
+
+		// A value that is not the default format and does not persist is still a failure.
+		\AAFM\Tests\AioseoStubStore::$save_should_fail = true;
+		$miss = wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+			array(
+				'post_id' => $post_id,
+				'title'   => 'Custom title',
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $miss );
+	}
+
+	/**
 	 * Setting a robots flag must also flip the model's robots_default column to false. AIOSEO honors the
 	 * per-post robots_noindex/robots_nofollow ONLY when robots_default is falsy (its Robots meta reads
 	 * the custom flags behind `! $metaData->robots_default`, and its sitemap treats robots_default = 1 as

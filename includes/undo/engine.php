@@ -1047,7 +1047,13 @@ function aafm_undo_apply( int $change_id, string $source ) {
 			// Anyone else gets the answer a missing id gets: no oracle for other connections' changes.
 			if ( 'agent' === $row['source'] && current_user_can( 'manage_options' ) ) {
 				$other = '' !== $connection && '' !== (string) $row['client_id'] && $row['client_id'] !== $connection;
-				return aafm_undo_refusal( $other ? 'other_connection' : 'needs_owner' );
+				if ( $other ) {
+					return aafm_undo_refusal( 'other_connection' );
+				}
+				// needs_owner says the change can be undone from the Changes tab, so a row that cannot be
+				// (reverted, expired) gets its own state answer first. The state tells an owner nothing new.
+				$state = aafm_undo_row_state( $row, $source );
+				return aafm_undo_refusal( $state['undoable'] ? 'needs_owner' : (string) ( $state['reason'] ?? 'not_allowed' ) );
 			}
 			return aafm_generic_error();
 		}

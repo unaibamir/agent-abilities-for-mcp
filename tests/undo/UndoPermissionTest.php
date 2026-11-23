@@ -126,6 +126,25 @@ final class UndoPermissionTest extends UndoTestCase {
 		$this->assertSame( 'B', get_post( $post )->post_title );
 	}
 
+	/**
+	 * The owner answer says a site owner can undo the change from the Changes tab, which is false for a
+	 * change already reverted or expired: those get their own row-state answer first.
+	 */
+	public function test_a_site_owner_gets_the_row_state_answer_before_needs_owner(): void {
+		global $wpdb;
+		aafm_oauth_current_client_id( null, true );
+		$post     = self::factory()->post->create( array( 'post_title' => 'A' ) );
+		$reverted = $this->edit( $post );
+		$expired  = $this->edit( $post, 'C' );
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->update( aafm_changes_table(), array( 'status' => 'reverted' ), array( 'id' => $reverted ) );
+		$wpdb->update( aafm_changes_table(), array( 'status' => 'expired' ), array( 'id' => $expired ) );
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+
+		$this->assertSame( 'aafm_undo_already_reverted', $this->undo_code( $reverted ) );
+		$this->assertSame( 'aafm_undo_expired', $this->undo_code( $expired ) );
+	}
+
 	public function test_older_than_24_hours_is_refused(): void {
 		global $wpdb;
 		$post   = self::factory()->post->create( array( 'post_title' => 'A' ) );

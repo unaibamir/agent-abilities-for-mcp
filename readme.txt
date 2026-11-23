@@ -259,7 +259,7 @@ Restore revision works on these pages too, and when WordPress keeps a revision t
 
 = What can an agent change on a WPBakery or Avada page? =
 
-Text, links and images work for anyone who can edit the page, and so do colours and spacing on Avada. Code blocks, raw HTML and JS, page CSS and JS, and settings that can carry script need a user who may post unfiltered HTML, and so do square brackets, percent-encoded brackets and data-* attributes in body text. On WPBakery that also covers Design Options, where its margins, padding, borders and background colours live.
+Text, links, images and an element's own colour settings work for anyone who can edit the page, and so does spacing on Avada. Code blocks, raw HTML and JS, page CSS and JS, and settings that can carry script need a user who may post unfiltered HTML, and so do square brackets, percent-encoded brackets and data-* attributes in body text. On WPBakery that also covers Design Options, where its margins, padding, borders and background colours live.
 
 The site-wide tools (WPBakery settings, Avada Global Options, Avada layouts and their sections, Avada Slider settings and both Avada Studio tools) need a user who can manage options, and so does editing the elements of an Avada layout section. Neither builder's Role Manager gives the agent extra access. The agent gets what its WordPress user can do and no more. WPBakery's Role Manager can still narrow that in two places: custom JS is refused when the Role Manager would not let that user save it, and an empty post can only take its first element if WPBakery's editor is on for that post type and that user.
 

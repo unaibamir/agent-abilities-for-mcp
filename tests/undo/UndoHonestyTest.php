@@ -565,6 +565,34 @@ final class UndoHonestyTest extends UndoTestCase {
 		$this->assertArrayNotHasKey( 'meta:_aioseo_title', $after['flags'] );
 	}
 
+	/**
+	 * The NULL-keeping restore adds and proves its rows before it removes the current ones, so an add
+	 * that a filter refuses leaves the key as it was rather than empty.
+	 */
+	public function test_a_refused_add_leaves_the_current_aioseo_mirror_row_in_place(): void {
+		$post = self::factory()->post->create();
+		add_post_meta( $post, '_aioseo_title', 'Current title' );
+		$refuse = static function ( $check, $object_id, $meta_key ) {
+			return '_aioseo_title' === $meta_key ? false : $check;
+		};
+		add_filter( 'add_post_metadata', $refuse, 10, 3 );
+		$ok = aafm_meta_restore_rows_keeping_null( 'post', $post, '_aioseo_title', array( null ) );
+		remove_filter( 'add_post_metadata', $refuse, 10 );
+
+		$this->assertFalse( $ok );
+		$this->assertSame( array( 'Current title' ), aafm_meta_rows_keeping_null( 'post', $post, '_aioseo_title' )['rows'] );
+	}
+
+	public function test_the_null_keeping_restore_replaces_the_rows_in_order(): void {
+		$post = self::factory()->post->create();
+		add_post_meta( $post, '_aioseo_title', 'Current title' );
+
+		$this->assertTrue( aafm_meta_restore_rows_keeping_null( 'post', $post, '_aioseo_title', array( null ) ) );
+		$this->assertSame( array( null ), aafm_meta_rows_keeping_null( 'post', $post, '_aioseo_title' )['rows'] );
+		$this->assertTrue( aafm_meta_restore_rows_keeping_null( 'post', $post, '_aioseo_title', array( 'Back', null ) ) );
+		$this->assertSame( array( 'Back', null ), aafm_meta_rows_keeping_null( 'post', $post, '_aioseo_title' )['rows'] );
+	}
+
 	public function test_aioseo_post_without_a_row_flags_every_field_as_no_vendor_row(): void {
 		$post = self::factory()->post->create();
 		$this->aioseo_table_with( $post + 1, 'Someone else' );

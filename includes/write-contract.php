@@ -538,14 +538,15 @@ function aafm_meta_object_fingerprint( string $type, int $id, array $skip_keys )
  * Every row of one meta key on an object, in id order, with a NULL meta_value kept as null.
  *
  * The raw snapshot (aafm_meta_raw_snapshot()) counts a NULL row as aliased, which is right for a
- * value that has to round-trip as a string. AIOSEO's own save writes NULL into its _aioseo_* mirror rows, so the undo
- * reads those keys through this instead: a NULL row is a state it can record and put back exactly.
- * aliased counts only rows under another spelling of the key, which still cannot be restored.
+ * value that has to round-trip as a string. AIOSEO's own save writes NULL into its _aioseo_* mirror
+ * rows, so the undo reads those keys through this instead: a NULL row is a state it can record and
+ * put back exactly. aliased counts only rows under another spelling of the key, which still cannot
+ * be restored.
  *
  * @param string $object_type 'post' or 'term'.
  * @param int    $object_id   Object id.
  * @param string $key         Meta key.
- * @return array{ok: bool, rows: list<string|null>, aliased: int}
+ * @return array{ok: bool, rows: list<string|null>, ids: list<int>, aliased: int}
  */
 function aafm_meta_rows_keeping_null( string $object_type, int $object_id, string $key ): array {
 	global $wpdb;
@@ -554,13 +555,15 @@ function aafm_meta_rows_keeping_null( string $object_type, int $object_id, strin
 		return array(
 			'ok'      => false,
 			'rows'    => array(),
+			'ids'     => array(),
 			'aliased' => 0,
 		);
 	}
 	$cols = aafm_meta_columns( $object_type );
 	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- the column names come from aafm_meta_columns().
-	$read    = aafm_wpdb_results( $wpdb->prepare( "SELECT meta_key, meta_value FROM %i WHERE {$cols['object_id_column']} = %d AND meta_key = %s ORDER BY {$cols['id_column']}", $table, $object_id, $key ) );
+	$read    = aafm_wpdb_results( $wpdb->prepare( "SELECT {$cols['id_column']} AS mid, meta_key, meta_value FROM %i WHERE {$cols['object_id_column']} = %d AND meta_key = %s ORDER BY {$cols['id_column']}", $table, $object_id, $key ) );
 	$rows    = array();
+	$ids     = array();
 	$aliased = 0;
 	foreach ( $read['ok'] ? (array) $read['value'] : array() as $row ) {
 		if ( $key !== (string) $row['meta_key'] ) {
@@ -568,10 +571,12 @@ function aafm_meta_rows_keeping_null( string $object_type, int $object_id, strin
 			continue;
 		}
 		$rows[] = null === $row['meta_value'] ? null : (string) $row['meta_value'];
+		$ids[]  = (int) $row['mid'];
 	}
 	return array(
 		'ok'      => $read['ok'],
 		'rows'    => $rows,
+		'ids'     => $ids,
 		'aliased' => $aliased,
 	);
 }
@@ -579,9 +584,11 @@ function aafm_meta_rows_keeping_null( string $object_type, int $object_id, strin
 /**
  * Put one meta key of an object back to an exact list of rows that holds a NULL row, in order.
  *
- * Only for a value read with aafm_meta_rows_keeping_null(); a list without a NULL row goes through
- * aafm_meta_restore_rows(), which proves each row. Every exact-key row is removed and the list added
- * back (add_metadata() stores a null as a NULL meta_value), then the key is read again and compared.
+ * The NULL-aware twin of aafm_meta_restore_rows(), with the same order of work: the same filter and
+ * veto probes, then each row is added (add_metadata() stores a null as a NULL meta_value) and proved
+ * by a read-back before any current row is removed. A row that does not land removes only the rows
+ * this call added, so a refused add leaves the key as it was. Only for a value read with
+ * aafm_meta_rows_keeping_null(); a list without a NULL row goes through aafm_meta_restore_rows().
  *
  * @param string            $object_type 'post' or 'term'.
  * @param int               $object_id   Object id.
@@ -590,31 +597,92 @@ function aafm_meta_rows_keeping_null( string $object_type, int $object_id, strin
  * @return bool Whether the key now holds exactly these rows.
  */
 function aafm_meta_restore_rows_keeping_null( string $object_type, int $object_id, string $key, array $rows ): bool {
-	global $wpdb;
-	$table = _get_meta_table( $object_type );
-	if ( ! $table ) {
-		return false;
+	$target = aafm_meta_write_target( $object_type, $object_id, $key );
+	$finish = static function ( string $status, bool $ok ) use ( $target ): bool {
+		aafm_emit_write_outcome( array( 'status' => $status ), $target );
+		return $ok;
+	};
+
+	$rows    = array_values( $rows );
+	$strings = array_values( array_filter( $rows, 'is_string' ) );
+	if ( ! aafm_meta_restore_unfiltered( $object_type, $key, (string) get_object_subtype( $object_type, $object_id ), $strings ) ) {
+		return $finish( AAFM_WRITE_REFUSED, false );
 	}
-	$cols = aafm_meta_columns( $object_type );
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- the column names come from aafm_meta_columns().
-	$existing = aafm_wpdb_results( $wpdb->prepare( "SELECT {$cols['id_column']} AS mid, meta_key FROM %i WHERE {$cols['object_id_column']} = %d AND meta_key = %s", $table, $object_id, $key ) );
-	if ( ! $existing['ok'] ) {
-		return false;
-	}
-	foreach ( (array) $existing['value'] as $row ) {
-		if ( $key === (string) $row['meta_key'] ) {
-			delete_metadata_by_mid( $object_type, (int) $row['mid'] );
-		}
-	}
+	$values = array();
 	foreach ( $rows as $raw ) {
-		// A stored string goes back as its own bytes: maybe_unserialize() undoes the serialization
-		// add_metadata() applies again.
-		add_metadata( $object_type, $object_id, wp_slash( $key ), null === $raw ? null : wp_slash( maybe_unserialize( $raw ) ) );
+		if ( null === $raw ) {
+			$values[] = null;
+			continue;
+		}
+		$inspect = aafm_meta_raw_inspect( $raw );
+		if ( null !== $inspect['reason'] ) {
+			return $finish( AAFM_WRITE_REFUSED, false );
+		}
+		$values[] = $inspect['value'];
+	}
+
+	wp_cache_delete( $object_id, $object_type . '_meta' );
+	$base = aafm_meta_rows_keeping_null( $object_type, $object_id, $key );
+	if ( ! $base['ok'] ) {
+		return $finish( AAFM_WRITE_READ_FAILED, false );
+	}
+	if ( $base['aliased'] > 0 ) {
+		return $finish( AAFM_WRITE_REFUSED, false );
+	}
+	// Ask the delete hook about a real baseline row before anything is added.
+	if ( array() !== $base['ids'] && aafm_meta_by_mid_vetoed( $object_type, max( $base['ids'] ) ) ) {
+		return $finish( AAFM_WRITE_REFUSED, false );
+	}
+
+	$floor = array() === $base['ids'] ? 0 : max( $base['ids'] );
+	$added = array();
+	foreach ( $values as $value ) {
+		$meta_id = add_metadata( $object_type, $object_id, wp_slash( $key ), null === $value ? null : wp_slash( $value ) );
+		if ( ! is_int( $meta_id ) || $meta_id <= $floor ) {
+			break;
+		}
+		$added[] = $meta_id;
+		$floor   = $meta_id;
+	}
+
+	$landed = count( $added ) === count( $values );
+	if ( $landed && array() !== $added ) {
+		$after = aafm_meta_rows_keeping_null( $object_type, $object_id, $key );
+		$new   = array();
+		foreach ( $after['ids'] as $index => $meta_id ) {
+			if ( ! in_array( $meta_id, $base['ids'], true ) ) {
+				$new[ $meta_id ] = $after['rows'][ $index ];
+			}
+		}
+		$landed = $after['ok'] && 0 === $after['aliased'] && array_keys( $new ) === $added && array_values( $new ) === $rows;
+	}
+	if ( ! $landed ) {
+		// Remove only an added id that reads back, straight from the database, as a row of this object and
+		// key (a short-circuit can answer with any id); the current rows stay.
+		global $wpdb;
+		$cols     = aafm_meta_columns( $object_type );
+		$unproved = false;
+		foreach ( $added as $meta_id ) {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- the column names come from aafm_meta_columns().
+			$read = aafm_wpdb_row( $wpdb->prepare( "SELECT {$cols['object_id_column']} AS object_id, meta_key FROM %i WHERE {$cols['id_column']} = %d", _get_meta_table( $object_type ), $meta_id ) );
+			if ( ! $read['ok'] ) {
+				$unproved = true;
+			} elseif ( is_array( $read['value'] ) && (int) $read['value']['object_id'] === $object_id && (string) $read['value']['meta_key'] === $key && ! in_array( $meta_id, $base['ids'], true ) ) {
+				delete_metadata_by_mid( $object_type, $meta_id );
+			}
+		}
+		wp_cache_delete( $object_id, $object_type . '_meta' );
+		return $finish( $unproved && array() !== $added ? AAFM_WRITE_UNCONFIRMED : AAFM_WRITE_REFUSED, false );
+	}
+
+	foreach ( $base['ids'] as $meta_id ) {
+		delete_metadata_by_mid( $object_type, $meta_id );
 	}
 	wp_cache_delete( $object_id, $object_type . '_meta' );
-	$after  = aafm_meta_rows_keeping_null( $object_type, $object_id, $key );
-	$wanted = array_values( $rows );
-	return $after['ok'] && 0 === $after['aliased'] && $wanted === $after['rows'];
+
+	$final = aafm_meta_rows_keeping_null( $object_type, $object_id, $key );
+	$exact = $final['ok'] && 0 === $final['aliased'] && $rows === $final['rows'];
+	return $finish( $exact ? AAFM_WRITE_WRITTEN : AAFM_WRITE_UNCONFIRMED, $exact );
 }
 
 /**

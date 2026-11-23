@@ -383,7 +383,9 @@ function aafm_exec_site_health_status(): array {
 		$tests[] = array(
 			'test'   => $name,
 			'status' => $status,
-			'label'  => aafm_site_health_label( $call['value'] ),
+			// Core labels insecure_registration after the problem it looks for, whatever the result, so a
+			// good result carries no label rather than one that names a problem the site does not have.
+			'label'  => 'good' === $status && 'insecure_registration' === $name ? '' : aafm_site_health_label( $call['value'] ),
 		);
 		++$counts[ $status ];
 	}

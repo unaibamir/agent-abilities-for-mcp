@@ -99,6 +99,20 @@ final class SiteHealthTest extends TestCase {
 		$this->assertSame( '', aafm_site_health_label( null ) );
 	}
 
+	/**
+	 * Core labels insecure_registration "Open Registration with privileged default role" whatever the
+	 * result, so on a good result that label would name a problem the site does not have.
+	 */
+	public function test_a_good_insecure_registration_result_carries_no_label(): void {
+		$this->acting_as( 'administrator' );
+		update_option( 'users_can_register', 0 );
+		$rows = wp_list_filter( wp_get_ability( 'aafm/site-health-status' )->execute( array() )['tests'], array( 'test' => 'insecure_registration' ) );
+		$row  = array_values( $rows )[0];
+
+		$this->assertSame( 'good', $row['status'] );
+		$this->assertSame( '', $row['label'] );
+	}
+
 	public function test_health_status_never_schedules_the_weekly_check_when_it_builds_the_instance(): void {
 		$instance = new \ReflectionProperty( \WP_Site_Health::class, 'instance' );
 		$instance->setAccessible( true );

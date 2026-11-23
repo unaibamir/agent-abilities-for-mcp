@@ -106,8 +106,8 @@ final class UndoAgentRulesTest extends UndoTestCase {
 		$other  = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $other );
 
-		// A site owner is told the change belongs to another connection, alike in every status; see UndoPermissionTest for a caller without the Changes tab.
-		$this->assertSame( 'aafm_undo_other_connection', $this->undo_code( $change ) );
+		// Same client, another user (a shared connector): not another connection, so the owner answer.
+		$this->assertSame( 'aafm_undo_needs_owner', $this->undo_code( $change ) );
 		$this->assertSame( 'B', get_post( $post )->post_title );
 		$listing = aafm_exec_list_changes(
 			array(

@@ -122,7 +122,7 @@ final class UndoPermissionTest extends UndoTestCase {
 		$post   = self::factory()->post->create( array( 'post_title' => 'A' ) );
 		$change = $this->edit( $post );
 
-		$this->assertSame( 'aafm_undo_other_connection', $this->undo_code( $change ) );
+		$this->assertSame( 'aafm_undo_needs_owner', $this->undo_code( $change ), 'With no client id on either side, no other connection can be named.' );
 		$this->assertSame( 'B', get_post( $post )->post_title );
 	}
 

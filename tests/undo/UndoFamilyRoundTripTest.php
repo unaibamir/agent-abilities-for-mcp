@@ -193,6 +193,39 @@ final class UndoFamilyRoundTripTest extends UndoTestCase {
 		delete_option( 'aafm_exposed_term_meta_keys' );
 	}
 
+	/**
+	 * Both term meta tools default an omitted taxonomy to category, as update-term does; the change
+	 * must still be recorded and revert.
+	 */
+	public function test_term_meta_tools_record_and_revert_with_the_taxonomy_omitted(): void {
+		update_option( 'aafm_exposed_term_meta_keys', array( 'aafm_note' ) );
+		$term = (int) self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+		update_term_meta( $term, 'aafm_note', 'old' );
+
+		$update = $this->change_from(
+			'aafm/update-term-meta',
+			array(
+				'term_id'  => $term,
+				'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- tool argument.
+				'value'    => 'new',
+			)
+		);
+		$this->revert( $update );
+		$this->assertSame( 'old', get_term_meta( $term, 'aafm_note', true ) );
+
+		$delete = $this->change_from(
+			'aafm/delete-term-meta',
+			array(
+				'term_id'  => $term,
+				'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- tool argument.
+			)
+		);
+		$this->assertSame( '', get_term_meta( $term, 'aafm_note', true ) );
+		$this->revert( $delete );
+		$this->assertSame( 'old', get_term_meta( $term, 'aafm_note', true ) );
+		delete_option( 'aafm_exposed_term_meta_keys' );
+	}
+
 	public function test_yoast_fields_round_trip_on_the_stub(): void {
 		$post = self::factory()->post->create();
 		update_post_meta( $post, '_yoast_wpseo_title', 'Old SEO title' );

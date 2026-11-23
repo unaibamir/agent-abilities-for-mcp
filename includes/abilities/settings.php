@@ -386,14 +386,16 @@ function aafm_exec_update_site_settings( array $input ) {
 		// blogname and blogdescription come back one write behind, and the next request reads the
 		// new value. The one-write-behind sequencing is measured here, not promised by WPML.
 		$updated[ $key ] = get_option( $key );
+	}
 
-		// A value that does not reach the row as sent (a clamp, cleaned text, or a filter that kept the old
-		// value) is reported with what the row holds now, read after the write, never with what was meant.
+	// A value that does not reach the row as sent (a clamp, cleaned text, a filter that kept the old value,
+	// or a later write's hook) is reported with what the row holds once every write is done.
+	foreach ( $settings as $key => $value ) {
+		$key = (string) $key;
 		$row = aafm_option_row( $key );
 		if ( $row['ok'] && $row['found'] && is_scalar( $row['value'] ) ) {
 			$stored = in_array( $key, $integer_keys, true ) ? (int) $row['value'] : wp_specialchars_decode( (string) $row['value'], ENT_QUOTES );
-			$sent   = (string) $value;
-			if ( (string) $stored !== $sent ) {
+			if ( (string) $stored !== (string) $value ) {
 				$adjusted[] = array(
 					'setting'   => $key,
 					'requested' => $value,

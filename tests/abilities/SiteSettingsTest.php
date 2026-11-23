@@ -290,6 +290,40 @@ final class SiteSettingsTest extends TestCase {
 		);
 	}
 
+	/**
+	 * A later write's hook can change a setting written earlier in the same call, so adjusted is read
+	 * once every write is done. (A homepage key changed that way fails the call's homepage report.)
+	 */
+	public function test_adjusted_is_read_after_every_write_of_the_call(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		$late = static function (): void {
+			update_option( 'blogname', 'Changed by a hook' );
+		};
+		add_action( 'update_option_posts_per_page', $late );
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array(
+				'settings' => array(
+					'blogname'       => 'A Name',
+					'posts_per_page' => 12,
+				),
+			)
+		);
+		remove_action( 'update_option_posts_per_page', $late );
+
+		$this->assertIsArray( $res );
+		$this->assertSame(
+			array(
+				array(
+					'setting'   => 'blogname',
+					'requested' => 'A Name',
+					'stored'    => 'Changed by a hook',
+				),
+			),
+			$res['adjusted'] ?? null
+		);
+	}
+
 	public function test_update_site_settings_reports_no_adjusted_list_when_nothing_was_changed_in_range(): void {
 		$this->register_all();
 		$this->acting_as( 'administrator' );

@@ -41,6 +41,7 @@ return array(
     'WP\\MCP\\Domain\\Tools\\McpToolCallContext' => $vendorDir . '/wordpress/mcp-adapter/includes/Domain/Tools/McpToolCallContext.php',
     'WP\\MCP\\Domain\\Tools\\RegisterAbilityAsMcpTool' => $vendorDir . '/wordpress/mcp-adapter/includes/Domain/Tools/RegisterAbilityAsMcpTool.php',
     'WP\\MCP\\Domain\\Utils\\AbilityArgumentNormalizer' => $vendorDir . '/wordpress/mcp-adapter/includes/Domain/Utils/AbilityArgumentNormalizer.php',
+    'WP\\MCP\\Domain\\Utils\\AbilityPermissionChecker' => $vendorDir . '/wordpress/mcp-adapter/includes/Domain/Utils/AbilityPermissionChecker.php',
     'WP\\MCP\\Domain\\Utils\\ContentBlockHelper' => $vendorDir . '/wordpress/mcp-adapter/includes/Domain/Utils/ContentBlockHelper.php',
     'WP\\MCP\\Domain\\Utils\\McpAbilityMeta' => $vendorDir . '/wordpress/mcp-adapter/includes/Domain/Utils/McpAbilityMeta.php',
     'WP\\MCP\\Domain\\Utils\\McpAnnotationMapper' => $vendorDir . '/wordpress/mcp-adapter/includes/Domain/Utils/McpAnnotationMapper.php',

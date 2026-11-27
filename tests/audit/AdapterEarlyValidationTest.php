@@ -137,6 +137,68 @@ final class AdapterEarlyValidationTest extends TestCase {
 		$this->assertInstanceOf( \WP_Post::class, get_post( $post_id ) );
 	}
 
+	public function test_a_standalone_validation_probe_has_no_side_effects(): void {
+		$this->register_enabled( array( 'aafm/get-posts' ) );
+		$this->acting_as( 'administrator' );
+		update_option( 'aafm_rate_limit_per_min', 1 );
+		aafm_policy_reset_request_state();
+
+		$probe = wp_get_ability( 'aafm/get-posts' )->validate_input( array( 'search' => array( 'x' ) ) );
+
+		$this->assertWPError( $probe );
+		$this->assertSame( 'ability_invalid_input', $probe->get_error_code(), 'A probe gets the plain validation answer.' );
+		$this->assertCount( 0, $this->rows( 'aafm/get-posts' ), 'A probe is not a call, so it writes no row.' );
+		$this->assertFalse( $this->call( $this->handler( array( 'aafm/get-posts' ) ), 'aafm-get-posts', array() )->getIsError(), 'And it spent no token.' );
+	}
+
+	public function test_a_nested_tool_call_is_governed_while_another_ability_executes(): void {
+		$this->register_enabled( array( 'aafm/get-posts' ) );
+		$this->acting_as( 'administrator' );
+		$handler = $this->handler( array( 'aafm/get-posts' ) );
+
+		aafm_executing_ability_push( 'aafm-bridge/some-foreign-ability' );
+		try {
+			$result = $this->call( $handler, 'aafm-get-posts', array( 'search' => array( 'x' ) ) );
+		} finally {
+			aafm_executing_ability_pop();
+		}
+
+		$this->assertTrue( $result->getIsError() );
+		$rows = $this->rows( 'aafm/get-posts' );
+		$this->assertCount( 1, $rows, 'The nested call gets its own row.' );
+		$this->assertSame( 'error', $rows[0]['status'] );
+	}
+
+	public function test_a_normalize_refusal_is_governed_like_a_validation_refusal(): void {
+		if ( ! class_exists( 'WP_Filter_Sentinel' ) ) {
+			$this->markTestSkipped( 'wp_ability_normalize_input exists on WordPress 7.1 and later.' );
+		}
+		$this->register_enabled( array( 'aafm/delete-post' ) );
+		$post_id = self::factory()->post->create();
+		$this->acting_as( 'administrator' );
+		$handler = $this->handler( array( 'aafm/delete-post' ) );
+		$refuse  = static function ( $input, $name ) {
+			return 'aafm/delete-post' === $name ? new \WP_Error( 'test_normalize_refusal', 'Refused by a normalize filter.' ) : $input;
+		};
+		add_filter( 'wp_ability_normalize_input', $refuse, 10, 2 );
+
+		$this->acting_as( 'subscriber' );
+		$denied = $this->call( $handler, 'aafm-delete-post', array( 'post_id' => $post_id ) );
+		$this->acting_as( 'administrator' );
+		$refused = $this->call( $handler, 'aafm-delete-post', array( 'post_id' => $post_id ) );
+		remove_filter( 'wp_ability_normalize_input', $refuse, 10 );
+
+		$this->assertTrue( $denied->getIsError() );
+		$this->assertStringNotContainsString( 'normalize filter', $denied->getContent()[0]->getText(), 'A caller the gate refuses is denied, not shown the filter error.' );
+		$this->assertSame( 'Refused by a normalize filter.', $refused->getContent()[0]->getText() );
+		$rows = $this->rows( 'aafm/delete-post' );
+		$this->assertCount( 2, $rows, 'Each refused call has its own row.' );
+		$this->assertSame( 'denied', $rows[0]['status'] );
+		$this->assertSame( 'error', $rows[1]['status'] );
+		$this->assertStringContainsString( 'rejected by WP_Ability::normalize_input(): test_normalize_refusal', (string) $rows[1]['detail'] );
+		$this->assertInstanceOf( \WP_Post::class, get_post( $post_id ) );
+	}
+
 	public function test_a_missing_argument_is_a_denied_row_with_our_message(): void {
 		$this->register_enabled( array( 'aafm/delete-post' ) );
 		$this->acting_as( 'administrator' );

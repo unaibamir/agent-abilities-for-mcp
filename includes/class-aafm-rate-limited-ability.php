@@ -123,6 +123,43 @@ class AAFM_Rate_Limited_Ability extends WP_Ability {
 	}
 
 	/**
+	 * Validate input, and govern a refusal that happens before execute().
+	 *
+	 * MCP Adapter 0.7.2 validates input inside McpTool::check_permission(), before it consults the
+	 * permission callback, and stops there on a WP_Error. Left alone, such a call never reached the
+	 * decorated permission callback or execute(): no activity row, no rate token, and a caller the
+	 * permission callback would refuse learned the schema reason instead of being denied. So a
+	 * failure outside execute() runs the decorated permission callback first, as the adapter did up
+	 * to 0.7.1. A refusal there is returned as it is (that callback already audited it and released
+	 * its rate memo). A caller it allows gets the validation error, with the same 'error' row a
+	 * validation refusal inside execute() leaves. Inside execute() this is plain validation: core's
+	 * own flow and AAFM_Rate_Limited_Ability::execute() already handle that refusal.
+	 *
+	 * @param mixed $input Optional. The input data to validate. Default `null`.
+	 * @return true|\WP_Error
+	 */
+	public function validate_input( $input = null ) {
+		$validity = parent::validate_input( $input );
+		if ( ! is_wp_error( $validity ) || null !== aafm_executing_ability() ) {
+			return $validity;
+		}
+
+		$name       = $this->get_name();
+		$permission = $this->check_permissions( $input );
+		if ( true !== $permission ) {
+			// Never false: the adapter only stops on a WP_Error and would run the permission callback again.
+			return is_wp_error( $permission ) ? $permission : new WP_Error( 'ability_invalid_permissions', __( 'Permission denied', 'agent-abilities-for-mcp' ) );
+		}
+
+		$token = aafm_begin_invocation( $name );
+		aafm_open_pending_invocation_row( $name, $input );
+		aafm_resolve_dangling_invocation_if_mine( $name, $token, $validity );
+		aafm_rate_limit_call_reset( $name );
+
+		return $validity;
+	}
+
+	/**
 	 * Validate a result against the output schema, except for a bridged wrapper.
 	 *
 	 * A bridged wrapper fronts someone else's ability. Its execute callback calls the source's own

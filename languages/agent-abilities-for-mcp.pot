@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-24T02:09:50+05:00\n"
+"POT-Creation-Date: 2026-11-27T19:31:40+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -13393,6 +13393,10 @@ msgstr ""
 #: includes/builder-shortcodes.php:1068
 #, php-format
 msgid "The content was saved, but the page builder could not rebuild the page's generated CSS, so the page may look out of date until it is saved again in the builder. Revision %d restores the content as it was before."
+msgstr ""
+
+#: includes/class-aafm-rate-limited-ability.php:151
+msgid "Permission denied"
 msgstr ""
 
 #: includes/default-server.php:268

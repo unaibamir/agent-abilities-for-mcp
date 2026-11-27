@@ -4,7 +4,7 @@ Tags: mcp-server, ai-agent, claude, mcp, abilities-api
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.13.0
+Stable tag: 1.13.1
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -370,6 +370,10 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 
 == Changelog ==
 
+= 1.13.1 =
+
+* **Fix:** Clients that left out the MCP-Protocol-Version header after connecting got an HTTP 400 on every later request; they now connect, with the bundled MCP Adapter updated to 0.7.2.
+
 = 1.13.0 =
 
 * **Feature:** Agents can clear one post, one URL or the whole site from the page cache of 13 cache plugins, including LiteSpeed Cache, WP Super Cache and W3 Total Cache. Each plugin's result says whether a cached copy was found and removed, the purge was only requested, or it failed or was skipped.
@@ -500,6 +504,10 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 [Full release history](https://agentabilitieswp.com/changelog/?utm_source=wordpress.org&utm_medium=readme&utm_campaign=plugin-listing).
 
 == Upgrade Notice ==
+
+= 1.13.1 =
+
+Updates the bundled MCP Adapter to 0.7.2, so clients that leave out the MCP-Protocol-Version header can connect again.
 
 = 1.13.0 =
 

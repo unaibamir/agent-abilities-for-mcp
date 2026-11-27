@@ -9,7 +9,7 @@ WordPress MCP server for Claude and ChatGPT with limited access, a pause switch,
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.1 |
 | **Requires PHP** | 7.4 |
-| **Stable tag** | 1.13.0 |
+| **Stable tag** | 1.13.1 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
 Agent Abilities for MCP is a free WordPress MCP server plugin. It adds an MCP endpoint to a site and exposes WordPress abilities to AI agents, so Claude, ChatGPT, Cursor and other MCP clients can work on it as a WordPress user you choose, with that user's role and no more. It ships 229 abilities (97 core, 132 for plugins such as WooCommerce, ACF and Yoast SEO) and every one starts switched off.
@@ -183,6 +183,10 @@ A setting on the Settings tab that starts off. You tick the risky tools it cover
 The Model Context Protocol is an open specification that Anthropic originally developed. Claude, ChatGPT, Cursor, VS Code, Gemini and other product names belong to their owners, and Agent Abilities for MCP is a third-party plugin that isn't affiliated with, endorsed by or sponsored by any of them.
 
 ## Changelog
+### 1.13.1
+
+* **Fix:** Clients that left out the MCP-Protocol-Version header after connecting got an HTTP 400 on every later request; they now connect, with the bundled MCP Adapter updated to 0.7.2.
+
 ### 1.13.0
 
 * **Feature:** Agents can clear one post, one URL or the whole site from the page cache of 13 cache plugins, including LiteSpeed Cache, WP Super Cache and W3 Total Cache. Each plugin's result says whether a cached copy was found and removed, the purge was only requested, or it failed or was skipped.

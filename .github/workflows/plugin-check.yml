@@ -2,9 +2,9 @@ name: Plugin Check
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
+  # Release (release.yml) calls this on every push to main and gates the publish job on it,
+  # so there is no push trigger here: a merge runs this check once, inside the release run.
+  workflow_call:
   pull_request:
     types:
       - opened
@@ -15,7 +15,11 @@ on:
 permissions: {}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.head_ref || github.sha }}
+  # A literal prefix, not github.workflow: when Release calls this workflow, the github context
+  # belongs to the caller, so github.workflow would read "Release" in all three called checks,
+  # put them in one group and let them cancel each other. Outside a PR the group is per run,
+  # so a manual dispatch on main's commit can never cancel the copy gating a release.
+  group: Plugin Check-${{ github.event_name == 'pull_request' && github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -58,6 +62,9 @@ jobs:
           extensions: mysqli, zip, gd
           coverage: none
           tools: wp-cli
+
+      - name: Make sure WP-CLI is installed
+        uses: ./.github/actions/ensure-wp-cli
 
       # See the note in test.yml's PHPCS job: the direct composer install lost
       # ramsey/composer-install's caching, and the runs after that change died on HTTP 429 from

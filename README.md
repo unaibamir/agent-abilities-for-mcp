@@ -9,7 +9,7 @@ WordPress MCP server for Claude and ChatGPT with limited access, a pause switch,
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.1 |
 | **Requires PHP** | 7.4 |
-| **Stable tag** | 1.13.0 |
+| **Stable tag** | 1.13.1 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
 Agent Abilities for MCP is a free WordPress MCP server plugin. It adds an MCP endpoint to a site and exposes WordPress abilities to AI agents, so Claude, ChatGPT, Cursor and other MCP clients can work on it as a WordPress user you choose, with that user's role and no more. It ships 229 abilities (97 core, 132 for plugins such as WooCommerce, ACF and Yoast SEO) and every one starts switched off.
@@ -153,7 +153,7 @@ The plugin calls no AI provider and sends no telemetry. It makes two kinds of re
 
 ### Why do I see "Another version of MCP Adapter is already loaded"?
 
-That notice comes from a copy of the MCP Adapter that runs its own loader and finds the adapter already loaded by a different copy. This plugin bundles adapter 0.7.1 and loads it without that loader, so its own copy never prints the notice. When the standalone MCP Adapter plugin is active too, this plugin asks it to step aside quietly, unless your site already sets the WP_MCP_AUTOLOAD constant.
+That notice comes from a copy of the MCP Adapter that runs its own loader and finds the adapter already loaded by a different copy. This plugin bundles adapter 0.7.2 and loads it without that loader, so its own copy never prints the notice. When the standalone MCP Adapter plugin is active too, this plugin asks it to step aside quietly, unless your site already sets the WP_MCP_AUTOLOAD constant.
 
 If the notice still shows, another plugin ships its own copy of the adapter. The Connection Doctor report on the Connection tab shows which copy is running. If it says bundled, this plugin's copy is in use and the notice comes from the other plugin's copy, so update or remove the plugin that bundles its own MCP Adapter.
 
@@ -183,6 +183,10 @@ A setting on the Settings tab that starts off. You tick the risky tools it cover
 The Model Context Protocol is an open specification that Anthropic originally developed. Claude, ChatGPT, Cursor, VS Code, Gemini and other product names belong to their owners, and Agent Abilities for MCP is a third-party plugin that isn't affiliated with, endorsed by or sponsored by any of them.
 
 ## Changelog
+### 1.13.1
+
+* **Fix:** Clients that left out the MCP-Protocol-Version header after connecting got an HTTP 400 on every later request; they now connect, with the bundled MCP Adapter updated to 0.7.2.
+
 ### 1.13.0
 
 * **Feature:** Agents can clear one post, one URL or the whole site from the page cache of 13 cache plugins, including LiteSpeed Cache, WP Super Cache and W3 Total Cache. Each plugin's result says whether a cached copy was found and removed, the purge was only requested, or it failed or was skipped.

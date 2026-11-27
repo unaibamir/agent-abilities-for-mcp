@@ -4,7 +4,7 @@ Tags: mcp-server, ai-agent, claude, mcp, abilities-api
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.13.0
+Stable tag: 1.13.1
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -297,7 +297,7 @@ Under Settings, Allow the MCP Adapter's default server starts on Automatic, whic
 
 = Why do I see "Another version of MCP Adapter is already loaded"? =
 
-That notice comes from a copy of the MCP Adapter that runs its own loader and finds the adapter already loaded by a different copy. This plugin bundles adapter 0.7.1 and loads it without that loader, so its own copy never prints the notice. When the standalone MCP Adapter plugin is active too, this plugin asks it to step aside quietly, unless your site already sets the WP_MCP_AUTOLOAD constant.
+That notice comes from a copy of the MCP Adapter that runs its own loader and finds the adapter already loaded by a different copy. This plugin bundles adapter 0.7.2 and loads it without that loader, so its own copy never prints the notice. When the standalone MCP Adapter plugin is active too, this plugin asks it to step aside quietly, unless your site already sets the WP_MCP_AUTOLOAD constant.
 
 If the notice still shows, another plugin ships its own copy of the adapter. The Connection Doctor report on the Connection tab shows which copy is running. If it says bundled, this plugin's copy is in use and the notice comes from the other plugin's copy, so update or remove the plugin that bundles its own MCP Adapter.
 
@@ -369,6 +369,10 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 16. Application Passwords: the agent users' passwords with when each was created and last used, the address it was last used from, and a Revoke button.
 
 == Changelog ==
+
+= 1.13.1 =
+
+* **Fix:** Clients that left out the MCP-Protocol-Version header after connecting got an HTTP 400 on every later request; they now connect, with the bundled MCP Adapter updated to 0.7.2.
 
 = 1.13.0 =
 
@@ -500,6 +504,10 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 [Full release history](https://agentabilitieswp.com/changelog/?utm_source=wordpress.org&utm_medium=readme&utm_campaign=plugin-listing).
 
 == Upgrade Notice ==
+
+= 1.13.1 =
+
+Updates the bundled MCP Adapter to 0.7.2, so clients that leave out the MCP-Protocol-Version header can connect again.
 
 = 1.13.0 =
 

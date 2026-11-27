@@ -69,6 +69,7 @@ class ComposerStaticInit695f50bef26fb7a3b20d301537b2c18a
         'WP\\MCP\\Domain\\Tools\\McpToolCallContext' => __DIR__ . '/..' . '/wordpress/mcp-adapter/includes/Domain/Tools/McpToolCallContext.php',
         'WP\\MCP\\Domain\\Tools\\RegisterAbilityAsMcpTool' => __DIR__ . '/..' . '/wordpress/mcp-adapter/includes/Domain/Tools/RegisterAbilityAsMcpTool.php',
         'WP\\MCP\\Domain\\Utils\\AbilityArgumentNormalizer' => __DIR__ . '/..' . '/wordpress/mcp-adapter/includes/Domain/Utils/AbilityArgumentNormalizer.php',
+        'WP\\MCP\\Domain\\Utils\\AbilityPermissionChecker' => __DIR__ . '/..' . '/wordpress/mcp-adapter/includes/Domain/Utils/AbilityPermissionChecker.php',
         'WP\\MCP\\Domain\\Utils\\ContentBlockHelper' => __DIR__ . '/..' . '/wordpress/mcp-adapter/includes/Domain/Utils/ContentBlockHelper.php',
         'WP\\MCP\\Domain\\Utils\\McpAbilityMeta' => __DIR__ . '/..' . '/wordpress/mcp-adapter/includes/Domain/Utils/McpAbilityMeta.php',
         'WP\\MCP\\Domain\\Utils\\McpAnnotationMapper' => __DIR__ . '/..' . '/wordpress/mcp-adapter/includes/Domain/Utils/McpAnnotationMapper.php',

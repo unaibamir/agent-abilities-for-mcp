@@ -50,6 +50,9 @@ jobs:
           coverage: none
           tools: wp-cli
 
+      - name: Make sure WP-CLI is installed
+        uses: ./.github/actions/ensure-wp-cli
+
       - name: Sync version and generate the changelog
         run: python3 .github/scripts/prepare_release.py
 

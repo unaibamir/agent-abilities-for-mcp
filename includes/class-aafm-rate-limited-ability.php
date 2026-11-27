@@ -123,6 +123,107 @@ class AAFM_Rate_Limited_Ability extends WP_Ability {
 	}
 
 	/**
+	 * Normalize input, and govern a refusal from the adapter's pre-permission check.
+	 *
+	 * See govern_adapter_input_refusal(). On WordPress 7.1+ a wp_ability_normalize_input filter can
+	 * return a WP_Error, which the adapter's checker returns before validation or permissions.
+	 *
+	 * @param mixed $input Optional. The raw input. Default `null`.
+	 * @return mixed The normalized input, or a WP_Error.
+	 */
+	public function normalize_input( $input = null ) {
+		$normalized = parent::normalize_input( $input );
+		return is_wp_error( $normalized ) ? $this->govern_adapter_input_refusal( $normalized, $input, 'normalize_input' ) : $normalized;
+	}
+
+	/**
+	 * Validate input, and govern a refusal from the adapter's pre-permission check.
+	 *
+	 * See govern_adapter_input_refusal().
+	 *
+	 * @param mixed $input Optional. The input data to validate. Default `null`.
+	 * @return true|\WP_Error
+	 */
+	public function validate_input( $input = null ) {
+		$validity = parent::validate_input( $input );
+		return is_wp_error( $validity ) ? $this->govern_adapter_input_refusal( $validity, $input, 'validate_input' ) : $validity;
+	}
+
+	/**
+	 * Answer an input refusal the MCP adapter hit before consulting our permission callback.
+	 *
+	 * MCP Adapter 0.7.2 prepares input inside McpTool::check_permission() (via
+	 * AbilityPermissionChecker::check()) and stops on a WP_Error before it asks the permission
+	 * callback. Left alone, such a call never reached the decorated permission callback or execute():
+	 * no activity row, no rate token, and a caller the callback would refuse learned the input reason
+	 * instead of being denied. So for that one call path this runs the decorated permission callback
+	 * first, as the adapter did up to 0.7.1. Its refusal is returned as it is (the callback already
+	 * audited it and released its rate memo). A caller it allows gets the input error and an 'error'
+	 * row naming the stage and code, and its rate memo is released.
+	 *
+	 * Every other caller gets the plain answer with no side effects: core's execute(), which audits
+	 * its own refusals, and code that only checks a value. The signal is the call path itself, read
+	 * from the stack only after a refusal, because the adapter fires no hook before this check and a
+	 * request-wide flag would also catch a probe or a nested call made in the same request.
+	 *
+	 * @param \WP_Error $refusal The normalize or validate error.
+	 * @param mixed     $input   The input the adapter passed in.
+	 * @param string    $stage   normalize_input or validate_input, for the row's detail.
+	 * @return \WP_Error
+	 */
+	private function govern_adapter_input_refusal( WP_Error $refusal, $input, string $stage ): WP_Error {
+		if ( ! self::called_by_adapter_permission_check() ) {
+			return $refusal;
+		}
+
+		$name       = $this->get_name();
+		$permission = $this->check_permissions( $input );
+		if ( true !== $permission ) {
+			// Never false: the adapter only stops on a WP_Error and would run the permission callback again.
+			return is_wp_error( $permission ) ? $permission : new WP_Error( 'ability_invalid_permissions', __( 'Permission denied', 'agent-abilities-for-mcp' ) );
+		}
+
+		aafm_begin_invocation( $name );
+		aafm_open_pending_invocation_row( $name, $input );
+		$row_id = aafm_resolve_current_invocation_row( $name );
+		aafm_rate_limit_call_reset( $name );
+		if ( null !== $row_id && $row_id > 0 ) {
+			// The code only, through the identifier allowlist: a filter's message may carry argument values.
+			$code   = aafm_activity_detail_field( 'key', $refusal->get_error_code() );
+			$detail = null !== $code ? "rejected by WP_Ability::{$stage}(): {$code}" : "rejected by WP_Ability::{$stage}()";
+			if ( aafm_update_activity_status( $row_id, 'error', null, $detail ) ) {
+				aafm_announce_ability_resolved( $row_id, 'error', null, $detail );
+			}
+		}
+
+		return $refusal;
+	}
+
+	/**
+	 * Whether the running normalize/validate call came from the adapter's pre-permission check.
+	 *
+	 * Skips this ability's own input methods (prepare_input() on WordPress 7.2+ calls normalize and
+	 * validate), then asks whether the first caller outside them is AbilityPermissionChecker::check().
+	 * Inside execute() that caller is WP_Ability::execute(), so a nested adapter call made while
+	 * another ability executes is still recognised as its own call.
+	 *
+	 * @return bool
+	 */
+	private static function called_by_adapter_permission_check(): bool {
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_debug_backtrace -- reads the caller to scope governance to the adapter's check; runs only after an input refusal.
+		$frames = debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS, 8 );
+		foreach ( array_slice( $frames, 2 ) as $frame ) {
+			$class    = $frame['class'] ?? '';
+			$function = $frame['function'];
+			if ( in_array( $class, array( 'WP_Ability', self::class ), true ) && in_array( $function, array( 'prepare_input', 'normalize_input', 'validate_input' ), true ) ) {
+				continue;
+			}
+			return 'WP\\MCP\\Domain\\Utils\\AbilityPermissionChecker' === $class && 'check' === $function;
+		}
+		return false;
+	}
+
+	/**
 	 * Validate a result against the output schema, except for a bridged wrapper.
 	 *
 	 * A bridged wrapper fronts someone else's ability. Its execute callback calls the source's own
